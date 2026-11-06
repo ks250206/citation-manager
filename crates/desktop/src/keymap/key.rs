@@ -69,6 +69,11 @@ impl KeyStroke {
         {
             return Err(InvalidKey);
         }
+        if modifiers & SHIFT != 0
+            && ((printable && !key.as_bytes()[0].is_ascii_alphabetic()) || key == "Plus")
+        {
+            return Err(InvalidKey);
+        }
         Ok(Self {
             key: key.into(),
             modifiers,

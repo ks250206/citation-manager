@@ -79,6 +79,10 @@ The complete document replaces the keymap; it is not a patch or a merge with def
   Modifiers `Cmd`, `Ctrl`, `Alt`, `Shift` use `+`; duplicates reject. Order normalizes, so
   `Cmd+Ctrl+k` conflicts with `Ctrl+Cmd+k`. Modified letters must be lowercase with explicit
   Shift (`Cmd+Shift+k`); bare shifted characters are literal (`G`, not `Shift+g`).
+  Explicit Shift with printable non-letters (including named `Plus`) rejects; use the
+  resulting literal instead (`Cmd+?`, not `Cmd+Shift+/`). This avoids layout-dependent
+  aliases hiding collisions. The plus character itself is spelled `Plus` because `+`
+  separates modifiers (`Cmd+Plus`); the native adapter must use this spelling.
   `⌘K` is display notation, represented by `Cmd+k` in JSON. Unicode text is not a shortcut token.
 - `command` must exactly match a registered descriptor; a known disabled command is valid.
 - At most 64 KiB input, 256 bindings, nesting depth 8 (root counts as 1). The byte cap runs before
@@ -87,6 +91,10 @@ The complete document replaces the keymap; it is not a patch or a merge with def
 - Duplicate sequences, including different commands bound to the same sequence, reject. Either
   ordering of a strict prefix (`g` and `gg`) in the same context **and mode** rejects. Siblings
   (`gg` and `gt`) and the same key in disjoint scopes are valid. No ambiguous delayed dispatch.
+- `UnreachableBinding` rejects a non-Cmd/Ctrl key anywhere in an Insert/VimOff sequence,
+  and unmodified `Esc` after a sequence's first key in any mode. The resolver necessarily
+  passes through or cancels these events, so accepting such bindings would be misleading.
+  Modified `Ctrl+Esc` and Normal sequences beginning with `Esc` remain valid.
 - `Diagnostic` has a code, schema path, optional related binding index and JSON line/column.
   Paths never include user contents; at most 64 diagnostics are returned. Validation reports a
   bounded set, not every possible error. Syntax/schema errors stop before semantic checks.

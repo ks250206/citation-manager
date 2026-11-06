@@ -19,6 +19,7 @@ pub enum DiagnosticCode {
     TooManyBindings,
     InvalidSequenceLength,
     InvalidKey,
+    UnreachableBinding,
     UnknownCommand,
     DuplicateBinding,
     PrefixConflict,
@@ -149,31 +150,41 @@ impl Keymap {
                     }
                 }
                 if keys.len() == raw.keys.len() {
-                    let binding = Binding {
-                        context: raw.context,
-                        mode: raw.mode,
-                        keys,
-                        command: raw.command,
-                    };
-                    for (previous_index, previous) in &bindings {
-                        if previous.context == binding.context
-                            && previous.mode == binding.mode
-                            && (previous.keys.starts_with(&binding.keys)
-                                || binding.keys.starts_with(&previous.keys))
-                        {
-                            let mut diagnostic = Diagnostic::at(
-                                if previous.keys == binding.keys {
-                                    DiagnosticCode::DuplicateBinding
-                                } else {
-                                    DiagnosticCode::PrefixConflict
-                                },
-                                format!("{path}.keys"),
-                            );
-                            diagnostic.related_binding = Some(*previous_index);
-                            diagnostics.push(diagnostic);
+                    if let Some((key_index, _)) = keys.iter().enumerate().find(|(position, key)| {
+                        (raw.mode != Mode::Normal && !key.is_shortcut())
+                            || (*position > 0 && key.is_escape())
+                    }) {
+                        diagnostics.push(Diagnostic::at(
+                            DiagnosticCode::UnreachableBinding,
+                            format!("{path}.keys[{key_index}]"),
+                        ));
+                    } else {
+                        let binding = Binding {
+                            context: raw.context,
+                            mode: raw.mode,
+                            keys,
+                            command: raw.command,
+                        };
+                        for (previous_index, previous) in &bindings {
+                            if previous.context == binding.context
+                                && previous.mode == binding.mode
+                                && (previous.keys.starts_with(&binding.keys)
+                                    || binding.keys.starts_with(&previous.keys))
+                            {
+                                let mut diagnostic = Diagnostic::at(
+                                    if previous.keys == binding.keys {
+                                        DiagnosticCode::DuplicateBinding
+                                    } else {
+                                        DiagnosticCode::PrefixConflict
+                                    },
+                                    format!("{path}.keys"),
+                                );
+                                diagnostic.related_binding = Some(*previous_index);
+                                diagnostics.push(diagnostic);
+                            }
                         }
+                        bindings.push((index, binding));
                     }
-                    bindings.push((index, binding));
                 }
             }
             if diagnostics.len() >= MAX_DIAGNOSTICS {

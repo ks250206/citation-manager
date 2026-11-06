@@ -413,29 +413,17 @@ fn editing_and_ime_pass_every_event_and_reset_prefix_even_for_escape_and_command
 #[test]
 fn normal_insert_vim_off_transitions_preserve_editing_keys_and_drop_sequences() {
     let registry = CommandRegistry::m1();
-    // Even malicious-but-valid custom Insert/VimOff bindings cannot claim ordinary editing events.
+    // Valid Insert/VimOff shortcut maps still pass ordinary editing events through.
     for mode in [Mode::Insert, Mode::VimOff] {
         let mode_name = if mode == Mode::Insert {
             "insert"
         } else {
             "vim_off"
         };
-        let mut bindings = vec![binding("library", "normal", &["g", "g"], ids::FIRST)];
-        for key in [
-            "j",
-            "g",
-            "G",
-            "Enter",
-            "/",
-            "y",
-            "Esc",
-            "Tab",
-            "Backspace",
-            "Left",
-            "Alt+e",
-        ] {
-            bindings.push(binding("library", mode_name, &[key], ids::NEW));
-        }
+        let bindings = vec![
+            binding("library", "normal", &["g", "g"], ids::FIRST),
+            binding("library", mode_name, &["Cmd+k"], ids::PALETTE),
+        ];
         let mut resolver = KeyResolver::new(map(bindings, &registry));
         let normal = input(Context::Library, Mode::Normal);
         assert_eq!(
@@ -598,7 +586,8 @@ fn prefix_conflicts_are_order_independent_but_sibling_sequences_and_different_sc
             binding("library", "normal", &["g", "g"], ids::FIRST),
             binding("library", "normal", &["g", "t"], ids::LAST),
             binding("search", "normal", &["g"], ids::SEARCH),
-            binding("library", "vim_off", &["g"], ids::NEW),
+            binding("library", "normal", &["Cmd+g", "Cmd+g"], ids::FIRST),
+            binding("library", "vim_off", &["Cmd+g"], ids::NEW),
         ],
         &registry,
     ));
@@ -608,6 +597,92 @@ fn prefix_conflicts_are_order_independent_but_sibling_sequences_and_different_sc
         Resolution::Pending
     );
     expect_command(resolve(&mut resolver, "t", state, 1, &registry), ids::LAST);
+    assert_eq!(
+        resolve(&mut resolver, "Cmd+g", state, 2, &registry),
+        Resolution::Pending
+    );
+    expect_command(
+        resolve(
+            &mut resolver,
+            "Cmd+g",
+            input(Context::Library, Mode::VimOff),
+            3,
+            &registry,
+        ),
+        ids::NEW,
+    );
+}
+
+#[test]
+fn shifted_punctuation_aliases_reject_the_whole_map_before_fallback() {
+    let registry = CommandRegistry::m1();
+    let bytes = document(vec![
+        binding("library", "normal", &["Cmd+?"], ids::PALETTE),
+        binding("library", "normal", &["Cmd+Shift+/"], ids::COPY),
+    ]);
+    let loaded = load_or_default(&bytes, &registry).unwrap();
+    assert_eq!(loaded.source, ConfigSource::Defaults);
+    assert_eq!(loaded.keymap, Keymap::defaults(&registry).unwrap());
+    assert_eq!(loaded.diagnostics.len(), 1);
+    assert_eq!(loaded.diagnostics[0].code, DiagnosticCode::InvalidKey);
+    assert_eq!(loaded.diagnostics[0].path, "$.bindings[1].keys[0]");
+}
+
+#[test]
+fn unreachable_sequences_are_rejected_but_modified_escape_and_shortcuts_work() {
+    let registry = CommandRegistry::m1();
+    for mode in ["insert", "vim_off"] {
+        for keys in [&["j"][..], &["Cmd+k", "j"][..], &["Alt+e"][..]] {
+            let bytes = document(vec![binding("library", mode, keys, ids::NEW)]);
+            let loaded = load_or_default(&bytes, &registry).unwrap();
+            assert_eq!(loaded.source, ConfigSource::Defaults);
+            assert_eq!(
+                loaded.diagnostics[0].code,
+                DiagnosticCode::UnreachableBinding
+            );
+        }
+    }
+    for keys in [&["g", "Esc"][..], &["Cmd+k", "Esc", "x"][..]] {
+        let errors = Keymap::parse(
+            &document(vec![binding("library", "normal", keys, ids::NEW)]),
+            &registry,
+        )
+        .unwrap_err();
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].code, DiagnosticCode::UnreachableBinding);
+        assert_eq!(errors[0].path, "$.bindings[0].keys[1]");
+    }
+    let mut resolver = KeyResolver::new(map(
+        vec![
+            binding("library", "normal", &["g", "Ctrl+Esc"], ids::FIRST),
+            binding("library", "normal", &["Esc", "g"], ids::LAST),
+            binding("library", "insert", &["Cmd+k", "Ctrl+x"], ids::PALETTE),
+        ],
+        &registry,
+    ));
+    let normal = input(Context::Library, Mode::Normal);
+    assert_eq!(
+        resolve(&mut resolver, "g", normal, 0, &registry),
+        Resolution::Pending
+    );
+    expect_command(
+        resolve(&mut resolver, "Ctrl+Esc", normal, 1, &registry),
+        ids::FIRST,
+    );
+    assert_eq!(
+        resolve(&mut resolver, "Esc", normal, 2, &registry),
+        Resolution::Pending
+    );
+    expect_command(resolve(&mut resolver, "g", normal, 3, &registry), ids::LAST);
+    let insert = input(Context::Library, Mode::Insert);
+    assert_eq!(
+        resolve(&mut resolver, "Cmd+k", insert, 4, &registry),
+        Resolution::Pending
+    );
+    expect_command(
+        resolve(&mut resolver, "Ctrl+x", insert, 5, &registry),
+        ids::PALETTE,
+    );
 }
 
 #[test]
@@ -631,6 +706,10 @@ fn modifier_aliases_cannot_hide_duplicates_and_invalid_key_spellings_are_rejecte
         "Cmd+K",
         "Shift+g",
         "Shift+?",
+        "Cmd+Shift+/",
+        "Ctrl+Shift+1",
+        "Cmd+Shift+?",
+        "Cmd+Shift+Plus",
         "F999",
         "Escape",
         "⌘K",
@@ -648,6 +727,9 @@ fn modifier_aliases_cannot_hide_duplicates_and_invalid_key_spellings_are_rejecte
         "Plus",
         "Space",
         "Cmd+Shift+k",
+        "Cmd+?",
+        "Ctrl+!",
+        "Cmd+Plus",
         "Ctrl+Alt+Delete",
         "Shift+Tab",
     ] {

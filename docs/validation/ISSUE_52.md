@@ -79,6 +79,27 @@ minimal edge from the restored original lock using `cargo check -p cm-desktop --
 required checks below use `--locked` on the preserved pins. No unrelated lock drift remains.
 An EOF blank line in the desktop manifest was removed after diff-check identified it.
 
+## Root follow-up after independent review
+
+The independent Opus 5.5 medium review at `6a60c16` found no P0–P2 and reproduced
+two P3 validation gaps. Root rejected explicit Shift with printable non-letter keys
+(including named `Plus`), and added `UnreachableBinding` diagnostics for non-Cmd/Ctrl
+keys in Insert/VimOff sequences or unmodified Escape after the first key. These
+settings could not dispatch under the existing resolver policy. The resolver itself
+is unchanged; configuration still validates as a whole before explicit fallback.
+
+Two new regressions verify rejected alias pairs and unreachable sequences, whole-map
+fallback, and valid modified Escape, first-key Escape and modified shortcut sequences.
+Existing scope tests now use reachable Insert/VimOff shortcuts while retaining their
+ordinary-input pass-through and prefix-reset checks. The dedicated suite passes
+21 tests; workspace all-targets locked Clippy passes. The full locked workspace run
+passed 207 tests (including the compile-fail doctest), and locked build, fmt,
+architecture, base-specified migration, Python 22 tests and diff-check also passed.
+[Root follow-up checks and tested Rust hashes](ISSUE_52/root-followup-checks.json)
+record the commands and distinguish overlapping test counts. The original implementation's
+205-test and 19-test figures above describe its earlier source, not this follow-up.
+All 636 package identities/checksums and immutable migration files remain unchanged.
+
 ## Limits and handoff
 
 No real focus, IME, input bubbling, palette rendering/fuzzy search/MRU, clipboard, mouse,
