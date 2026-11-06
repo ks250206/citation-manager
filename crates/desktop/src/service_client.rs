@@ -202,6 +202,8 @@ impl LibraryState {
                         "{}Could not load list: {error}. Reload to retry.",
                         if self.saving() {
                             "Saving… • "
+                        } else if self.dirty {
+                            "Unsaved changes • "
                         } else if self.save_confirmed {
                             "Saved locally • "
                         } else {

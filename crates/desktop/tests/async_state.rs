@@ -188,6 +188,13 @@ fn late_list_success_or_failure_keeps_the_confirmed_save_status() {
         }
         state.edited();
         assert!(state.message.starts_with("Unsaved changes"));
+        let (list, _) = state.list(false).unwrap();
+        state.complete(list, Err(ServiceError::Unavailable));
+        assert!(
+            state
+                .message
+                .starts_with("Unsaved changes • Could not load list")
+        );
     }
 }
 
