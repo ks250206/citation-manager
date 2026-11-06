@@ -42,14 +42,17 @@ intentionally extended for the new result fields, not replaced by production cla
   raw `10.12/a%2Fb` differs from resolver `https://doi.org/10.12/a%2Fb` (`10.12/a/b`).
   This resolves the #8 deferral; double encoding decodes only once.
 - DOI bibliography/external-ID disagreement is a row error. Known DOI/arXiv/PMID namespaces
-  canonicalize; PMID leading zeros are removed, arXiv wrappers and case normalize while
+  canonicalize; PMID leading zeros are removed, arXiv prefixes (`arxiv:` and HTTP/HTTPS/schemeless arxiv.org/abs/) compare ASCII
+  case-insensitively and normalize while
   version suffixes remain part of the retained identifier. Unknown namespace/value spelling
   is preserved apart from edge whitespace. Canonical duplicate IDs within a row are errors.
 - Dates accept `YYYY`, `YYYY-M[M]`, `YYYY-M[M]-D[D]` and `/` separators. Calendar validation
   includes leap years; output has zero-padded precision, with year consistency required.
-  Absent dates stay absent. Page ranges with digits at both ends normalize hyphen/double
-  hyphen/em dash to en dash; other e-locators retain spelling.
-- Supplied citation keys are trimmed and retained if available. Otherwise generate from
+  Absent dates stay absent. Page ranges whose endpoints are decimal numbers with the same optional ASCII letter
+  prefix normalize hyphen/double hyphen/em dash to en dash (e.g.123-145 or S1--S12).
+  Mismatched-prefix e-locators such as e2020-001 and S12-3 retain spelling.
+- Supplied citation keys are trimmed and retained if available, including when the key
+  belongs to the row's single exact persisted match. That is not a self-collision. Otherwise generate from
   first contributor/title/year, preserving Unicode letters/numbers. Collisions get `_2`,
   `_3`, etc., including trash and earlier batch rows. Keys are at most256 UTF-8 bytes;
   generated/collision keys shorten at a scalar boundary to leave suffix space, with a
@@ -76,6 +79,9 @@ External-ID diffs are an additive union; unselected fields remain verbatim. DOI 
 with a target is rejected even if the caller tries to ignore that field. Trash must be
 restored explicitly outside import. No implicit restore, overwrite, merge or attachment move.
 
+Each preview gets a fresh UUIDv7 handle rather than a process-restarting counter.
+An old process's handle cannot alias the first retained preview after restart; a real
+two-process regression covers this boundary. UUIDs are not caller grants.
 A preview lives ONLY inside that coordinator; it is bound to its backend/connection and
 retained destination IDs. Handles carry no authorization and are not durable credentials.
 #25 must resolve caller grants and restrict preview/commit/cancel access before invoking

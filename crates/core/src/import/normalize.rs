@@ -17,6 +17,16 @@ pub fn invalid(message: &str) -> ServiceError {
 pub fn spaces(value: &str) -> String {
     value.split_whitespace().collect::<Vec<_>>().join(" ")
 }
+fn page_range(start: &str, end: &str) -> bool {
+    let number = |s: &str| {
+        let boundary = s.bytes().take_while(u8::is_ascii_alphabetic).count();
+        !s[boundary..].is_empty() && s[boundary..].bytes().all(|b| b.is_ascii_digit())
+    };
+    let start = start.trim();
+    let end = end.trim();
+    let prefix = |s: &str| s.bytes().take_while(u8::is_ascii_alphabetic).count();
+    number(start) && number(end) && start[..prefix(start)] == end[..prefix(end)]
+}
 fn text(value: &str, limit: usize) -> Result<(), ServiceError> {
     if value.len() > limit || value.chars().any(|c| c.is_control() && !c.is_whitespace()) {
         return Err(invalid(
@@ -60,10 +70,20 @@ pub fn external_id(id: &ExternalId) -> Result<ExternalId, ServiceError> {
     let (namespace, value) = match known.as_str() {
         "doi" => (known, normalize_doi(value)?),
         "arxiv" => {
-            let v = value
-                .strip_prefix("https://arxiv.org/abs/")
-                .or_else(|| value.strip_prefix("arXiv:"))
-                .unwrap_or(value);
+            let mut v = value;
+            for prefix in [
+                "https://arxiv.org/abs/",
+                "http://arxiv.org/abs/",
+                "arxiv.org/abs/",
+                "arxiv:",
+            ] {
+                if v.get(..prefix.len())
+                    .is_some_and(|s| s.eq_ignore_ascii_case(prefix))
+                {
+                    v = &v[prefix.len()..];
+                    break;
+                }
+            }
             if v.chars().any(char::is_whitespace) {
                 return Err(invalid("invalid arXiv identifier"));
             }
@@ -154,10 +174,7 @@ pub fn normalize(input: &PaperDraft) -> Result<PaperDraft, ServiceError> {
                     .split_once("--")
                     .or_else(|| part.split_once(['-', '–', '—']));
                 match range {
-                    Some((start, end))
-                        if start.chars().any(|c| c.is_ascii_digit())
-                            && end.chars().any(|c| c.is_ascii_digit()) =>
-                    {
+                    Some((start, end)) if page_range(start, end) => {
                         format!("{}–{}", start.trim(), end.trim())
                     }
                     _ => part.to_owned(),

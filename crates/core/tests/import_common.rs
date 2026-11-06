@@ -378,3 +378,135 @@ fn key_and_batch_boundaries_and_bibliographic_suggestions_are_honest() {
             .is_err()
     );
 }
+
+#[test]
+fn preview_handles_do_not_alias_after_a_real_process_restart() {
+    if std::env::var_os("CM_IMPORT_ID_TEST_CHILD").is_some() {
+        let mut service = ImportCoordinator::new(Mock { applies: 0 });
+        let preview = service
+            .preview(request(vec![PaperDraft::titled("Unapproved child row")]))
+            .unwrap();
+        println!("CM_IMPORT_PREVIEW_ID={}", preview.id.0);
+        return;
+    }
+    let ids = (0..2)
+        .map(|_| {
+            let result = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "preview_handles_do_not_alias_after_a_real_process_restart",
+                    "--nocapture",
+                ])
+                .env("CM_IMPORT_ID_TEST_CHILD", "1")
+                .output()
+                .unwrap();
+            assert!(
+                result.status.success(),
+                "{}",
+                String::from_utf8_lossy(&result.stderr)
+            );
+            String::from_utf8(result.stdout)
+                .unwrap()
+                .lines()
+                .find_map(|line| {
+                    line.strip_prefix("CM_IMPORT_PREVIEW_ID=")
+                        .map(str::to_owned)
+                })
+                .unwrap()
+        })
+        .collect::<Vec<_>>();
+    assert_ne!(ids[0], ids[1]);
+    let mut service = ImportCoordinator::new(Mock { applies: 0 });
+    service
+        .preview(request(vec![PaperDraft::titled("Current unapproved row")]))
+        .unwrap();
+    assert_eq!(
+        service.commit(ImportCommit {
+            preview_id: PreviewId(ids[0].clone()),
+            decisions: vec![ImportDecision {
+                candidate_index: 0,
+                action: ImportAction::Create
+            }]
+        }),
+        Err(ServiceError::NotFound)
+    );
+    assert_eq!(service.into_backend().applies, 0);
+}
+
+#[test]
+fn arxiv_wrappers_and_page_ranges_preserve_literal_elocators() {
+    for value in [
+        "arXiv:2101.00001v2",
+        "arxiv:2101.00001v2",
+        "ARXIV:2101.00001v2",
+        "http://arxiv.org/abs/2101.00001v2",
+        "https://ARXIV.org/abs/2101.00001v2",
+        "arxiv.org/abs/2101.00001v2",
+    ] {
+        assert_eq!(
+            external_id(&ExternalId {
+                namespace: "ARXIV".into(),
+                value: value.into()
+            })
+            .unwrap()
+            .value,
+            "2101.00001v2"
+        );
+    }
+    for (raw, expected) in [
+        ("123-145", "123–145"),
+        ("S1 -- S12", "S1–S12"),
+        ("e2020-001", "e2020-001"),
+        ("S12-3", "S12-3"),
+    ] {
+        let mut draft = PaperDraft::titled("Pages");
+        draft.bibliography.pages = Some(raw.into());
+        assert_eq!(
+            normalize(&draft).unwrap().bibliography.pages.as_deref(),
+            Some(expected)
+        );
+    }
+}
+
+#[test]
+fn reimport_retains_a_key_owned_by_its_single_exact_match() {
+    struct Existing(cm_domain::Paper);
+    impl ImportBackend for Existing {
+        fn snapshot(&mut self, _: &ImportDestination) -> Result<ImportSnapshot, ServiceError> {
+            Ok(ImportSnapshot {
+                revision: "1".into(),
+                papers: vec![self.0.clone()],
+            })
+        }
+        fn apply(&mut self, _: &PreparedImport) -> Result<ImportOutcome, ServiceError> {
+            unreachable!()
+        }
+    }
+    let mut draft = PaperDraft::titled("A retained reference");
+    draft.bibliography.doi = Some("10.12/self".into());
+    draft.bibliography.citation_key = Some("StableLaTeXKey".into());
+    let normalized = normalize(&draft).unwrap();
+    let paper = cm_domain::Paper {
+        id: cm_domain::PaperId(uuid::Uuid::now_v7()),
+        title: normalized.title.clone(),
+        external_ids: normalized.external_ids.clone(),
+        bibliography: normalized.bibliography.clone(),
+        created_at: None,
+        updated_at: None,
+        deleted_at: None,
+    };
+    let mut service = ImportCoordinator::new(Existing(paper));
+    let preview = service.preview(request(vec![draft])).unwrap();
+    let row = &preview.candidates[0];
+    assert_eq!(
+        row.draft.bibliography.citation_key.as_deref(),
+        Some("StableLaTeXKey")
+    );
+    assert!(!row.diagnostics.iter().any(|d| d.field == "citation_key"));
+    assert!(
+        !row.matches[0]
+            .differences
+            .iter()
+            .any(|d| d.field == "citation_key")
+    );
+}

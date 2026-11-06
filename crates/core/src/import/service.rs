@@ -3,7 +3,6 @@ use crate::{ServiceError, ports::ImportService};
 use normalize::{invalid, *};
 use std::{
     collections::{HashMap, HashSet},
-    sync::atomic::{AtomicU64, Ordering},
     time::{Duration, Instant},
 };
 
@@ -74,8 +73,7 @@ impl<B: ImportBackend> ImportService for ImportCoordinator<B> {
         }
         let snapshot = self.backend.snapshot(&request.destination)?;
         check_snapshot(&snapshot)?;
-        static NEXT: AtomicU64 = AtomicU64::new(1);
-        let id = PreviewId(format!("import-{}", NEXT.fetch_add(1, Ordering::Relaxed)));
+        let id = PreviewId(format!("import-{}", uuid::Uuid::now_v7()));
         let candidates = build_preview(&request.candidates, &snapshot.papers)?;
         let preview = ImportPreview { id: id.clone(), candidates, warnings:vec!["Commit requires one decision per row; fuzzy matches are suggestions. Handles are service-local, not credentials.".into()] };
         let plan = PreparedImport {
@@ -138,7 +136,18 @@ fn build_preview(
         let mut diagnostics = input.diagnostics.clone();
         let draft = match normalize(input) {
             Ok(mut d) => {
-                let key = citation_keys::allocate(&d, &mut used);
+                let exact = papers
+                    .iter()
+                    .filter(|paper| {
+                        dedup::classify(&d, &paper_draft(paper)).is_some_and(MatchKind::exact)
+                    })
+                    .collect::<Vec<_>>();
+                let own_key = d.bibliography.citation_key.as_ref().filter(|key| {
+                    exact.len() == 1 && exact[0].bibliography.citation_key.as_ref() == Some(*key)
+                });
+                let key = own_key
+                    .cloned()
+                    .unwrap_or_else(|| citation_keys::allocate(&d, &mut used));
                 if d.bibliography
                     .citation_key
                     .as_ref()

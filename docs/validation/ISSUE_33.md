@@ -51,10 +51,11 @@ python3 -m unittest discover -s scripts -p 'test_*.py' -v
 git diff --check
 ```
 
-Workspace:87 unit/integration tests +1 compile-fail doctest, including6 new pure/core and10
+Workspace:90 unit/integration tests +1 compile-fail doctest, including9 new pure/core and10
 new genuine SQLite integration tests. Python:18 tests. Architecture:12 crates, existing
 allowed dependency direction/platform isolation. Migrations: existing2 SQL/checksums unchanged;
-no new migration or dependency/lockfile change was needed. Local default-feature build is
+no new migration or dependency version/checksum change was needed. Core now uses the
+already-pinned uuid with its explicit v7 feature; Cargo.lock adds only that dependency edge. Local default-feature build is
 compilation evidence; SQLite integration tests above are actual runtime evidence.
 
 `find-docs` resolved rusqlite via Context7, then queried `/rusqlite/rusqlite/v0.41.1`.
@@ -77,3 +78,19 @@ The #34 packaging work was not edited. The worker's existing upgrade/backup gate
 Different-model independent read-only review and merge belong to root for this exact PR head;
 this implementation agent did not run reviewers, merge, watch or poll CI. CI is inspected once
 at PR handoff, with its observed non-final/failure state reported honestly.
+
+## Root review corrections in progress
+
+The first independent review found one P1 (legacy resolver DOI compatibility), one P2
+(preview ID reuse after real process restart), and three P3s. The P1 remains an explicit
+merge blocker pending the dedicated compatibility repair. Root fixed the P2 with UUIDv7
+handles and a two-child-process regression; P3 corrections cover case-insensitive arXiv
+wrappers, numeric/matching-prefix page ranges versus e-locators, and preserving a supplied
+citation key owned by the single exact match. The core test confirms the key is neither
+renamed nor offered as a changed field. Full fmt/clippy/workspace tests/build, architecture,
+immutable migration checks and Python18 passed for this partial correction. No user library
+or old data was modified; actual legacy-data regression is still required for the P1.
+
+UUID API evidence: Context7 resolved `/uuid-rs/uuid`, then official source for now_v7
+confirmed the v7/std feature and timestamp+random generation. The exact pinned1.29.0 API
+also compiled in an isolated core check and in the separate-process regression.
