@@ -10,6 +10,4 @@ workspace = true
 
 [dependencies]
 cm-domain.workspace = true
-
-[dev-dependencies]
 serde_json.workspace = true

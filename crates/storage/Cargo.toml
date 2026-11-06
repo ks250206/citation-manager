@@ -12,3 +12,12 @@ workspace = true
 cm-domain.workspace = true
 cm-core.workspace = true
 rusqlite.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+uuid = { workspace = true, features = ["v7"] }
+
+[target.'cfg(unix)'.dependencies]
+rustix.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

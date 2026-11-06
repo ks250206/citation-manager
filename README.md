@@ -4,8 +4,9 @@
 
 Created in [T3 Code](https://t3.codes).
 
-Rust + GPUI のローカル文献管理アプリを実装中です。現在は #7 の 12-crate workspace と最小契約のみです。
-文献保存、GUI window、daemon/CLI、PDFium runtime、MCP tools はまだ利用できません。
+Rust + GPUI のローカル文献管理アプリを実装中です。#7 の 12-crate workspace と最小契約に、
+#8 の SQLite library / 文献 CRUD を追加しました（[利用API・保存境界](docs/ADR/sqlite-library.md)、
+[実DB検証](docs/validation/ISSUE_8.md)）。GUI window、daemon/CLI、PDFium runtime、MCP tools はまだ利用できません。
 `cm_mcp::run_stdio()` は #29 未実装を明示するエラーを返し、MCP stdout を出力しません。
 
 設計は [DESIGN.md](DESIGN.md)、依存方向と信頼境界は [ADR](docs/ADR/boundaries.md) /

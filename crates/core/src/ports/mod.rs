@@ -6,6 +6,8 @@ use cm_domain::{Attachment, AttachmentId, Paper, PaperId, StorageKey};
 pub trait PaperRepository {
     fn get(&self, id: PaperId) -> Result<Option<Paper>, ServiceError>;
     /// Save one logical record; adapter must preserve external identifiers.
+    /// SQLite implements this as insert-only (explicit internal ID), never an upsert.
+    /// For generated IDs, updates and lifecycle operations use papers::PaperLibrary.
     fn save(&mut self, paper: &Paper) -> Result<(), ServiceError>;
 }
 

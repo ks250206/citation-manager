@@ -1,18 +1,21 @@
 //! Application contracts independent of UI, storage drivers and transports.
 pub mod import;
+pub mod papers;
 pub mod ports;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ServiceError {
     Unavailable,
     Conflict,
+    NotFound,
     InvalidInput(String),
 }
 impl std::fmt::Display for ServiceError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Unavailable => f.write_str("service unavailable"),
-            Self::Conflict => f.write_str("state changed; preview again"),
+            Self::Conflict => f.write_str("record conflicts with existing data or state"),
+            Self::NotFound => f.write_str("record not found"),
             Self::InvalidInput(reason) => write!(f, "invalid input: {reason}"),
         }
     }
