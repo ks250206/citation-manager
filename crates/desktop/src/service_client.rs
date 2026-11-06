@@ -20,6 +20,7 @@ pub struct LibraryState {
     pub has_more: bool,
     page_after: Option<cm_protocol::domain::PaperId>,
     dirty: bool,
+    save_confirmed: bool,
     generation: u64,
     pending: Option<(u64, Operation)>,
     listing: Option<(u64, bool)>,
@@ -29,6 +30,7 @@ impl LibraryState {
     pub fn edited(&mut self) {
         if !self.editor_busy() {
             self.dirty = true;
+            self.save_confirmed = false;
             self.message = "Unsaved changes • ⌘S to save".into();
             self.error = false;
         }
@@ -49,6 +51,7 @@ impl LibraryState {
             self.list_overrides.clear();
         } else {
             self.pending = Some((self.generation, operation));
+            self.save_confirmed = false;
         }
         self.message = if operation == Operation::Save {
             "Saving…"
@@ -67,6 +70,7 @@ impl LibraryState {
         self.pending = None;
         self.selected = None;
         self.dirty = true;
+        self.save_confirmed = false;
         self.message = "New paper • unsaved".into();
         self.error = false;
     }
@@ -159,6 +163,8 @@ impl LibraryState {
                         "{}{} papers loaded • offline",
                         if self.dirty {
                             "Unsaved changes • "
+                        } else if self.save_confirmed {
+                            "Saved locally • "
                         } else {
                             ""
                         },
@@ -186,12 +192,27 @@ impl LibraryState {
                 self.papers.sort_by_key(|p| p.id.0);
                 self.selected = Some(*paper);
                 self.dirty = false;
+                self.save_confirmed = operation == Operation::Save;
                 true
             }
             (_, Err(error)) => {
                 self.error = true;
-                self.message =
-                    format!("Error: {error}. Nothing was confirmed saved; retry when ready.");
+                self.message = match operation {
+                    Operation::List { .. } => format!(
+                        "{}Could not load list: {error}. Reload to retry.",
+                        if self.saving() {
+                            "Saving… • "
+                        } else if self.save_confirmed {
+                            "Saved locally • "
+                        } else {
+                            ""
+                        }
+                    ),
+                    Operation::Get => format!("Could not load paper: {error}. Retry when ready."),
+                    Operation::Save => format!(
+                        "Could not save: {error}. Nothing was confirmed saved; retry when ready."
+                    ),
+                };
                 false
             }
             _ => {

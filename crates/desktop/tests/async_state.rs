@@ -166,6 +166,32 @@ fn a_late_list_snapshot_cannot_hide_a_newly_saved_paper() {
 }
 
 #[test]
+fn late_list_success_or_failure_keeps_the_confirmed_save_status() {
+    for result in [
+        Ok(LibraryReply::Papers(vec![])),
+        Err(ServiceError::Unavailable),
+    ] {
+        let mut state = LibraryState::default();
+        let (list, _) = state.list(false).unwrap();
+        state.new_paper();
+        let (save, _) = state.save("Saved title".into(), "".into()).unwrap();
+        state.complete(save, Ok(LibraryReply::Paper(Box::new(paper()))));
+        state.complete(list, result.clone());
+        assert!(
+            state.message.starts_with("Saved locally • "),
+            "{}",
+            state.message
+        );
+        assert!(!state.message.contains("Nothing was confirmed saved"));
+        if result.is_err() {
+            assert!(state.message.contains("Could not load list"));
+        }
+        state.edited();
+        assert!(state.message.starts_with("Unsaved changes"));
+    }
+}
+
+#[test]
 fn abandoned_or_panicked_transport_completes_once_and_unlocks_save() {
     use cm_desktop::service_client::response_completion;
     use std::sync::mpsc;

@@ -150,3 +150,15 @@ paper, observed the one-line display, Cmd+S -> Saved locally, and Cmd+Q -> app q
 SQLite check confirmed exact original title/abstract bytes and integrity_check=ok afterward.
 [Recorded values and binary hash](issue-10/root-multiline.json). No real library was opened.
 This targeted regression does not repeat the original network-denial/IME-candidate checks.
+
+## Integration after #9
+
+Integrated merged #9 (`1c11329`) before final review. Both feature appendices and module
+registrations are preserved; no applied SQL/checksums or dependency versions changed.
+Root passed integrated workspace fmt/clippy/test/build, architecture, migration preservation
+and Python validators. Workspace tests including compile-fail doctest: 62.
+Native-feature clippy/tests (12) and executable linking also passed.
+A remaining review P3 is fixed: background List success/failure retains the confirmed-save
+status, and list/read errors no longer claim that nothing was saved. A regression covers
+Save completion followed by both List success and List failure; editing clears the confirmation.
+This message/state-only repair does not change multiline rendering or the recorded native bytes.
