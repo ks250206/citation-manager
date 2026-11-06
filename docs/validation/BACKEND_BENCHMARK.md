@@ -1,50 +1,57 @@
 # #47 release headless backend baseline
 
-Measured 2026-11-07 JST from benchmark implementation commit
-`f273466d72c6baa240dc0870a6f47d104b6ac75f`, based on merged main
-`fd50af1fe385c30b8581f06c90247630f27caf55` (#8/#12/#13/#33). Subsequent changes in this PR are evidence only.
-The recorded working tree contains only untracked evidence files; measured harness
-and Rust sources match that commit. The final CSV uses LF line endings.
-No product optimization, schema/migration change, dependency/pin/lock change,
-search DSL, PR #45 worker or GUI/native host operation is included. Independent
-Opus review and CI/integration belong to the root agent; they are not local passes.
+Measured 2026-11-07 JST at implementation commit
+`b7c0dd6df5557feb8c491bac68757883af706432`, based on merged main
+`d9157ff0f5db7bc06d37521d6878b0383160fdc4`. The measured working tree was clean;
+subsequent changes are measurement evidence and this report. #46 is on that main,
+but its new DSL parser is not used by these existing #8/#12/#13/#33 operations.
+No product optimization, schema/migration, dependency/pin/lock, PR #45 worker or GUI
+operation is included. This replaces the initial measurements at `f273466d`; their
+raw files remain available in commit `d5287d6` and are not mixed with the new samples.
 
 ## Environment and reproduction
 
-- Mac16,6, Apple M4 Max, 14 physical/logical CPU cores; arm64 macOS 27.2 (26B123).
-- **36 GiB RAM (38,654,705,664 bytes)**; this differs from DESIGN §16's 16 GB target.
-- Rust 1.99.1 (`58cf8f9c3`), Cargo 1.99.1, LLVM 23.1.1, bundled SQLite 3.54.1.
-- Locked default-feature `--release`: opt-level 3, no debug assertions/debuginfo; no RUSTFLAGS/build-target override. Actual artifact profiles and SHA-256 are recorded.
-- Seed 47; 10,000 query papers, 10 collections, 8 tags, 20,000 links in each membership table, 20,000 contributors and 20,000 external IDs. No PDF/attachment/fulltext/job data.
-- Import: independently empty DB per repeat, 1,000 new synthetic BibTeX papers each, 10 explicit 100-row previews/commits per repeat, 3 repeats.
-- Query: 21 samples per case/page/condition, 546 timed calls in total. Measurements ran sequentially without this agent running workspace checks concurrently. Other host/agent activity was not controlled.
+- Mac16,6, Apple M4 Max, 14 physical / 14 logical CPU cores;
+  arm64 macOS 27.2 (26B123).
+- **36 GiB RAM (38,654,705,664 bytes)**, different from DESIGN §16's 16 GB target.
+- Rust 1.99.1 / Cargo 1.99.1, bundled SQLite 3.54.1.
+- Locked default-feature release opt-level 3, no debug assertions/debuginfo;
+  actual artifact paths/profiles/features/hashes and build environment are recorded.
+  No explicit `--features` or RUSTFLAGS override was used. Default features may be active.
+- Query fixture: seed 47, 10,000 papers, 10 collections, 8 tags, 20,000 links in each
+  membership table, 20,000 contributors and 20,000 external IDs. No PDF/FTS/jobs.
+- Query: 21 samples per case/page/condition, **546** timed calls, executed sequentially.
+- Import: three independent empty DBs, 1,000 new papers each, ten explicit 100-row
+  preview/decision/commit batches per repeat.
+- No workspace checks or other agent work were run by root concurrently with the
+  representative measurement. Other host activity and OS caches were not controlled.
 
 ```sh
-python3 scripts/benchmarks/run.py --representative --out representative-release-lf
+python3 scripts/benchmarks/run.py --representative --out root-reviewed-release
 ```
 
-The [instrument/method](../../scripts/benchmarks/README.md) specifies fixture
-formulas, private temporary storage, timing boundaries, decision policy and limits.
-Outputs are retained under `target/backend-benchmark/representative-release-lf`; DBs
-are deleted by their own TempDir owners. No user library was opened. Committed
-[environment](BACKEND_BENCHMARK_2026-11-07/environment.json),
-[raw query samples](BACKEND_BENCHMARK_2026-11-07/query.json),
-[raw import samples](BACKEND_BENCHMARK_2026-11-07/import.json),
+See [instrument and exact method](../../scripts/benchmarks/README.md). The run is
+retained under `target/backend-benchmark/root-reviewed-release`. Each private temp
+DB is owned/deleted by its TempDir; there is no user-library path argument.
+Committed [environment](BACKEND_BENCHMARK_2026-11-07/environment.json),
+[raw query](BACKEND_BENCHMARK_2026-11-07/query.json),
+[raw import](BACKEND_BENCHMARK_2026-11-07/import.json),
 [summary JSON](BACKEND_BENCHMARK_2026-11-07/summary.json),
-[summary CSV](BACKEND_BENCHMARK_2026-11-07/summary.csv), and
-[synthetic per-batch log](BACKEND_BENCHMARK_2026-11-07/import.log) are inspectable.
-Build logs stay in target; environment evidence retains actual executable profiles/hashes.
+[CSV](BACKEND_BENCHMARK_2026-11-07/summary.csv) and
+[batch log](BACKEND_BENCHMARK_2026-11-07/import.log) are inspectable.
+CSV and SVG regenerate exactly from raw data with the documented Python functions.
+Build logs remain in target. Summary commands and environment artifacts contain the
+actual Cargo-returned executable paths, including custom CARGO_TARGET_DIR support.
 
 ## Query correctness and timings
 
-The fixture uses **direct SQL on its own fixture connection**, with foreign keys
-ON, production WAL/FULL schema and one transaction. This is not CRUD/ImportService
-filling speed. Generation/serialization/insert/checkpoint seed time was
-**444.529 ms**, outside all query samples. Integrity check was `ok`,
-foreign-key check returned 0 rows, exact counts and all membership contents passed.
-The reopened production factory checked immutable migration history. Full traversal
-checked exact ordered IDs, complete Paper metadata, cursor progress and terminal pages
-in **391.086 ms**, also outside samples. SHA-256 of the ordered fixture Papers:
+Direct SQL seeds only the dedicated fixture connection, with FK ON, WAL/FULL and
+one transaction. This is not CRUD/ImportService throughput. Generation, serialization,
+insert and checkpoint seed time was **469.183 ms**, outside query samples.
+Integrity was ok, FK violations zero, and exact table/membership contents passed.
+The production factory revalidated migration history. Complete ordered IDs,
+full Paper metadata, cursor progress and terminal pages were checked outside timers
+in **385.923 ms**. Ordered fixture SHA-256:
 `0386c3881aadab6e8ed95e33c0d3a97b3541258d83a5fff12f3c462d92f704b4`.
 
 | Case | Expected = actual hits | Validated pages (limit 50) |
@@ -57,125 +64,114 @@ in **391.086 ms**, also outside samples. SHA-256 of the ordered fixture Papers:
 | tag_any | 3,750 | 75 |
 | combined | 71 | 2 |
 
-The table below reports **bounded API page calls**, not whole-result scans or GUI
-latency. Page 0 is the first page; page 1 uses its real cursor. `Reopened` means
-a fresh production connection per call; its separate open/history/baseline validation
-duration is in raw `open_ms`/summary `connection_open`, excluded here. **OS caches
-were not evicted** and validation already read the data. `Warm` uses one retained
-connection and one untimed identical priming call. Conditions/order are fixed.
-All times below are milliseconds; quantiles are nearest rank `ceil(p*N)-1`.
-Each cell is p50 / p95 over 21 calls.
+These are **bounded API page calls**, not full-result scans or GUI latency.
+Page 0 is first; page 1 uses its real cursor. Reopened means a fresh production
+connection for each call, not OS cold cache; validation already read the DB.
+Connection open/history/baseline time is separate from the page timer. Warm uses
+one retained connection and an untimed priming call. Case/condition order is fixed.
+All timings are milliseconds; p50/p95 use nearest rank `ceil(p*N)-1`, N=21.
 
 | Case | Page | Returned / call | Reopened p50 / p95 (ms) | Warm p50 / p95 (ms) |
 |---|---:|---:|---:|---:|
-| list | 0 | 50 | 0.723 / 0.803 | 0.739 / 0.792 |
-| list | 1 | 50 | 0.845 / 0.916 | 0.866 / 0.951 |
-| metadata_keyword | 0 | 50 | 2.794 / 2.994 | 2.121 / 2.447 |
-| metadata_keyword | 1 | 50 | 2.383 / 2.500 | 2.053 / 2.278 |
-| metadata_no_hit | 0 | 0 | 42.253 / 44.619 | 42.619 / 43.924 |
-| collection | 0 | 50 | 0.815 / 0.919 | 0.763 / 0.821 |
-| collection | 1 | 50 | 0.968 / 1.049 | 0.859 / 0.938 |
-| tag_all | 0 | 50 | 1.150 / 1.271 | 0.981 / 1.089 |
-| tag_all | 1 | 50 | 1.178 / 1.302 | 0.989 / 1.113 |
-| tag_any | 0 | 50 | 0.999 / 1.245 | 0.929 / 1.028 |
-| tag_any | 1 | 50 | 1.035 / 1.104 | 0.846 / 0.923 |
-| combined | 0 | 50 | 27.792 / 28.737 | 27.743 / 27.925 |
-| combined | 1 | 21 | 11.736 / 12.033 | 11.885 / 12.008 |
+| collection | 0 | 50 | 0.818 / 0.943 | 0.770 / 0.858 |
+| collection | 1 | 50 | 0.973 / 1.050 | 0.860 / 0.938 |
+| combined | 0 | 50 | 27.531 / 31.412 | 27.769 / 27.954 |
+| combined | 1 | 21 | 11.641 / 12.025 | 11.819 / 11.873 |
+| list | 0 | 50 | 0.681 / 0.751 | 0.689 / 0.744 |
+| list | 1 | 50 | 0.795 / 0.917 | 0.794 / 0.862 |
+| metadata_keyword | 0 | 50 | 2.804 / 3.048 | 2.105 / 2.443 |
+| metadata_keyword | 1 | 50 | 2.376 / 2.569 | 2.079 / 2.355 |
+| metadata_no_hit | 0 | 0 | 41.582 / 42.797 | 42.307 / 43.341 |
+| tag_all | 0 | 50 | 1.084 / 1.262 | 0.985 / 1.098 |
+| tag_all | 1 | 50 | 1.207 / 1.312 | 0.993 / 1.119 |
+| tag_any | 0 | 50 | 1.005 / 1.105 | 0.915 / 1.010 |
+| tag_any | 1 | 50 | 1.049 / 1.303 | 1.011 / 1.029 |
+
+Summary `connection_open` rows exist only for reopened conditions. Warm raw
+`open_ms=0` means no timed opening, **not** a measured zero-latency open. There are
+71 summary rows (26 query, 13 real connection-open, 32 import), with no synthetic
+warm-open metrics. Query timers include service validation/SQL/full materialization/
+cursor construction; expected-value comparisons and output serialization are outside.
 
 ## Actual parser / confirmed import timings
 
-Input is 1,091,560 synthetic UTF-8 BibTeX bytes, generated before timing; source SHA-256:
-`22fe0a077c9ae8c2acc322fbab3f0087937dc932ce66645d908e8e73acf3f335`. Distinct SHA-derived titles deliberately avoid saturating
-near-duplicate matching limits. This is a controlled unique-record workload, not
-a natural-language duplicate-heavy library or a real researcher import distribution.
-Each repeat begins with zero papers. Collection/tag setup is outside timing.
-The real #13 parser feeds ten fresh #33 previews with default TTL/capacity/budgets.
-The fixture explicitly inspects normalized rows and submits Create decisions for
-valid unique DOI/key rows; no human/GUI/IPC authorization claim is made.
-No retry, TTL relaxation, automatic merge or larger batch is used.
+Input: 1,091,560 synthetic UTF-8 BibTeX bytes generated before timing;
+SHA-256 `22fe0a077c9ae8c2acc322fbab3f0087937dc932ce66645d908e8e73acf3f335`. Unique SHA-derived titles deliberately avoid saturating
+near-duplicate budgets. This is a controlled unique-record workload, not a natural
+researcher/duplicate-heavy distribution. No matching limits or policy were relaxed.
+Setup and collection/tag destination creation are outside timing. Real #13 parser
+and #33 default TTL/capacity/budgets are used. The synthetic caller explicitly checks
+valid rows, source hash and absence of exact/batch duplicates before Create decisions;
+this does not model human, GUI, IPC or native-host approval. No retry/automatic merge.
 
-All **30 previews left DB and WAL byte-identical**. A second real production
-connection observed each count progression 0→100→…→1000. All 30 commits created
-exactly 100 rows with zero merge/skip; each independently reopened DB contained
-1,000 fully equal bibliographies/external IDs and all expected collection/tag links.
-Each preview/commit duration is retained in raw JSON/logs, including first/last batches.
-
-`total_ms` runs from parser start through the final batch count check, including
-hashes, readback, fixture decision construction and instrumentation. It excludes
-source generation, DB setup, and final reopen/full-content verification (each is
-recorded separately). It is not human approval waiting time.
+All 30 previews left DB and WAL byte-identical. A separate production read connection
+observed 0→100→…→1000. All 30 commits created exactly 100 rows with no merge/skip.
+Each reopened DB contained all 1,000 fully equal bibliographies/external IDs and exact
+collection/tag memberships. Per-stage values remain in raw JSON/logs.
+`total_ms` runs from parser start through final batch count validation, including hashes,
+readback, decision construction and instrumentation. It excludes source generation,
+setup and final reopen/full-content validation, recorded separately. It is not human
+waiting time and is not equal to the sum of measured service intervals.
 
 | Repeat | Parser (ms) | Total wall (ms) | Reopened stored count |
 |---|---:|---:|---:|
-| 0 | 25.282 | 8127.403 | 1000 |
-| 1 | 12.513 | 8270.927 | 1000 |
-| 2 | 11.986 | 8284.156 | 1000 |
+| 0 | 16.123 | 8017.860 | 1000 |
+| 1 | 11.684 | 8030.446 | 1000 |
+| 2 | 11.855 | 8052.964 | 1000 |
 
 | Batch | Existing papers before | Preview p50 / p95 (ms) | Commit p50 / p95 (ms) | Created / commit |
 |---|---:|---:|---:|---:|
-| 1 | 0 | 50.348 / 58.501 | 29.773 / 29.797 | 100 |
-| 2 | 100 | 153.086 / 153.732 | 81.173 / 81.769 | 100 |
-| 3 | 200 | 255.963 / 257.441 | 133.139 / 133.184 | 100 |
-| 4 | 300 | 364.695 / 402.002 | 181.632 / 186.604 | 100 |
-| 5 | 400 | 467.340 / 477.430 | 232.595 / 237.881 | 100 |
-| 6 | 500 | 573.633 / 579.210 | 283.926 / 303.005 | 100 |
-| 7 | 600 | 677.279 / 690.192 | 332.235 / 333.192 | 100 |
-| 8 | 700 | 783.825 / 793.104 | 384.385 / 384.469 | 100 |
-| 9 | 800 | 904.671 / 906.188 | 440.838 / 454.921 | 100 |
-| 10 | 900 | 1002.893 / 1062.966 | 490.752 / 501.878 | 100 |
+| 1 | 0 | 47.823 / 53.760 | 29.121 / 29.189 | 100 |
+| 2 | 100 | 149.757 / 150.947 | 78.412 / 78.515 | 100 |
+| 3 | 200 | 254.163 / 254.936 | 129.488 / 132.365 | 100 |
+| 4 | 300 | 356.984 / 359.663 | 178.855 / 180.495 | 100 |
+| 5 | 400 | 459.469 / 461.724 | 227.131 / 228.615 | 100 |
+| 6 | 500 | 565.527 / 566.116 | 280.521 / 281.965 | 100 |
+| 7 | 600 | 667.457 / 691.020 | 327.628 / 328.409 | 100 |
+| 8 | 700 | 769.932 / 772.297 | 376.449 / 378.191 | 100 |
+| 9 | 800 | 876.930 / 884.967 | 430.057 / 431.749 | 100 |
+| 10 | 900 | 979.189 / 986.427 | 475.574 / 477.095 | 100 |
 
-Total p50 / p95: **8270.927 / 8284.156 ms** over three repeats.
-With N=3, p95 is simply the largest observation; it is not a robust tail estimate
-or confidence interval. Do not combine samples at different inventory sizes as
-one latency distribution. The JSON/CSV includes per-batch decision durations too.
+Total p50 / p95: **8030.446 / 8052.964 ms**, over three repeats.
+N=3 p95 is the maximum observation, not a robust tail estimate or confidence interval.
+Different inventory sizes are not pooled into one latency distribution. Decision times
+are also retained in JSON/CSV. The reproducible chart uses p50 bars and p95 whiskers:
 
 ![Measured import batch medians and p95](BACKEND_BENCHMARK_2026-11-07/import-batches.svg)
 
 ## Evidence-supported follow-up, deferred
 
-The first/last preview medians are 50.348 / 1,002.893 ms; commit medians are
-29.773 / 490.752 ms, while every batch still contains 100 rows. This is observed
-under increasing inventory, not proof that all imports are fast/slow or that one
-function is the bottleneck. Existing inventory materialization/revision and
-pairwise duplicate classification are visible in the unchanged
-`storage/src/repositories/import.rs` and `core/src/import/{service,dedup}.rs`.
-A separate issue could profile these phases and investigate candidate lookup while
-preserving DOI compatibility, full reviewed matches, stale/ABA checks, preview byte
-budgets and atomic decisions. This PR proposes no algorithm/index change and
-attributes no measured duration to a subphase that was not individually timed.
+First/last preview medians: 47.823 / 979.189 ms;
+commit medians: 29.121 / 475.574 ms.
+Each batch still has 100 rows. This is inventory-associated growth, not proof of a
+particular bottleneck. Unchanged inventory/revision materialization and pairwise
+classification code are candidates for future profiling, preserving DOI compatibility,
+reviewed matches, stale/ABA protection, byte budgets and atomic decisions. No measured
+latency is attributed to an untimed subphase; this PR changes no product algorithm.
 
-## Scope limits and handoff
+## Scope limits and validation
 
-These are synchronous headless API observations on a 36 GiB machine. They do not
-complete DESIGN §16 or parent #30: no 16 GB whole-app load, GUI collection switch
-latency, warm app startup, scrolling/frame p95, CPU/I/O/RSS (including headless RSS),
-1,000 PDFs/20,000 pages, FTS/Japanese recall, jobs, crash recovery or security
-regression was measured. No total PDF/process memory claim is made.
-#15 GUI gate, #34 HELD, and #25/#23 closed gates remain intact.
+This 36 GiB headless baseline does not complete parent #30 or DESIGN §16. No 16 GB
+whole-app workload, GUI collection-switch/frame/startup latency, CPU/I/O/RSS,
+1,000 PDFs/20,000 pages, FTS/Japanese recall, jobs, crash/security regression or total
+PDF process memory was measured. #15 GUI gate, #34 HELD and #23/#25 gates stay intact.
 
-Local checks completed on the measured implementation source (evidence-only files added afterward).
-The [machine-readable check report](BACKEND_BENCHMARK_2026-11-07/checks.json) and its numbered logs record actual commands, exit codes, durations and hashes.
-Independent different-model read-only review is pending root, and CI is separate.
-No merge/watch/polling is performed by this implementation agent.
+The [initial check report](BACKEND_BENCHMARK_2026-11-07/checks.json) and numbered logs
+record the earlier implementation validation: fmt, locked workspace Clippy/build,
+159 Rust tests including the old 1000-paper roundtrips, architecture/migrations,
+Python 21 and whitespace. These logs are historical, not checks on the new harness.
+Root's follow-up checks and final independent review/CI are recorded separately below.
 
-## Local validation
-
-| Command | Result |
-|---|---|
-| `cargo fmt --all -- --check` | exit 0 |
-| `cargo clippy --workspace --all-targets --locked -- -D warnings` | exit 0 |
-| `cargo test --workspace --locked` | 159 passed, 0 failed, 0 ignored, 0 filtered out; 136.55 s including build |
-| `cargo build --workspace --locked` | exit 0 |
-| `python3 scripts/check_architecture.py` | exit 0 |
-| `python3 scripts/check_migrations.py --base fd50af1fe385c30b8581f06c90247630f27caf55` | exit 0 |
-| `python3 -m unittest discover -s scripts -p test_*.py -v` | 21 passed (including 3 instrument tests) |
-| `git diff --check` | exit 0 |
-
-The existing 1000-paper BibTeX and RIS real-SQLite roundtrip tests both passed
-(their shared test binary took 124.57 seconds). The two new Rust small instrument
-tests also ran in the workspace command. Representative 10k/1k runs remain opt-in;
-normal CI gains only the small deterministic correctness tests. No native-feature
-PDFium/GUI/signing lane is claimed as locally run.
-
-Logs are synthetic-only. Excess final blank lines are removed in committed logs
-for repository whitespace rules; checks.json preserves the raw hash when this occurs.
+The original Opus review at d5287d6 was approval-equivalent. Root addressed its three
+notes: absent warm opens removed from metric summaries, actual executable paths
+recorded, and SVG generation now part of the reproducible runner. Default-feature
+wording is explicit. Root merged current main d9157ff; benchmark Rust sources and
+production query/import algorithms are unchanged. Python 22 (including chart geometry
+and absent-open regressions), fmt, locked workspace Clippy/build passed before this
+representative rerun. Full integrated workspace validation passed 176 tests including the compile-fail
+doctest, with zero failed/ignored/filtered; both existing 1000-record BibTeX/RIS
+roundtrips ran. Architecture and immutable migration checks against d9157ff passed.
+[Root follow-up check report](BACKEND_BENCHMARK_2026-11-07/root-follow-up-checks.json)
+and [workspace log](BACKEND_BENCHMARK_2026-11-07/root-workspace.log) retain these
+results separately from initial historical logs. Final-head CI and independent
+recheck remain required. GUI/FTS/jobs/signing were not exercised.
