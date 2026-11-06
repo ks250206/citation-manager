@@ -38,6 +38,8 @@ impl LibraryView {
                 button("pdfs", "PDF files / folder", enabled).on_click(cx.listener(
                     |this, _, _, cx| {
                         if !this.locked() {
+                            this.invalidate_doi();
+                            this.load_pdf_form(this.pdf_row, cx);
                             this.screen = Screen::Pdf;
                             cx.notify();
                         }
@@ -55,6 +57,9 @@ impl LibraryView {
             .child(
                 button("review-tab", "Import review", true).on_click(cx.listener(
                     |this, _, _, cx| {
+                        if this.locked() {
+                            return;
+                        }
                         this.screen = Screen::Import;
                         cx.notify();
                     },

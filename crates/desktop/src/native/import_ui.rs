@@ -1,18 +1,76 @@
 use super::*;
 impl LibraryView {
-    pub(super) fn cancel_preview(&mut self) {
-        if let Some(preview) = self.review.preview.take() {
-            let _ = self
-                .client
-                .import(ImportRequestUi::Cancel(preview.id), Box::new(|_| {}));
+    pub(super) fn cancel_preview(&mut self) -> bool {
+        let client = self.client.clone();
+        let result = self.reviews.cancel_active(|id| {
+            client.import(ImportRequestUi::Cancel(id.clone()), Box::new(|_| {}))
+        });
+        self.review_transition(result)
+    }
+    pub(super) fn pause_file_review(&mut self) -> bool {
+        let client = self.client.clone();
+        let result = self
+            .reviews
+            .pause_file(|id| client.import(ImportRequestUi::Cancel(id.clone()), Box::new(|_| {})));
+        self.review_transition(result)
+    }
+    pub(super) fn resume_file_review(&mut self) -> bool {
+        let had_paused_file = self.reviews.paused_file.is_some();
+        let client = self.client.clone();
+        let result = self
+            .reviews
+            .resume_file(|id| client.import(ImportRequestUi::Cancel(id.clone()), Box::new(|_| {})));
+        let resumed = self.review_transition(result);
+        if resumed
+            && had_paused_file
+            && let Some(parsed) = &self.parsed
+        {
+            self.diagnostics = vec![parsed.migration_notice.clone()];
+            self.diagnostics.extend(parsed.diagnostics.iter().map(|d| {
+                format!(
+                    "{} line {}: {}",
+                    if d.error { "ERROR" } else { "Warning" },
+                    d.line,
+                    d.message
+                )
+            }));
+            self.diagnostics.push(format!("Resumed at {} / {} processed; {} committed, {} skipped. Earlier commits remain saved.", self.reviews.active.batch_start, self.reviews.active.total, self.reviews.active.committed, self.reviews.active.skipped));
         }
-        self.review.decisions.clear();
+        resumed
+    }
+    fn review_transition(&mut self, result: Result<(), ServiceError>) -> bool {
+        if let Err(error) = result {
+            self.message =
+                format!("Cannot release current preview: {error}. Retry before switching imports");
+            self.error = true;
+            false
+        } else {
+            true
+        }
+    }
+    fn cancel_review(&mut self, cx: &mut Context<Self>) {
+        if self.locked() {
+            return;
+        }
+        if !self.cancel_preview() {
+            cx.notify();
+            return;
+        }
+        self.reviews.active.from_file = false;
+        self.reviews.active.total = self.reviews.active.batch_start;
+        self.screen = Screen::Library;
+        self.status(
+            "Cancelled. Earlier commits remain saved; no later batch will run",
+            false,
+            cx,
+        );
     }
     pub(super) fn start_manual_preview(&mut self, draft: PaperDraft, cx: &mut Context<Self>) {
         self.invalidate_doi();
-        self.cancel_preview();
-        self.review = Review::default();
-        self.parsed = None;
+        if !self.pause_file_review() {
+            cx.notify();
+            return;
+        }
         let destination = self.bind_destination();
         self.call(Lane::Import, Event::Import, |c, done| {
             c.import(
@@ -50,8 +108,14 @@ impl LibraryView {
                 match result {
                     Ok(Ok(Some(paths))) => {
                         if let Some(path) = paths.into_iter().next() {
-                            this.cancel_preview();
-                            this.review = Review::default();
+                            let client = this.client.clone();
+                            let result = this.reviews.replace_file(|id| {
+                                client.import(ImportRequestUi::Cancel(id.clone()), Box::new(|_| {}))
+                            });
+                            if !this.review_transition(result) {
+                                cx.notify();
+                                return;
+                            }
                             this.parsed = None;
                             this.diagnostics.clear();
                             this.call(Lane::Import, Event::Import, |c, done| {
@@ -76,27 +140,27 @@ impl LibraryView {
         cx: &mut Context<Self>,
     ) {
         match result{
-            Ok(ImportReply::Parsed(parsed))=>{self.review.total=parsed.records;self.review.from_file=true;self.diagnostics=vec![parsed.migration_notice.clone()];self.diagnostics.extend(parsed.diagnostics.iter().map(|d|format!("{} line {}: {}",if d.error{"ERROR"}else{"Warning"},d.line,d.message)));self.parsed=Some(parsed);self.status("Parsed. Review file diagnostics, then request a bounded preview",false,cx);},
-            Ok(ImportReply::Preview(preview))=>{self.review.set_preview(preview);self.merge_fields.clear();self.merge_target=0;self.status("Review normalized candidates, source lines and differences before choosing decisions",false,cx);},
+            Ok(ImportReply::Parsed(parsed))=>{self.reviews.active.total=parsed.records;self.reviews.active.from_file=true;self.diagnostics=vec![parsed.migration_notice.clone()];self.diagnostics.extend(parsed.diagnostics.iter().map(|d|format!("{} line {}: {}",if d.error{"ERROR"}else{"Warning"},d.line,d.message)));self.parsed=Some(parsed);self.status("Parsed. Review file diagnostics, then request a bounded preview",false,cx);},
+            Ok(ImportReply::Preview(preview))=>{self.reviews.active.set_preview(preview);self.merge_fields.clear();self.merge_target=0;self.status("Review normalized candidates, source lines and differences before choosing decisions",false,cx);},
             Ok(ImportReply::Committed(outcome))=>{
-                self.review.preview=None;self.review.decisions.clear();self.review.committed+=outcome.created.len()+outcome.merged.len();self.review.skipped+=outcome.skipped;
-                self.review.batch_start+=self.review.batch_count;
+                self.reviews.active.preview=None;self.reviews.active.decisions.clear();self.reviews.active.committed+=outcome.created.len()+outcome.merged.len();self.reviews.active.skipped+=outcome.skipped;
+                self.reviews.active.batch_start+=self.reviews.active.batch_count;
                 self.diagnostics.push(format!("Committed batch: {} created, {} merged, {} skipped. Prior commits remain if you cancel.",outcome.created.len(),outcome.merged.len(),outcome.skipped));
                 for row in outcome.rows {for diagnostic in row.diagnostics{self.diagnostics.push(format!("Row {:?}, {}: {}",row.source.row,diagnostic.field,diagnostic.message));}}
                 self.reload(cx);
-                self.status(format!("Saved batch. {} committed / {} skipped; request next preview explicitly",self.review.committed,self.review.skipped),false,cx);
-                if !self.review.from_file {let id=outcome.created.first().or(outcome.merged.first()).copied();if let Some(id)=id{self.call(Lane::Editor,Event::Editor,|c,done|c.submit(LibraryRequest::Get(id),done));}}
+                self.status(format!("Saved batch. {} committed / {} skipped; request next preview explicitly",self.reviews.active.committed,self.reviews.active.skipped),false,cx);
+                if !self.reviews.active.from_file {let id=outcome.created.first().or(outcome.merged.first()).copied();if let Some(id)=id{self.call(Lane::Editor,Event::Loaded,|c,done|c.submit(LibraryRequest::Get(id),done));}}
             }
             Ok(ImportReply::Cancelled)=>self.status("Preview cancelled. Earlier committed batches remain",false,cx),
             Err(e)=>self.status(format!("Import failed: {e}. Nothing in this batch was confirmed; prior commits remain. Cancel/repreview for stale state; reduce batch size for payload limits"),true,cx),
         }
     }
     fn preview_next(&mut self, cx: &mut Context<Self>) {
-        if self.busy(Lane::Import) || self.review.preview.is_some() {
+        if self.busy(Lane::Import) || self.reviews.active.preview.is_some() {
             return;
         }
-        let start = self.review.batch_start;
-        let count = (self.review.total.saturating_sub(start)).min(self.batch_size);
+        let start = self.reviews.active.batch_start;
+        let count = (self.reviews.active.total.saturating_sub(start)).min(self.batch_size);
         if count == 0 {
             return;
         }
@@ -117,13 +181,12 @@ impl LibraryView {
         if self.busy(Lane::Import) || self.busy(Lane::Pdf) {
             return;
         }
-        let Some(commit) = self.review.commit() else {
+        let Some(commit) = self.reviews.active.commit() else {
             self.status("Choose Create, Merge or Skip for EVERY row", true, cx);
             return;
         };
-        if let Some(index) = self.review.pdf_index {
-            let cancel = Cancellation::default();
-            self.cancel = cancel.clone();
+        if let Some(index) = self.reviews.active.pdf_index {
+            let cancel = self.cancels.start_pdf();
             self.dispatch_pdf(PdfRequest::CommitNew {
                 index,
                 commit,
@@ -142,8 +205,7 @@ impl LibraryView {
             return;
         }
         let input = self.doi.read(cx).content.to_string();
-        self.cancel = Cancellation::default();
-        let cancel = self.cancel.clone();
+        let cancel = self.cancels.start_doi();
         self.call(
             Lane::Doi,
             |result| Event::Doi(Box::new(result)),
@@ -217,20 +279,20 @@ impl LibraryView {
         let busy = self.busy(Lane::Import) || self.busy(Lane::Pdf);
         let mut content=div().flex_1().min_h_0().flex().flex_col()
             .child(div().p_3().flex().gap_2()
-                .child(line(format!("Import · {} / {} candidates processed · {} committed · {} skipped",self.review.batch_start,self.review.total,self.review.committed,self.review.skipped)))
+                .child(line(format!("Import · {} / {} candidates processed · {} committed · {} skipped",self.reviews.active.batch_start,self.reviews.active.total,self.reviews.active.committed,self.reviews.active.skipped)))
                 .child(button("file-diagnostics","File diagnostics / reports",true).on_click(cx.listener(|this,_,_,cx|{this.screen=Screen::Report;cx.notify();})))
-                .child(button("cancel-import","Cancel preview / stop file",!busy).on_click(cx.listener(|this,_,_,cx|{if this.locked(){return;}this.cancel_preview();this.review.from_file=false;this.review.total=this.review.batch_start;this.status("Cancelled. Earlier commits remain saved; no later batch will run",false,cx);this.screen=Screen::Library;}))))
+                .child(button("cancel-import","Cancel preview / stop file",!busy).on_click(cx.listener(|this,_,_,cx|this.cancel_review(cx)))))
             .child(div().px_3().child("BibTeX/RIS transfer bibliography only; PDFs, notes and organization are not migrated. File and row warnings require review."));
         content = content.child(div().px_3().child(self.review_destination.clone()));
         content = content.child(
             button(
                 "batch-size",
                 format!("Batch size: {} — cycle (maximum 100)", self.batch_size),
-                !busy && self.review.preview.is_none(),
+                !busy && self.reviews.active.preview.is_none(),
             )
             .m_3()
             .on_click(cx.listener(|this, _, _, cx| {
-                if this.locked() || this.review.preview.is_some() {
+                if this.locked() || this.reviews.active.preview.is_some() {
                     return;
                 }
                 this.batch_size = match this.batch_size {
@@ -244,16 +306,31 @@ impl LibraryView {
                 cx.notify();
             })),
         );
-        if let Some(parsed) = &self.parsed {
+        if let Some(file) = &self.reviews.paused_file {
+            content = content.child(line(format!("Bibliography paused: {} / {} processed, {} committed, {} skipped. Next batch still requires a fresh preview and decisions.", file.batch_start, file.total, file.committed, file.skipped)))
+                .child(button("resume-file", "Resume bibliography / cancel current preview", !busy).on_click(cx.listener(|this, _, _, cx| {
+                    if this.locked() { return; }
+                    if this.resume_file_review() { this.status("Bibliography resumed. Request the next preview explicitly", false, cx); } else { cx.notify(); }
+                })));
+        }
+        if let Some(summary) = &self.reviews.replaced_file {
+            content = content.child(line(summary.clone()));
+        }
+        if let Some(parsed) = self
+            .parsed
+            .as_ref()
+            .filter(|_| self.reviews.active.from_file)
+        {
             content = content.child(div().px_3().child(format!(
                 "File: {} accepted candidates · {} file diagnostics (including rejected records)",
                 parsed.records,
                 parsed.diagnostics.len()
             )));
         }
-        if let Some(preview) = &self.review.preview {
+        if let Some(preview) = &self.reviews.active.preview {
             let row = self
-                .review
+                .reviews
+                .active
                 .row
                 .min(preview.candidates.len().saturating_sub(1));
             content = content.child(
@@ -269,7 +346,7 @@ impl LibraryView {
                         )
                         .on_click(cx.listener(|this, _, _, cx| {
                             if !this.locked() {
-                                this.review.choose_valid_creates();
+                                this.reviews.active.choose_valid_creates();
                                 cx.notify();
                             }
                         })),
@@ -278,7 +355,7 @@ impl LibraryView {
                         button(
                             "commit",
                             "Commit reviewed batch",
-                            !busy && self.review.commit().is_some(),
+                            !busy && self.reviews.active.commit().is_some(),
                         )
                         .on_click(cx.listener(|this, _, _, cx| this.commit_review(cx))),
                     ),
@@ -296,8 +373,8 @@ impl LibraryView {
                             .flex_col()
                             .child(line(format!(
                                 "Preview rows {}–{} (at most 100)",
-                                self.review.batch_start + 1,
-                                self.review.batch_start + preview.candidates.len()
+                                self.reviews.active.batch_start + 1,
+                                self.reviews.active.batch_start + preview.candidates.len()
                             )))
                             .child(
                                 uniform_list(
@@ -307,17 +384,19 @@ impl LibraryView {
                                         range
                                             .map(|index| {
                                                 let c = &this
-                                                    .review
+                                                    .reviews
+                                                    .active
                                                     .preview
                                                     .as_ref()
                                                     .expect("review")
                                                     .candidates[index];
-                                                let decision = match &this.review.decisions[index] {
-                                                    None => "Choose a decision",
-                                                    Some(ImportAction::Create) => "Create",
-                                                    Some(ImportAction::Merge { .. }) => "Merge",
-                                                    Some(ImportAction::Skip) => "Skip",
-                                                };
+                                                let decision =
+                                                    match &this.reviews.active.decisions[index] {
+                                                        None => "Choose a decision",
+                                                        Some(ImportAction::Create) => "Create",
+                                                        Some(ImportAction::Merge { .. }) => "Merge",
+                                                        Some(ImportAction::Skip) => "Skip",
+                                                    };
                                                 let has_error =
                                                     c.diagnostics.iter().any(|d| d.error);
                                                 button(
@@ -334,7 +413,7 @@ impl LibraryView {
                                                 .h(px(44.))
                                                 .overflow_hidden()
                                                 .on_click(cx.listener(move |this, _, _, cx| {
-                                                    this.review.row = index;
+                                                    this.reviews.active.row = index;
                                                     this.merge_target = 0;
                                                     this.merge_fields.clear();
                                                     cx.notify();
@@ -357,14 +436,16 @@ impl LibraryView {
                             .child(self.candidate_review(row, cx)),
                     ),
             );
-        } else if self.review.from_file && self.review.batch_start < self.review.total {
+        } else if self.reviews.active.from_file
+            && self.reviews.active.batch_start < self.reviews.active.total
+        {
             content = content.child(
                 button(
                     "next-preview",
                     format!(
                         "Preview next {} candidates",
                         self.batch_size
-                            .min(self.review.total - self.review.batch_start)
+                            .min(self.reviews.active.total - self.reviews.active.batch_start)
                     ),
                     !busy,
                 )
@@ -381,7 +462,7 @@ impl LibraryView {
         content
     }
     fn candidate_review(&self, row: usize, cx: &mut Context<Self>) -> Div {
-        let Some(preview) = &self.review.preview else {
+        let Some(preview) = &self.reviews.active.preview else {
             return div();
         };
         let Some(candidate) = preview.candidates.get(row) else {
@@ -438,7 +519,7 @@ impl LibraryView {
                         )
                         .on_click(cx.listener(move |this, _, _, cx| {
                             if !this.locked() {
-                                this.review.choose(row, ImportAction::Create);
+                                this.reviews.active.choose(row, ImportAction::Create);
                                 cx.notify();
                             }
                         })),
@@ -447,7 +528,7 @@ impl LibraryView {
                         button("choose-skip", "Explicit Skip", enabled).on_click(cx.listener(
                             move |this, _, _, cx| {
                                 if !this.locked() {
-                                    this.review.choose(row, ImportAction::Skip);
+                                    this.reviews.active.choose(row, ImportAction::Skip);
                                     cx.notify();
                                 }
                             },
@@ -529,7 +610,7 @@ impl LibraryView {
                         )
                         .on_click(cx.listener(move |this, _, _, cx| {
                             if !this.locked() && this.merge_target == index {
-                                this.review.choose(
+                                this.reviews.active.choose(
                                     row,
                                     ImportAction::Merge {
                                         match_index: index,

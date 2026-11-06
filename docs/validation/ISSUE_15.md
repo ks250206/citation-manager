@@ -12,6 +12,45 @@ but no actual window screenshot or GUI operation was observed. The cause is unre
 [Exact observations and private paths](issue-15/native-observations.txt) distinguish these
 logs from visible UI evidence. Earlier #10 screenshots do not verify the new implementation.
 
+The controlled follow-up built the actual baseline `fd50af1` in T3-prepared checkout
+`t3-6bedd541` before fast-forwarding to published `0afdee4`. Both independently copied
+real-executable test apps, each with fresh private data, returned `cgWindowNotFound`
+through both app-path and bundle-ID CUA lookup; CUA inventory reported each running.
+This is a native window-observation blocker shared with the control, not evidence of a
+#15-specific regression or proof that CUA alone is faulty. Temporary application logs
+reached render, a scheduled next-frame callback and worker replies, but do not establish
+visibility, native input or screenshots. Instrumentation was removed. See
+[comparison and follow-up checks](issue-15/follow-up-checks.json).
+
+## Independent-review corrections
+
+The [review of original `0afdee4`](https://github.com/ks250206/citation-manager/pull/45#issuecomment-6693421153)
+reported no P0/P1 and three P2 findings. This follow-up addresses their code paths:
+
+- PDF registration owns separate form entities and a draft bound to row index, source
+  path and SHA-256. Library selection and Cmd+N cannot supply PDF metadata. A mismatched
+  origin is rejected; matching origins retain edits. Cmd+S saves only on the Library
+  screen; PDF registration uses its explicit preview/commit controls.
+- Replacing a preview first submits coordinator Cancel. Failed cancellation submission
+  retains the original handle/decisions. PDF/manual review pauses the bibliography
+  counters, and explicit Resume requires a fresh preview/decisions. An unrelated PDF
+  report preserves a non-PDF preview. Choosing a new file explicitly reports the prior
+  stopped progress; prior commits remain. Parsed file diagnostics are restored on resume.
+- DOI and PDF own independent real cancellation tokens. Idle PDF Cancel is guarded.
+  Leaving for the PDF screen invalidates the earlier DOI response generation. Attach,
+  retry and commit cannot replace the DOI cancellation token.
+- Adjacent P3-1: Get replies use a separate load event and no longer display “Saved
+  locally” or erase the PDF partial-failure summary. This does not fix the separate
+  unsaved-draft navigation or export-default findings. Paging and its failure hook are
+  reserved for root; this checkout does not modify `library.rs` or `workbench_state.rs`.
+
+New tests are **state/worker evidence**, not native acceptance: four pure-state tests
+exercise PDF origin changes, retained handles/batch counters, failed cancellation
+submission and both cancellation directions with real tokens. A real worker regression
+commits the first batch, alternates twelve PDF/manual previews without exhausting the
+four coordinator slots, resumes the exact next file row with fresh decisions, and
+verifies exactly three real saved records. Updated-source independent review remains due.
+
 ## Executed evidence
 
 - `crates/daemon/tests/library_workbench.rs` uses actual temporary SQLite libraries,
@@ -51,8 +90,10 @@ logs from visible UI evidence. Earlier #10 screenshots do not verify the new imp
 
 ## Required checks
 
-Final executed commands, results and source/binary hashes are in
-[checks.json](issue-15/checks.json); supporting command logs are retained in the same directory.
+Original implementation commands, results and source/binary hashes are in
+[checks.json](issue-15/checks.json). Follow-up results, final binary/source hashes and
+the baseline comparison are in [follow-up-checks.json](issue-15/follow-up-checks.json);
+supporting logs are retained separately and identified there.
 Workspace tests, native-feature tests and PDF runtime tests are separate lanes. CI and
 independent different-model review belong to root and are not implied by local success.
 

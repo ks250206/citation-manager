@@ -1,5 +1,77 @@
 //! Explicit decisions for every reviewed row; no automatic confirmation/budget override.
 use cm_protocol::import::*;
+use cm_protocol::library::ServiceError;
+/// PDF review temporarily pauses file batching, retaining its exact progress.
+#[derive(Default)]
+pub struct ReviewSessions {
+    pub active: Review,
+    pub paused_file: Option<Review>,
+    pub replaced_file: Option<String>,
+}
+impl ReviewSessions {
+    pub fn cancel_active(
+        &mut self,
+        mut cancel: impl FnMut(&PreviewId) -> Result<(), ServiceError>,
+    ) -> Result<(), ServiceError> {
+        if let Some(preview) = &self.active.preview {
+            cancel(&preview.id)?;
+        }
+        self.active.preview = None;
+        self.active.decisions.clear();
+        Ok(())
+    }
+    pub fn pause_file(
+        &mut self,
+        cancel: impl FnMut(&PreviewId) -> Result<(), ServiceError>,
+    ) -> Result<(), ServiceError> {
+        self.cancel_active(cancel)?;
+        let previous = std::mem::take(&mut self.active);
+        if previous.from_file {
+            self.paused_file = Some(previous);
+        }
+        Ok(())
+    }
+    pub fn replace_file(
+        &mut self,
+        cancel: impl FnMut(&PreviewId) -> Result<(), ServiceError>,
+    ) -> Result<(), ServiceError> {
+        self.cancel_active(cancel)?;
+        if let Some(file) = self
+            .paused_file
+            .as_ref()
+            .or(self.active.from_file.then_some(&self.active))
+        {
+            self.replaced_file = Some(format!(
+                "Previous bibliography stopped at {} / {} processed, {} committed, {} skipped. Earlier commits remain saved; the new file starts a new review.",
+                file.batch_start, file.total, file.committed, file.skipped
+            ));
+        }
+        self.active = Review::default();
+        self.paused_file = None;
+        Ok(())
+    }
+    pub fn finish_pdf(
+        &mut self,
+        cancel: impl FnMut(&PreviewId) -> Result<(), ServiceError>,
+    ) -> Result<(), ServiceError> {
+        // An Attach/Retry report must not discard an unrelated manual/file preview.
+        if self.active.pdf_index.is_some() {
+            self.cancel_active(cancel)?;
+            self.active = Review::default();
+        }
+        Ok(())
+    }
+    pub fn resume_file(
+        &mut self,
+        cancel: impl FnMut(&PreviewId) -> Result<(), ServiceError>,
+    ) -> Result<(), ServiceError> {
+        if self.paused_file.is_some() {
+            self.cancel_active(cancel)?;
+            self.active = self.paused_file.take().expect("checked paused file");
+        }
+        Ok(())
+    }
+}
 #[derive(Default)]
 pub struct Review {
     pub preview: Option<ImportPreview>,
