@@ -37,3 +37,9 @@ serde_json.workspace = true
 [[test]]
 name = "doi_import"
 path = "../../tests/integration/doi_import.rs"
+
+# Headless composition only; preserves metadata/storage dependency direction.
+[[example]]
+name = "backend_bench_import"
+path = "../../scripts/benchmarks/import.rs"
+test = true

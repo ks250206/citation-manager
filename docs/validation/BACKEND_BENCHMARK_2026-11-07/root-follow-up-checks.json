@@ -1,0 +1,31 @@
+{
+  "base_main": "d9157ff0f5db7bc06d37521d6878b0383160fdc4",
+  "measurement_implementation": "b7c0dd6df5557feb8c491bac68757883af706432",
+  "measurement": "target/backend-benchmark/root-reviewed-release",
+  "changes": "merged main #46; fixed absent-open summaries, actual executable provenance and reproducible SVG; fresh representative 10k/1k rerun",
+  "workspace_tests": {
+    "command": "cargo test --workspace --locked",
+    "passed": 176,
+    "failed": 0,
+    "ignored": 0,
+    "measured": 0,
+    "filtered": 0,
+    "includes_compile_fail_doctest": true,
+    "raw_log_sha256": "ad5f4182ad38b2882eb41da3eac65180a3d5af485be69fadef9d563e9ec1e01b",
+    "stored_log_sha256": "67fb6b4d50c197c8ea69219e2e7207774ba07905cfa066edd5e5b38ed361aae9",
+    "stored_log": "root-workspace.log",
+    "normalization": "excess final blank lines removed only"
+  },
+  "other_passed": [
+    "python3 -m unittest discover -s scripts -p test_*.py -v (22)",
+    "cargo fmt --all -- --check",
+    "cargo clippy --workspace --all-targets --locked -- -D warnings",
+    "cargo build --workspace --locked",
+    "python3 scripts/check_architecture.py",
+    "python3 scripts/check_migrations.py --base d9157ff0f5db7bc06d37521d6878b0383160fdc4",
+    "git diff --check"
+  ],
+  "evidence_validation": "raw -> 71 rows -> CSV/SVG exact; 40 plot marks agree with source quantiles and geometry; actual executable paths/hash verified; fixture/source digests unchanged",
+  "unchanged": "production algorithms, immutable SQL and all 636 dependency identities; 36GiB headless observations only",
+  "pending": "final exact-head Opus recheck and CI; GUI/16GB whole-app/RSS/FTS/jobs remain unmeasured"
+}

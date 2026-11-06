@@ -22,3 +22,8 @@ rustix = { workspace = true, features = ["fs"] }
 
 [dev-dependencies]
 tempfile.workspace = true
+
+[[example]]
+name = "backend_bench_query"
+path = "../../scripts/benchmarks/query.rs"
+test = true

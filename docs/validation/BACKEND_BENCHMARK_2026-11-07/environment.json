@@ -1,0 +1,57 @@
+{
+  "started_utc": "2026-11-06T21:38:44.050527+00:00",
+  "machine": "arm64",
+  "model": "Mac16,6",
+  "cpu": "Apple M4 Max",
+  "physical_cpu_count": "14",
+  "logical_cpu_count": "14",
+  "ram_bytes": 38654705664,
+  "os": "ProductName:\t\tmacOS\nProductVersion:\t\t27.2\nBuildVersion:\t\t26B123",
+  "rust": "rustc 1.99.1 (58cf8f9c3 2026-10-13)\nbinary: rustc\ncommit-hash: 58cf8f9c35b355199727627d07ae34a4e2846d67\ncommit-date: 2026-10-13\nhost: aarch64-apple-darwin\nrelease: 1.99.1\nLLVM version: 23.1.1",
+  "cargo": "cargo 1.99.1 (5f94df478 2026-08-27)",
+  "profile": "release",
+  "build_flags": "--release --locked; no explicit --features; default features and release profile",
+  "build_environment": {
+    "RUSTFLAGS": null,
+    "CARGO_ENCODED_RUSTFLAGS": null,
+    "CARGO_BUILD_TARGET": null,
+    "CARGO_TARGET_DIR": null
+  },
+  "git_head": "b7c0dd6df5557feb8c491bac68757883af706432",
+  "git_status": "",
+  "harness_sha256": "19c0bc4f2b85ba4d98f85170d54f001e8e03539943cbc5da78d3803a8ed9c6ac",
+  "cargo_lock_sha256": "7349aaa20b3c77266ce9df81fc85b2d59747be1491f3c620c2e1c286101270a9",
+  "query_records": 10000,
+  "import_records": 1000,
+  "query_samples": 21,
+  "import_samples": 3,
+  "limits": "headless only; OS cache uncontrolled; no GUI, PDF, FTS, startup, total RSS or 16GB acceptance",
+  "artifacts": {
+    "backend_bench_query": {
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 0,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": false
+      },
+      "features": [],
+      "executable": "/Users/ryojikanno/.t3/worktrees/citation-manager/t3-8aadb20e/target/release/examples/backend_bench_query",
+      "executable_sha256": "826b8636153b11823f68bca5c50f1a4b172d54c473b2822efdc768bfdf153a57"
+    },
+    "backend_bench_import": {
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 0,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": false
+      },
+      "features": [
+        "default"
+      ],
+      "executable": "/Users/ryojikanno/.t3/worktrees/citation-manager/t3-8aadb20e/target/release/examples/backend_bench_import",
+      "executable_sha256": "d8cae4bf93c156883365d58ecaeaa9c13ffaf5ed51fdd70c1c9547450097ac99"
+    }
+  }
+}

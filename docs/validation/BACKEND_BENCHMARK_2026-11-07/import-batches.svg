@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 480" data-y-max-ms="1000" data-plot-top="70" data-plot-bottom="370">
+<title>Measured import batches: p50 bars and p95 whiskers</title>
+<rect width="900" height="480" fill="white"/>
+<g font-family="sans-serif" font-size="13" fill="#172033">
+<text x="75" y="26" font-size="19">Headless release import: preview / commit</text>
+<text x="75" y="48">Milliseconds; bars = p50, whiskers = nearest-rank p95</text>
+<line x1="75" x2="855" y1="370.000000" y2="370.000000" stroke="#dce2ea"/>
+<text x="65" y="374.000000" text-anchor="end">0</text>
+<line x1="75" x2="855" y1="310.000000" y2="310.000000" stroke="#dce2ea"/>
+<text x="65" y="314.000000" text-anchor="end">200</text>
+<line x1="75" x2="855" y1="250.000000" y2="250.000000" stroke="#dce2ea"/>
+<text x="65" y="254.000000" text-anchor="end">400</text>
+<line x1="75" x2="855" y1="190.000000" y2="190.000000" stroke="#dce2ea"/>
+<text x="65" y="194.000000" text-anchor="end">600</text>
+<line x1="75" x2="855" y1="130.000000" y2="130.000000" stroke="#dce2ea"/>
+<text x="65" y="134.000000" text-anchor="end">800</text>
+<line x1="75" x2="855" y1="70.000000" y2="70.000000" stroke="#dce2ea"/>
+<text x="65" y="74.000000" text-anchor="end">1000</text>
+<text x="114.000000" y="392" text-anchor="middle">1</text>
+<rect data-batch="0" data-series="preview" data-stat="p50" data-ms="47.823458000" x="88.260000" y="355.652963" width="20.280000" height="14.347037" fill="#2563eb"/>
+<line data-batch="0" data-series="preview" data-stat="p95" data-ms="53.759708000" x1="98.400000" x2="98.400000" y1="353.872088" y2="355.652963" stroke="#172033"/>
+<line x1="94.400000" x2="102.400000" y1="353.872088" y2="353.872088" stroke="#172033"/>
+<rect data-batch="0" data-series="commit" data-stat="p50" data-ms="29.120750000" x="119.460000" y="361.263775" width="20.280000" height="8.736225" fill="#d97706"/>
+<line data-batch="0" data-series="commit" data-stat="p95" data-ms="29.188917000" x1="129.600000" x2="129.600000" y1="361.243325" y2="361.263775" stroke="#172033"/>
+<line x1="125.600000" x2="133.600000" y1="361.243325" y2="361.243325" stroke="#172033"/>
+<text x="192.000000" y="392" text-anchor="middle">2</text>
+<rect data-batch="1" data-series="preview" data-stat="p50" data-ms="149.756666000" x="166.260000" y="325.073000" width="20.280000" height="44.927000" fill="#2563eb"/>
+<line data-batch="1" data-series="preview" data-stat="p95" data-ms="150.947209000" x1="176.400000" x2="176.400000" y1="324.715837" y2="325.073000" stroke="#172033"/>
+<line x1="172.400000" x2="180.400000" y1="324.715837" y2="324.715837" stroke="#172033"/>
+<rect data-batch="1" data-series="commit" data-stat="p50" data-ms="78.412250000" x="197.460000" y="346.476325" width="20.280000" height="23.523675" fill="#d97706"/>
+<line data-batch="1" data-series="commit" data-stat="p95" data-ms="78.514958000" x1="207.600000" x2="207.600000" y1="346.445513" y2="346.476325" stroke="#172033"/>
+<line x1="203.600000" x2="211.600000" y1="346.445513" y2="346.445513" stroke="#172033"/>
+<text x="270.000000" y="392" text-anchor="middle">3</text>
+<rect data-batch="2" data-series="preview" data-stat="p50" data-ms="254.162500000" x="244.260000" y="293.751250" width="20.280000" height="76.248750" fill="#2563eb"/>
+<line data-batch="2" data-series="preview" data-stat="p95" data-ms="254.935917000" x1="254.400000" x2="254.400000" y1="293.519225" y2="293.751250" stroke="#172033"/>
+<line x1="250.400000" x2="258.400000" y1="293.519225" y2="293.519225" stroke="#172033"/>
+<rect data-batch="2" data-series="commit" data-stat="p50" data-ms="129.488125000" x="275.460000" y="331.153563" width="20.280000" height="38.846437" fill="#d97706"/>
+<line data-batch="2" data-series="commit" data-stat="p95" data-ms="132.365042000" x1="285.600000" x2="285.600000" y1="330.290487" y2="331.153563" stroke="#172033"/>
+<line x1="281.600000" x2="289.600000" y1="330.290487" y2="330.290487" stroke="#172033"/>
+<text x="348.000000" y="392" text-anchor="middle">4</text>
+<rect data-batch="3" data-series="preview" data-stat="p50" data-ms="356.984167000" x="322.260000" y="262.904750" width="20.280000" height="107.095250" fill="#2563eb"/>
+<line data-batch="3" data-series="preview" data-stat="p95" data-ms="359.662708000" x1="332.400000" x2="332.400000" y1="262.101188" y2="262.904750" stroke="#172033"/>
+<line x1="328.400000" x2="336.400000" y1="262.101188" y2="262.101188" stroke="#172033"/>
+<rect data-batch="3" data-series="commit" data-stat="p50" data-ms="178.855375000" x="353.460000" y="316.343388" width="20.280000" height="53.656612" fill="#d97706"/>
+<line data-batch="3" data-series="commit" data-stat="p95" data-ms="180.495042000" x1="363.600000" x2="363.600000" y1="315.851487" y2="316.343388" stroke="#172033"/>
+<line x1="359.600000" x2="367.600000" y1="315.851487" y2="315.851487" stroke="#172033"/>
+<text x="426.000000" y="392" text-anchor="middle">5</text>
+<rect data-batch="4" data-series="preview" data-stat="p50" data-ms="459.469333000" x="400.260000" y="232.159200" width="20.280000" height="137.840800" fill="#2563eb"/>
+<line data-batch="4" data-series="preview" data-stat="p95" data-ms="461.724042000" x1="410.400000" x2="410.400000" y1="231.482787" y2="232.159200" stroke="#172033"/>
+<line x1="406.400000" x2="414.400000" y1="231.482787" y2="231.482787" stroke="#172033"/>
+<rect data-batch="4" data-series="commit" data-stat="p50" data-ms="227.131375000" x="431.460000" y="301.860588" width="20.280000" height="68.139412" fill="#d97706"/>
+<line data-batch="4" data-series="commit" data-stat="p95" data-ms="228.614667000" x1="441.600000" x2="441.600000" y1="301.415600" y2="301.860588" stroke="#172033"/>
+<line x1="437.600000" x2="445.600000" y1="301.415600" y2="301.415600" stroke="#172033"/>
+<text x="504.000000" y="392" text-anchor="middle">6</text>
+<rect data-batch="5" data-series="preview" data-stat="p50" data-ms="565.527208000" x="478.260000" y="200.341838" width="20.280000" height="169.658162" fill="#2563eb"/>
+<line data-batch="5" data-series="preview" data-stat="p95" data-ms="566.115666000" x1="488.400000" x2="488.400000" y1="200.165300" y2="200.341838" stroke="#172033"/>
+<line x1="484.400000" x2="492.400000" y1="200.165300" y2="200.165300" stroke="#172033"/>
+<rect data-batch="5" data-series="commit" data-stat="p50" data-ms="280.521458000" x="509.460000" y="285.843563" width="20.280000" height="84.156437" fill="#d97706"/>
+<line data-batch="5" data-series="commit" data-stat="p95" data-ms="281.965375000" x1="519.600000" x2="519.600000" y1="285.410388" y2="285.843563" stroke="#172033"/>
+<line x1="515.600000" x2="523.600000" y1="285.410388" y2="285.410388" stroke="#172033"/>
+<text x="582.000000" y="392" text-anchor="middle">7</text>
+<rect data-batch="6" data-series="preview" data-stat="p50" data-ms="667.456709000" x="556.260000" y="169.762987" width="20.280000" height="200.237013" fill="#2563eb"/>
+<line data-batch="6" data-series="preview" data-stat="p95" data-ms="691.020375000" x1="566.400000" x2="566.400000" y1="162.693887" y2="169.762987" stroke="#172033"/>
+<line x1="562.400000" x2="570.400000" y1="162.693887" y2="162.693887" stroke="#172033"/>
+<rect data-batch="6" data-series="commit" data-stat="p50" data-ms="327.628458000" x="587.460000" y="271.711463" width="20.280000" height="98.288537" fill="#d97706"/>
+<line data-batch="6" data-series="commit" data-stat="p95" data-ms="328.408625000" x1="597.600000" x2="597.600000" y1="271.477413" y2="271.711463" stroke="#172033"/>
+<line x1="593.600000" x2="601.600000" y1="271.477413" y2="271.477413" stroke="#172033"/>
+<text x="660.000000" y="392" text-anchor="middle">8</text>
+<rect data-batch="7" data-series="preview" data-stat="p50" data-ms="769.931500000" x="634.260000" y="139.020550" width="20.280000" height="230.979450" fill="#2563eb"/>
+<line data-batch="7" data-series="preview" data-stat="p95" data-ms="772.297167000" x1="644.400000" x2="644.400000" y1="138.310850" y2="139.020550" stroke="#172033"/>
+<line x1="640.400000" x2="648.400000" y1="138.310850" y2="138.310850" stroke="#172033"/>
+<rect data-batch="7" data-series="commit" data-stat="p50" data-ms="376.448708000" x="665.460000" y="257.065388" width="20.280000" height="112.934612" fill="#d97706"/>
+<line data-batch="7" data-series="commit" data-stat="p95" data-ms="378.191375000" x1="675.600000" x2="675.600000" y1="256.542587" y2="257.065388" stroke="#172033"/>
+<line x1="671.600000" x2="679.600000" y1="256.542587" y2="256.542587" stroke="#172033"/>
+<text x="738.000000" y="392" text-anchor="middle">9</text>
+<rect data-batch="8" data-series="preview" data-stat="p50" data-ms="876.929875000" x="712.260000" y="106.921038" width="20.280000" height="263.078962" fill="#2563eb"/>
+<line data-batch="8" data-series="preview" data-stat="p95" data-ms="884.966791000" x1="722.400000" x2="722.400000" y1="104.509963" y2="106.921038" stroke="#172033"/>
+<line x1="718.400000" x2="726.400000" y1="104.509963" y2="104.509963" stroke="#172033"/>
+<rect data-batch="8" data-series="commit" data-stat="p50" data-ms="430.056833000" x="743.460000" y="240.982950" width="20.280000" height="129.017050" fill="#d97706"/>
+<line data-batch="8" data-series="commit" data-stat="p95" data-ms="431.748958000" x1="753.600000" x2="753.600000" y1="240.475313" y2="240.982950" stroke="#172033"/>
+<line x1="749.600000" x2="757.600000" y1="240.475313" y2="240.475313" stroke="#172033"/>
+<text x="816.000000" y="392" text-anchor="middle">10</text>
+<rect data-batch="9" data-series="preview" data-stat="p50" data-ms="979.189250000" x="790.260000" y="76.243225" width="20.280000" height="293.756775" fill="#2563eb"/>
+<line data-batch="9" data-series="preview" data-stat="p95" data-ms="986.426584000" x1="800.400000" x2="800.400000" y1="74.072025" y2="76.243225" stroke="#172033"/>
+<line x1="796.400000" x2="804.400000" y1="74.072025" y2="74.072025" stroke="#172033"/>
+<rect data-batch="9" data-series="commit" data-stat="p50" data-ms="475.573625000" x="821.460000" y="227.327912" width="20.280000" height="142.672088" fill="#d97706"/>
+<line data-batch="9" data-series="commit" data-stat="p95" data-ms="477.095292000" x1="831.600000" x2="831.600000" y1="226.871412" y2="227.327912" stroke="#172033"/>
+<line x1="827.600000" x2="835.600000" y1="226.871412" y2="226.871412" stroke="#172033"/>
+<text x="465" y="415" text-anchor="middle">Batch (increasing existing inventory)</text>
+<rect x="75" y="434" width="14" height="14" fill="#2563eb"/><text x="96" y="446">Preview</text>
+<rect x="200" y="434" width="14" height="14" fill="#d97706"/><text x="221" y="446">Commit</text>
+<text x="365" y="446">N per batch: 3; small-N p95 may be the maximum</text>
+</g></svg>
