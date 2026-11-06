@@ -363,7 +363,7 @@ mod tests {
     fn pinned_sqlite_hitsets_tokens_and_finite_scope() -> Result<()> {
         let report = experiment(2, 1)?;
         let rows = report["observations"].as_array().unwrap();
-        assert_eq!(rows.len(), 69);
+        assert_eq!(rows.len(), 71);
         let vocab = rows
             .iter()
             .find(|r| r["series"] == "vocabulary" && r["tokenizer"] == "unicode61")
@@ -375,6 +375,26 @@ mod tests {
                 .iter()
                 .any(|t| t["doc"] == 1 && t["term"] == "固体電解質リチウム")
         );
+        for (doc, expected) in [
+            (7, vec!["ａｂｃ"]),
+            (24, vec!["abc"]),
+            (25, vec!["abc"]),
+            (8, vec!["ｶﾞﾗｽ"]),
+            (26, vec!["ガラス"]),
+            (27, vec!["カ", "ラス"]),
+            (28, vec!["カ", "ラス"]),
+            (20, vec!["e"]),
+            (29, vec!["e"]),
+        ] {
+            let actual: Vec<_> = vocab["tokens"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|t| t["doc"] == doc)
+                .map(|t| t["term"].as_str().unwrap())
+                .collect();
+            assert_eq!(actual, expected, "isolated normalization variant {doc}");
+        }
         let partial = rows.iter().find(|r| r["case"] == "two_cap2").unwrap();
         assert_eq!(partial["result"]["candidate_ids"], json!([1, 2]));
         assert_eq!(partial["status"], "partial_unsearched");

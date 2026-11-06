@@ -1,5 +1,10 @@
 # #53: measured bundled SQLite tokenizer and finite short-query fallback
 
+The 23-record measurements below are the original baseline. Review found that
+co-located normalization variants could mask missing cross-form matches. They are
+retained as historical evidence; the corrected 30-record run is documented separately
+after isolated variant expectations are committed. Neither run proves product #18.
+
 Measured on 2026-11-07 JST at clean implementation commit
 `0d7942fbe5767886b254af1c2d2ac4dd9c99e819`, based on prepared main
 `9e7e66e3e284a047096eae0707b823233206fe8c`. Subsequent changes retain evidence
@@ -18,8 +23,9 @@ python3 scripts/search-experiments/run.py --out a-new-issue53-run
 [23-record synthetic CC0 corpus](../../scripts/search-experiments/fixture.json),
 [independent expected hit sets](../../scripts/search-experiments/expected.json), and
 [license](../../scripts/search-experiments/LICENSE.fixture) are committed separately
-from observations. The hand-enumerated expectations predate SQLite execution and
-were not regenerated from its results. No third-party/user literature is present.
+from observations. The author's claim that the original hand-enumerated expectations
+predate execution cannot be established from git history: oracle and instrument were
+introduced in the same commit. No third-party/user literature is present.
 There is no DB path option: the Rust instrument owns a new private TempDir DB,
 uses a canonical path with SQLite NOFOLLOW, and deletes it on exit. The runner
 refuses to overwrite its dedicated output directory.
@@ -88,7 +94,7 @@ For example, row 1 `固体電解質リチウム` is one unicode61 token; row 2's
 split it. Probe `固体電` has no shared unicode61 corpus token, while trigram has
 that token at rows 1,3,16. The `alpha beta` vocabulary union returns candidates
 11,12,13 for both tokenizers: unicode61 phrase order removes 13; trigram requires
-the actual space sequence and also removes 12. `café` has unicode61 probe `cafe`,
+the actual space sequence and also removes 12. The NFD `café` query has unicode61 probe `cafe`,
 but trigram probes `caf`, `afe`, `fé`; its candidates include 23 via `caf`, while
 exact trigram MATCH removes 23. These are SQL observations, not documentation-based
 predictions substituted for execution. Extra FTS accent/case hits are preserved.

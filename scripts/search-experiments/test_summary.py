@@ -3,6 +3,7 @@ import csv
 import importlib.util
 import io
 import math
+import os
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -82,6 +83,29 @@ class SearchSummaryTests(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 runner.new_output('evidence')
             self.assertEqual(marker.read_text(), 'preserve')
+
+    def test_symlink_ancestors_are_rejected_before_any_external_mkdir(self):
+        for symlink_target in ('target', 'parent'):
+            with tempfile.TemporaryDirectory() as temp:
+                root = Path(temp).resolve() / 'root'
+                outside = Path(temp).resolve() / 'outside'
+                root.mkdir()
+                outside.mkdir()
+                if symlink_target == 'target':
+                    (root / 'target').symlink_to(outside, target_is_directory=True)
+                else:
+                    (root / 'target').mkdir()
+                    (root / 'target/search-experiments').symlink_to(outside, target_is_directory=True)
+                with patch.object(runner, 'ROOT', root), self.assertRaises(ValueError):
+                    runner.new_output('evidence')
+                self.assertEqual(list(outside.iterdir()), [])
+
+    def test_all_sqlite_engine_overrides_are_rejected(self):
+        with patch.dict(os.environ, {}, clear=True):
+            runner.reject_engine_overrides()
+            for name in runner.SQLITE_BUILD_OVERRIDES:
+                with patch.dict(os.environ, {name: 'override'}), self.assertRaises(ValueError):
+                    runner.reject_engine_overrides()
 
 
 if __name__ == '__main__':

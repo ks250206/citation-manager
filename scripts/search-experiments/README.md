@@ -21,12 +21,15 @@ claim follows from this tiny fixture.
 
 ## Corpus and independent expectations
 
-[fixture.json](fixture.json) is a fixed enumeration of 23 original synthetic strings,
+[fixture.json](fixture.json) is a fixed enumeration of 30 original synthetic strings,
 with no random generation, imported papers, PDF text or private data. The synthetic
 strings and [expected.json](expected.json) are dedicated under
-[CC0-1.0](LICENSE.fixture). The latter was hand-enumerated separately before the
-first SQLite execution, not generated from its outputs or by applying the tested
-search algorithm. Rust asserts the literal, FTS-semantic and fallback expected ID
+[CC0-1.0](LICENSE.fixture). The original claim of hand enumeration before execution
+rests on the author's report: git history cannot establish that ordering because
+the first oracle and instrument shared one commit. The review correction manually
+enumerates isolated variant expectations using fixture text and the earlier measured
+tokenizer semantics; those expectations are committed before the corrected run,
+not generated from its results. Rust asserts the literal, FTS-semantic and fallback expected ID
 sets; a mismatch fails the run. Regression failures must be investigated, not
 resolved by automatically regenerating the oracle from measured results.
 
@@ -35,6 +38,10 @@ Coverage: Japanese contiguous/separated/mixed strings; English word/substring;
 accented composed/decomposed Latin; half/full-width and composed/decomposed kana;
 ASCII and non-ASCII case differences. Length counts scalars, not UTF-8 bytes or
 grapheme clusters. In particular `e` + combining acute counts as two.
+Width, kana and accent variants occupy separate records. The CI test additionally
+asserts their unicode61 tokens, including the decomposed dakuten split into `カ`
+and `ラス`. A plain-kana phrase has its own record and query to expose that false
+positive rather than masking it inside a document containing every spelling.
 
 **Literal rule:** fold ASCII A–Z only, then exact substring. Do not NFC/NFKC,
 remove accents, fold width, lowercase Greek/accented capitals, or fully fold ß.
@@ -48,11 +55,14 @@ case/normalization policy.
 The storage test-only example uses workspace `rusqlite =0.41.1` with bundled
 `libsqlite3-sys =0.39.1`; no Python or system SQLite is executed. Runner records
 source/package hashes, Cargo library artifact feature sets, runtime version/source
-ID and all `PRAGMA compile_options`. It requires bundled features, rejects alternate
-engine build overrides/features and matches the runtime ID/version to the pinned
+ID and all `PRAGMA compile_options`. It requires bundled features, rejects the five
+SQLite-specific overrides listed in `SQLITE_BUILD_OVERRIDES` (including `LIBSQLITE3_FLAGS`)
+and alternate engine features, and matches the runtime ID/version to the pinned
 C source. It records build flags, binary hash, CPU/RAM/OS, toolchains and a hash of
 the environment record (canonical sorted JSON before adding its hash). Existing
 636 locked packages and immutable migrations are untouched.
+Other compiler flags are recorded, not exhaustively prohibited; this is not a
+hermetic toolchain or a guarantee that every possible compiler override is rejected.
 
 Experiment-only FTS tables each have one `text` column, `detail=full`,
 `columnsize=1`, no prefixes, default stored content:
@@ -97,11 +107,11 @@ capability or permission to label unsearched scope zero.
 
 ## Timing and size definitions
 
-All 67 cases run sequentially: 29 queries × 2 tokenizers, then 9 fallback cases.
+All 69 cases run sequentially: 30 queries × 2 tokenizers, then 9 fallback cases.
 Each case has one correctness observation plus 5 untimed calls before its 31 timed
 calls, using the same populated connection. Setup, vocabulary/oracle probes and
 OS caching make this warm; there is no cold-cache control. The default run has
-2,077 timed calls. Repeated empty trigram results are still timed SQL calls.
+2,139 timed calls. Repeated empty trigram results are still timed SQL calls.
 
 FTS timer: `Instant` before phrase quoting, SQL prepare/bind/step and ordered rowid
 collection, stopping before expected-result comparison/serialization. Fallback
@@ -133,8 +143,8 @@ expected/actual hitsets, literal recall, bounded scopes, sizes and raw timings.
 `summary.json` and CSV validate coverage/quantiles/hitsets/bounds. `environment.json`
 contains exact source and environment hashes; `build.log` records Cargo artifacts.
 The repository's existing workspace `cargo test` lane executes three SQLite/literal/
-bounds tests from the registered example. Python discovery executes three summary/
-coverage/output-preservation regressions. No workflow changes are necessary.
+bounds tests from the registered example. Python discovery executes five summary/
+coverage/output-preservation/symlink/engine-override regressions. No workflow changes are necessary.
 
 For a retained result, regenerate summary with `summarize(raw, fixture, expected,
 raw['repetitions_per_case'], raw['warmups_per_case'])` and CSV with `csv_text(rows)`

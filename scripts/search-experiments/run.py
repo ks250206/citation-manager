@@ -11,11 +11,14 @@ import os
 from pathlib import Path
 import platform
 import re
+import stat
 import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
+SQLITE_BUILD_OVERRIDES = ('LIBSQLITE3_SYS_USE_PKG_CONFIG', 'SQLITE3_LIB_DIR',
+                          'SQLITE3_INCLUDE_DIR', 'SQLITE3_STATIC', 'LIBSQLITE3_FLAGS')
 
 
 def quantile(values, fraction):
@@ -133,12 +136,25 @@ def new_output(name):
     if not name or Path(name).name != name or name in ('.', '..'):
         raise ValueError('--out must be a new single directory name')
     parent = ROOT / 'target/search-experiments'
+    # Inspect both output ancestors before mkdir can follow either symlink.
+    for path in (ROOT / 'target', parent):
+        try:
+            info = path.lstat()
+        except FileNotFoundError:
+            continue
+        if not stat.S_ISDIR(info.st_mode) or path.resolve() != path:
+            raise ValueError('dedicated target output parent must not contain symlinks')
     parent.mkdir(parents=True, mode=0o700, exist_ok=True)
     if parent.is_symlink() or parent.resolve() != parent:
         raise ValueError('dedicated target output parent must not contain symlinks')
     out = parent / name
     out.mkdir(mode=0o700)  # exist_ok=False: never overwrite evidence
     return out
+
+
+def reject_engine_overrides():
+    if any(os.environ.get(k) for k in SQLITE_BUILD_OVERRIDES):
+        raise ValueError('remove SQLite engine build overrides; pinned bundled build required')
 
 
 def main():
@@ -150,6 +166,7 @@ def main():
     if not 1 <= args.repetitions <= 100 or not 1 <= args.warmups <= 20:
         parser.error('repetitions 1..100; warmups 1..20')
     os.umask(0o077)
+    reject_engine_overrides()
     out = new_output(args.out)
     metadata = json.loads(capture(['cargo', 'metadata', '--locked', '--format-version', '1']))
     packages = {p['name']: p for p in metadata['packages'] if p['name'] in ('rusqlite', 'libsqlite3-sys')}
@@ -175,8 +192,7 @@ def main():
                            ('hw.model', 'machdep.cpu.brand_string', 'hw.memsize', 'hw.physicalcpu', 'hw.logicalcpu')}
         env['macos'] = capture(['sw_vers'])
     # libsqlite3-sys supports environment overrides that can bypass the pinned bundled build.
-    if any(os.environ.get(k) for k in ('LIBSQLITE3_SYS_USE_PKG_CONFIG', 'SQLITE3_LIB_DIR', 'SQLITE3_INCLUDE_DIR', 'SQLITE3_STATIC')):
-        raise ValueError('remove SQLite engine build overrides; pinned bundled build required')
+    reject_engine_overrides()
     build_args = ['cargo', 'build', '--release', '--locked', '-p', 'cm-storage', '--example', 'search_experiment', '--message-format=json']
     with (out / 'build.log').open('w') as log:
         build = subprocess.run(build_args, cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=log, check=True)
