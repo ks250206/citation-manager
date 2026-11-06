@@ -56,3 +56,10 @@ M1 keywordはscanによる書誌substring。FTS/PDF本文/notes/relevance/性能
 #33のpreview/merge/作成を含むatomic import、GUI、daemon認可、#9 file storeは対象外。
 optional native GPUI/PDFium runtime / signing laneはこの変更でローカル再実行していない。
 独立した異モデルreviewとmergeはrootがこのPRのexact headに対して実施する。
+
+## Integration after #9
+
+Integrated merged #9 (`1c11329`) before final review. Both feature appendices and module
+registrations are preserved; no applied SQL/checksums or dependency versions changed.
+Root passed integrated workspace fmt/clippy/test/build, architecture, migration preservation
+and Python validators. Workspace tests including compile-fail doctest: 59.
