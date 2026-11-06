@@ -32,10 +32,15 @@ HTTP remains off. #25 will replace the transport, add lifecycle/single-writer
 ownership and enforce the existing security ADR from the first IPC request.
 The current adapter is not a remotely callable unauthenticated server.
 
-UI response generations reject stale data and errors. Saving locks mutation and
-navigation until the confirmation arrives; failures retain the draft and the last
-confirmed paper. The minimal editor updates title/abstract only and preserves all
-other bibliographic fields/IDs. List paging retains the service cursor independently
+UI response generations reject stale editor data and errors. List/Load more has a
+separate pending slot: New/Get does not discard its rows or replace the editor. Get/Save
+replies completed after a list began override that list's older rows, with its server cursor
+kept separate. Saving locks in-window mutation and navigation until confirmation; failures
+retain the draft and last confirmed paper. A dropped callback (including worker unwind)
+is converted into Unavailable by a UI-side completion guard and releases the save lock. The minimal editor updates title/abstract only and preserves all
+other bibliographic fields/IDs. A previously absent abstract remains None after title-only
+edits; CR/LF stays in stored values and is replaced only for single-line display, preserving
+byte and UTF-16 positions. IME preedit save attempts show an instruction to finish conversion. List paging retains the service cursor independently
 of newly created rows, avoiding skipped pages after an insert. Navigation/PDF host
 functions in `native/bootstrap_views.rs` are the replacement points for #15/#17.
 The manual editor is single-line, supports Unicode/grapheme movement, text selection,
@@ -56,3 +61,9 @@ execution on 2026-11-06; API signatures were then checked against the official p
 [source](https://github.com/zed-industries/zed/tree/4a6121bb0f10c6e8037b741b7dc0a4cd639ae289/crates/gpui).
 `text_input.rs` adapts that revision's `examples/input.rs`; attribution and the
 [Apache license](../licenses/GPUI-APACHE-2.0.txt) are retained. No GPUI revision changed.
+
+Quitting is a separate boundary: Cmd+Q/window close currently ends the process even while
+Saving. The UI does not claim a completed save until Saved locally appears. Closing earlier
+leaves the outcome unknown (SQLite commits atomically); reopen and inspect the record before
+retrying. The worker only drains on last-client drop while its process remains alive; app quit
+does not join it. A future quit-confirmation UI belongs with the full editor, not this bootstrap.

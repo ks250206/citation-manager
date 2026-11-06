@@ -12,6 +12,11 @@ use gpui::{
 };
 use unicode_segmentation::*;
 
+/// Preserve byte/UTF-16 offsets and stored content while drawing a single line.
+fn display_line(content: &str) -> SharedString {
+    content.replace(['\n', '\r'], " ").into()
+}
+
 actions!(
     text_input,
     [
@@ -446,7 +451,7 @@ impl EntityInputHandler for TextInput {
         _cx: &mut Context<Self>,
     ) -> Option<Bounds<Pixels>> {
         let last_layout = self.last_layout.as_ref()?;
-        if last_layout.text != self.content {
+        if last_layout.text != display_line(&self.content) {
             return None;
         }
         let range = self.range_from_utf16(&range_utf16);
@@ -483,7 +488,7 @@ impl EntityInputHandler for TextInput {
         let line_point = self.last_bounds?.localize(&point)?;
         let last_layout = self.last_layout.as_ref()?;
 
-        if last_layout.text != self.content {
+        if last_layout.text != display_line(&self.content) {
             return None;
         }
         let utf8_index = last_layout.closest_index_for_x(line_point.x);
@@ -545,7 +550,7 @@ impl Element for TextElement {
         cx: &mut App,
     ) -> Self::PrepaintState {
         let input = self.input.read(cx);
-        let content = input.content.clone();
+        let content = display_line(&input.content);
         let selected_range = input.selected_range.clone();
         let cursor = input.cursor_offset();
         let style = window.text_style();
@@ -753,4 +758,26 @@ pub(super) fn bind_keys(cx: &mut App) {
         KeyBinding::new("end", End, Some("TextInput")),
         KeyBinding::new("ctrl-cmd-space", ShowCharacterPalette, Some("TextInput")),
     ]);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::display_line;
+    #[test]
+    fn multiline_display_keeps_stored_unicode_and_all_offsets() {
+        let stored = "日本語\nsecond\r\n🙂 e\u{301}";
+        let display = display_line(stored);
+        assert_eq!(display.as_ref(), "日本語 second  🙂 e\u{301}");
+        assert!(!display.contains(['\n', '\r']));
+        assert_eq!(display.len(), stored.len());
+        assert_eq!(
+            display.encode_utf16().count(),
+            stored.encode_utf16().count()
+        );
+        assert_eq!(
+            display.char_indices().map(|(i, _)| i).collect::<Vec<_>>(),
+            stored.char_indices().map(|(i, _)| i).collect::<Vec<_>>()
+        );
+        assert_eq!(stored, "日本語\nsecond\r\n🙂 e\u{301}");
+    }
 }

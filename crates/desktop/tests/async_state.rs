@@ -13,7 +13,9 @@ fn superseded_responses_and_old_errors_cannot_replace_current_state() {
     let (old, _) = state.list(false).unwrap();
     state.new_paper();
     assert!(!state.complete(old, Ok(LibraryReply::Papers(vec![paper()]))));
-    assert!(state.papers.is_empty());
+    assert_eq!(state.papers, vec![paper()]);
+    assert!(state.selected.is_none());
+    assert!(!state.editor_busy());
     let (a, _) = state.select(paper().id).unwrap();
     let (b, _) = state.select(paper().id).unwrap();
     assert!(!state.complete(a, Err(ServiceError::Unavailable)));
@@ -108,4 +110,87 @@ fn a_replacement_client_can_deliver_deferred_errors_without_saved_data() {
     state.complete(id, rx.recv().unwrap());
     assert!(state.error);
     assert!(state.papers.is_empty());
+}
+
+#[test]
+fn load_more_survives_new_draft_and_editor_requests_without_replacing_the_editor() {
+    let mut state = LibraryState::default();
+    let (first, _) = state.list(false).unwrap();
+    state.complete(first, Ok(LibraryReply::Papers(vec![paper()])));
+    let (more, _) = state.list(true).unwrap();
+    state.new_paper();
+    assert!(!state.editor_busy());
+    let (get, _) = state.select(paper().id).unwrap();
+    state.complete(get, Ok(LibraryReply::Paper(Box::new(paper()))));
+    let mut later = paper();
+    later.id = serde_json::from_str("\"01900000-0000-7000-8000-000000000002\"").unwrap();
+    state.complete(more, Ok(LibraryReply::Papers(vec![later])));
+    assert_eq!(state.papers.len(), 2);
+    assert_eq!(state.selected, Some(paper()));
+    assert!(!state.loading());
+}
+
+#[test]
+fn title_edit_preserves_absent_or_multiline_abstract_exactly() {
+    for detail in [None, Some(""), Some("日本語\nsecond\r\n🙂 e\u{301}")] {
+        let mut state = LibraryState::default();
+        let mut original = paper();
+        original.bibliography.abstract_text = detail.map(str::to_owned);
+        let (get, _) = state.select(original.id).unwrap();
+        state.complete(get, Ok(LibraryReply::Paper(Box::new(original.clone()))));
+        let (_, LibraryRequest::Update(updated)) = state
+            .save("Edited title".into(), detail.unwrap_or_default().into())
+            .unwrap()
+        else {
+            panic!("update expected")
+        };
+        assert_eq!(
+            updated.bibliography.abstract_text,
+            original.bibliography.abstract_text
+        );
+    }
+}
+
+#[test]
+fn a_late_list_snapshot_cannot_hide_a_newly_saved_paper() {
+    let mut state = LibraryState::default();
+    let (list, _) = state.list(false).unwrap();
+    state.new_paper();
+    let (save, _) = state.save("New title".into(), "".into()).unwrap();
+    let mut saved = paper();
+    saved.title = "New title".into();
+    state.complete(save, Ok(LibraryReply::Paper(Box::new(saved.clone()))));
+    state.complete(list, Ok(LibraryReply::Papers(vec![])));
+    assert_eq!(state.papers, vec![saved.clone()]);
+    assert_eq!(state.selected, Some(saved));
+}
+
+#[test]
+fn abandoned_or_panicked_transport_completes_once_and_unlocks_save() {
+    use cm_desktop::service_client::response_completion;
+    use std::sync::mpsc;
+    let mut state = LibraryState::default();
+    state.new_paper();
+    let (id, _) = state.save("Draft".into(), "".into()).unwrap();
+    let (tx, rx) = mpsc::channel();
+    let completion = response_completion(tx.clone(), id);
+    assert!(
+        std::thread::spawn(move || {
+            let _pending = completion;
+            panic!("simulated transport failure");
+        })
+        .join()
+        .is_err()
+    );
+    let (response_id, result) = rx.recv().unwrap();
+    assert_eq!(response_id, id);
+    assert_eq!(result, Err(ServiceError::Unavailable));
+    state.complete(response_id, result);
+    assert!(!state.saving());
+    assert!(state.error);
+    assert!(state.save("Retry draft".into(), "".into()).is_some());
+    assert!(rx.try_recv().is_err());
+    response_completion(tx, 42)(Ok(LibraryReply::Papers(vec![])));
+    assert_eq!(rx.recv().unwrap(), (42, Ok(LibraryReply::Papers(vec![]))));
+    assert!(rx.try_recv().is_err());
 }

@@ -22,16 +22,21 @@ pub struct LibraryState {
     dirty: bool,
     generation: u64,
     pending: Option<(u64, Operation)>,
+    listing: Option<(u64, bool)>,
+    list_overrides: Vec<Paper>,
 }
 impl LibraryState {
     pub fn edited(&mut self) {
-        if !self.loading() {
+        if !self.editor_busy() {
             self.dirty = true;
             self.message = "Unsaved changes • ⌘S to save".into();
             self.error = false;
         }
     }
     pub fn loading(&self) -> bool {
+        self.pending.is_some() || self.listing.is_some()
+    }
+    pub fn editor_busy(&self) -> bool {
         self.pending.is_some()
     }
     pub fn saving(&self) -> bool {
@@ -39,7 +44,12 @@ impl LibraryState {
     }
     fn begin(&mut self, operation: Operation) -> u64 {
         self.generation += 1;
-        self.pending = Some((self.generation, operation));
+        if let Operation::List { append } = operation {
+            self.listing = Some((self.generation, append));
+            self.list_overrides.clear();
+        } else {
+            self.pending = Some((self.generation, operation));
+        }
         self.message = if operation == Operation::Save {
             "Saving…"
         } else {
@@ -80,32 +90,43 @@ impl LibraryState {
         Some((self.begin(Operation::Get), LibraryRequest::Get(id)))
     }
     pub fn save(&mut self, title: String, detail: String) -> Option<(u64, LibraryRequest)> {
-        if self.loading() {
+        if self.editor_busy() {
             return None;
         }
         let request = if let Some(paper) = &self.selected {
             // Preserve every field not exposed by this minimal editor.
             let mut paper = paper.clone();
             paper.title = title;
-            paper.bibliography.abstract_text = Some(detail);
+            if !detail.is_empty() || paper.bibliography.abstract_text.is_some() {
+                paper.bibliography.abstract_text = Some(detail);
+            }
             LibraryRequest::Update(Box::new(paper))
         } else {
             let mut input = NewPaper::titled(title);
-            input.bibliography.abstract_text = Some(detail);
+            input.bibliography.abstract_text = (!detail.is_empty()).then_some(detail);
             LibraryRequest::Create(Box::new(input))
         };
         Some((self.begin(Operation::Save), request))
     }
     /// Returns true only when the editor should adopt confirmed service data.
     pub fn complete(&mut self, id: u64, result: Result<LibraryReply, ServiceError>) -> bool {
-        let Some((current, operation)) = self.pending else {
+        let operation = if let Some((_, append)) =
+            self.listing.filter(|(current, _)| *current == id)
+        {
+            self.listing = None;
+            Operation::List { append }
+        } else if let Some((_, operation)) = self.pending.filter(|(current, _)| *current == id) {
+            self.pending = None;
+            operation
+        } else {
             return false;
         };
-        if id != current {
-            return false;
-        }
-        self.pending = None;
         self.error = false;
+        let overrides = if matches!(operation, Operation::List { .. }) {
+            std::mem::take(&mut self.list_overrides)
+        } else {
+            vec![]
+        };
         match (operation, result) {
             (Operation::List { append }, Ok(LibraryReply::Papers(papers))) => {
                 self.page_after =
@@ -122,18 +143,35 @@ impl LibraryState {
                         self.papers.push(paper);
                     }
                 }
-                self.message = format!(
-                    "{}{} papers loaded • offline",
-                    if self.dirty {
-                        "Unsaved changes • "
+                // Get/Save replies after this list began take precedence over its old snapshot.
+                for paper in overrides {
+                    if let Some(row) = self.papers.iter_mut().find(|p| p.id == paper.id) {
+                        *row = paper;
                     } else {
-                        ""
-                    },
-                    self.papers.len()
-                );
+                        self.papers.push(paper);
+                    }
+                }
+                self.papers.sort_by_key(|p| p.id.0);
+                self.message = if self.saving() {
+                    "Saving…".into()
+                } else {
+                    format!(
+                        "{}{} papers loaded • offline",
+                        if self.dirty {
+                            "Unsaved changes • "
+                        } else {
+                            ""
+                        },
+                        self.papers.len()
+                    )
+                };
                 false
             }
             (Operation::Get | Operation::Save, Ok(LibraryReply::Paper(paper))) => {
+                if self.listing.is_some() {
+                    self.list_overrides.retain(|p| p.id != paper.id);
+                    self.list_overrides.push(*paper.clone());
+                }
                 self.message = if operation == Operation::Save {
                     "Saved locally"
                 } else {
@@ -163,4 +201,37 @@ impl LibraryState {
             }
         }
     }
+}
+
+pub type Response = (u64, Result<LibraryReply, ServiceError>);
+
+/// A transport dropping its accepted callback must release the UI's pending state.
+pub fn response_completion(
+    sender: std::sync::mpsc::Sender<Response>,
+    id: u64,
+) -> cm_protocol::library::Completion {
+    struct Delivery {
+        sender: std::sync::mpsc::Sender<Response>,
+        id: u64,
+        delivered: bool,
+    }
+    impl Delivery {
+        fn finish(mut self, result: Result<LibraryReply, ServiceError>) {
+            self.delivered = true;
+            let _ = self.sender.send((self.id, result));
+        }
+    }
+    impl Drop for Delivery {
+        fn drop(&mut self) {
+            if !self.delivered {
+                let _ = self.sender.send((self.id, Err(ServiceError::Unavailable)));
+            }
+        }
+    }
+    let delivery = Delivery {
+        sender,
+        id,
+        delivered: false,
+    };
+    Box::new(move |result| delivery.finish(result))
 }

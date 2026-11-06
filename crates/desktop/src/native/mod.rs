@@ -1,8 +1,8 @@
 mod bootstrap_views;
 mod text_input;
 use self::text_input::TextInput;
-use crate::service_client::LibraryState;
-use cm_protocol::library::{LibraryClient, LibraryReply, LibraryRequest, ServiceError};
+use crate::service_client::{LibraryState, Response, response_completion};
+use cm_protocol::library::{LibraryClient, LibraryRequest};
 use gpui::{prelude::*, *};
 use std::{
     sync::{Arc, mpsc},
@@ -22,8 +22,6 @@ actions!(
         Quit
     ]
 );
-
-type Response = (u64, Result<LibraryReply, ServiceError>);
 
 struct LibraryView {
     client: Arc<dyn LibraryClient>,
@@ -91,17 +89,12 @@ impl LibraryView {
             return;
         };
         let sender = self.sender.clone();
-        if let Err(error) = self.client.submit(
-            request,
-            Box::new(move |result| {
-                let _ = sender.send((id, result));
-            }),
-        ) {
+        if let Err(error) = self.client.submit(request, response_completion(sender, id)) {
             let _ = self.sender.send((id, Err(error)));
         }
     }
     fn lock_editor(&mut self, cx: &mut Context<Self>) {
-        let enabled = !self.state.loading();
+        let enabled = !self.state.editor_busy();
         self.title.update(cx, |field, cx| {
             field.enabled = enabled;
             cx.notify();
@@ -127,6 +120,9 @@ impl LibraryView {
     fn save(&mut self, _: &Save, _: &mut Window, cx: &mut Context<Self>) {
         // Finish native composition before saving; do not persist an IME preedit.
         if self.title.read(cx).is_composing() || self.detail.read(cx).is_composing() {
+            self.state.message = "Finish text conversion before saving".into();
+            self.state.error = false;
+            cx.notify();
             return;
         }
         let title = self.title.read(cx).content.to_string();
@@ -307,9 +303,12 @@ impl Render for LibraryView {
                             .child(self.title.clone())
                             .child("Abstract / detail (single line)")
                             .child(self.detail.clone())
-                            .child(button("save", "Save locally  ⌘S", !loading).on_click(
-                                cx.listener(|this, _, window, cx| this.save(&Save, window, cx)),
-                            ))
+                            .child(
+                                button("save", "Save locally  ⌘S", !self.state.editor_busy())
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.save(&Save, window, cx)
+                                    })),
+                            )
                             .child(
                                 div()
                                     .text_color(rgb(0x667084))

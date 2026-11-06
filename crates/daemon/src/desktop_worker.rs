@@ -54,7 +54,9 @@ impl InProcessLibraryClient {
                     };
                     complete(result);
                 }
-                // Last client dropped: drain queued requests, close the connection, exit.
+                // If the process remains alive, dropping the last client drains queued work.
+                // App quit ends the process without joining this worker; save confirmation
+                // must be observed before quitting to know whether a write committed.
             })?;
         Ok(Self { sender })
     }

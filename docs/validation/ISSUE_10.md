@@ -127,3 +127,26 @@ the original feature head `f79ebc3`; root inspected the screenshot and rebuilt t
 executable, but did not repeat CUA interaction. The independently reviewed PDF runtime
 source is preserved; the remote PDFium lane remains an integrated-head gate.
 Integrated local executable SHA-256: `273c4fff3b47d302d7743446f6dba71da344fcd9390b4f5fd9ebe79ab546011e`.
+
+## Independent review corrections and native multiline regression
+
+Opus review at `aa3b296` found P2 (stored CR/LF sent to GPUI shape_line) and five P3s.
+Display now substitutes spaces for CR/LF without changing stored content or byte/UTF-16
+indices; layout hit-testing compares the display string as well. Title-only edits preserve
+None versus Some("") abstracts. A dropped completion unwinds to Unavailable, releasing Saving.
+List and editor generations are independent; pending list/load-more rows survive New/Get,
+and a late list snapshot cannot hide newer completed saves. IME save attempts explain why
+conversion must finish first. ADR/worker comments now explicitly state quit-during-save has
+an unknown commit outcome and process quit does not drain/join the worker.
+
+Original CUA screenshots above precede these corrections; the List/loading generation behavior
+is superseded by the new independent-list tests. Root passed fmt/clippy/build, workspace
+40 unit/integration + 1 compile-fail doctest, native-feature clippy/tests 11, architecture,
+immutable migration checks and Python 18. New tests exercise a panicking/dropping transport,
+null/multiline abstract preservation, list/editor ordering, saved-row overlays and display offsets.
+Root then launched the actual rebuilt debug binary in a fresh unsigned non-network-restricted
+smoke app using a synthetic temp DB with multiline title and CR/LF abstract. CUA selected the
+paper, observed the one-line display, Cmd+S -> Saved locally, and Cmd+Q -> app quit. A read-only
+SQLite check confirmed exact original title/abstract bytes and integrity_check=ok afterward.
+[Recorded values and binary hash](issue-10/root-multiline.json). No real library was opened.
+This targeted regression does not repeat the original network-denial/IME-candidate checks.
