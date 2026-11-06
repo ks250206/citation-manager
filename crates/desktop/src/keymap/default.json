@@ -1,0 +1,183 @@
+{
+  "version": 1,
+  "bindings": [
+    {
+      "context": "library",
+      "mode": "normal",
+      "keys": [
+        "j"
+      ],
+      "command": "library.select_next"
+    },
+    {
+      "context": "library",
+      "mode": "normal",
+      "keys": [
+        "k"
+      ],
+      "command": "library.select_previous"
+    },
+    {
+      "context": "library",
+      "mode": "normal",
+      "keys": [
+        "g",
+        "g"
+      ],
+      "command": "library.select_first"
+    },
+    {
+      "context": "library",
+      "mode": "normal",
+      "keys": [
+        "G"
+      ],
+      "command": "library.select_last"
+    },
+    {
+      "context": "library",
+      "mode": "normal",
+      "keys": [
+        "Enter"
+      ],
+      "command": "paper.open"
+    },
+    {
+      "context": "library",
+      "mode": "normal",
+      "keys": [
+        "/"
+      ],
+      "command": "search.focus"
+    },
+    {
+      "context": "library",
+      "mode": "normal",
+      "keys": [
+        "y"
+      ],
+      "command": "citation.copy"
+    },
+    {
+      "context": "library",
+      "mode": "normal",
+      "keys": [
+        "Esc"
+      ],
+      "command": "focus.restore"
+    },
+    {
+      "context": "library",
+      "mode": "normal",
+      "keys": [
+        "Cmd+k"
+      ],
+      "command": "palette.open"
+    },
+    {
+      "context": "library",
+      "mode": "insert",
+      "keys": [
+        "Cmd+k"
+      ],
+      "command": "palette.open"
+    },
+    {
+      "context": "library",
+      "mode": "vim_off",
+      "keys": [
+        "Cmd+k"
+      ],
+      "command": "palette.open"
+    },
+    {
+      "context": "search",
+      "mode": "normal",
+      "keys": [
+        "j"
+      ],
+      "command": "library.select_next"
+    },
+    {
+      "context": "search",
+      "mode": "normal",
+      "keys": [
+        "k"
+      ],
+      "command": "library.select_previous"
+    },
+    {
+      "context": "search",
+      "mode": "normal",
+      "keys": [
+        "g",
+        "g"
+      ],
+      "command": "library.select_first"
+    },
+    {
+      "context": "search",
+      "mode": "normal",
+      "keys": [
+        "G"
+      ],
+      "command": "library.select_last"
+    },
+    {
+      "context": "search",
+      "mode": "normal",
+      "keys": [
+        "Enter"
+      ],
+      "command": "paper.open"
+    },
+    {
+      "context": "search",
+      "mode": "normal",
+      "keys": [
+        "/"
+      ],
+      "command": "search.focus"
+    },
+    {
+      "context": "search",
+      "mode": "normal",
+      "keys": [
+        "y"
+      ],
+      "command": "citation.copy"
+    },
+    {
+      "context": "search",
+      "mode": "normal",
+      "keys": [
+        "Esc"
+      ],
+      "command": "focus.restore"
+    },
+    {
+      "context": "search",
+      "mode": "normal",
+      "keys": [
+        "Cmd+k"
+      ],
+      "command": "palette.open"
+    },
+    {
+      "context": "search",
+      "mode": "insert",
+      "keys": [
+        "Cmd+k"
+      ],
+      "command": "palette.open"
+    },
+    {
+      "context": "search",
+      "mode": "vim_off",
+      "keys": [
+        "Cmd+k"
+      ],
+      "command": "palette.open"
+    }
+  ]
+}

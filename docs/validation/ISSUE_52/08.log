@@ -1,0 +1,21 @@
+test_backend_bench (unittest.loader._FailedTest.test_backend_bench) ... ERROR
+
+======================================================================
+ERROR: test_backend_bench (unittest.loader._FailedTest.test_backend_bench)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_backend_bench
+Traceback (most recent call last):
+  File "/Users/ryojikanno/.local/share/uv/python/cpython-3.14.0-macos-aarch64-none/lib/python3.14/unittest/loader.py", line 426, in _find_test_path
+    module = self._get_module_from_name(name)
+  File "/Users/ryojikanno/.local/share/uv/python/cpython-3.14.0-macos-aarch64-none/lib/python3.14/unittest/loader.py", line 367, in _get_module_from_name
+    __import__(name)
+    ~~~~~~~~~~^^^^^^
+  File "/Users/ryojikanno/.t3/worktrees/citation-manager/t3-52b5e36a/scripts/benchmarks/test_backend_bench.py", line 8, in <module>
+    from benchmarks.run import csv_text, import_chart, quantile, summarize
+ModuleNotFoundError: No module named 'benchmarks'
+
+
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+FAILED (errors=1)

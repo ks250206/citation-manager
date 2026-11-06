@@ -725,6 +725,7 @@ dependencies = [
  "cm-protocol",
  "gpui",
  "gpui_platform",
+ "serde",
  "serde_json",
  "unicode-segmentation",
 ]
