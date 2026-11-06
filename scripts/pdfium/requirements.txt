@@ -1,0 +1,6 @@
+# Fixture generation / PDF structure verification only; no application dependency.
+reportlab==4.4.4
+pypdf==6.1.1
+fonttools==4.60.1
+pillow==13.0.0
+charset-normalizer==3.5.2

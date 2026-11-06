@@ -1,5 +1,9 @@
 # #7 検証分担と証跡
 
+以下は#7時点の履歴。現在のSQLite実装と2本のmigrationは [#8検証](ISSUE_8.md)、
+PDFium実ロード/継承box/独立renderer検証は [#11検証](PDFIUM_POC.md) を参照。
+下記の0件registry・PDFium未選択は現行の状態を示すものではない。
+
 2026-11-06、実装 agent がこの isolated worktree で実行。
 環境: macOS 27.2 (26B123), arm64、rustc 1.99.1 (58cf8f9c3 2026-10-13)、
 cargo 1.99.1 (5f94df478 2026-08-27)、Xcode 26.6 (17F113)、Python 3.14.0。

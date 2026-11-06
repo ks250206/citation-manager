@@ -1,0 +1,76 @@
+{
+  "status": "passed",
+  "independent_renderer": "Apple PDFKit",
+  "os": "Version 27.2 (Build 26B123)",
+  "corpus": "corpus.pdf",
+  "appearance_forms": 8,
+  "original_unchanged": true,
+  "checks": [
+    {
+      "page_index": 0,
+      "rotation": 0,
+      "quads": 2,
+      "checked_characters": 42,
+      "max_quad_error_pt": 1.3916015632275958e-05,
+      "max_char_box_error_pt": 1.5119860839843682,
+      "marker_centroid_error_px": 0.0,
+      "PDFKit_yellow_interior_coverage": 1.0,
+      "PDFium_yellow_interior_coverage": 1.0,
+      "PDFKit_yellow_pixels": 2569,
+      "note_colored_pixels_PDFKit_PDFium": [
+        340,
+        340
+      ]
+    },
+    {
+      "page_index": 1,
+      "rotation": 90,
+      "quads": 2,
+      "checked_characters": 42,
+      "max_quad_error_pt": 1.3916015632275958e-05,
+      "max_char_box_error_pt": 1.5119860839843682,
+      "marker_centroid_error_px": 0.0,
+      "PDFKit_yellow_interior_coverage": 1.0,
+      "PDFium_yellow_interior_coverage": 1.0,
+      "PDFKit_yellow_pixels": 2502,
+      "note_colored_pixels_PDFKit_PDFium": [
+        340,
+        340
+      ]
+    },
+    {
+      "page_index": 2,
+      "rotation": 180,
+      "quads": 2,
+      "checked_characters": 42,
+      "max_quad_error_pt": 1.3916015632275958e-05,
+      "max_char_box_error_pt": 1.5119860839843682,
+      "marker_centroid_error_px": 0.0,
+      "PDFKit_yellow_interior_coverage": 1.0,
+      "PDFium_yellow_interior_coverage": 1.0,
+      "PDFKit_yellow_pixels": 2484,
+      "note_colored_pixels_PDFKit_PDFium": [
+        340,
+        340
+      ]
+    },
+    {
+      "page_index": 3,
+      "rotation": 270,
+      "quads": 2,
+      "checked_characters": 42,
+      "max_quad_error_pt": 1.3916015632275958e-05,
+      "max_char_box_error_pt": 1.5119860839843682,
+      "marker_centroid_error_px": 0.0,
+      "PDFKit_yellow_interior_coverage": 1.0,
+      "PDFium_yellow_interior_coverage": 1.0,
+      "PDFKit_yellow_pixels": 2555,
+      "note_colored_pixels_PDFKit_PDFium": [
+        340,
+        340
+      ]
+    }
+  ],
+  "observed_native_limit": "PDFium export has no /AP; explicit export-only pypdf completion verified",
+  "portable_sha256": "b462e71f64987c8ddbfb5e7a7331b69a9429dbbcbbd1521d3d8286dbc57080ed"
+}

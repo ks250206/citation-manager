@@ -1,0 +1,29 @@
+{
+  "sha256": "72203ee5e158c09bb93d509b24eb1d169c7bbf0ef8c07ce2f803f2f0fb23c4da",
+  "method": "raw /Root/Pages/Kids, without PdfReader.pages flattening",
+  "parent_media": [
+    0,
+    0,
+    400,
+    500
+  ],
+  "parent_crop": [
+    20,
+    30,
+    380,
+    470
+  ],
+  "parent_rotation": 90,
+  "pages": [
+    {
+      "page_index": 0,
+      "direct_entries": []
+    },
+    {
+      "page_index": 1,
+      "direct_entries": [
+        "/MediaBox"
+      ]
+    }
+  ]
+}
