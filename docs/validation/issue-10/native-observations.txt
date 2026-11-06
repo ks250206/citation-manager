@@ -1,0 +1,15 @@
+Final native executable SHA256: 58c7a4eedb6fd3260633bdeab9f83e5084d29a57e854ca6c208706d7f4d3a081
+macOS 27.2 arm64 / Xcode 26.6 / unsigned local binary.
+Full Cmd-Q shutdown: no bundle executable process remained.
+Read-only DB verification after actual native create/edit/save:
+[('01a1b043-1a97-7778-b90c-7b7713a49bbb', '固体電解質 🙂 — edited after native save', 'Edited detail: offline persistence after shutdown / 再起動確認'), ('01a1b049-e4ab-70c3-9d21-a247f5692155', '最終ビルド 😀 — native M0 create', 'Final executable / manual create, Unicode, worker-owned SQLite.'), ('01a1b04a-474b-742e-90da-f5b741ee3121', '最終ビルド 😀 — edited and persisted', 'Final detail / 再起動後も保持 / no network service')]
+Second matching create title is an intentional repeated create during CUA activation; no seeded sample rows.
+
+Offline relaunch and actual UI save under profile:
+(version 1)(allow default)(deny network-outbound (remote ip "*:*"))(deny network-inbound (local ip "*:*"))
+Profile negative probe: Python TCP connect to 127.0.0.1:9 -> PermissionError [Errno 1] Operation not permitted.
+Final full shutdown verified: no matching executable process.
+Final DB row: ('01a1b04a-474b-742e-90da-f5b741ee3121', '最終ビルド 😀 — edited and persisted', 'Final detail / 再起動後も保持 / offline write verified')
+PRAGMA integrity_check: ('ok',)
+Actual lock contention: startup open error; retry Loading... with Save disabled; New+typing responsive while worker blocked; stale response did not replace draft; release lock+Reload+select restored saved title/detail.
+No real user library was opened. All records are synthetic UI input.

@@ -5,3 +5,5 @@ pub use cm_core::import;
 
 // Let clients name shared values without depending on infrastructure.
 pub use cm_domain as domain;
+
+pub mod library;

@@ -922,3 +922,12 @@ DB参照を追加する。同一hashを複数文献で共有し、関連付け�
 daemonの排他/activationは実装しない。#25がmigration/GC/復元activationの排他を担当する。
 利用API、保存条件、復旧手順と一貫性の限界は
 [attachments-backup ADR](docs/ADR/attachments-backup.md)を正本とする。
+
+## 30. #10 macOS desktop vertical slice
+
+[Desktop bootstrap ADR](docs/ADR/desktop-bootstrap.md) defines the temporary optional
+macOS daemon-to-desktop composition edge. The real GPUI executable uses a replaceable
+protocol client and worker-owned #8 PaperService for manual title/detail create/edit/list.
+[Native evidence](docs/validation/ISSUE_10.md) separates actual shutdown/relaunch, loading/error
+checks from headless tests and hosted compile checks. Actual IPC/lifecycle/auth remain #25;
+PDF/view integration remains #15/#17 and signing/distribution remains #31/#34.
