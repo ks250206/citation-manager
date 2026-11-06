@@ -1,0 +1,1 @@
+{"name":"@HOST_NAME@","description":"#34 test-only nonce ping","path":"@ABSOLUTE_HOST_PATH@","type":"stdio","allowed_extensions":["@EXTENSION_ID@"]}

@@ -1,0 +1,97 @@
+{
+  "browser": "firefox",
+  "browser_executable": "/tmp/cm34-browsers/Firefox.app/Contents/MacOS/firefox",
+  "bundle": "/private/tmp/cm34 外部 bundle/Citation Layout 日本語.app",
+  "manifest": {
+    "name": "test.citationmanager.probe_c5080c956134b369a68b3994",
+    "description": "#34 test-only nonce ping",
+    "path": "/private/tmp/cm34 外部 bundle/Citation Layout 日本語.app/Contents/MacOS/cm34-probe-host",
+    "type": "stdio",
+    "allowed_extensions": [
+      "cm34-probe@fixture.invalid"
+    ]
+  },
+  "manifest_file": "/private/tmp/cm34 外部 bundle/firefox-before/native-root/NativeMessagingHosts/test.citationmanager.probe_c5080c956134b369a68b3994.json",
+  "profile": "/private/tmp/cm34 外部 bundle/firefox-before/profile",
+  "extension_id": "cm34-probe@fixture.invalid",
+  "permissions": [
+    "nativeMessaging"
+  ],
+  "before": {
+    "$USER_HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts": {
+      "exists": true,
+      "entry_count": 5,
+      "aggregate_sha256": "2cf364f8d24fd562db69510024fab761529390e428328441dd84c444e21fbc09"
+    },
+    "$USER_HOME/Library/Application Support/Google/ChromeForTesting/NativeMessagingHosts": {
+      "exists": true,
+      "entry_count": 1,
+      "aggregate_sha256": "646312cbf4801d94d2e3bfcd74a4e39e18adef6e0daab34ba7110aae5aa47d3d"
+    },
+    "$USER_HOME/Library/Application Support/Mozilla/NativeMessagingHosts": {
+      "exists": false,
+      "entry_count": 0,
+      "aggregate_sha256": "4ae057f5106130da09fb7534162cbeb5e0bf9c789c81c44daed277462453c459"
+    },
+    "$USER_HOME/Library/Application Support/Firefox/profiles.ini": {
+      "exists": false,
+      "entry_count": 0,
+      "aggregate_sha256": "4ae057f5106130da09fb7534162cbeb5e0bf9c789c81c44daed277462453c459"
+    },
+    "$USER_HOME/Library/Application Support/Firefox/installs.ini": {
+      "exists": false,
+      "entry_count": 0,
+      "aggregate_sha256": "4ae057f5106130da09fb7534162cbeb5e0bf9c789c81c44daed277462453c459"
+    }
+  },
+  "firefox_dirsvc_override": true,
+  "default_registration_tested": false,
+  "arguments": [
+    "/tmp/cm34-browsers/Firefox.app/Contents/MacOS/firefox",
+    "--no-remote",
+    "--profile",
+    "/private/tmp/cm34 外部 bundle/firefox-before/profile",
+    "--marionette",
+    "--remote-allow-system-access",
+    "about:blank"
+  ],
+  "browser_pid": 79292,
+  "passed": false,
+  "error": "TimeoutError('browser fixture condition not observed')",
+  "lingering_before_cleanup": [],
+  "after": {
+    "$USER_HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts": {
+      "exists": true,
+      "entry_count": 5,
+      "aggregate_sha256": "2cf364f8d24fd562db69510024fab761529390e428328441dd84c444e21fbc09"
+    },
+    "$USER_HOME/Library/Application Support/Google/ChromeForTesting/NativeMessagingHosts": {
+      "exists": true,
+      "entry_count": 1,
+      "aggregate_sha256": "646312cbf4801d94d2e3bfcd74a4e39e18adef6e0daab34ba7110aae5aa47d3d"
+    },
+    "$USER_HOME/Library/Application Support/Mozilla/NativeMessagingHosts": {
+      "exists": false,
+      "entry_count": 0,
+      "aggregate_sha256": "4ae057f5106130da09fb7534162cbeb5e0bf9c789c81c44daed277462453c459"
+    },
+    "$USER_HOME/Library/Application Support/Firefox/profiles.ini": {
+      "exists": false,
+      "entry_count": 0,
+      "aggregate_sha256": "4ae057f5106130da09fb7534162cbeb5e0bf9c789c81c44daed277462453c459"
+    },
+    "$USER_HOME/Library/Application Support/Firefox/installs.ini": {
+      "exists": false,
+      "entry_count": 0,
+      "aggregate_sha256": "4ae057f5106130da09fb7534162cbeb5e0bf9c789c81c44daed277462453c459"
+    }
+  },
+  "default_locations_unchanged": true,
+  "events": {},
+  "manifest_removed": true,
+  "socket_removed": true,
+  "elapsed_cleanup_note": "Own test profile/extension/log retained under output for inspection; no user registration written.",
+  "browser_lifecycle_passed": false,
+  "actual_connect_native_ack_observed": false,
+  "trial_note": "Failed historical trial; current runner now blocks interactive-user launch. A disposable OS test account is required."
+}

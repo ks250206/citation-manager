@@ -68,3 +68,16 @@ GitHub runner の OS/Xcode 差による失敗は PR 上で実結果を確認す�
 
 UI/browser の未実施は自動 contract test で充足した扱いにしない。fallback ユーザーがまだ実行していない項目を
 passed と記さない。Developer ID 不在は将来 #31 の blocker として維持し、#7 の未署名 compile を妨げない。
+
+## #34 current partial evidence (2026-11-06/07 JST)
+
+The external, moved unsigned `.app` ran the real #10 GPUI executable and #11 fixed
+PDFium render/Japanese extraction. Six actual-executable resource/runtime failures
+and the direct-spawn supplemental lifecycle harness passed. See
+[APP_LAYOUT_POC](APP_LAYOUT_POC.md) for binary hashes, Mach-O/signature failures,
+CUA observations, registrations, logs and cleanup. **Both actual browser gates
+failed/unverified** under the added isolation sandbox; a disposable OS test account/
+VM is required. No connectNative/lifecycle success is inferred from the direct
+harness. #23/#25 remain gated; #34 acceptance is incomplete and the PR stays draft.
+Developer ID remains 0; hardened runtime/notarization and the final rights-holder
+notice/product-license audit remain #31. Native CI is compile/test-only proof.

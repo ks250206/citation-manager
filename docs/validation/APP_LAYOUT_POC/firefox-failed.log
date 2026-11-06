@@ -1,0 +1,9 @@
+sandbox_extension_issue_file_to_process failed for /tmp/cm34-browsers/Firefox.app: 1 (Operation not permitted)
+sandbox initialization failed: Operation not permitted
+Sandbox error: sandbox_init() failed with error "Operation not permitted"
+sandbox initialization failed: Operation not permitted
+Sandbox error: sandbox_init() failed with error "Operation not permitted"
+sandbox initialization failed: Operation not permitted
+Sandbox error: sandbox_init() failed with error "Operation not permitted"
+sandbox initialization failed: Operation not permitted
+Sandbox error: sandbox_init() failed with error "Operation not permitted"

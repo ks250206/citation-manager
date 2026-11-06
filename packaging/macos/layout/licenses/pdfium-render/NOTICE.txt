@@ -1,0 +1,13 @@
+pdfium-render 0.9.5
+Selected license: Apache-2.0 (upstream offers MIT OR Apache-2.0).
+Author recorded by the official crate: Alastair Carey <alastair@alastaircarey.com>.
+Source revision: 06952ffbca7d7c9336ac7f0313e84fa259712df6
+Source: https://crates.io/api/v1/crates/pdfium-render/0.9.5/download
+Apache license text: https://www.apache.org/licenses/LICENSE-2.0.txt
+
+This preserves upstream attribution and author metadata; it does not invent a
+copyright year or assert that an author field is a copyright declaration.
+The published crate LICENSE.md contains only a dual-license selection statement;
+no separate NOTICE or explicit copyright declaration was located in that crate.
+Confirm the rights-holder notice with upstream before product distribution (#31).
+This unsigned test bundle is not a completed product license audit.

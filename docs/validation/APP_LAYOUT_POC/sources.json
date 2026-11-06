@@ -1,0 +1,71 @@
+{
+  "consulted_utc": "2026-11-06T15:02:19.807170+00:00",
+  "sources": [
+    {
+      "url": "https://raw.githubusercontent.com/chromium/chromium/157.0.8103.38/chrome/common/chrome_paths.cc",
+      "bytes": 18464,
+      "sha256": "fc7e97434d4c9e592fe859b69ba9a83945d836e0a1c3f2b0e52701850952c0df"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/mozilla-firefox/firefox/FIREFOX_159_0_1_RELEASE/toolkit/components/extensions/NativeManifests.sys.mjs",
+      "bytes": 6657,
+      "sha256": "15ae10b1aa73a8adc6947bd34e2227d0e6ce1d73c9aa16fe36eed8bb52e99ec9"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/mozilla-firefox/firefox/FIREFOX_159_0_1_RELEASE/toolkit/xre/nsXREDirProvider.cpp",
+      "bytes": 54148,
+      "sha256": "b0ae99e017919bf37d140b2a951eda87cbced172f0cd087b31ad80bf35ed6a1c"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/mozilla-firefox/firefox/FIREFOX_159_0_1_RELEASE/toolkit/components/extensions/test/xpcshell/head_native_messaging.js",
+      "bytes": 4358,
+      "sha256": "a9b4e0aeb2864b3aa9d8cd960c765f7befdae00aebe0028caca61f3c28b4e219"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/mozilla-firefox/firefox/FIREFOX_159_0_1_RELEASE/remote/marionette/driver.sys.mjs",
+      "bytes": 160555,
+      "sha256": "83a2d78d2c8c102f7680bccfad8862f82b62ef0caba3cc492dc44bc83644c866"
+    },
+    {
+      "url": "https://crates.io/api/v1/crates/pdfium-render/0.9.5/download",
+      "bytes": 4066282,
+      "sha256": "296b1146652b486ea6eea0d316e85ab6837ff69e8d2b1568e6fa7bc38bd4c00e"
+    },
+    {
+      "url": "https://www.apache.org/licenses/LICENSE-2.0.txt",
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "url": "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json",
+      "bytes": 10450,
+      "sha256": "3ae6c78651db7d56186892db18fc8bb124affb9b8b5c4074a659f4b3aba1074e"
+    },
+    {
+      "url": "https://product-details.mozilla.org/1.0/firefox_versions.json",
+      "bytes": 627,
+      "sha256": "816def1c0a0455281d436f50d30c27f144a224bddd3dc2736c32ead2fd3c4796"
+    }
+  ],
+  "downloads": [
+    {
+      "file": "chrome.zip",
+      "url": "https://storage.googleapis.com/chrome-for-testing-public/157.0.8103.38/mac-arm64/chrome-mac-arm64.zip",
+      "bytes": 196562867,
+      "sha256": "3406b38b52b7d341d74450eb7b369be038c9fec9894c8b8a9e9e9f97333caf2f"
+    },
+    {
+      "file": "firefox.dmg",
+      "url": "https://archive.mozilla.org/pub/firefox/releases/159.0.1/mac/en-US/Firefox%20159.0.1.dmg",
+      "bytes": 164974072,
+      "sha256": "0c214da4439c1eb4cea28a3c141ff112d511aa32c67f9d12e91116569c8d8dda"
+    },
+    {
+      "file": "firefox-SHA256SUMS",
+      "url": "https://archive.mozilla.org/pub/firefox/releases/159.0.1/SHA256SUMS",
+      "bytes": 551210,
+      "sha256": "fb2bbcd3a3d3778b2e3794e7cbec9e4c163495bb0e54f8f541b9b6709d15c126"
+    }
+  ],
+  "firefox_official_SHA256SUMS_matched": true
+}

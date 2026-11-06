@@ -1,0 +1,38 @@
+[
+  {
+    "case": "missing-pdfium",
+    "exit_code": 1,
+    "stderr": "Layout smoke failed: No such file or directory (os error 2)\n",
+    "output_empty": true
+  },
+  {
+    "case": "altered-pdfium",
+    "exit_code": 1,
+    "stderr": "Layout smoke failed: LibraryChecksum\n",
+    "output_empty": true
+  },
+  {
+    "case": "missing-resource",
+    "exit_code": 1,
+    "stderr": "Layout smoke failed: No such file or directory (os error 2)\n",
+    "output_empty": true
+  },
+  {
+    "case": "altered-resource",
+    "exit_code": 1,
+    "stderr": "Layout smoke failed: resource checksum mismatch: /private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/Resources/layout-fixture.pdf\n",
+    "output_empty": true
+  },
+  {
+    "case": "missing-helper",
+    "exit_code": 1,
+    "stderr": "Layout smoke failed: No such file or directory (os error 2)\n",
+    "output_empty": true
+  },
+  {
+    "case": "symlink-resource",
+    "exit_code": 1,
+    "stderr": "Layout smoke failed: symlink in bundle inventory\n",
+    "output_empty": true
+  }
+]

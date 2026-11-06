@@ -1,0 +1,20 @@
+{
+  "executable": "/private/tmp/cm34 外部 bundle/Citation Layout 日本語.app/Contents/MacOS/citation-manager",
+  "contents": "/private/tmp/cm34 外部 bundle/Citation Layout 日本語.app/Contents",
+  "resources": "/private/tmp/cm34 外部 bundle/Citation Layout 日本語.app/Contents/Resources",
+  "pdfium_library": "/private/tmp/cm34 外部 bundle/Citation Layout 日本語.app/Contents/Frameworks/libpdfium.dylib",
+  "pdfium_build": "158.0.8125.0",
+  "pdfium_abi": "pdfium-render=0.9.5;pdfium_8125;thread_safe",
+  "pdfium_sha256": "8d1e46a6dbe32d7cb95279ab3def2e71e557a3d4cc49162453afa3e3b250dc5e",
+  "host": "/private/tmp/cm34 外部 bundle/Citation Layout 日本語.app/Contents/MacOS/cm34-probe-host",
+  "daemon": "/private/tmp/cm34 外部 bundle/Citation Layout 日本語.app/Contents/MacOS/cm34-probe-daemon",
+  "fixture_sha256_before": "1842ec1c966b74fd73d9dd75ec1f8a199e14e9935b002e2c037206a0496f8910",
+  "fixture_sha256_after": "1842ec1c966b74fd73d9dd75ec1f8a199e14e9935b002e2c037206a0496f8910",
+  "width": 360,
+  "height": 440,
+  "text": "Unicode 日本語 αβ café\r\nsecond line: coordinate proof",
+  "characters": 50,
+  "cwd": "/",
+  "inventory_entries": 30,
+  "io_thread": "layout-smoke-io"
+}

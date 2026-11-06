@@ -1,0 +1,89 @@
+{
+  "recorded_utc": "2026-11-06T15:06:34.361722+00:00",
+  "base_main": "42345ccf7f80c11d3b8a89e8ad1db5e0cafa881b",
+  "passed": [
+    {
+      "command": "cargo fmt --all -- --check",
+      "proof": "format"
+    },
+    {
+      "command": "cargo clippy --workspace --all-targets --locked -- -D warnings",
+      "proof": "lint"
+    },
+    {
+      "command": "cargo test --workspace --locked",
+      "passed_tests_including_doctests": 72,
+      "proof": "unit/integration/doctest"
+    },
+    {
+      "command": "cargo build --workspace --locked",
+      "proof": "compile"
+    },
+    {
+      "command": "cargo clippy -p cm-daemon --all-targets --features layout-smoke --locked -- -D warnings",
+      "proof": "lint optional composition"
+    },
+    {
+      "command": "cargo test -p cm-daemon -p cm-desktop --features cm-daemon/layout-smoke --locked",
+      "passed_tests": 12,
+      "proof": "headless native-feature unit/integration"
+    },
+    {
+      "command": "cargo build -p cm-daemon --bin citation-manager --features layout-smoke --locked",
+      "proof": "actual executable linked; native run recorded separately"
+    },
+    {
+      "command": "python3 scripts/check_architecture.py",
+      "proof": "12 crates and unchanged boundary rules"
+    },
+    {
+      "command": "python3 scripts/check_migrations.py --base 42345ccf7f80c11d3b8a89e8ad1db5e0cafa881b",
+      "proof": "2 immutable SQL/checksums preserved"
+    },
+    {
+      "command": "python3 -m unittest discover -s scripts -p 'test_*.py' -v",
+      "passed_tests": 20,
+      "proof": "Python safety tests"
+    },
+    {
+      "command": "rustfmt --edition 2024 --check tests/fixtures/lifecycle-probe/probe.rs",
+      "proof": "standalone fixture format"
+    },
+    {
+      "command": "rustc --edition 2024 -D warnings tests/fixtures/lifecycle-probe/probe.rs -o /tmp/cm34-probe-host",
+      "proof": "standalone fixture compile"
+    },
+    {
+      "command": "CM_PDFIUM_LIBRARY=/private/tmp/cm34-runtime/lib/libpdfium.dylib cargo test -p cm-pdf --features runtime --locked",
+      "passed_tests": 6,
+      "proof": "existing fixed original PDFium runtime corpus and unit tests"
+    },
+    {
+      "command": "check_failures.py --bundle <moved actual app> --out <new temp>",
+      "passed_cases": 6,
+      "proof": "actual app executable before GUI/DB output"
+    },
+    {
+      "command": "probe_harness.py --bundle-meta <moved bundle.json> --out <new temp>",
+      "proof": "direct-spawn-only lifecycle; 5 invalid frames; browser_tested=false"
+    },
+    {
+      "command": "browser_probe.py <chromium|firefox> ... under interactive account",
+      "proof": "both refused before output/profile/process creation"
+    },
+    {
+      "command": "git diff --check",
+      "proof": "whitespace"
+    }
+  ],
+  "not_passed": {
+    "chromium_actual_connectNative_lifecycle": "failed trial/no ack; disposable OS account prerequisite",
+    "firefox_actual_connectNative_lifecycle": "failed trial/no ack; disposable OS account prerequisite",
+    "Developer_ID": "0 valid identities",
+    "hardened_runtime_notarization": "not performed",
+    "remote_CI": "inspect once after PR creation",
+    "independent_review": "root owns; not run by implementer"
+  },
+  "dependency_versions_changed": false,
+  "existing_issue_tests_retained": true
+}
