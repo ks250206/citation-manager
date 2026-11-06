@@ -60,6 +60,12 @@ complete the draft and request a fresh common preview. No successful title is fa
   No person-name splitting, transliteration, date day/month inference or abstract HTML
   rendering is performed. Main title, type, abstract, journal/container, volume/issue/pages
   (or Crossref article number), DOI, landing URL and language map to shared bibliography.
+  Crossref unknown/null date parts are skipped in source order, retaining the raw date
+  fields; a missing date does not discard usable title/authors/PDF metadata. DataCite Issued
+  timestamps contribute their calendar prefix only, validated by the common date/year
+  normalizer. Time/zone precision is not represented or converted. Ranges, unsupported
+  date forms and year conflicts leave publication_date unset while retaining publicationYear,
+  raw dates and a non-error diagnostic. No point date is inferred from a range.
 - Known external IDs are compared using #33's `external_id` function. Canonical repeats
   within a provider are coalesced before common preview (DataCite can repeat its primary
   DOI), retaining the first raw spelling. All raw external-ID spellings, provider-specific
@@ -79,6 +85,11 @@ complete the draft and request a fresh common preview. No successful title is fa
   results remain usable while failed provider diagnostics survive. If combined evidence
   exceeds the common64 KiB row/count budget, return a small diagnostic manual draft with
   `TooLarge` outcomes for discarded found records; never silently truncate metadata.
+  Invalid external IDs from any provider-port implementation discard only that provider
+  record with InvalidResponse, allowing secondary lookup/manual fallback instead of aborting
+  resolution. A landing URL excluded by the public-web policy is omitted from the usable URL
+  field with a diagnostic and its original value retained in source extra_json; other usable
+  bibliography is retained. PDF candidate policy is unchanged.
 
 ## HTTP, resource bounds and retry/cache rules
 
@@ -125,6 +136,11 @@ complete the draft and request a fresh common preview. No successful title is fa
   be zero to disable that class. No transient, schema/identity, redirect or cancellation
   failure is cached. Cached hits have attempts0 and cached=true; rate/cancellation still
   remain separate outcomes. There is no public API availability requirement in CI.
+- Construct, call **and drop** HttpProviders on a synchronous worker outside any async
+  runtime. Lookup also checks this condition before cache/network/wait and returns
+  Unavailable with zero attempts when violated. This does not make the owned runtime safe
+  to drop inside async code; callers must return it to the synchronous worker for disposal.
+  No background runtime shutdown or blocking-task leak workaround is introduced.
 
 ## PDF candidates
 
@@ -151,4 +167,8 @@ Official references: [reqwest0.13.5](https://docs.rs/reqwest/0.13.5/reqwest/),
 [DataCite public API and Findable-only visibility](https://support.datacite.org/docs/rest-api),
 [DataCite response metadata example](https://support.datacite.org/docs/api-create-dois).
 A404 is provider NotFound, not proof that a DOI is unregistered globally or nonexistent.
+Crossref's [official null-issued record](https://gitlab.com/crossref/rest_api/-/work_items/212)
+documents `[[null]]` for absent dates. [DataCite Date 4.6](https://datacite-metadata-schema.readthedocs.io/en/4.6/properties/date/)
+permits time precision and date ranges beyond the common calendar-date model. The adapter
+retains those source values without treating unsupported precision as a failed work.
 See [executed evidence and limits](../validation/ISSUE_14.md).

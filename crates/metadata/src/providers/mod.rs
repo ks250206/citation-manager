@@ -76,6 +76,27 @@ fn raw_doi(draft: &mut PaperDraft, value: String) {
         value,
     });
 }
+fn landing_url(draft: &mut PaperDraft, raw: Option<String>) {
+    if let Some(url) = raw {
+        if public_url(&url).is_some() {
+            draft.bibliography.url = Some(url);
+        } else {
+            if let Some(extra) = draft
+                .bibliography
+                .extra_json
+                .as_mut()
+                .and_then(serde_json::Value::as_object_mut)
+            {
+                extra.insert("unusable_landing_url".into(), url.into());
+            }
+            draft.diagnostics.push(cm_core::import::RowDiagnostic {
+                field: "url".into(),
+                message: "Landing URL excluded by public-web candidate policy; original retained in source metadata".into(),
+                error: false,
+            });
+        }
+    }
+}
 fn pdf(url: &str, provider: Provider, source: &ImportSource) -> Option<PdfCandidate> {
     public_url(url).map(|url| PdfCandidate {
         url,

@@ -6,10 +6,10 @@ struct Envelope {
     message_type: String,
     message: Work,
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, serde::Serialize)]
 struct Date {
     #[serde(rename = "date-parts")]
-    parts: Vec<Vec<i32>>,
+    parts: Vec<Vec<Option<i32>>>,
 }
 #[derive(Deserialize)]
 struct Link {
@@ -79,11 +79,15 @@ pub(super) fn parse(body: &[u8], source: ImportSource) -> Result<ProviderRecord,
         .map(|p| p.contributor("author"))
         .chain(w.editor.into_iter().map(|p| p.contributor("editor")))
         .collect();
-    if let Some(date) = w.issued.or(w.print).or(w.online) {
+    let raw_dates = serde_json::json!({"issued":w.issued,"published-print":w.print,"published-online":w.online});
+    for date in [w.issued, w.print, w.online].into_iter().flatten() {
         if date.parts.len() != 1 || date.parts[0].is_empty() || date.parts[0].len() > 3 {
             return Err(());
         }
-        let parts = &date.parts[0];
+        // Crossref represents an unknown date as [[null]]. Try the next source.
+        let Some(parts) = date.parts[0].iter().copied().collect::<Option<Vec<_>>>() else {
+            continue;
+        };
         b.year = Some(parts[0]);
         b.publication_date = Some(
             parts
@@ -99,23 +103,19 @@ pub(super) fn parse(body: &[u8], source: ImportSource) -> Result<ProviderRecord,
                 .collect::<Vec<_>>()
                 .join("-"),
         );
+        break;
     }
     b.journal = w.container.first().cloned();
     b.volume = w.volume;
     b.issue = w.issue;
     b.pages = w.page.or(w.article_number);
     b.abstract_text = w.abstract_text;
-    b.url = w.url;
     b.language = w.language;
-    if let Some(url) = &b.url
-        && public_url(url).is_none()
-    {
-        return Err(());
-    }
     // Retain nonmapped provider metadata for review, including alternative titles and IDs.
     b.extra_json = Some(
-        serde_json::json!({"other_titles":w.title.into_iter().skip(1).collect::<Vec<_>>(), "provider_fields": w.extra}),
+        serde_json::json!({"other_titles":w.title.into_iter().skip(1).collect::<Vec<_>>(), "provider_fields": w.extra,"dates":raw_dates}),
     );
+    landing_url(&mut draft, w.url);
     let pdf_candidates = w
         .link
         .iter()

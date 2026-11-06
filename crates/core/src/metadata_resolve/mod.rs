@@ -38,6 +38,7 @@ pub enum ProviderStatus {
     RateLimited,
     Timeout,
     Network,
+    Unavailable,
     InvalidResponse,
     TooLarge,
     IdentityMismatch,
@@ -202,6 +203,14 @@ impl<P: MetadataProvider> MetadataResolveService<P> {
                         .any(|id| normalize_doi(id).ok().as_ref() != Some(&doi))
                 {
                     reply.outcome.status = ProviderStatus::IdentityMismatch;
+                    reply.record = None;
+                } else if record
+                    .draft
+                    .external_ids
+                    .iter()
+                    .any(|id| normalize::external_id(id).is_err())
+                {
+                    reply.outcome.status = ProviderStatus::InvalidResponse;
                     reply.record = None;
                 }
             }

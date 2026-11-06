@@ -92,3 +92,35 @@ workspace build is compilation evidence; SQLite/loopback scenarios are runtime e
 Independent different-model review and merge remain root responsibilities. This agent
 ran no child/reviewer, merged nothing and did not watch/poll CI. CI is inspected once at
 handoff for the exact pushed PR head; an in-progress state is not a pass.
+
+## Independent-review corrections
+
+Opus 5.5 medium reviewed `cad25b5` read-only, reproduced P2 date handling issues and three
+P3s, and verified all193 tracked file hashes stayed unchanged. Full findings are recorded
+in PR comment6689942729. Root verified Crossref's official null-issued example and DataCite
+4.6's timestamp/range allowance (links in ADR); these were not verified by the reviewer.
+
+- Null Crossref date parts preserve usable metadata and try print/online fallback. Raw date
+  fields remain in source metadata, including the null value.
+- DataCite timestamps use common-validated calendar precision; ranges, unrepresentable dates
+  and conflicting years preserve the record/year/raw dates with a non-error diagnostic.
+- Excluded landing URLs retain their raw value and a diagnostic, preserving the rest of the
+  record. Unsafe PDF candidates remain excluded.
+- Invalid external IDs from a replacement core port are provider InvalidResponse outcomes,
+  so a valid secondary record or manual fallback remains available.
+- Calling an existing HTTP adapter in an async runtime returns Unavailable with zero fetches;
+  it remains usable after returning to its worker. Its owned runtime must be dropped outside
+  async contexts, as documented. Pinned Tokio1.54.1 Runtime/drop and blocking/shutdown sources
+  confirm that constraint; Context7's tagged query returned reactor internals rather than
+  the relevant Runtime API, so it was supplemented by these primary local sources.
+
+Three new real-loopback tests cover Crossref unknown/print/online dates; nine DataCite
+timestamp/range/leap-day/year/unsupported precision cases; and both providers' excluded URLs
+without weakening PDF policy. One new core-port test covers invalid external IDs with valid
+secondary and both-invalid manual fallback. The existing async-context test now exercises
+lookup rejection, no fetch, and subsequent synchronous success. Source hashes and original
+SQLite confirmation policies remain intact. Root reran fmt, locked warnings-denied workspace
+clippy/tests/build, architecture, immutable migrations, Python and whitespace checks:
+126 unit/integration +1 compile-fail doctest (127 total),18 Python tests, all passed.
+No dependency, lockfile, schema or migration changes were needed for these corrections.
+Independent re-review and the new head's CI are pending; this is not a review approval.

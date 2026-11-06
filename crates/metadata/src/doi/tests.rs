@@ -805,11 +805,141 @@ fn config_bounds_and_async_context_are_rejected_without_fetching() {
     ] {
         assert!(HttpProviders::new(config).is_err());
     }
+    let server = Server::start(vec![Reply::json(200, cr("10.99/test"))]);
+    let mut client = server.client();
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .unwrap();
     runtime.block_on(async {
         assert!(HttpProviders::new(Default::default()).is_err());
+        let response = lookup(&mut client);
+        assert_eq!(response.outcome.status, ProviderStatus::Unavailable);
+        assert_eq!(response.outcome.attempts, 0);
+        assert_eq!(server.count(), 0);
     });
+    assert_eq!(lookup(&mut client).outcome.status, ProviderStatus::Found);
+    assert_eq!(server.count(), 1);
+    // The owned runtime must also be dropped outside the async context.
+    drop(client);
+}
+
+#[test]
+fn crossref_unknown_date_keeps_metadata_and_tries_the_next_date_source() {
+    for next in [None, Some("print"), Some("online")] {
+        let mut body = cr("10.99/test");
+        body["message"]["issued"] = json!({"date-parts":[[null]]});
+        if let Some(kind) = next {
+            body["message"][format!("published-{kind}")] = json!({"date-parts":[[2024,3,2]]});
+        }
+        let server = Server::start(vec![Reply::json(200, body), Reply::json(404, json!({}))]);
+        let r = MetadataResolveService::new(server.client())
+            .resolve("10.99/test", &Cancellation::default())
+            .unwrap();
+        assert_eq!(r.outcomes[0].status, ProviderStatus::Found);
+        assert!(!r.manual_add);
+        assert_eq!(r.draft.bibliography.authors.len(), 3);
+        assert_eq!(r.draft.bibliography.journal.as_deref(), Some("Journal Ω"));
+        assert_eq!(r.pdf_candidates.len(), 1);
+        assert_eq!(
+            r.draft.bibliography.publication_date.as_deref(),
+            next.map(|_| "2024-03-02")
+        );
+        assert_eq!(
+            r.draft.bibliography.extra_json.as_ref().unwrap()["doi_resolution"]["sources"][0]["unmapped"]
+                ["dates"]["issued"]["date-parts"],
+            json!([[null]])
+        );
+        assert!(cm_core::import::normalize::normalize(&r.draft).is_ok());
+    }
+}
+
+#[test]
+fn datacite_issued_dates_reduce_precision_or_remain_raw_without_losing_metadata() {
+    for (issued, expected) in [
+        ("2024-01-15T10:30:00Z", Some("2024-01-15")),
+        ("2024-01-15T10:30:00+09:00", Some("2024-01-15")),
+        ("2024-01/2024-12", None),
+        ("2019-12-31", None),
+        ("2023-02-29", None),
+        ("2024-02-30", None),
+        ("unsupported", None),
+        ("2024-02", Some("2024-02")),
+        ("2024", Some("2024")),
+    ] {
+        let mut body = dc("10.99/test");
+        body["data"]["attributes"]["dates"][0]["date"] = json!(issued);
+        let server = Server::start(vec![Reply::json(404, json!({})), Reply::json(200, body)]);
+        let r = MetadataResolveService::new(server.client())
+            .resolve("10.99/test", &Cancellation::default())
+            .unwrap();
+        assert_eq!(r.outcomes[1].status, ProviderStatus::Found, "{issued}");
+        assert!(!r.manual_add);
+        assert_eq!(r.draft.title, "DataCite title");
+        assert_eq!(r.draft.bibliography.authors.len(), 4);
+        assert_eq!(r.draft.bibliography.year, Some(2024));
+        assert_eq!(
+            r.draft.bibliography.publication_date.as_deref(),
+            expected,
+            "{issued}"
+        );
+        assert_eq!(
+            r.draft.bibliography.extra_json.as_ref().unwrap()["doi_resolution"]["sources"][0]["unmapped"]
+                ["dates"][0]["date"],
+            json!(issued)
+        );
+        assert!(cm_core::import::normalize::normalize(&r.draft).is_ok());
+        if issued != expected.unwrap_or("") {
+            assert!(
+                r.draft
+                    .diagnostics
+                    .iter()
+                    .any(|d| d.field == "publication_date" && !d.error)
+            );
+        }
+    }
+}
+
+#[test]
+fn excluded_landing_urls_do_not_discard_other_metadata_or_relax_pdf_policy() {
+    let raw = "https://repo.example.edu:8080/handle/1";
+    for provider in [Provider::Crossref, Provider::DataCite] {
+        let mut body = if provider == Provider::Crossref {
+            cr("10.99/test")
+        } else {
+            dc("10.99/test")
+        };
+        let replies = if provider == Provider::Crossref {
+            body["message"]["URL"] = json!(raw);
+            body["message"]["link"] = json!([{"URL":"https://repo.example.edu:8080/paper.pdf","content-type":"application/pdf"}]);
+            vec![Reply::json(200, body), Reply::json(404, json!({}))]
+        } else {
+            body["data"]["attributes"]["url"] = json!(raw);
+            body["data"]["attributes"]["contentUrl"] =
+                json!(["https://repo.example.edu:8080/paper.pdf"]);
+            vec![Reply::json(404, json!({})), Reply::json(200, body)]
+        };
+        let server = Server::start(replies);
+        let r = MetadataResolveService::new(server.client())
+            .resolve("10.99/test", &Cancellation::default())
+            .unwrap();
+        assert!(!r.manual_add);
+        assert_eq!(
+            r.outcomes[usize::from(provider == Provider::DataCite)].status,
+            ProviderStatus::Found
+        );
+        assert!(r.draft.bibliography.url.is_none());
+        assert!(r.pdf_candidates.is_empty());
+        assert!(
+            r.draft
+                .diagnostics
+                .iter()
+                .any(|d| d.field == "url" && !d.error)
+        );
+        assert_eq!(
+            r.draft.bibliography.extra_json.as_ref().unwrap()["doi_resolution"]["sources"][0]["unmapped"]
+                ["unusable_landing_url"],
+            json!(raw)
+        );
+    }
 }

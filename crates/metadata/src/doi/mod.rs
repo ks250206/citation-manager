@@ -78,6 +78,7 @@ struct Cached {
 }
 /// Owns a small current-thread runtime, one client, per-provider pacing and bounded cache.
 /// Product API accepts only DOI + Provider; test-only endpoints cannot ship in a build.
+/// Construct, call and drop on a synchronous worker outside any async runtime.
 pub struct HttpProviders<C = SystemClock> {
     config: HttpConfig,
     clock: C,
@@ -209,6 +210,9 @@ impl<C: WorkerClock> HttpProviders<C> {
 }
 impl<C: WorkerClock> MetadataProvider for HttpProviders<C> {
     fn lookup(&mut self, provider: Provider, doi: &str, cancel: &Cancellation) -> ProviderReply {
+        if tokio::runtime::Handle::try_current().is_ok() {
+            return Self::reply(provider, ProviderStatus::Unavailable, 0, None);
+        }
         if cancel.is_cancelled() {
             return Self::reply(provider, ProviderStatus::Cancelled, 0, None);
         }

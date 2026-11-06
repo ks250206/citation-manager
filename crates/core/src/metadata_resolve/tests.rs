@@ -101,6 +101,49 @@ fn invalid_input_and_pre_cancelled_calls_do_no_provider_work() {
     assert!(s.into_provider().calls.is_empty());
 }
 #[test]
+fn invalid_port_identifier_discards_only_that_provider_and_allows_fallback() {
+    for both_invalid in [false, true] {
+        let mut cr = reply(Provider::Crossref, "2024");
+        cr.record
+            .as_mut()
+            .unwrap()
+            .draft
+            .external_ids
+            .push(ExternalId {
+                namespace: "pmid".into(),
+                value: "not-a-pmid".into(),
+            });
+        let mut dc = reply(Provider::DataCite, "2024");
+        if both_invalid {
+            dc.record
+                .as_mut()
+                .unwrap()
+                .draft
+                .external_ids
+                .push(ExternalId {
+                    namespace: "pmid".into(),
+                    value: "bad".into(),
+                });
+        }
+        let r = MetadataResolveService::new(Port {
+            calls: vec![],
+            replies: vec![cr, dc].into(),
+        })
+        .resolve("10.99/test", &Cancellation::default())
+        .unwrap();
+        assert_eq!(r.outcomes[0].status, ProviderStatus::InvalidResponse);
+        assert_eq!(r.manual_add, both_invalid);
+        assert!(r.draft.external_ids.is_empty());
+        if both_invalid {
+            assert!(r.draft.title.is_empty());
+            assert_eq!(r.outcomes[1].status, ProviderStatus::InvalidResponse);
+        } else {
+            assert_eq!(r.draft.title, "Ω Title");
+            assert_eq!(r.outcomes[1].status, ProviderStatus::Found);
+        }
+    }
+}
+#[test]
 fn combined_evidence_overflow_is_diagnostic_manual_fallback_without_truncation() {
     let mut cr = reply(Provider::Crossref, "2024");
     cr.record.as_mut().unwrap().draft.bibliography.extra_json =

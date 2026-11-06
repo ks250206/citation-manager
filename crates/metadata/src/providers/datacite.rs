@@ -124,6 +124,31 @@ struct Attributes {
     #[serde(flatten)]
     extra: serde_json::Map<String, Value>,
 }
+// The common model has date precision only. Do not guess a point from a range.
+fn issued_date(raw: &str, year: Option<i32>) -> Option<String> {
+    if raw.contains('/') {
+        return None;
+    }
+    let date = raw.split_once('T').map_or(raw, |(date, _)| date);
+    if !matches!(date.len(), 4 | 7 | 10)
+        || !date.bytes().enumerate().all(|(i, c)| {
+            if i == 4 || i == 7 {
+                c == b'-'
+            } else {
+                c.is_ascii_digit()
+            }
+        })
+    {
+        return None;
+    }
+    let mut draft = PaperDraft::titled("Date validation");
+    draft.bibliography.year = year;
+    draft.bibliography.publication_date = Some(date.into());
+    normalize::normalize(&draft)
+        .ok()?
+        .bibliography
+        .publication_date
+}
 pub(super) fn parse(body: &[u8], source: ImportSource) -> Result<ProviderRecord, ()> {
     let envelope: Envelope = serde_json::from_slice(body).map_err(|_| ())?;
     let data = envelope.data;
@@ -170,24 +195,17 @@ pub(super) fn parse(body: &[u8], source: ImportSource) -> Result<ProviderRecord,
         .chain(a.contributors.into_iter().map(|p| p.contributor(false)))
         .collect::<Result<_, _>>()?;
     b.year = a.year;
-    b.publication_date = a
-        .dates
-        .iter()
-        .find(|d| d.kind == "Issued")
-        .map(|d| d.date.clone())
-        .or(a.year.map(|y| format!("{y:04}")));
+    let issued = a.dates.iter().find(|d| d.kind == "Issued");
+    b.publication_date = match issued {
+        Some(date) => issued_date(&date.date, a.year),
+        None => a.year.map(|y| format!("{y:04}")),
+    };
     b.abstract_text = a
         .descriptions
         .iter()
         .find(|d| d.kind == "Abstract")
         .map(|d| d.description.clone());
-    b.url = a.url;
     b.language = a.language;
-    if let Some(url) = &b.url
-        && public_url(url).is_none()
-    {
-        return Err(());
-    }
     if let Some(t) = a.types {
         b.paper_type = t.general.map(|g| match g.as_str() {
             "JournalArticle" => "journal-article".into(),
@@ -209,6 +227,14 @@ pub(super) fn parse(body: &[u8], source: ImportSource) -> Result<ProviderRecord,
     b.extra_json = Some(
         serde_json::json!({"provider_fields":a.extra, "titles":a.titles.iter().map(|t|&t.title).collect::<Vec<_>>(), "dates":a.dates.iter().map(|d|serde_json::json!({"date":d.date,"type":d.kind})).collect::<Vec<_>>()}),
     );
+    if issued.is_some_and(|d| draft.bibliography.publication_date.as_deref() != Some(&d.date)) {
+        draft.diagnostics.push(cm_core::import::RowDiagnostic {
+            field: "publication_date".into(),
+            message: "Issued time, range, unsupported date or year conflict omitted from date precision; original dates retained in source metadata".into(),
+            error: false,
+        });
+    }
+    landing_url(&mut draft, a.url);
     let pdf_candidates = a
         .content_url
         .unwrap_or_default()
