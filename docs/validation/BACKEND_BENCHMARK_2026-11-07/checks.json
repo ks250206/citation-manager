@@ -1,0 +1,122 @@
+{
+  "git_head": "f273466d72c6baa240dc0870a6f47d104b6ac75f",
+  "commands": [
+    {
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.3666588329942897,
+      "log": "01.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "cargo",
+        "clippy",
+        "--workspace",
+        "--all-targets",
+        "--locked",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 1.0592404170893133,
+      "log": "02.log",
+      "sha256": "f44cef9000df6c90960ea18f4738a725b9337b6b11ad1a73f6ea296725066df0"
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "--workspace",
+        "--locked"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 136.54845170804765,
+      "log": "03.log",
+      "sha256": "24dcc47b83c1182a36da92006f2f5f48eea4fdbc55341fc0545881e224268562",
+      "raw_sha256": "dd0468ef17b11a3c6ef02453cdb16f1303985ce59ad52dc2d7bcfa6da65d5939"
+    },
+    {
+      "command": [
+        "cargo",
+        "build",
+        "--workspace",
+        "--locked"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.6268781670369208,
+      "log": "04.log",
+      "sha256": "0b9c85a57402765a9638848a90eec54abbd9a68f42a071a97aaa9d8acc5ba131"
+    },
+    {
+      "command": [
+        "python3",
+        "scripts/check_architecture.py"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.06806895800400525,
+      "log": "05.log",
+      "sha256": "7a5f780819b4ec02a7b577aa8979ef8a6a64326d56e33c0d753e8a988f989109"
+    },
+    {
+      "command": [
+        "python3",
+        "scripts/check_migrations.py",
+        "--base",
+        "fd50af1fe385c30b8581f06c90247630f27caf55"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.11251270805951208,
+      "log": "06.log",
+      "sha256": "92423d36fa24dfbf57562970b44f53b1abee88b95621c71f456abcbca257409a"
+    },
+    {
+      "command": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts",
+        "-p",
+        "test_*.py",
+        "-v"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.17085774999577552,
+      "log": "07.log",
+      "sha256": "c518136d080f2bafda885a34e4e749e5ec027819375e84bcbcba09bfd43906bb"
+    },
+    {
+      "command": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.021341332932934165,
+      "log": "08.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "rust_test_counts": {
+    "passed": 159,
+    "failed": 0,
+    "ignored": 0,
+    "measured": 0,
+    "filtered_out": 0
+  },
+  "notes": [
+    "Default-feature workspace tests; no GUI/native feature launch.",
+    "Both existing 1000-record BibTeX/RIS roundtrip tests passed; none skipped for slowness.",
+    "Independent different-model review and GitHub CI are separate, pending root.",
+    "Committed logs remove excess trailing blank lines only. Original raw SHA-256 is retained when normalization occurs."
+  ]
+}

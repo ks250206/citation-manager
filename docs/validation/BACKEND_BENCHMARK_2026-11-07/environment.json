@@ -1,0 +1,54 @@
+{
+  "started_utc": "2026-11-06T21:22:07.683442+00:00",
+  "machine": "arm64",
+  "model": "Mac16,6",
+  "cpu": "Apple M4 Max",
+  "physical_cpu_count": "14",
+  "logical_cpu_count": "14",
+  "ram_bytes": 38654705664,
+  "os": "ProductName:\t\tmacOS\nProductVersion:\t\t27.2\nBuildVersion:\t\t26B123",
+  "rust": "rustc 1.99.1 (58cf8f9c3 2026-10-13)\nbinary: rustc\ncommit-hash: 58cf8f9c35b355199727627d07ae34a4e2846d67\ncommit-date: 2026-10-13\nhost: aarch64-apple-darwin\nrelease: 1.99.1\nLLVM version: 23.1.1",
+  "cargo": "cargo 1.99.1 (5f94df478 2026-08-27)",
+  "profile": "release",
+  "build_flags": "--release --locked; no feature flags; default Cargo release profile",
+  "build_environment": {
+    "RUSTFLAGS": null,
+    "CARGO_ENCODED_RUSTFLAGS": null,
+    "CARGO_BUILD_TARGET": null
+  },
+  "git_head": "f273466d72c6baa240dc0870a6f47d104b6ac75f",
+  "git_status": "?? docs/validation/BACKEND_BENCHMARK.md\n?? docs/validation/BACKEND_BENCHMARK_2026-11-07/",
+  "harness_sha256": "317aa96859914526a18cb08d56e2753974241d787a4adc64af2383cae258fcec",
+  "cargo_lock_sha256": "7349aaa20b3c77266ce9df81fc85b2d59747be1491f3c620c2e1c286101270a9",
+  "query_records": 10000,
+  "import_records": 1000,
+  "query_samples": 21,
+  "import_samples": 3,
+  "limits": "headless only; OS cache uncontrolled; no GUI, PDF, FTS, startup, total RSS or 16GB acceptance",
+  "artifacts": {
+    "backend_bench_query": {
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 0,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": false
+      },
+      "features": [],
+      "executable_sha256": "cfacaa84337e8744963f7e1cf194301e5e3baae01920a88142dbbb6a5ab6c68b"
+    },
+    "backend_bench_import": {
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 0,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": false
+      },
+      "features": [
+        "default"
+      ],
+      "executable_sha256": "5c44e33d25cc6cf955c39abcbecaaeea9aeebed24165a0a99ad33704a0a58c78"
+    }
+  }
+}
