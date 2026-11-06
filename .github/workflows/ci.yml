@@ -1,0 +1,61 @@
+name: macOS workspace
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  contracts:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.14'
+      - name: Install exact Rust toolchain
+        run: |
+          rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
+          rustup show active-toolchain
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked
+      - run: cargo build --workspace --locked
+      - run: python3 scripts/check_architecture.py
+      - run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
+      - name: Check migration identities and preserve base registry
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -n "$BASE_SHA" ] && [ "$BASE_SHA" != "0000000000000000000000000000000000000000" ]; then
+            python3 scripts/check_migrations.py --base "$BASE_SHA"
+          else
+            python3 scripts/check_migrations.py
+          fi
+  native-dependencies:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Environment and exact toolchain
+        run: |
+          rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
+          rustup show active-toolchain
+          xcodebuild -version
+      - name: Ensure Xcode Metal compiler
+        run: |
+          # Xcode 16 bundles Metal and does not support -downloadComponent.
+          # Newer Xcode releases may need the separately installed toolchain.
+          if ! xcrun --sdk macosx metal -v; then
+            xcodebuild -downloadComponent MetalToolchain
+          fi
+          xcrun --sdk macosx metal -v
+      - run: cargo check -p cm-desktop --features native-gpui --locked
+      - run: cargo clippy -p cm-desktop --all-targets --features native-gpui --locked -- -D warnings
+      - run: cargo build -p cm-desktop --features native-gpui --locked
+      - name: Compile PDF bindings only (no PDFium runtime)
+        run: cargo check -p cm-pdf --features bindings-check --locked

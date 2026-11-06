@@ -1,0 +1,13 @@
+[package]
+name = "cm-protocol"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+cm-domain.workspace = true
+cm-core.workspace = true
