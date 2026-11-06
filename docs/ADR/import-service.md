@@ -70,8 +70,9 @@ intentionally extended for the new result fields, not replaced by production cla
 
 ## Legacy DOI compatibility (P1 repair)
 
-Base `42345cc` manual CRUD stored the lowercase resolver suffix without decoding, and
-retained the original external-ID URL. For example a real old-API-created record has
+Base `42345cc` manual CRUD stored the lowercase resolver suffix without decoding. When
+the URL was supplied as a DOI external ID, it also retained that original external-ID URL.
+For example a real old-API-created record has
 `doi_normalized = 10.1002/abc%3c493%3e` and external ID
 `https://doi.org/10.1002/abc%3C493%3E`. New input maps that URL to `10.1002/abc<493>`.
 Changing the new-input normalizer globally would conflate raw percent-literal identifiers.
@@ -93,6 +94,16 @@ Instead, compatibility uses the persisted pair as narrow provenance evidence:
   be ambiguous whether a raw input intended the historical literal or resolver identity.
   We conservatively report/block that match for explicit review. A raw percent DOI with no
   resolver witness is never decoded, so independent literal and decoded records can coexist.
+- Known legacy limitation: the old API also accepted resolver URLs directly in
+  `bibliography.doi` without an external ID. That path discarded the original URL and kept
+  only its lowercase escaped suffix. For example, a bibliography-only input of
+  `https://doi.org/10.1002/abc%3C493%3E` became `10.1002/abc%3c493%3e` with no external IDs.
+  This is indistinguishable from an intentional raw percent-literal DOI. Without a retained
+  resolver witness we do not decode it or treat a later decoded DOI as an exact match.
+  Reimporting the same resolver URL can therefore offer `Create` and produce a separate
+  `10.1002/abc<493>` record if explicitly approved. Bibliographic similarity may suggest the
+  existing paper, but is not guaranteed. This repair does not provide complete exact dedup
+  for those bibliography-only legacy records; users must review that ambiguity explicitly.
 - Manual create/save/update and shared import writes check all equivalent DOI forms against
   every other row (including trash) while holding the IMMEDIATE writer transaction. Manual
   checks stream only DOI columns/IDs, without imposing import title/inventory budgets. The

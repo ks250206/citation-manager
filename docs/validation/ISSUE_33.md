@@ -128,3 +128,15 @@ also compiled in an isolated core check and in the separate-process regression.
 For P1, find-docs resolved rusqlite and queried `/rusqlite/rusqlite/v0.41.1`; its historical
 changelog response was supplemented with the pinned primary-source `transaction.rs`
 (IMMEDIATE mapping and rollback-on-drop) and `statement.rs` (`query`/row iteration).
+
+## Independent re-review and legacy ambiguity
+
+Opus 5.5 medium independently reviewed `761b9a4`, regenerated the actual base-API fixture,
+passed all seven legacy regressions against that database and all 99 workspace tests, and
+verified all 183 tracked file hashes remained unchanged. No P0–P2 findings remained.
+One P3 identified the separate old bibliography-only DOI input path: its original resolver
+URL was discarded, so an escaped stored DOI cannot be distinguished from an intentional
+percent-literal DOI. The reviewer reproduced a reimport offering Create and explicitly
+approved duplicate records. The ADR now documents that limitation using the reviewer's
+option (a); no guessed aliases, normalization or write behavior were added. This follow-up
+changes only these two documentation files. CI remains a separate merge gate.
