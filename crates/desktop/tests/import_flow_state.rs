@@ -104,6 +104,7 @@ fn pdf_reports_preserve_unrelated_previews_and_paused_batch_progress_requires_ne
     for n in 0..8 {
         sessions.active.pdf_index = Some(0);
         sessions.active.set_preview(preview(&format!("pdf-{n}")));
+        assert_eq!(sessions.active.total, 1);
         sessions
             .pause_file(|id| {
                 cancelled.push(id.clone());

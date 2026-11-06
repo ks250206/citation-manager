@@ -132,6 +132,10 @@ fn all_rows_need_explicit_decisions_and_errors_can_only_be_skipped() {
         candidates: vec![valid, invalid],
         warnings: vec![],
     });
+    assert_eq!(
+        review.total, 2,
+        "manual progress must count its preview rows"
+    );
     assert!(review.commit().is_none());
     review.choose_valid_creates();
     assert!(review.commit().is_none());

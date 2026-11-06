@@ -412,13 +412,14 @@ impl LibraryView {
                                                         "{} {} · {} · {}",
                                                         index + 1,
                                                         if has_error { "ERROR" } else { "" },
-                                                        c.draft.title.replace(['\r', '\n'], " "),
-                                                        decision
+                                                        decision,
+                                                        c.draft.title.replace(['\r', '\n'], " ")
                                                     ),
                                                     true,
                                                 )
                                                 .h(px(44.))
-                                                .overflow_hidden()
+                                                .w_full()
+                                                .truncate()
                                                 .on_click(cx.listener(move |this, _, _, cx| {
                                                     this.reviews.active.row = index;
                                                     this.merge_target = 0;

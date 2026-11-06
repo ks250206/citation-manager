@@ -90,6 +90,9 @@ impl Review {
         self.decisions = vec![None; preview.candidates.len()];
         self.row = 0;
         self.batch_count = preview.candidates.len();
+        if !self.from_file {
+            self.total = self.batch_count;
+        }
         self.preview = Some(preview);
     }
     pub fn choose(&mut self, index: usize, action: ImportAction) -> bool {

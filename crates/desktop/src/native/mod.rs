@@ -436,7 +436,9 @@ impl LibraryView {
         cx.notify();
     }
     fn load_membership(&mut self) {
-        if let Some(p) = &self.editor {
+        // Membership queries are defined only for active papers. A successful
+        // Trash action must not be replaced by an expected ForPaper NotFound.
+        if let Some(p) = self.editor.as_ref().filter(|p| p.deleted_at.is_none()) {
             let id = p.id;
             self.call(Lane::Membership, Event::Membership, |c, done| {
                 c.organization(OrganizationRequest::ForPaper(id), done)

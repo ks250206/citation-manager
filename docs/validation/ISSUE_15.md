@@ -1,10 +1,23 @@
 # #15 library workbench — validation and blockers
 
+**Current: the native GUI works; acceptance remains incomplete. Keep PR45 Draft and #15 open.**
+The 2026-11-07 awake run used a fresh private library, actual Mach-O app, bundled pinned
+PDFium, real CUA interactions and ten separately approved 100-row batches. Main through
+`9e7e66e` is integrated. Four observed UI defects were corrected. See the
+[actual native actions, remaining gates and source/binary evidence](issue-15/native-awake.md),
+[artifact manifest](issue-15/native-awake-artifacts.json) and
+[final local checks](issue-15/native-awake-checks.json). #34 remains HELD.
+
+## Historical implementation and headless evidence
+
+The observations below predate the successful awake run. Statements that a native path
+was unrun describe that historical run; the current matrix is near the end of this file.
+
 Base `fd50af1fe385c30b8581f06c90247630f27caf55`, T3-prepared isolated checkout
 `t3-6fa2df7e`, branch `t3/issue-15-library-import`. Native macOS arm64, Rust 1.99.1,
 GPUI revision and all 636 locked dependency identities/checksums unchanged.
 
-**Acceptance is not complete. This is a draft handoff.** Real worker/DB/PDF operations
+**Historical window-observation failure, now superseded.** Real worker/DB/PDF operations
 are implemented; native CUA could not locate the application window. It returned
 `Computer Use server error -10005: cgWindowNotFound` for two fresh isolated test bundle
 identities. Native startup diagnostics reached GPUI launch/window creation/activation,
@@ -162,21 +175,24 @@ and commit waits were 15.37 and 7.93 seconds in this unoptimized local run. Thes
 measurements do not establish CI runner timing or release performance. Formatting and
 all-target native daemon Clippy passed. [Exact stage timings and failure context](issue-15/ci-watchdog-checks.json).
 
-## Native acceptance still unrun
+## Current native acceptance matrix
 
-| Required path | Current result |
+| Required path | Observed result after wake |
 |---|---|
-| Actual 1000-record UI import in ten approvals → classification → metadata search → export | **blocked/unrun**; headless service path passed |
-| Real native picker and ExternalPaths D&D for both attach/new intents | **blocked/unrun** |
-| Folder progress/cancel/retry, duplicate hash, scanned/corrupt/encrypted/offline fallback and true partial attachment UI | **blocked/unrun**; worker/ABI paths tested separately |
-| Manual/DOI preview, read-only lookup/offline fallback/cancel, field merge/Skip diagnostics in the actual window | **blocked/unrun**; deterministic provider/service tests passed, no public-network success claimed |
-| Settings persistence across actual Cmd+Q/relaunch, invalid-setting native warning/reset | **blocked/unrun**; worker reopen/default tests passed |
-| Virtualized table/paging, combined filters, hierarchy/multiple memberships, trash/restore, loading/empty/error UI | **blocked/unrun**; real service/state paths tested |
-| Selected Details/PDF attachment slot, quit/relaunch and later metadata edits via GUI | **blocked/unrun**; DB/reference reopen passed |
+| Actual 1000-record import, ten separate approvals | Passed in actual GUI; exactly 1000 synthetic DOIs corroborated read-only |
+| Classification, combined filters, multiselect, paging, loading/empty/error, trash/restore | Observed; Title/Year/ID/created/updated sorting observed; failed-query paging/retry and collection edit/move/delete remain unverified |
+| Manual preview/Create, exact duplicate selected-title Merge, error-row Skip | Observed; invalid candidate could not Create |
+| DOI lookup/cancel | Actual loading/cancel and public provider response into uncommitted review observed; no DOI paper saved; offline fallback remains unverified |
+| Native Open/Save pickers, exports/readback | PDF Attach/New pickers, All RIS 1000 / selected BibTeX 2 / direct collection RIS 1 passed; real D&D remains unverified |
+| PDF folder/metadata/fallback/progress/cancel/retry/partial success | Recursive5/nonrecursive 4, digest duplicate, symlink/non-PDF, malformed/encrypted fallback forms; cancel20/500 then retry500; attach cancel retained 9, explicit resume completed 500; retained-new-paper failure/retry observed |
+| Layout/settings and attached-paper correction | Actual quit/relaunch, tabs/reading/columns/panes, invalidJSON warning/reset and later metadata correction observed;502 managed blobs match original source hashes |
+| Review regressions | PDF form/Library/New/CmdS, bibliography pause/resume/fresh decisions, dirty guards, failure-survives-Get, HOME Save picker observed; simultaneous cancellation and dirty/non-PDF preview plus unrelated Attach/Get remain unverified |
 
-Follow [the native checklist](../../tests/e2e/library/README.md) after a native window can
-be obtained. No GUI acceptance checkbox is marked passed. No fulltext, saved advanced
-search, viewer, annotation/note editing or command palette/keymap registry is claimed.
+The [native run log](issue-15/native-awake.md) specifies exactly which binary each phase
+used and retains the incomplete gates. Earlier headless results above remain headless
+results. No viewer, annotations/note editor, saved advanced search or command/keymap
+registry is claimed; #52/#53 parallel work is outside PR45. The checklist remains at
+[tests/e2e/library](../../tests/e2e/library/README.md).
 
 ## Boundaries and limits
 

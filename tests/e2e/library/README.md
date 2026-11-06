@@ -2,8 +2,10 @@
 
 Required operator: native CUA against a freshly linked actual GPUI executable, using
 only a fresh private temp library/settings. No preseeded UI data. #34 remains held.
-The current run could not obtain the native window from CUA; every path below is
-**unverified in GUI**. Headless service tests do not substitute for these actions.
+The awake run obtained the actual native window and exercised many paths below.
+See [current per-path results and incomplete gates](../../../docs/validation/issue-15/native-awake.md).
+This is still an acceptance checklist, not a claim that all paths passed. Headless
+service tests do not substitute for native actions.
 
 1. Build the actual `citation-manager` with `desktop-bootstrap --locked`. Use
    `scripts/prepare_native_smoke.py` without the optional shell launcher; the test app
@@ -31,7 +33,7 @@ The current run could not obtain the native window from CUA; every path below is
    product bundle/lifetime/browser/signing gates passed. Quit only the test app and
    preserve evidence paths at handoff.
 
-Review regressions to repeat in the actual app (still unverified in GUI): inspect a PDF,
+Review regressions (consult the current run log before repeating already verified paths): inspect a PDF,
 edit its title, visit Library/select a different paper and Cmd+N, then return to the same
 PDF row. Its own edits/DOI must survive; Cmd+S in PDF must not create a manual-only paper.
 Open a file batch preview after earlier commits, switch repeatedly between PDF/manual
@@ -48,4 +50,5 @@ paper selection, DOI replacement and trash/restore: the form must remain until s
 or explicitly discarded. Repeat while a PDF report/Get arrives. Discard must restore
 original form values without deleting saved records. Confirm that the unsaved banner
 survives unrelated operation messages, and the export Save picker starts at HOME.
-These root integration paths are likewise unverified in the native GUI.
+The current run log distinguishes observed guards/HOME picker from outstanding native
+failed-page and simultaneous-operation cases.

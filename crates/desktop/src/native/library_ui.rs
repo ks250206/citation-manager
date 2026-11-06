@@ -244,15 +244,11 @@ impl LibraryView {
                 let id = c.id;
                 button(
                     ("collection", i),
-                    format!(
-                        "{}{}{}",
-                        "  ".repeat(depth),
-                        if selected { "▸ " } else { "" },
-                        c.name
-                    ),
+                    format!("{}{}", if selected { "▸ " } else { "" }, c.name),
                     true,
                 )
                 .w_full()
+                .pl(px(12. + depth as f32 * 16.))
                 .on_click(cx.listener(move |this, _, _, cx| {
                     this.library.query.filter.collection = Some(id);
                     this.reload(cx);

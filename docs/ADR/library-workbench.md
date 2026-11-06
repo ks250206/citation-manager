@@ -129,3 +129,22 @@ The fixed PDFium digest remains the #11 runtime-lock value; the product has no e
 PATH/system-library or downloaded override fallback. The temporary native test bundle is
 not #34's product layout/browser/lifetime gate; that work remains held. #23/#25, native-host
 registration, browser profiles, VMs, signing/notarization and user settings are untouched.
+
+
+## Native acceptance corrections (2026-11-07)
+
+Actual CUA observation found that GPUI collapses leading spaces in collection labels;
+hierarchy now uses per-depth padding. Long import titles use a single-line truncated
+row with the decision first, while the right pane retains full metadata. These are
+rendering corrections, not changes to stored titles or collection ownership.
+
+A successful Trash action no longer submits the active-only membership read for a
+deleted paper, which previously replaced success with an expected NotFound error.
+Restore refreshes membership when the paper is active again. Manual/PDF review progress
+counts its own candidates; paused bibliography counters retain their separate total.
+
+The [awake native evidence](../validation/issue-15/native-awake.md) records real GUI
+imports, pickers, private settings, partial attachment failures/cancellation and source
+hashes. It supersedes the historical inability to observe a window, while explicitly
+leaving D&D, offline/concurrency and failed-query acceptance incomplete. PR45 remains
+Draft; #34 stays HELD. No command registry/keymap or search experiment is added here.
