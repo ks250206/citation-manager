@@ -1,0 +1,303 @@
+{
+  "issue": "https://github.com/ks250206/citation-manager/issues/50",
+  "base": "c54fa3984c729f5e731cf17a223033c2aa1f6d25",
+  "worktree": "/Users/ryojikanno/.t3/worktrees/citation-manager/t3-50338322",
+  "branch": "t3/crash-recovery-tests",
+  "environment": {
+    "os": "macOS 27.2 (26B123)",
+    "kernel": "Darwin 27.2.0",
+    "host": "aarch64-apple-darwin",
+    "hardware": "Mac16,6",
+    "memory_bytes": 38654705664,
+    "filesystem": "local APFS (/private/tmp)",
+    "rustc": "1.99.1 (58cf8f9c3 2026-10-13)",
+    "cargo": "1.99.1 (5f94df478 2026-08-27)",
+    "python": "3.14.0",
+    "features": "debug/default; no native/PDFium/UI"
+  },
+  "source_sha256": {
+    "crates/storage/src/crash_recovery.rs": "03a19b0749937c054e2bf83f28844e8897e0c8f05bacce0fe4685bd46142607d",
+    "crates/storage/src/lib.rs": "b4378b66bb7b9fb2c5e4773a63abc22358aa717889f2e2d25bf1d13c52e4ad07",
+    "crates/storage/src/attachments/mod.rs": "3fc27bd85ba5a5cec4ca4677fbd156b777456d052a99b4296e45e5067e4ecfd0",
+    "crates/storage/src/repositories/papers.rs": "b1cd56ffc1f793d79cecf330ad738ed0e35f0f02ddadb7fe8685fbbe210b80fb"
+  },
+  "source_preservation": {
+    "crates/storage/src/attachments/mod.rs": {
+      "production_source_unchanged_after_removing_test_only_additions": true
+    },
+    "crates/storage/src/repositories/papers.rs": {
+      "production_source_unchanged_after_removing_test_only_additions": true
+    },
+    "crates/storage/src/lib.rs": {
+      "production_source_unchanged_after_removing_test_only_additions": true
+    }
+  },
+  "cargo_lock_packages": 636,
+  "immutable_sha256": {
+    "Cargo.lock": "7349aaa20b3c77266ce9df81fc85b2d59747be1491f3c620c2e1c286101270a9",
+    "crates/storage/migrations/20261106T090000Z_issue-8_001_papers.sql": "b0c824cfd8123b9d13b52eace3d577342a4031bfd06dce6657f474aac3b7367f",
+    "crates/storage/migrations/20261106T090000Z_issue-8_002_relations.sql": "54f446f55adc0602c24d2489075b3e6ad6092907aaa31fc60863701d1b29cd9c",
+    "crates/storage/migrations/manifest.json": "321775b8518c47570ada5eb75c66abcf997b32109881120aacf3e98e6751f467"
+  },
+  "commands": [
+    {
+      "name": "fmt",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "started_utc": "2026-11-06T22:05:21.846926+00:00",
+      "exit_code": 0,
+      "elapsed_seconds": 0.399,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "test_results": []
+    },
+    {
+      "name": "clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--workspace",
+        "--all-targets",
+        "--locked",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "started_utc": "2026-11-06T22:05:22.247282+00:00",
+      "exit_code": 0,
+      "elapsed_seconds": 4.833,
+      "log_sha256": "c506c2008352851439eab1c3e8b693165ff52bcf2cbdea39cc8912e1cc56bd30",
+      "test_results": []
+    },
+    {
+      "name": "subprocess",
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "cm-storage",
+        "--lib",
+        "--locked",
+        "crash_recovery",
+        "--",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "started_utc": "2026-11-06T22:05:27.080828+00:00",
+      "exit_code": 0,
+      "elapsed_seconds": 11.347,
+      "log_sha256": "41b9eb0c301fdcddda0529841816c91e7d854017e77f9c69eacdac995a3f0c8e",
+      "test_results": [
+        "test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 16 filtered out; finished in 9.32s"
+      ]
+    },
+    {
+      "name": "workspace-tests",
+      "command": [
+        "cargo",
+        "test",
+        "--workspace",
+        "--locked"
+      ],
+      "started_utc": "2026-11-06T22:05:38.432003+00:00",
+      "exit_code": 0,
+      "elapsed_seconds": 178.817,
+      "log_sha256": "5a2b6f9c181bc192501cc9a8d18f45b6f3674f6d230547b7d2412dcad5fc081d",
+      "test_results": [
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.39s",
+        "test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.02s",
+        "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 126.04s",
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s",
+        "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.32s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.86s",
+        "test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.51s",
+        "test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s",
+        "test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.28s",
+        "test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s",
+        "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s",
+        "test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.43s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+      ]
+    },
+    {
+      "name": "workspace-build",
+      "command": [
+        "cargo",
+        "build",
+        "--workspace",
+        "--locked"
+      ],
+      "started_utc": "2026-11-06T22:08:37.251905+00:00",
+      "exit_code": 0,
+      "elapsed_seconds": 1.217,
+      "log_sha256": "a113781de65540b4cd3aa2a4cc5d6f77f4bed35e9ab0e988cc44a7a412373342",
+      "test_results": []
+    },
+    {
+      "name": "architecture",
+      "command": [
+        "python3",
+        "scripts/check_architecture.py"
+      ],
+      "started_utc": "2026-11-06T22:08:38.469779+00:00",
+      "exit_code": 0,
+      "elapsed_seconds": 0.085,
+      "log_sha256": "7a5f780819b4ec02a7b577aa8979ef8a6a64326d56e33c0d753e8a988f989109",
+      "test_results": []
+    },
+    {
+      "name": "migrations",
+      "command": [
+        "python3",
+        "scripts/check_migrations.py",
+        "--base",
+        "c54fa3984c729f5e731cf17a223033c2aa1f6d25"
+      ],
+      "started_utc": "2026-11-06T22:08:38.558309+00:00",
+      "exit_code": 0,
+      "elapsed_seconds": 0.158,
+      "log_sha256": "92423d36fa24dfbf57562970b44f53b1abee88b95621c71f456abcbca257409a",
+      "test_results": []
+    },
+    {
+      "name": "python",
+      "command": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts",
+        "-p",
+        "test_*.py",
+        "-v"
+      ],
+      "started_utc": "2026-11-06T22:08:38.720758+00:00",
+      "exit_code": 0,
+      "elapsed_seconds": 0.256,
+      "log_sha256": "c81f443210add62e042983f2d6b563ef67f16adb88354de1ef4d386472f2f7df",
+      "test_results": [
+        "Ran 22 tests in 0.097s",
+        "OK"
+      ]
+    },
+    {
+      "name": "whitespace",
+      "command": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "started_utc": "2026-11-06T22:08:38.978876+00:00",
+      "exit_code": 0,
+      "elapsed_seconds": 0.032,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "test_results": []
+    },
+    {
+      "name": "immutable",
+      "command": [
+        "git",
+        "diff",
+        "--exit-code",
+        "c54fa3984c729f5e731cf17a223033c2aa1f6d25",
+        "--",
+        "Cargo.lock",
+        "Cargo.toml",
+        ":(glob)**/Cargo.toml",
+        "crates/storage/migrations"
+      ],
+      "started_utc": "2026-11-06T22:08:39.013860+00:00",
+      "exit_code": 0,
+      "elapsed_seconds": 0.029,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "test_results": []
+    }
+  ],
+  "workspace_totals": {
+    "passed": 186,
+    "failed": 0,
+    "ignored": 0,
+    "measured": 0,
+    "filtered_out": 0
+  },
+  "workspace_required_preexisting_tests_passed": [
+    "thousand_bibtex_real_sqlite_all_selected_collection_roundtrip",
+    "thousand_ris_real_sqlite_all_selected_collection_roundtrip",
+    "attachments::tests::interruptions_retain_old_associations_and_are_detectable_and_retryable",
+    "attachments::tests::lost_response_after_commit_keeps_durable_new_and_old_references_on_reopen",
+    "wal_backup_roundtrip_retains_full_metadata_relations_annotations_and_immutable_files"
+  ],
+  "case_counts": {
+    "product_SIGKILL_cases": 8,
+    "harness_failure_test_functions": 1,
+    "harness_failure_children": 5,
+    "helper_noop_test_functions": 1,
+    "new_ignored_tests": 0,
+    "product_child_signal": 9,
+    "product_child_exit_code": null,
+    "owned_children_reaped": true,
+    "reader_threads_created": 0
+  },
+  "fixture": {
+    "papers": 2,
+    "initial_references": 2,
+    "initial_shared_blobs": 1,
+    "original_bytes": 196625,
+    "new_bytes": 131103,
+    "original_sha256": "34d4df63f6e27079061c021e1e61c7f6cabb93cd736ca2b16bc6ad3c11427955",
+    "new_sha256": "6c0bd559314b5b5299fbd48e58e36938bd4b2ba9854147c5b3111e7243cb2d6a",
+    "staging": "complete copied/synced/verified file, not interrupted partial stream"
+  },
+  "backup_restore_cases_passed": 8,
+  "precommit_explicit_retry_cases_passed": 4,
+  "postcommit_inspect_without_retry_cases_passed": 2,
+  "independent_review": "Not run by implementation child; root owns Opus 5.5 medium review",
+  "ci": "Not locally claimed; one inspection after PR creation",
+  "limits": [
+    "Unix signal verification executed only on macOS",
+    "No power/OS/filesystem loss or physical fsync guarantee",
+    "No jobs/IPC/daemon/lease/idempotency",
+    "No migration-kill/FTS/security/PDF/GUI/native runtime/signing/16GB full-load proof"
+  ],
+  "archived_subprocess_log": {
+    "path": "docs/validation/CRASH_RECOVERY_SUBPROCESS.log",
+    "sha256": "8897286e70f2810b4e5ce4730f9249945bc4f9856b9c7b514fa380209c2dc233",
+    "normalization": "Removed terminal blank line to satisfy repository whitespace validation; test output otherwise unchanged"
+  }
+}
