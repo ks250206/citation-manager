@@ -656,6 +656,7 @@ name = "cm-core"
 version = "0.1.0"
 dependencies = [
  "cm-domain",
+ "serde",
  "serde_json",
 ]
 

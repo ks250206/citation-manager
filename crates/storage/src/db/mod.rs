@@ -2,7 +2,9 @@ pub mod paths;
 use crate::{
     StorageError,
     migrations::{self, MigrationBackup},
-    repositories::{SqliteAttachments, SqlitePapers},
+    repositories::{
+        SqliteAttachments, SqliteCollections, SqliteLibraryQuery, SqlitePapers, SqliteTags,
+    },
 };
 use paths::LibraryDirectory;
 use rusqlite::{Connection, OpenFlags};
@@ -55,6 +57,21 @@ impl LibraryDb {
     }
     pub fn attachments(&self) -> SqliteAttachments<'_> {
         SqliteAttachments {
+            connection: &self.connection,
+        }
+    }
+    pub fn collections(&mut self) -> SqliteCollections<'_> {
+        SqliteCollections {
+            connection: &mut self.connection,
+        }
+    }
+    pub fn tags(&mut self) -> SqliteTags<'_> {
+        SqliteTags {
+            connection: &mut self.connection,
+        }
+    }
+    pub fn library_query(&self) -> SqliteLibraryQuery<'_> {
+        SqliteLibraryQuery {
             connection: &self.connection,
         }
     }

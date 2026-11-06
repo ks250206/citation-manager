@@ -1,8 +1,11 @@
 //! Application contracts independent of UI, storage drivers and transports.
 pub mod attachments;
+pub mod collections;
 pub mod import;
+pub mod library_query;
 pub mod papers;
 pub mod ports;
+pub mod tags;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ServiceError {

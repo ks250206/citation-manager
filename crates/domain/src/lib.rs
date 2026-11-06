@@ -3,6 +3,9 @@ use serde::{Deserialize, Serialize};
 use std::{error::Error, fmt};
 use uuid::Uuid;
 
+pub mod organization;
+pub use organization::{Collection, Tag, TagKey, organization_name};
+
 macro_rules! id {
     ($name:ident) => {
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
