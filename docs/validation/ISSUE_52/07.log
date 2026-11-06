@@ -1,0 +1,27 @@
+test_incomplete_samples_bad_counts_and_preview_writes_fail (benchmarks.test_backend_bench.InstrumentTests.test_incomplete_samples_bad_counts_and_preview_writes_fail) ... ok
+test_nearest_rank_and_invalid_measurements (benchmarks.test_backend_bench.InstrumentTests.test_nearest_rank_and_invalid_measurements) ... ok
+test_standalone_chart_geometry_matches_measured_quantiles (benchmarks.test_backend_bench.InstrumentTests.test_standalone_chart_geometry_matches_measured_quantiles) ... ok
+test_summary_counts_quantiles_and_csv_round_trip (benchmarks.test_backend_bench.InstrumentTests.test_summary_counts_quantiles_and_csv_round_trip) ... ok
+test_cached_tampered_artifact_fails_before_extract (test_pdfium_tools.PdfiumPins.test_cached_tampered_artifact_fails_before_extract) ... ok
+test_committed_corpus_and_license_integrity (test_pdfium_tools.PdfiumPins.test_committed_corpus_and_license_integrity) ... ok
+test_fetched_upstream_notices_require_exact_contents_and_file_set (test_pdfium_tools.PdfiumPins.test_fetched_upstream_notices_require_exact_contents_and_file_set) ... ok
+test_tar_traversal_symlink_and_devices_fail_closed (test_pdfium_tools.PdfiumPins.test_tar_traversal_symlink_and_devices_fail_closed) ... ok
+test_daemon_desktop_bootstrap_has_only_the_narrow_optional_edge (test_validation.ArchitectureTests.test_daemon_desktop_bootstrap_has_only_the_narrow_optional_edge) ... ok
+test_desktop_gpui_requires_pinned_optional_macos_dependencies (test_validation.ArchitectureTests.test_desktop_gpui_requires_pinned_optional_macos_dependencies) ... ok
+test_framework_in_core_or_wrong_crate_count_is_rejected (test_validation.ArchitectureTests.test_framework_in_core_or_wrong_crate_count_is_rejected) ... ok
+test_gpui_dependencies_outside_desktop_are_rejected (test_validation.ArchitectureTests.test_gpui_dependencies_outside_desktop_are_rejected) ... ok
+test_native_drivers_outside_their_owner_are_rejected (test_validation.ArchitectureTests.test_native_drivers_outside_their_owner_are_rejected) ... ok
+test_valid_additive_edge_and_forbidden_reverse_edge (test_validation.ArchitectureTests.test_valid_additive_edge_and_forbidden_reverse_edge) ... ok
+test_colliding_ids_with_different_descriptions_are_rejected (test_validation.MigrationTests.test_colliding_ids_with_different_descriptions_are_rejected) ... ok
+test_deletion_is_rejected_against_baseline (test_validation.MigrationTests.test_deletion_is_rejected_against_baseline) ... ok
+test_duplicate_manifest_key_invalid_timestamp_and_zero_sequence (test_validation.MigrationTests.test_duplicate_manifest_key_invalid_timestamp_and_zero_sequence) ... ok
+test_modified_file_and_rewritten_checksum_are_both_rejected (test_validation.MigrationTests.test_modified_file_and_rewritten_checksum_are_both_rejected) ... ok
+test_new_migration_and_additive_registry (test_validation.MigrationTests.test_new_migration_and_additive_registry) ... ok
+test_subdirectory_is_not_silently_ignored (test_validation.MigrationTests.test_subdirectory_is_not_silently_ignored) ... ok
+test_unavailable_baseline_fails_closed (test_validation.MigrationTests.test_unavailable_baseline_fails_closed) ... ok
+test_unregistered_file_and_symlink_rejected (test_validation.MigrationTests.test_unregistered_file_and_symlink_rejected) ... ok
+
+----------------------------------------------------------------------
+Ran 22 tests in 0.072s
+
+OK

@@ -1,0 +1,9 @@
+test_incomplete_samples_bad_counts_and_preview_writes_fail (test_backend_bench.InstrumentTests.test_incomplete_samples_bad_counts_and_preview_writes_fail) ... ok
+test_nearest_rank_and_invalid_measurements (test_backend_bench.InstrumentTests.test_nearest_rank_and_invalid_measurements) ... ok
+test_standalone_chart_geometry_matches_measured_quantiles (test_backend_bench.InstrumentTests.test_standalone_chart_geometry_matches_measured_quantiles) ... ok
+test_summary_counts_quantiles_and_csv_round_trip (test_backend_bench.InstrumentTests.test_summary_counts_quantiles_and_csv_round_trip) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.001s
+
+OK

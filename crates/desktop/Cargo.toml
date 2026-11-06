@@ -10,6 +10,8 @@ workspace = true
 
 [dependencies]
 cm-protocol.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 
 [features]
 default = []
@@ -19,6 +21,3 @@ native-gpui = ["dep:gpui", "dep:gpui_platform", "dep:unicode-segmentation"]
 gpui = { workspace = true, optional = true }
 gpui_platform = { workspace = true, optional = true }
 unicode-segmentation = { version = "=1.13.3", optional = true }
-
-[dev-dependencies]
-serde_json.workspace = true
