@@ -1,0 +1,68 @@
+{
+  "license": "CC0-1.0 for synthetic content; embedded font SIL-OFL-1.1",
+  "generator": "scripts/pdfium/generate_fixtures.py",
+  "font_sha256": "c2f3b4d463500a2ddcd3849cded1fceeb9fd6d1c32e6cbecd568453ba50fc68f",
+  "files": {
+    "corpus.pdf": "1842ec1c966b74fd73d9dd75ec1f8a199e14e9935b002e2c037206a0496f8910",
+    "encrypted.pdf": "6fadba4aef6330df278525012a22368e5f2f73c3a5c38cf3bf3256037d1962aa",
+    "inherited.pdf": "72203ee5e158c09bb93d509b24eb1d169c7bbf0ef8c07ce2f803f2f0fb23c4da",
+    "malformed.pdf": "a03c195f7aae7ff2e768b338f828c989839567603fc6bdbfd882f427eb11351e"
+  },
+  "inherited": {
+    "file": "inherited.pdf",
+    "rotations": [
+      90,
+      90
+    ],
+    "direct_entries": [
+      [],
+      [
+        "/MediaBox"
+      ]
+    ],
+    "render_size_at_zoom_1": [
+      440,
+      360
+    ],
+    "highlight_rects": [
+      [
+        44,
+        406,
+        330,
+        426
+      ],
+      [
+        44,
+        378,
+        330,
+        398
+      ]
+    ]
+  },
+  "crop": [
+    20,
+    30,
+    380,
+    470
+  ],
+  "rotations": [
+    0,
+    90,
+    180,
+    270,
+    0,
+    0
+  ],
+  "marker": [
+    40,
+    50,
+    52,
+    58
+  ],
+  "unicode_line": "Unicode 日本語 αβ café",
+  "second_line": "second line: coordinate proof",
+  "image_only_page_index": 4,
+  "password": "test-password",
+  "highlight_comment": "検証コメント αβ café",
+  "note": "独立ノート 日本語"
+}

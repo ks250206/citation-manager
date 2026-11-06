@@ -1,0 +1,71 @@
+{
+  "abi": "pdfium-render=0.9.5;pdfium_8125;thread_safe",
+  "build": "158.0.8125.0",
+  "elapsed_ms": 1226.821583,
+  "export_sha256": "3a6adc4776caa6eb5bc52a1a8a2491b52be6d48107b2a78ccae99585a2ca4446",
+  "library_sha256": "8d1e46a6dbe32d7cb95279ab3def2e71e557a3d4cc49162453afa3e3b250dc5e",
+  "limits": "cooperative between native calls; bounded queue/input/output/bitmap/chars; native allocation/time not sandboxed; process-global dylib remains loaded",
+  "measurements": [
+    {
+      "height": 180,
+      "marker_centroid_error_px": 0.0,
+      "milliseconds": 2.9007080000000003,
+      "page_index": 0,
+      "red_pixels": 24,
+      "width": 220,
+      "zoom": 0.5
+    },
+    {
+      "height": 360,
+      "marker_centroid_error_px": 0.0,
+      "milliseconds": 4.045333,
+      "page_index": 0,
+      "red_pixels": 96,
+      "width": 440,
+      "zoom": 1.0
+    },
+    {
+      "height": 720,
+      "marker_centroid_error_px": 0.0,
+      "milliseconds": 6.054208999999999,
+      "page_index": 0,
+      "red_pixels": 384,
+      "width": 880,
+      "zoom": 2.0
+    },
+    {
+      "height": 180,
+      "marker_centroid_error_px": 0.0,
+      "milliseconds": 1.9785419999999998,
+      "page_index": 1,
+      "red_pixels": 24,
+      "width": 220,
+      "zoom": 0.5
+    },
+    {
+      "height": 360,
+      "marker_centroid_error_px": 0.0,
+      "milliseconds": 2.802542,
+      "page_index": 1,
+      "red_pixels": 96,
+      "width": 440,
+      "zoom": 1.0
+    },
+    {
+      "height": 720,
+      "marker_centroid_error_px": 0.0,
+      "milliseconds": 6.834874999999999,
+      "page_index": 1,
+      "red_pixels": 384,
+      "width": 880,
+      "zoom": 2.0
+    }
+  ],
+  "original_sha256": "72203ee5e158c09bb93d509b24eb1d169c7bbf0ef8c07ce2f803f2f0fb23c4da",
+  "statuses_checked": [
+    "outside-quad",
+    "outside-note",
+    "inherited-viewport",
+    "two rotated inherited pages"
+  ]
+}

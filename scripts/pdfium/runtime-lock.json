@@ -1,0 +1,21 @@
+{
+  "build": "158.0.8125.0",
+  "binding": "pdfium-render=0.9.5",
+  "features": [
+    "pdfium_8125",
+    "thread_safe"
+  ],
+  "release": "https://github.com/bblanchon/pdfium-binaries/releases/tag/chromium/8125",
+  "url": "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/8125/pdfium-mac-univ.tgz",
+  "artifact_sha256": "0cf06803b9a4acc489fc967a1b05990622ca1cf41fa027ff9cc89eeab9b19279",
+  "library": "lib/libpdfium.dylib",
+  "library_sha256": "8d1e46a6dbe32d7cb95279ab3def2e71e557a3d4cc49162453afa3e3b250dc5e",
+  "platform": "macOS 13+ universal arm64/x86_64",
+  "v8": false,
+  "xfa": false,
+  "font_url": "https://raw.githubusercontent.com/google/fonts/66a36c8c94b1a5d992ee4e7f392fccfe4945767c/ofl/notosansjp/NotoSansJP%5Bwght%5D.ttf",
+  "font_sha256": "c2f3b4d463500a2ddcd3849cded1fceeb9fd6d1c32e6cbecd568453ba50fc68f",
+  "builder_commit": "4bdb7acd45b39ef6a7fc2a5b4c83f0398e45c9a6",
+  "attestation_url": "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/8125/pdfium-attestation.json",
+  "attestation_sha256": "a0964f520afc57593d285b081e23e401169cc42234f2d14f5bdb4a3add08c9b9"
+}
