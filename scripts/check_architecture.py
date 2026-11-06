@@ -25,6 +25,22 @@ def validate(metadata):
         short = name.removeprefix('cm-')
         for dep in package['dependencies']:
             target = dep['name']
+            if short == 'daemon' and target == 'cm-desktop':
+                features = package.get('features', {})
+                bootstrap = features.get('desktop-bootstrap', [])
+                enabled = list(features.get('default', []))
+                visited = set()
+                while enabled:
+                    feature = enabled.pop()
+                    if feature not in visited:
+                        visited.add(feature)
+                        enabled.extend(features.get(feature, []))
+                if (not dep.get('optional') or dep.get('target') != 'cfg(target_os = "macos")'
+                        or dep.get('kind') is not None
+                        or set(bootstrap) != {'dep:cm-desktop', 'cm-desktop/native-gpui'}
+                        or visited & {'desktop-bootstrap', 'dep:cm-desktop', 'cm-desktop/native-gpui'}):
+                    raise ValueError('daemon desktop bootstrap must be optional, macOS-only and disabled by default')
+                continue
             if target.startswith('cm-'):
                 if target not in members or target.removeprefix('cm-') not in ALLOWED[short]:
                     raise ValueError(f'forbidden dependency: {name} -> {target}')

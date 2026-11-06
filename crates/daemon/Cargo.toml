@@ -15,3 +15,18 @@ cm-storage.workspace = true
 cm-search.workspace = true
 cm-pdf.workspace = true
 cm-metadata.workspace = true
+
+[features]
+default = []
+desktop-bootstrap = ["dep:cm-desktop", "cm-desktop/native-gpui"]
+
+[target.'cfg(target_os = "macos")'.dependencies]
+cm-desktop = { path = "../desktop", optional = true }
+
+[[bin]]
+name = "citation-manager"
+path = "src/bin/citation-manager.rs"
+required-features = ["desktop-bootstrap"]
+
+[dev-dependencies]
+tempfile.workspace = true

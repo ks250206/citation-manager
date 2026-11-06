@@ -923,7 +923,16 @@ daemonの排他/activationは実装しない。#25がmigration/GC/復元activati
 利用API、保存条件、復旧手順と一貫性の限界は
 [attachments-backup ADR](docs/ADR/attachments-backup.md)を正本とする。
 
-## 30. #12 整理と M1 書誌検索の確定事項
+## 30. #10 macOS desktop vertical slice
+
+[Desktop bootstrap ADR](docs/ADR/desktop-bootstrap.md) defines the temporary optional
+macOS daemon-to-desktop composition edge. The real GPUI executable uses a replaceable
+protocol client and worker-owned #8 PaperService for manual title/detail create/edit/list.
+[Native evidence](docs/validation/ISSUE_10.md) separates actual shutdown/relaunch, loading/error
+checks from headless tests and hosted compile checks. Actual IPC/lifecycle/auth remain #25;
+PDF/view integration remains #15/#17 and signing/distribution remains #31/#34.
+
+## 31. #12 整理と M1 書誌検索の確定事項
 
 [Collection / Tag / LibraryQuery ADR](docs/ADR/library-organization-query.md) が §6/10/19.1 の
 M1 実装上の明確化となる。循環を防ぐ collection CRUD/move、複数所属、共通 domain TagKey、

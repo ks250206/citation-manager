@@ -20,6 +20,33 @@ class ArchitectureTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'forbidden dependency'):
             architecture.validate(metadata)
 
+    def test_daemon_desktop_bootstrap_has_only_the_narrow_optional_edge(self):
+        metadata = self.metadata()
+        daemon = next(p for p in metadata['packages'] if p['name'] == 'cm-daemon')
+        good = {'name': 'cm-desktop', 'optional': True, 'target': 'cfg(target_os = "macos")', 'kind': None}
+        daemon['dependencies'] = [good.copy()]
+        daemon['features'] = {'default': [], 'desktop-bootstrap': ['dep:cm-desktop', 'cm-desktop/native-gpui']}
+        architecture.validate(metadata)
+        for field, value in [('optional', False), ('target', None), ('target', 'cfg(unix)'), ('kind', 'dev'), ('kind', 'build')]:
+            with self.subTest(field=field, value=value):
+                daemon['dependencies'] = [dict(good, **{field: value})]
+                with self.assertRaisesRegex(ValueError, 'bootstrap must be optional'):
+                    architecture.validate(metadata)
+        daemon['dependencies'] = [good.copy()]
+        daemon['features']['default'] = ['indirect']
+        daemon['features']['indirect'] = ['desktop-bootstrap']
+        with self.assertRaisesRegex(ValueError, 'disabled by default'):
+            architecture.validate(metadata)
+        daemon['features']['default'] = []
+        daemon['features']['desktop-bootstrap'] = ['dep:cm-desktop']
+        with self.assertRaisesRegex(ValueError, 'bootstrap must be optional'):
+            architecture.validate(metadata)
+        desktop = next(p for p in metadata['packages'] if p['name'] == 'cm-desktop')
+        daemon['features']['desktop-bootstrap'].append('cm-desktop/native-gpui')
+        desktop['dependencies'] = [{'name': 'cm-daemon'}]
+        with self.assertRaisesRegex(ValueError, 'forbidden dependency'):
+            architecture.validate(metadata)
+
     def test_framework_in_core_or_wrong_crate_count_is_rejected(self):
         metadata = self.metadata()
         metadata['packages'][1]['dependencies'] = [{'name': 'tokio'}]

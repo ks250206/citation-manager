@@ -36,3 +36,11 @@ commit は handle と明示的 decisions を受け取り、保存された previ
 `python3 scripts/check_architecture.py` は Cargo metadata の通常/dev/target 依存を検査する。
 循環を作れない許可集合、12 member、純契約層への framework 混入、driver 所有、GPUI 固定 rev と
 optional macOS feature を検査する。意味が変わる境界変更は先行契約 PR でレビューする。
+
+## #10 narrow bootstrap exception
+
+The only additional edge is optional macOS `daemon → desktop`, behind the explicit,
+off-by-default `desktop-bootstrap` feature. See [desktop bootstrap ADR](desktop-bootstrap.md).
+The validator rejects unconditional/dev/build/non-macOS and default-enabled forms.
+Desktop still depends only on protocol; daemon remains the storage composition root.
+#25 replaces the in-process client transport and owns actual IPC/lifecycle/auth.

@@ -1,0 +1,22 @@
+{
+  "binary_sha256": "53df3b4102c07b95292a4190512da42af3c619cbe11a9158976bd93d25320fff",
+  "fixture": "synthetic multiline title and CRLF abstract in temp library",
+  "paper_id": "e2a65db4-7bb6-4650-a2c0-60b65fd51ac7",
+  "title": "Root review\nUnicode 🙂",
+  "abstract": "first line\nsecond line\r\n詳細 é",
+  "native_observations": [
+    "real debug executable opened selected paper without assertion",
+    "display substitutes ASCII spaces for CR/LF",
+    "Cmd+S showed Saved locally",
+    "Cmd+Q observed app quit"
+  ],
+  "readonly_after_save": {
+    "original_title_and_abstract_exactly_preserved": true,
+    "integrity_check": "ok"
+  },
+  "network_denial": "not part of this regression; original feature smoke covers offline flow",
+  "test_counts": {
+    "workspace_including_doctest": 41,
+    "native_feature": 11
+  }
+}
