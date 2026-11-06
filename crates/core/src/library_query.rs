@@ -30,7 +30,8 @@ pub struct LibraryFilter {
     pub year_to: Option<i32>,
     /// Exact case-sensitive persisted type.
     pub paper_type: Option<String>,
-    /// At least one attachment with kind=pdf and MIME application/pdf. This is
+    /// At least one attachment with kind=pdf and an ASCII case-insensitive base
+    /// MIME application/pdf (parameters and surrounding SP/HTAB ignored). This is
     /// metadata presence, not a claim about file existence or PDF validity.
     pub has_pdf: Option<bool>,
 }

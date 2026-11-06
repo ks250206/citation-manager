@@ -38,4 +38,9 @@ fn tag_keys_share_unicode_whitespace_and_case_policy_and_serde_validation() {
         assert!(serde_json::from_str::<TagKey>(&serde_json::to_string(&input).unwrap()).is_err());
     }
     assert!(TagKey::new(&"界".repeat(256)).is_ok());
+    for input in ["FOO ", " Tag", "tag\tkey", "İ"] {
+        assert!(TagKey::new(input).is_ok());
+        assert!(TagKey::try_from(input.to_owned()).is_err());
+        assert!(serde_json::from_str::<TagKey>(&serde_json::to_string(input).unwrap()).is_err());
+    }
 }

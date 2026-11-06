@@ -870,3 +870,90 @@ fn empty_memory_library_and_invalid_destinations_use_the_same_contracts() {
     );
     assert_eq!(db.tags().for_paper(paper.id).unwrap(), vec![tag]);
 }
+
+#[test]
+fn managed_ingestion_pdf_filter_accepts_case_and_parameter_variants() {
+    use cm_core::attachments::{AttachmentLibrary, ImportAttachment};
+    let (_temp, directory, mut db) = library();
+    let source = directory
+        .path()
+        .parent()
+        .unwrap()
+        .join("synthetic-source.pdf");
+    std::fs::write(&source, b"synthetic fixture bytes; no valid-PDF claim").unwrap();
+    let mut expected_pdf = Vec::new();
+    let mut expected_other = Vec::new();
+    for mime in [
+        "application/pdf",
+        "application/PDF",
+        " \tApplication/Pdf\t ; version=1.7",
+        "image/png",
+    ] {
+        let paper = db.papers().create(NewPaper::titled(mime)).unwrap();
+        db.managed_attachments(&directory)
+            .unwrap()
+            .import(ImportAttachment {
+                paper_id: paper.id,
+                source: source.clone(),
+                original_name: "source.pdf".into(),
+                media_type: mime.into(),
+                expected_sha256: None,
+            })
+            .unwrap();
+        if mime == "image/png" {
+            expected_other.push(paper.id);
+        } else {
+            expected_pdf.push(paper.id);
+        }
+    }
+    expected_pdf.sort_by_key(|id| id.0);
+    assert_eq!(
+        ids(
+            &db,
+            LibraryFilter {
+                has_pdf: Some(true),
+                ..Default::default()
+            }
+        ),
+        expected_pdf
+    );
+    assert_eq!(
+        ids(
+            &db,
+            LibraryFilter {
+                has_pdf: Some(false),
+                ..Default::default()
+            }
+        ),
+        expected_other
+    );
+    assert!(db.check_integrity(&directory).unwrap().is_clean());
+}
+
+#[test]
+fn oversized_title_cursor_has_a_bounded_error_and_id_sort_remains_available() {
+    let (_temp, _directory, mut db) = library();
+    let paper = db
+        .papers()
+        .create(NewPaper::titled("a".repeat(1_048_576)))
+        .unwrap();
+    db.papers().create(NewPaper::titled("z-last")).unwrap();
+    let query = LibraryQuery {
+        sort: LibrarySort {
+            field: SortField::Title,
+            direction: SortDirection::Asc,
+        },
+        limit: 1,
+        ..Default::default()
+    };
+    invalid(db.library_query().query(&query));
+    let page = db
+        .library_query()
+        .query(&LibraryQuery {
+            limit: 1,
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(page.papers[0].id, paper.id);
+    assert!(page.next.is_some());
+}

@@ -48,7 +48,8 @@ raw 名の便宜 API は `TagService::find`。名前/色の変更は ID/所属�
    `é` と `e` + combining acute、`Ａ` と `A`、`ß` と `ss`、`ς` と `σ` は別キー。
    日本語や zero-width format character はこの規則で変わらない部分を保持する。
 
-構築と serde 読込の両方に同じ検証を使う。256 scalar 上限は UTF-8 byte 数とは異なる。
+raw 入力は `TagKey::new` で正規化する。`TryFrom<String>` / serde 読込は
+すでに正規化されたキーだけを受け付け、`"FOO "` のような値は拒否する。256 scalar 上限は UTF-8 byte 数とは異なる。
 Unicode tables は固定 Rust toolchain に由来する。将来の更新でキーが変わる場合は、既存キーを黙って
 再計算せず、衝突を検出する追記 migration と契約更新が必要。空/空白のみは InvalidInput。
 Collection 表示名も1–2の同じ規則と256 scalar上限を使い、小文字化しない。
@@ -77,8 +78,10 @@ preview の認可、stale paper revision、重複判定、merge、batch commit �
 年は inclusive from/to（逆転は InvalidInput）、未指定年は年範囲の対象外。
 type は保存値の完全一致、author は role=`author` の given/family、両順の結合名、literal の部分一致。
 editor は author filter に含めないが keyword の対象になる。
-has_pdf は `kind='pdf' AND mime_type='application/pdf'` の添付 metadata の EXISTS / NOT EXISTS。
-ファイルの実在/可読/valid PDF は保証しない。#9 に依存した架空の attachment API を作らない。
+has_pdf は `kind='pdf'` と base MIME type `application/pdf` の添付 metadata の EXISTS / NOT EXISTS。
+base type はセミコロンより前を取り、前後の ASCII space/tab を除去して ASCII 大小文字を区別せず照合する。
+従って `application/PDF` や `Application/Pdf; version=1.7` も対象。#9 は入力 MIME を保持し、query がこの比較規則を所有する。
+ファイルの実在/可読/valid PDF は保証しない。#9 の実 managed-ingestion API から添付した表記違いも integration test で照合する。
 
 M1 keyword は Unicode whitespace 区切りの各 token の **literal substring** を AND、
 各 token は次のフィールドのいずれかにあれば一致する。
@@ -113,7 +116,10 @@ M1 の文字列を MATCH にそのまま渡して意味を変えたり、metadat
   versioned opaque JSON cursor に保持する。復元は `LibraryCursor::from_encoded`、取得は `as_str`。
   version / 構造 / UUID / key型 / filter / sort を検証し、別 query の流用は InvalidInput。
   page size だけは変更可能。tag順などの filter 表現を途中で変える場合も最初から検索する。
-- cursor は最大1 MiB（生成時も検証）。極端に大きい title が境界になる title sort はこの上限で失敗しうる。
+- cursor は最大1 MiB（生成時も検証）。極端に大きい title（JSON escape による拡大も含む）が
+  境界になる title sort はこの上限で InvalidInput を返す既知制約がある。ID 順等の sort は利用できる。
+  既存タイトルのデータ上限は #33/#30 の入力契約で別途決める。この PR は cursor の上限を維持し、
+  oversized title での明示的な失敗と ID 順への切替を回帰テストで固定する。
   cursor は認可 token / 署名ではなく、内部 metadata を含むためログに記録しない。
   caller が valid な構造の位置を生成してもアクセス権は増えない。認可と library の選択は #25。
 - 一ページの ID 選択と完全 Paper の読取は同じ read transaction。

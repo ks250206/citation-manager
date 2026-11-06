@@ -25,7 +25,11 @@ impl TagKey {
 impl TryFrom<String> for TagKey {
     type Error = ValueError;
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        Self::new(&value)
+        let key = Self::new(&value)?;
+        if key.as_str() != value {
+            return Err(ValueError("tag key must already be normalized"));
+        }
+        Ok(key)
     }
 }
 impl From<TagKey> for String {

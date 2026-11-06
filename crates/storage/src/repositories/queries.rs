@@ -103,7 +103,10 @@ fn predicate(query: &LibraryQuery) -> Result<Predicate, ServiceError> {
         b.and(&format!("p.type={v}"));
     }
     if let Some(has) = f.has_pdf {
-        b.and(if has { "EXISTS(SELECT 1 FROM attachments a WHERE a.paper_id=p.id AND a.kind='pdf' AND a.mime_type='application/pdf')" } else { "NOT EXISTS(SELECT 1 FROM attachments a WHERE a.paper_id=p.id AND a.kind='pdf' AND a.mime_type='application/pdf')" });
+        // Metadata predicate only: compare the ASCII base media type, ignoring
+        // parameters and SP/HTAB around it. Managed ingestion preserves the input.
+        let pdf = "EXISTS(SELECT 1 FROM attachments a WHERE a.paper_id=p.id AND a.kind='pdf' AND lower(trim(substr(a.mime_type,1,instr(a.mime_type||';',';')-1),char(9)||' '))='application/pdf')";
+        b.and(&format!("{}{pdf}", if has { "" } else { "NOT " }));
     }
     if let Some(keyword) = &f.keyword {
         for token in keyword.split_whitespace() {
