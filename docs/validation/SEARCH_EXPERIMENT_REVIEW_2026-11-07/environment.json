@@ -1,6 +1,6 @@
 {
-  "started_utc": "2026-11-06T23:33:23.995667+00:00",
-  "git_head": "ca1df7662982f9e877144695344075efe6ce2803",
+  "started_utc": "2026-11-06T23:44:14.104446+00:00",
+  "git_head": "8b7b025ab9413413707237e4a5c88d802b5b5ab0",
   "git_status": "",
   "os": "macOS-27.2-arm64-arm-64bit-Mach-O",
   "machine": "arm64",
@@ -31,22 +31,25 @@
     "scripts/search-experiments/expected.json": "2e97dc5570c895e2fa5514a1c83ad7281dde6f9cfbd5fc926de8996f2787cb9a",
     "scripts/search-experiments/experiment.rs": "ca656d599533ed0012e38c641e5e90b3e77ac2efcf52d20774b8aecd016ae156",
     "scripts/search-experiments/fixture.json": "c9f3548151c83f07894e00f7c7dfebd9631805f5b3f839fbbfd8d9c9e07c46d5",
-    "scripts/search-experiments/run.py": "27f5e1fd49a09a25d07078d5801278875bc9c60c1ca32af7857bfbc5409e0c43",
-    "scripts/search-experiments/test_summary.py": "c4c5aa6ff81cbe003e305708bbc5b7571d4fc9d86ab56ade70cdcde78c9147f1",
+    "scripts/search-experiments/run.py": "0e8552db6388b998dc287231ee0ce6e17c1ada530f2981b14e6113cfea2fb605",
+    "scripts/search-experiments/test_summary.py": "7b123f87dcc3790364caec9d2cf3a872ea7179db78f7322571f52cad4264b2f0",
     "Cargo.toml": "5748e9644678d8de47474e38a19f496710faeb35c9735c0af5e08df898f17d71",
-    "Cargo.lock": "7349aaa20b3c77266ce9df81fc85b2d59747be1491f3c620c2e1c286101270a9",
+    "Cargo.lock": "fdf717054fcdd2dd4dd0534cd7c13564174de3ff75269aef46af27be2f207c49",
     "crates/storage/Cargo.toml": "b2fe02f796ef26637d4a999d2159e98298305ea04f2e2d9576d6a34a5276de9a"
   },
   "build_environment": {
-    "RUSTFLAGS": null,
-    "CARGO_ENCODED_RUSTFLAGS": null,
-    "CARGO_BUILD_TARGET": null,
-    "CARGO_TARGET_DIR": null,
     "LIBSQLITE3_SYS_USE_PKG_CONFIG": null,
     "SQLITE3_LIB_DIR": null,
     "SQLITE3_INCLUDE_DIR": null,
     "SQLITE3_STATIC": null,
     "LIBSQLITE3_FLAGS": null,
+    "SQLITE_MAX_VARIABLE_NUMBER": null,
+    "SQLITE_MAX_EXPR_DEPTH": null,
+    "SQLITE_MAX_COLUMN": null,
+    "RUSTFLAGS": null,
+    "CARGO_ENCODED_RUSTFLAGS": null,
+    "CARGO_BUILD_TARGET": null,
+    "CARGO_TARGET_DIR": null,
     "CC": null,
     "CFLAGS": null,
     "CPPFLAGS": null
@@ -107,5 +110,5 @@
       "5"
     ]
   ],
-  "environment_sha256": "7fdadadc34ae62ef412b68aa159ba848c32baa8fc25b42438681e6841ad61764"
+  "environment_sha256": "75a218e1bb4294e6db30e85581be3d6a5072d3308515e91e5562a8ead92f224a"
 }

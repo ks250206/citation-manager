@@ -1,8 +1,8 @@
 # #53: corrected bundled-SQLite Japanese tokenizer experiment
 
 The current result is the review-corrected **30-record** corpus, measured at clean
-commit `ca1df7662982f9e877144695344075efe6ce2803` on 2026-11-07 JST, based on main
-`9e7e66e3e284a047096eae0707b823233206fe8c`. The source/expected sets were committed
+commit `8b7b025ab9413413707237e4a5c88d802b5b5ab0` on 2026-11-07 JST, integrating main
+`5f0fb1dfa139afc567a492a309c1f5f4728ffbed`. The source/expected sets were committed
 before this corrected run. Later changes retain its evidence and this report.
 Only #53 is covered: #18 still depends on #25; #30, GUI #15 and held #34 are not
 completed, and #23/#25 gates remain closed.
@@ -42,8 +42,9 @@ hashes are independently recomputable; summary/CSV regenerate from raw using the
 runner. The runtime is pinned bundled SQLite **3.54.1**, through
 rusqlite 0.41.1 / libsqlite3-sys 0.39.1, not Python/system SQLite. Its source ID is
 `2026-10-16 14:45:20 555e07ef33f69a0957d24d8e555b702464a131d6f1607f4c3c1e4551e8e6ca76`. All 51 compile options are in raw;
-FTS5 and DBSTAT are enabled, ICU is not. Five SQLite-specific environment overrides,
-including LIBSQLITE3_FLAGS, are rejected before output creation. Other compiler
+FTS5 and DBSTAT are enabled, ICU is not. Eight declared SQLite-specific environment overrides, including LIBSQLITE3_FLAGS
+and the three SQLITE_MAX_* settings, are rejected by presence before output creation,
+even with an empty or `0` value. Their values are also recorded. Other compiler
 flags are recorded rather than exhaustively prohibited; this is not a hermetic build.
 
 Environment: Mac16,6 Apple M4 Max, **36 GiB**, arm64, macOS 27.2 (26B123),
@@ -71,14 +72,14 @@ asserted by real SQL; CI also asserts the isolated unicode61 token sequences.
 | `電解質` | 1,2,16 | 2 | 1,2,16 |
 | `ABC` | 18,24,25 | 18,24,25 | 18,24,25 |
 | `ＡＢＣ` | 7 | 7 | 7 |
-| `ｶﾞﾗｽ` | 8 | 8 | 8 |
-| `ガラス` | 26 | 26 | 26 |
-| `ガラス` | 27 | 27,28 | 27 |
-| `カ ラス` | 28 | 27,28 | 28 |
-| `café` | 6 | 6,23,30 | 6,23 |
-| `café` | 30 | 6,23,30 | 30 |
-| `é` | 6,20 | 20,29 | none |
-| `é` | 29,30 | 20,29 | none |
+| `ｶﾞﾗｽ` (half-width) | 8 | 8 | 8 |
+| `ガラス` (NFC) | 26 | 26 | 26 |
+| `ガラス` (NFD / decomposed dakuten) | 27 | 27,28 | 27 |
+| `カ ラス` (plain kana with space) | 28 | 27,28 | 28 |
+| `café` (NFC) | 6 | 6,23,30 | 6,23 |
+| `café` (NFD) | 30 | 6,23,30 | 30 |
+| `é` (NFC) | 6,20 | 20,29 | none |
+| `é` (NFD) | 29,30 | 20,29 | none |
 | `alpha beta` | 11 | 11,12 | 11 |
 | `alpha, beta` | 12 | 11,12 | 12 |
 
@@ -112,12 +113,12 @@ serialization are excluded. Not import, PDF extraction or product service throug
 
 | Query | unicode61 p50 / p95 ms | trigram p50 / p95 ms |
 |---|---:|---:|
-| `電` | 0.006542 / 0.009125 | 0.004917 / 0.006333 |
-| `電池` | 0.006333 / 0.007291 | 0.004875 / 0.005084 |
-| `固体電` | 0.006292 / 0.018250 | 0.018292 / 0.018959 |
-| `電解質` | 0.006166 / 0.012542 | 0.006375 / 0.007250 |
-| `ガラス` | 0.006959 / 0.007333 | 0.007042 / 0.007209 |
-| `カ ラス` | 0.019917 / 0.052125 | 0.007416 / 0.015041 |
+| `電` | 0.021500 / 0.052834 | 0.004958 / 0.005167 |
+| `電池` | 0.017083 / 0.032458 | 0.005292 / 0.006333 |
+| `固体電` | 0.018209 / 0.018959 | 0.018500 / 0.026875 |
+| `電解質` | 0.006209 / 0.008833 | 0.006958 / 0.015416 |
+| `ガラス` (NFD / decomposed dakuten) | 0.006958 / 0.009292 | 0.007417 / 0.008083 |
+| `カ ラス` (plain kana with space) | 0.019042 / 0.020583 | 0.007334 / 0.010875 |
 
 Short-query fallback has explicit bucket filter and row cap 1..64; no hidden
 unlimited text search precedes LIMIT. Filter counts can scan the bucket index,
@@ -127,15 +128,15 @@ including outside-filter match 17. The expanded language bucket has 18 records.
 
 | Case | cap / read | returned count | unsearched in filter | status | p50 / p95 ms |
 |---|---:|---:|---:|---|---:|
-| two_cap2 | 2 / 2 | 0 | 8 | partial_unsearched | 0.011625 / 0.018583 |
-| two_cap4 | 4 / 4 | 1 | 6 | partial_unsearched | 0.011500 / 0.013583 |
-| two_complete | 64 / 10 | 5 | 0 | complete_within_filter | 0.013208 / 0.027792 |
-| one_cap4 | 4 / 4 | 3 | 6 | partial_unsearched | 0.011334 / 0.015042 |
-| one_complete | 64 / 10 | 7 | 0 | complete_within_filter | 0.013333 / 0.025292 |
-| ascii_two | 64 / 10 | 3 | 0 | complete_within_filter | 0.013000 / 0.027625 |
-| punctuation_partial | 3 / 3 | 0 | 15 | partial_unsearched | 0.010958 / 0.011291 |
-| absent_partial | 2 / 2 | 0 | 8 | partial_unsearched | 0.010708 / 0.011875 |
-| empty_filter | 2 / 0 | 0 | 0 | complete_within_filter | 0.009917 / 0.011833 |
+| two_cap2 | 2 / 2 | 0 | 8 | partial_unsearched | 0.010959 / 0.011541 |
+| two_cap4 | 4 / 4 | 1 | 6 | partial_unsearched | 0.017000 / 0.017458 |
+| two_complete | 64 / 10 | 5 | 0 | complete_within_filter | 0.013041 / 0.013417 |
+| one_cap4 | 4 / 4 | 3 | 6 | partial_unsearched | 0.021125 / 0.021500 |
+| one_complete | 64 / 10 | 7 | 0 | complete_within_filter | 0.012542 / 0.012708 |
+| ascii_two | 64 / 10 | 3 | 0 | complete_within_filter | 0.012542 / 0.013125 |
+| punctuation_partial | 3 / 3 | 0 | 15 | partial_unsearched | 0.010625 / 0.010792 |
+| absent_partial | 2 / 2 | 0 | 8 | partial_unsearched | 0.010416 / 0.010583 |
+| empty_filter | 2 / 0 | 0 | 0 | complete_within_filter | 0.018750 / 0.019000 |
 
 Empty hits plus partial_unsearched does not mean zero matches. For two_cap2, all
 five expected in-filter hits remain unsearched. Expected-oracle recall is meaningful
@@ -163,10 +164,27 @@ These are measured constraints/recommendations, not a chosen product schema.
 
 Original baseline checks passed 189 Rust tests and 25 Python tests, with required
 fmt/Clippy/build/validators; their retained logs are historical, not claims for the
-corrected fixture. Root follow-up passed the full locked workspace **189 tests**, Python **27 tests**,
+corrected fixture. The first root follow-up passed the full locked workspace **189 tests**, Python **27 tests**,
 fmt, workspace all-targets locked Clippy, locked build, architecture, base-specified
 migrations and diff-check. [Root commands/counts/output hashes](SEARCH_EXPERIMENT_REVIEW_2026-11-07/root-checks.json)
 record these results. Summary/CSV regenerated exactly; recorded source/environment
 hashes matched. Independent exact-head recheck and final CI remain pending. Production source,
 Cargo.lock's 636 pins and both immutable migrations/manifest remain unchanged;
 the only shared addition is the storage experiment example registration.
+
+## Runner guard and main integration follow-up
+
+The subsequent review found no P0–P2. Root corrected the presence-versus-nonempty
+check for build overrides, added the three SQLITE_MAX_* settings to rejection and
+recording, and tested empty, `0` and nonempty values for all eight declared names.
+Unset those variables; no disabling-value exception is accepted. NFC/NFD and kana
+form labels now distinguish visually identical table entries. Main #52 was normally
+merged without changing its pure modules or any search production code. The current
+clean-source run above replaces the earlier corrected timing files; that earlier
+run remains in commit `18b2eb9`, and its expected sets/fixture/Rust instrument are
+unchanged. Current timings are not pooled or compared for speedups. Final integrated checks passed **210 workspace tests** (including the compile-fail
+doctest and three SQLite example tests), **27 Python tests**, fmt, all-targets locked
+workspace Clippy, locked build, architecture, migration against main `5f0fb1d`, and
+diff-check. [Final integrated commands/counts/output hashes](SEARCH_EXPERIMENT_REVIEW_2026-11-07/root-integration-checks.json)
+are separate from the historical 189-test checks above. Independent final-head
+review and CI remain pending.
