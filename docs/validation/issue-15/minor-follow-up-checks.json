@@ -1,0 +1,25 @@
+{
+  "reviewed_base": "b6c9ba9a68b2b48c1f195fbfaf84d1e9b54b606e",
+  "scope": "two optional P3 report/cancellation fixes and row-edit reset wording",
+  "source_sha256": {
+    "crates/desktop/src/native/pdf_ui.rs": "61ebc22a5f4db05e8beb67d8172356f15d97a3d337775cb13bab2782d7e70781",
+    "crates/desktop/src/native/import_ui.rs": "d17aa20af1e2965a4976cc209e28024fdada6f9e2e6ca43ea34cdda3d58a28ef"
+  },
+  "native_binary_sha256": "bb4ea493eae1cdbcbd78fd51a13c471e2ccffa8fb92ff2cc4f9d6c58dab3eaf7",
+  "passed": [
+    "cargo fmt --all -- --check",
+    "cargo clippy --workspace --all-targets --features cm-daemon/desktop-bootstrap --locked -- -D warnings",
+    "cargo test --locked -p cm-desktop --features native-gpui --test import_flow_state --test workbench_state (4+5)",
+    "cargo test --locked -p cm-daemon --features desktop-bootstrap --test mixed_import_review (1)",
+    "cargo build --locked -p cm-daemon --features desktop-bootstrap"
+  ],
+  "not_rerun": [
+    "full workspace suite",
+    "thousand-record suites",
+    "PDF runtime",
+    "Python/architecture/migrations; files unchanged",
+    "GUI acceptance; remains unverified"
+  ],
+  "review": "pending final narrow recheck",
+  "ci": "pending final-head complete checks"
+}

@@ -58,5 +58,6 @@
   "gui_acceptance": "unrun; baseline/published/follow-up cgWindowNotFound; no additional root UI attempt on this binary",
   "held_scope": "#34 unchanged; #23/#25 gates remain closed",
   "independent_review": "pending updated-source review",
-  "ci": "pending updated-head checks"
+  "ci": "pending updated-head checks",
+  "recorded_source_head": "b6c9ba9a68b2b48c1f195fbfaf84d1e9b54b606e"
 }

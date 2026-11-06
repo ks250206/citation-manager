@@ -95,11 +95,7 @@ impl LibraryView {
             Ok(PdfReply::Report(report)) => {
                 self.pdf_report = report;
                 let client = self.client.clone();
-                let released = self.reviews.finish_pdf(|id| client.import(ImportRequestUi::Cancel(id.clone()), Box::new(|_| {})));
-                if let Err(error) = released {
-                    self.status(format!("PDF result retained, but preview release failed: {error}; retry before another review"), true, cx);
-                    return;
-                }
+                let release_error = self.reviews.finish_pdf(|id| client.import(ImportRequestUi::Cancel(id.clone()), Box::new(|_| {}))).err();
                 self.load_pdf_form(self.pdf_row, cx);
                 self.screen = Screen::Pdf;
                 self.reload(cx);
@@ -108,7 +104,8 @@ impl LibraryView {
                 }
                 let imported = self.pdf_report.files.iter().filter(|f| f.attachment.is_some()).count();
                 let failed = self.pdf_report.files.iter().filter(|f| matches!(f.disposition, FileDisposition::Failed(_))).count();
-                self.status(format!("PDF report: {} assessed; {} attachments saved; {} failures{}", self.pdf_report.assessed, imported, failed, if self.pdf_report.cancelled { "; cancelled (prior successes retained)" } else { "" }), failed > 0, cx);
+                let warning = release_error.as_ref().map(|error| format!("; preview release failed: {error}; retry before another review")).unwrap_or_default();
+                self.status(format!("PDF report: {} assessed; {} attachments saved; {} failures{}{}", self.pdf_report.assessed, imported, failed, if self.pdf_report.cancelled { "; cancelled (prior successes retained)" } else { "" }, warning), failed > 0 || release_error.is_some(), cx);
             }
             Ok(PdfReply::Preview(preview)) => {
                 self.reviews.active.pdf_index = Some(self.pdf_row);
@@ -204,7 +201,7 @@ impl LibraryView {
                             PdfIntent::AttachExisting(paper)=>el.child(line(format!("Attachment destination fixed to paper {}",paper.0)))
                                 .child(button("attach-reviewed","Attach ready inspected files (bibliography unchanged)",enabled).on_click(cx.listener(move|this,_,_,cx|{if this.locked(){return;}let indices=this.pdf_report.files.iter().enumerate().filter(|(_,f)|f.disposition==FileDisposition::Ready).map(|(i,_)|i).collect();let cancel=this.cancels.start_pdf();this.dispatch_pdf(PdfRequest::Attach{indices,paper,cancel});this.status("Attaching inspected originals…",false,cx);}))),
                             PdfIntent::RegisterNew=>el.when(file.disposition==FileDisposition::Ready&&file.paper.is_none(),|el|el
-                                .child(line("Review/edit metadata. Blank authors/date remain unresolved; filename may be a provisional title."))
+                                .child(line("Review/edit metadata. Blank authors/date remain unresolved; filename may be a provisional title. Changing PDF rows resets unsubmitted edits."))
                                 .children(crate::details::FIELDS.iter().zip(self.pdf_fields.iter()).map(|(label,field)|div().mb_2().child(line(*label)).child(field.clone())))
                                 .child(button("preview-pdf-new","Preview registration as NEW paper",enabled).on_click(cx.listener(move|this,_,_,cx|this.pdf_preview(index,cx)))))
                         }

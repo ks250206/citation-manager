@@ -60,7 +60,11 @@ impl LibraryView {
         self.reviews.active.total = self.reviews.active.batch_start;
         self.screen = Screen::Library;
         self.status(
-            "Cancelled. Earlier commits remain saved; no later batch will run",
+            if self.reviews.paused_file.is_some() {
+                "Current preview cancelled. Earlier commits remain saved; bibliography stays paused until explicit Resume in Import review"
+            } else {
+                "Cancelled. Earlier commits remain saved; no later batch will run"
+            },
             false,
             cx,
         );

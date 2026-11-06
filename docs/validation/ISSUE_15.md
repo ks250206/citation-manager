@@ -67,7 +67,22 @@ exercise PDF origin changes, retained handles/batch counters, failed cancellatio
 submission and both cancellation directions with real tokens. A real worker regression
 commits the first batch, alternates twelve PDF/manual previews without exhausting the
 four coordinator slots, resumes the exact next file row with fresh decisions, and
-verifies exactly three real saved records. Updated-source independent review remains due.
+verifies exactly three real saved records.
+
+The [independent review of integrated `b6c9ba9`](https://github.com/ks250206/citation-manager/pull/45#issuecomment-6694366929)
+confirmed the original P2×3/P3×4 fixes in the native handlers, with no P0–P2. The reviewer
+ran import-flow state 4, workbench state 5 and feature-enabled mixed worker 1, and verified
+all 268 tracked hashes unchanged. Two optional P3 follow-ups were then addressed:
+PDF reports now refresh form/list/retained-paper and report counts even if releasing a
+preview cannot be submitted; that release error is appended and the retained handle
+still blocks replacement until release succeeds. Cancelling a preview explicitly says
+when bibliography remains paused and resumable. PDF forms also state that selecting
+another row resets unsubmitted edits. These final small changes require a narrow
+independent recheck and final-head CI; no additional native GUI acceptance is implied.
+The [small follow-up checks](issue-15/minor-follow-up-checks.json) record final-source
+fmt, workspace native Clippy, desktop focused 4+5, mixed worker 1 and native executable
+build success. Full/thousand-record/PDF/Python suites were not repeated for these small
+handler/status-only changes; final CI and the separate GUI gate remain required.
 
 ## Executed evidence
 

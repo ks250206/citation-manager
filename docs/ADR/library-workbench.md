@@ -68,6 +68,10 @@ batch counters. Resume restores file diagnostics/counters and requires a fresh p
 and fresh decisions. An unrelated PDF report preserves a non-PDF preview. Cancel submission
 failure keeps the old handle/decisions and blocks replacement. Selecting another bibliography
 explicitly reports stopped progress before starting a new file session.
+PDF reports still refresh the list/form/retained paper if preview-release submission
+fails, while displaying the release error and retaining the handle for retry. Cancelling
+an active non-file preview leaves paused bibliography resumable only by explicit Resume;
+the cancellation status distinguishes this from stopping the active file session.
 Export All/selected/direct collection calls #13 ExportService on the actual #12 query,
 writes a new selected filename, and surfaces losses and the bibliography-only migration
 notice. An export IO failure may leave a partial new output file; it never overwrites an
@@ -82,6 +86,8 @@ PDF metadata uses a dedicated form bound to row index, source path and digest; i
 read fields from the library/manual editor. Matching sources retain edits, while changed
 origins require reloading. Cmd+S only saves on the Library screen; PDF registration always
 uses the explicit PDF preview and reviewed commit, preserving attachment intent.
+Unsubmitted PDF edits belong to the current row; changing rows resets that form, as the
+metadata review text states. Per-row draft persistence is not claimed.
 Explicit AttachExisting never imports bibliography or creates a paper. RegisterNew uses
 #33 `file_metadata::propose`, then a retained ordinary preview. The serial #11 worker has
 one additive bounded Metadata operation, returning source digest, page count and neutral
