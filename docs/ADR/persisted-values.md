@@ -12,6 +12,8 @@
 - `Anchor::Unresolved` は attachment、quote、reason を保存し、解決できなかった位置を失わない。
   ページを推測して Resolved にしない。PDF 差し替え後は再解決と確認が必要。
   保存側は source と Anchor を両方保持する。#7 は全 annotation schema や幾何型を固定しない。
+  最小保存 DTO は serde の既定どおり未知フィールドを無視する。Unresolved に未知の `page` が
+  あっても状態は昇格せず、再出力に位置を残さない。公開 IPC の未知フィールド拒否/互換性方針は #25 で定める。
 - `PageIndex` は 0-based の物理 index。永続化・検索結果・引用追跡はこれを使う。
   `PhysicalPageNumber` は 1-based の物理表示番号。`page_index + 1` で相互変換する。
   index 最大値は u32::MAX-1、表示番号は 1..=u32::MAX。construct/deserialize の両方で検証する。

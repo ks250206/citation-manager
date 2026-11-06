@@ -27,10 +27,14 @@ python3 -m unittest discover -s scripts -p 'test_*.py' -v
 通常の lane は GPUI/PDFium をコンパイル・ロードしません。SQLite は bundled C source をビルドします。
 optional dependency の解決/lock 生成にはネットワークが必要です。
 macOS + Xcode（初回起動/ライセンス同意済み）で native dependency lane を追加確認できます。
-Metal Toolchain が未導入なら最初のコマンドで取得します。
+Metal compiler が使えるか確認し、不足時のみ追加取得します。
+Xcode 16 の同梱 compiler が使える場合、追加取得は不要です。
 
 ```sh
-xcodebuild -downloadComponent MetalToolchain
+if ! xcrun --sdk macosx metal -v; then
+  xcodebuild -downloadComponent MetalToolchain
+fi
+xcrun --sdk macosx metal -v
 cargo check -p cm-desktop --features native-gpui --locked
 cargo clippy -p cm-desktop --all-targets --features native-gpui --locked -- -D warnings
 cargo build -p cm-desktop --features native-gpui --locked

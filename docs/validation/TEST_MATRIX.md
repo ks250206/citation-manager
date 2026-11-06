@@ -11,11 +11,11 @@ base main: `86eb892`。依存確認は [DEPENDENCIES](DEPENDENCIES.md) を参照
 |---|---|
 | `cargo fmt --all -- --check` | passed |
 | `cargo clippy --workspace --all-targets --locked -- -D warnings` | passed、workspace warning なし |
-| `cargo test --workspace --locked` | passed: integration/unit 8件 + compile-fail doctest 1件 |
+| `cargo test --workspace --locked` | passed: integration/unit 9件 + compile-fail doctest 1件 |
 | `cargo build --workspace --locked` | passed、12 library crate。実行可能な app/server ができたという意味ではない |
 | `python3 scripts/check_architecture.py` | passed、12 member・許可依存方向・framework/driver 所有・macOS GPUI pin |
 | `python3 scripts/check_migrations.py --base origin/main` | passed、0件 registry と base 保存。実 schema は未実装 |
-| `python3 -m unittest discover -s scripts -p 'test_*.py' -v` | passed、10件。逆依存・framework混入、migration衝突/改変/削除・registry改変・symlink・subdirectory・無効baseを拒否 |
+| `python3 -m unittest discover -s scripts -p 'test_*.py' -v` | passed、13件。逆依存・framework混入・driver所有・GPUI固定rev/optional/macOS条件、migration衝突/改変/削除・registry改変・symlink・subdirectory・無効baseを拒否 |
 | `xcodebuild -downloadComponent MetalToolchain` | passed、Metal Toolchain 17F109 を取得 |
 | `cargo check -p cm-desktop --features native-gpui --locked` | passed、gpui/gpui_platform/gpui_macos/gpui_apple 固定 rev、Metal shader compile を含む |
 | `cargo clippy -p cm-desktop --all-targets --features native-gpui --locked -- -D warnings` | passed |
@@ -36,6 +36,7 @@ GitHub runner の OS/Xcode 差による失敗は PR 上で実結果を確認す�
 
 - domain: page index/display の 0・1・最大値・overflow・負値、deserialize 時の拒否、PDF label `iv` の保持、
   Paper/Attachment と外部 ID の roundtrip、`source=ai`、位置未解決 quote の保存、storage key の traversal 拒否。
+  Unresolved の再出力に位置を持たず、未知の page フィールドでも Resolved へ昇格しないことを確認する。
 - core: transport/framework なしで Repository を差替え、preview/commit の別 DTO と明示的 skip を spy で確認。
   compile-fail test は raw ImportRequest を commit に渡せないことを保証する。
   spy は production service の認可/transaction/重複処理が実装済みである証拠ではない。
@@ -59,7 +60,7 @@ GitHub runner の OS/Xcode 差による失敗は PR 上で実結果を確認す�
 | Chrome/Firefox保存 #23/#24 | implementing agent がfixture、自動化可能な実ブラウザ agent。fallback Ryoji Kanno | **未実施**。拡張/host未実装。両ブラウザでGUI閉鎖時の保存/重複/失敗再試行を記録 |
 | MCP stdio tools #29 | implementing agent が公式SDK/clientから自動試験 | **未実施**。入口は Unavailable。read-only/write許可・出典ページ・stdout純度・transport停止を検証 |
 | Developer ID / notarization / DMG #31 | Ryoji Kanno が Developer ID と Apple 公証権限を用意し、権限を与えた配布担当 agent が実行 | **blocker**: `security find-identity -v -p codesigning` → `0 valid identities found`。Developer ID署名・notarizationは未検証。秘密は保存/Issue公開しない |
-| 独立異モデル review | root が非対話/read-only の別モデルを手配 | **未実施**。#7実装 agent は自己reviewで代替しない。PR headに対するseverity/file:line/根拠をrootが記録する |
+| 独立異モデル review | root が非対話/read-only の別モデルを手配 | **実施**。Opus 5.5/mediumが `e927a5f` を確認しP0〜P2なし、P3のtest/doc指摘3件。本変更で対応し、修正後headのreview結果と証跡はPRコメントに記録する。自己reviewで代替しない |
 
 UI/browser の未実施は自動 contract test で充足した扱いにしない。fallback ユーザーがまだ実行していない項目を
 passed と記さない。Developer ID 不在は将来 #31 の blocker として維持し、#7 の未署名 compile を妨げない。

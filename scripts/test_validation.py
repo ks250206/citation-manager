@@ -30,6 +30,49 @@ class ArchitectureTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, '12 planned crates'):
             architecture.validate(metadata)
 
+    def test_gpui_dependencies_outside_desktop_are_rejected(self):
+        for dependency in ['gpui', 'gpui_platform']:
+            with self.subTest(dependency=dependency):
+                metadata = self.metadata()
+                package = next(p for p in metadata['packages'] if p['name'] == 'cm-metadata')
+                package['dependencies'] = [{'name': dependency}]
+                with self.assertRaisesRegex(ValueError, 'GPUI must stay in desktop'):
+                    architecture.validate(metadata)
+
+    def test_native_drivers_outside_their_owner_are_rejected(self):
+        for dependency, owner, message in [
+            ('rusqlite', 'cm-daemon', 'SQLite driver must stay in storage'),
+            ('pdfium-render', 'cm-storage', 'PDFium must stay in pdf'),
+        ]:
+            with self.subTest(dependency=dependency):
+                metadata = self.metadata()
+                package = next(p for p in metadata['packages'] if p['name'] == owner)
+                package['dependencies'] = [{'name': dependency}]
+                with self.assertRaisesRegex(ValueError, message):
+                    architecture.validate(metadata)
+
+    def test_desktop_gpui_requires_pinned_optional_macos_dependencies(self):
+        for dependency in ['gpui', 'gpui_platform']:
+            good = {
+                'name': dependency,
+                'source': 'git+https://github.com/zed-industries/zed?rev=4a6121bb0f10c6e8037b741b7dc0a4cd639ae289',
+                'optional': True,
+                'target': 'cfg(target_os = "macos")',
+            }
+            metadata = self.metadata()
+            package = next(p for p in metadata['packages'] if p['name'] == 'cm-desktop')
+            package['dependencies'] = [copy.copy(good)]
+            architecture.validate(metadata)
+            for field, invalid in [
+                ('source', 'git+https://github.com/zed-industries/zed?rev=unreviewed'),
+                ('optional', False),
+                ('target', None),
+            ]:
+                with self.subTest(dependency=dependency, field=field):
+                    package['dependencies'] = [dict(good, **{field: invalid})]
+                    with self.assertRaisesRegex(ValueError, 'pinned optional macOS lane'):
+                        architecture.validate(metadata)
+
 class MigrationTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

@@ -40,12 +40,24 @@ fn page_label_is_not_a_physical_display_number_and_unresolved_ai_is_retained() {
     assert_eq!(to_value(anchor).unwrap(), resolved);
     let unresolved = json!({"state":"unresolved", "attachment_id":resolved["page"]["attachment_id"],
         "quote":"unverified quote", "reason":"not found in replacement PDF"});
-    assert_eq!(
-        to_value(from_value::<Anchor>(unresolved.clone()).unwrap()).unwrap(),
-        unresolved
-    );
+    let saved = to_value(from_value::<Anchor>(unresolved.clone()).unwrap()).unwrap();
+    assert_eq!(saved, unresolved);
     assert_eq!(to_value(AnnotationSource::Ai).unwrap(), json!("ai"));
-    assert!(!unresolved.as_object().unwrap().contains_key("page"));
+    assert!(!saved.as_object().unwrap().contains_key("page"));
+}
+
+#[test]
+fn an_unknown_page_field_does_not_promote_an_unresolved_anchor() {
+    let canonical = json!({"state":"unresolved",
+        "attachment_id":"019a5665-18c0-7000-8000-000000000002",
+        "quote":"unverified quote", "reason":"not found"});
+    let mut input = canonical.clone();
+    input["page"] = json!({"attachment_id":canonical["attachment_id"],
+        "page_index":4, "page_label":"iv"});
+
+    let anchor: Anchor = from_value(input).unwrap();
+    assert!(matches!(&anchor, Anchor::Unresolved { .. }));
+    assert_eq!(to_value(anchor).unwrap(), canonical);
 }
 
 #[test]
