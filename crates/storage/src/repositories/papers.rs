@@ -66,7 +66,11 @@ impl PaperLibrary for SqlitePapers<'_> {
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(service_error)?;
         paper = update_in_transaction(&tx, &paper)?;
+        #[cfg(all(test, unix))]
+        crate::crash_recovery::checkpoint("metadata-transaction", tx.path());
         tx.commit().map_err(service_error)?;
+        #[cfg(all(test, unix))]
+        crate::crash_recovery::checkpoint("metadata-committed", self.connection.path());
         Ok(paper)
     }
     fn list(&self, query: &PaperList) -> Result<Vec<Paper>, ServiceError> {

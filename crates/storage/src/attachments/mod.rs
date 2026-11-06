@@ -179,6 +179,8 @@ impl ManagedAttachments<'_> {
         if verified != (digest, size) || request.expected_sha256.is_some_and(|h| h != digest) {
             return Err(StorageError::DigestMismatch);
         }
+        #[cfg(all(test, unix))]
+        crate::crash_recovery::checkpoint("attachment-staged", self.db.connection.path());
         let storage_key = key(&digest);
         let destination = managed_path(&self.store.directory, &storage_key, true)?;
         if destination.try_exists()? {
@@ -205,6 +207,8 @@ impl ManagedAttachments<'_> {
         File::open(&destination)?.sync_all()?;
         sync_dir(destination.parent().unwrap())?;
         sync_dir(&staging)?;
+        #[cfg(all(test, unix))]
+        crate::crash_recovery::checkpoint("attachment-published", self.db.connection.path());
         if cut == Cut::AfterPublish {
             return Err(injected());
         }
@@ -231,6 +235,8 @@ impl ManagedAttachments<'_> {
             return Err(StorageError::Sqlite(rusqlite::Error::QueryReturnedNoRows));
         }
         tx.execute("INSERT INTO attachments(id,paper_id,relative_path,file_hash,original_name,mime_type,byte_size,added_at) VALUES (?1,?2,?3,?4,?5,?6,?7,strftime('%Y-%m-%dT%H:%M:%fZ','now'))", params![attachment.id.0.to_string(), attachment.paper_id.0.to_string(), attachment.storage_key.as_str(), digest.as_slice(), attachment.original_name, attachment.media_type, i64::try_from(size).map_err(|_| invalid("attachment too large"))?])?;
+        #[cfg(all(test, unix))]
+        crate::crash_recovery::checkpoint("attachment-transaction", tx.path());
         if cut == Cut::BeforeCommit {
             return Err(injected());
         }
@@ -243,6 +249,8 @@ impl ManagedAttachments<'_> {
             )?;
         }
         tx.commit()?;
+        #[cfg(all(test, unix))]
+        crate::crash_recovery::checkpoint("attachment-committed", self.db.connection.path());
         if cut == Cut::AfterCommit {
             return Err(injected());
         }
