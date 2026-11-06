@@ -904,7 +904,15 @@ PaperService/SQLite repositoryで手動作成・全書誌情報編集・一覧�
 §7の実file store/製品backupは#9、FTSは#18、daemonの単一起動/書込制御は#25が実装する。
 現在のAPI/正確な保証範囲とtemp DBによるruntime証跡はADRと[#8検証](docs/validation/ISSUE_8.md)に記録する。
 
-## 28. #9 添付ストア・バックアップ実装への追記
+## 28. #11 PDFium PoCの確定事項
+
+[PDFium runtime ADR](docs/ADR/pdfium-runtime.md) と [実機検証](docs/validation/PDFIUM_POC.md) が
+§9 の実装上の明確化となる。固定8125/0.9.5を専用workerで直列実行し、
+`/Pages` 継承を解決した有効MediaBox/CropBox交差をPage/Export/Viewportで共用する。
+原本不変で標準注釈を搬出し、nativeの/AP欠落にはexport-only補完を使いPDFKitで独立照合する。
+製品export helper配送は#20、.app実ロードは#34、署名/trust policyは#31で未完。
+
+## 29. #9 添付ストア・バックアップ実装への追記
 
 SHA-256添付はprivate tempへのstream copy・再hash検証・no-replace atomic rename・fsync後に
 DB参照を追加する。同一hashを複数文献で共有し、関連付け失敗で既存blobを削除しない。
