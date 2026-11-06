@@ -62,6 +62,15 @@ fn rendezvous(context: &Context, nonce: &str, stage: &str) {
     panic!("child was released without SIGKILL: {result:?}");
 }
 
+fn wait_for_parent_kill() -> ! {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while let Some(remaining) = deadline.checked_duration_since(Instant::now()) {
+        // park_timeout may return spuriously; only the absolute deadline ends this wait.
+        thread::park_timeout(remaining);
+    }
+    panic!("parent did not kill child");
+}
+
 /// Helper-only libtest entry: a no-op outside an explicitly owned invocation, not a crash case.
 #[test]
 fn owned_child_entry() {
@@ -88,14 +97,10 @@ fn owned_child_entry() {
     let context = Context { root, nonce, stage };
     match context.stage.as_str() {
         "early-exit" => return,
-        "no-ready" => {
-            thread::park_timeout(Duration::from_secs(30));
-            panic!("parent did not kill child")
-        }
+        "no-ready" => wait_for_parent_kill(),
         "silent-ready" => {
             let _stream = UnixStream::connect(context.root.join("s")).unwrap();
-            thread::park_timeout(Duration::from_secs(30));
-            panic!("parent did not kill silent child");
+            wait_for_parent_kill();
         }
         "wrong-nonce" => rendezvous(&context, "wrong", &context.stage),
         "wrong-stage" => rendezvous(&context, &context.nonce, "wrong"),

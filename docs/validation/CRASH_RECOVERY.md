@@ -52,6 +52,12 @@ canonical root/name, root's UID/private permissions/ancestors, and the private n
 file. The entry initializes the private checkpoint context only in that child.
 Other unit tests have no initialized context and the hooks do nothing.
 
+The product-operation child disables WAL auto-checkpointing on its own connection
+with `wal_autocheckpoint=0` to retain committed WAL frames for reopen recovery.
+Production leaves auto-checkpointing enabled; its `synchronous=FULL` setting is
+unchanged in these tests. This is a deliberate test condition, not evidence of
+recovery under every production checkpoint schedule.
+
 At the selected hook the child validates the actual database path, connects to the
 parent's private Unix socket, sends `nonce:stage\n`, and blocks. The parent accepts
 only an exact nonce/stage match before invoking `Child::kill` on the `Child` handle
@@ -69,6 +75,8 @@ uncollected owned child on assertion/handshake failures. Accepted sockets, inclu
 rejected/partial handshakes, remain owned by the guard until after reaping, avoiding
 an EOF-induced child-unwind race. Cleanup failure fails the run (or is explicitly
 reported during an existing unwind); it is never recorded as passed evidence.
+The two synthetic parked children recheck an absolute deadline after every wake,
+so a spurious `park_timeout` return cannot turn them into an early panic/exit.
 
 The harness regression separately checks early successful exit, no connection,
 connected-but-silent read timeout, wrong nonce and wrong stage. Receipts confirm
@@ -160,6 +168,15 @@ The unfiltered workspace run passed **186 tests**, with 0 failed, 0 ignored, and
 The dedicated serial SIGKILL command passed 10 tests; its 16 filtered-out tests
 are existing unit tests that also run in the unfiltered workspace command.
 
+After independent review of `ca78726`, root changed only the two synthetic parked
+children to tolerate spurious wakes and added the WAL/coverage disclosures above.
+On that follow-up source, root reran the serial subprocess command (10 passed),
+ordinary parallel `cargo test -p cm-storage --lib --locked` (26 passed),
+`cargo check -p cm-storage --locked`, storage all-targets locked Clippy with
+`-D warnings`, workspace fmt-check and `git diff --check`; all passed. The 186-test
+workspace and 22-test Python figures remain the original implementation results,
+not a claim that those full suites were rerun for this small follow-up.
+
 The observed platform is macOS 27.2 (26B123), Darwin 27.2.0, Apple Silicon
 Mac16,6 / arm64 with 38,654,705,664 bytes memory and local APFS. Toolchain:
 Rust/Cargo 1.99.1, Python 3.14.0. Builds/tests use ordinary debug/default features.
@@ -178,6 +195,9 @@ broad for process cleanup, so the official Rust 1.99.1 primary docs were checked
 persistence, interrupted partial streaming copy, jobs/IPC/daemon writer lifetime,
 leases/request deduplication, migration kills, FTS recovery, security regression,
 PDF/GUI/native runtime, signing, 16-GB/full-load performance, or exactly-once writes.
+Shared-source kills at the staged and published checkpoints are not covered;
+shared-source transaction/committed cases are covered. No mutation test established
+that these assertions catch a write-order change accompanied by moved checkpoints.
 This PR changes no production write/fsync/publication order or public API. #30's
 other requirements/dependencies remain open; #15/PR #45 Draft GUI block, #34 HELD,
 and the #23/#25 closed gates remain unchanged. Independent Opus review and CI
