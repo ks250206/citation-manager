@@ -86,6 +86,6 @@ quit/relaunch and attachment host actions. That report distinguishes earlier-bin
 from affected-control retests. The [fresh continuation](issue-15/native-continuation.md)
 adds exact-executable evidence for collection rename/move/delete, both oversize limits,
 dirty selection/Trash guards, unrelated Attach/Get preservation and six preview/Resume
-cycles. Genuine D&D, offline DOI, simultaneous DOI/PDF cancellation and failed page-query
+cycles. After normally merging main `5f0fb1d`, a fresh binary retested dirty guards, attachment reopening, PDF metadata preview and cancellation; exact phase hashes and integration checks are retained. No command/keymap native handlers were connected. Genuine D&D, offline DOI, simultaneous DOI/PDF cancellation and failed page-query
 retry remain unverified. Keep PR45 Draft and #15 open. #34 remains HELD; #23/#25 stay
 closed. Root owns independent final review, CI and any merge.

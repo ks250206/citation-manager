@@ -191,10 +191,9 @@ all-target native daemon Clippy passed. [Exact stage timings and failure context
 The [native run log](issue-15/native-awake.md) distinguishes earlier observations from
 final-binary retests and retains the incomplete gates. It does not map every phase or
 screenshot to an executable hash. The [fresh continuation](issue-15/native-continuation.md)
-maps all its new screenshot/action ranges to one exact executable and retains the
+maps its screenshot/action ranges separately to the initial and integrated-main executables and retains the
 outstanding D&D, offline, simultaneous-cancellation and failed-page constraints.
-Earlier headless results above remain headless results. No viewer, annotations/note editor, saved advanced search or command/keymap
-registry is claimed; #52/#53 parallel work is outside PR45. The checklist remains at
+Main `5f0fb1d` (#52/PR55) was normally integrated before final freeze, preserving additive pure command/keymap modules, serde edges and both branches' lib/Cargo registrations. No command/keymap GUI handlers were connected. A fresh integrated native build retested dirty guards, attachment reopening, PDF metadata preview and cancellation; the broader local checks were rerun. #53/PR54 was unmerged at integration. Earlier headless results above remain headless results. No viewer, annotations/note editor or saved advanced search is claimed; #52/#53 implementation remains outside #15. The checklist remains at
 [tests/e2e/library](../../tests/e2e/library/README.md).
 
 ## Boundaries and limits

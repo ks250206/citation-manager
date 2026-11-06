@@ -6,7 +6,7 @@ The awake run obtained the actual native window and exercised many paths below.
 See [current per-path results and incomplete gates](../../../docs/validation/issue-15/native-awake.md).
 The [isolated continuation](../../../docs/validation/issue-15/native-continuation.md)
 adds collection/oversize/dirty-guard/Attach-Get/repeated-Resume proof, with all new action
-and screenshot ranges mapped to one exact executable. D&D/offline/simultaneous-cancel/
+and screenshot ranges mapped to their exact initial/integrated executables. D&D/offline/simultaneous-cancel/
 failed-page gates remain open; this checklist is not fully passed.
 This is still an acceptance checklist, not a claim that all paths passed. Headless
 service tests do not substitute for native actions.

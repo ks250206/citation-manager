@@ -116,6 +116,6 @@ private app/library/settings and maps every new screenshot/action range to execu
 `0eaaec984e238371415d264a244529ce357bae175119313335f036826c70c682`.
 It observed collection rename/move/delete, oversize limits, screenshot-backed dirty
 selection/Trash guards, unrelated Attach/Get preservation and six manual-preview/Resume
-cycles. The remaining list above describes this earlier run; consult the continuation
+cycles. A subsequent fresh build after integrating main `5f0fb1d` retested dirty guards, attachment reopening, PDF metadata review and cancellation; its separately mapped executable is `c07fba3698c43cefac50bfc7fe161e366715c3ddae66a178ade609848464a617`. The remaining list above describes this earlier run; consult the continuation
 for the current gates. D&D, offline DOI, simultaneous cancellation and failed-page retry
 remain unproven. Earlier binary observations above retain their original provenance.

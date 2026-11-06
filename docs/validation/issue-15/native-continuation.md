@@ -8,18 +8,16 @@ page-query retry still do not have successful native proof.
 ## Exact executable and private scope
 
 - Starting remote/source head: `9ea22dd2d343cfa921ba12377cd24ba62500adbf`.
-- Main verified before and after GUI work: `9e7e66e3e284a047096eae0707b823233206fe8c`.
+- First phase main: `9e7e66e3e284a047096eae0707b823233206fe8c`. Before final freeze, normally merged updated main `5f0fb1dfa139afc567a492a309c1f5f4728ffbed` (#52/PR55); additive pure commands/keymap modules and serde/lib registrations preserved, without native wiring. #53/PR54 was not merged.
 - T3-prepared checkout: `t3-3485176f`; normal fast-forward of the existing PR branch.
 - Fresh private root: `/private/var/folders/y1/84n75pz56qg1b36t882r8n900000gn/T/cm-pr45-native-348-v4ut62vv`.
-- Real arm64 Mach-O app executable SHA-256:
+- First-phase real arm64 Mach-O app executable SHA-256:
   `0eaaec984e238371415d264a244529ce357bae175119313335f036826c70c682`.
 - Bundled `Contents/Frameworks/libpdfium.dylib` SHA-256:
   `8d1e46a6dbe32d7cb95279ab3def2e71e557a3d4cc49162453afa3e3b250dc5e`.
 - Built here with `cargo build --locked -p cm-daemon --features desktop-bootstrap --bin citation-manager`.
-  No product code changed. Full tracked source hashes were recorded before launch and
-  verified unchanged after observation, before writing this documentation.
-- All 51 retained screenshots (numbers 01–52 except 27) and action ranges map to that
-  executable in [the artifact manifest](native-continuation-artifacts.json). The private
+  No #15 product code changed in this continuation. Full tracked source hashes were recorded before each observation phase and verified unchanged afterward, before documentation edits.
+- Initial 51 screenshots (01–52 except 27) map to the first executable. Integrated screenshots 53–61 map to source `a5a6f3194a6077758e778e099c9d6007af39dc95`, executable `c07fba3698c43cefac50bfc7fe161e366715c3ddae66a178ade609848464a617`, with the same PDFium. All 60 screenshots and action ranges are mapped separately in [the artifact manifest](native-continuation-artifacts.json). The private
   manifest retains the complete tracked source snapshot. Screenshot 27 does not exist:
   that coordinate probe returned a CUA error before an image was produced.
 - All UI input and screenshots used documented `mcp__cua_repl` native APIs. Actual
@@ -45,12 +43,14 @@ persistence claim.
 | Attach/Get with unrelated non-PDF preview | Inspected scanned.pdf for the anchor, then opened an unrelated manual preview. Returned to the retained attachment intent and explicitly attached. The report/Get preserved the manual candidate, its uncommitted state and dirty form. | 33–35 |
 | Repeated slot release and Resume | Three-row bibliography, batch size 1; only Saffron row 1 was approved/committed. Six manual-preview/explicit-Resume cycles returned to Tundra row 2 at 1/3 processed, without slot exhaustion. Selected Create before the final pause; fresh Resume/preview reset it to Choose a decision and disabled Commit. Stopped file without committing rows 2–3. | 36–50 |
 
+After main integration, the fresh binary reopened the same own private library (53). Dirty selection and Trash guards retained an integrated title sentinel (54–55); the edit was discarded. Both attachments reopened Present (56). A native picker selected metadata.pdf; pending inspection (57) settled to Info/XMP suggestions (58), then explicit registration preview showed Choose a decision with Commit disabled (59–60). Cancel returned to the unchanged three-row library with both attachments (61). No new paper or attachment was committed in this phase.
+
 [Read-only corroboration](native-continuation-db-readonly.json), collected after normal
 quit using SQLite URI `mode=ro`, shows exactly three active records: GUI Delta Anchor,
 Quartz Mountain Reference and Saffron horizon microscopy. There is one Root collection,
 Moved Beta. Both attachments belong to the anchor; each source digest equals its managed
 blob digest. The sentinel, uncommitted manual candidate and later bibliography rows were
-not saved. This corroborates actions; it does not substitute for their GUI evidence.
+not saved. A second read-only query after the integrated app quit matched these records, collections and attachment digests exactly; neither the integrated sentinel nor PDF candidate persisted. This corroborates actions; it does not substitute for their GUI evidence.
 
 ## Remaining native gates and reproduction constraints
 
@@ -80,19 +80,18 @@ not saved. This corroborates actions; it does not substitute for their GUI evide
   was exercised. No DB mutation, product fault switch or fake GUI response was introduced.
   Keep this gate open until a safe controlled real query failure can be reproduced.
 
-No changes to commands/keymap/search/daemon, dependency pins, SQL or migration manifest.
+No continuation changes to commands/keymap/search/daemon; the ordinary main merge preserves the upstream pure modules and both branches' lib/Cargo additions. Dependency pins, SQL and migration manifest are preserved.
 All 636 locked dependency identities/checksums and both SQL migrations/manifest match main.
 #34 stays **HELD**, #23/#25 stay closed. No browser/VM/account/native-host registration,
-signing, review agents, watch or merge was performed. Root retains independent final review.
-The owned normal app exited0 after actual Cmd+Q; CUA inventory then contained no owned
+signing, review agents, watch or PR merge was performed. Root retains independent final review.
+Both owned normal app phases exited0 after actual Cmd+Q; CUA inventory then contained no owned
 Citation Manager app. No prior QA library, settings or evidence was edited.
 
-The fresh native executable build, formatting, architecture validator, migration
-preservation against refreshed `origin/main`, all 23 Python validators, artifact/link
-integrity and `git diff --check` passed. [Commands and log hashes](native-continuation-checks.json)
-identify this continuation's checks. The earlier full Rust/native/runtime test results
-remain in the awake report; no Rust tests were rerun for this documentation-only change.
-The final pushed head's CI and independent review remain root's responsibility.
+The integrated source passed formatting, locked workspace and native clippy with warnings denied, locked workspace tests, native GPUI tests, locked workspace/native builds, architecture validation, migration preservation against refreshed `origin/main`, all 23 Python validators, artifact/link integrity and `git diff --check`. [Commands and log hashes](native-continuation-checks.json) identify the exact checks. State tests remain separate evidence from native observations.
+
+Offline lock regeneration exited0 but proposed nine dependency changes; its result was rejected and the exact prior pinned bytes restored. [The retained resolver audit](native-continuation-lock-regeneration-audit.json) records this drift. `cargo update --workspace --locked --offline` then passed without a lock change. All 636 dependency identities/checksums match both the requested starting head and integrated main; both SQL migrations and their manifest are unchanged. This is preservation evidence, not a claim that unconstrained regeneration reproduced the lock.
+
+The final pushed head's CI and independent review remain separate from these local checks. No new review agent was started; prior reviews apply only to their recorded heads.
 
 Selected original CUA images:
 
@@ -103,3 +102,8 @@ Selected original CUA images:
 - [Unrelated preview after Attach/Get](native-continuation-screenshots/35-manual-preview-survived-report-get.jpg)
 - [Create before pause](native-continuation-screenshots/48-row-two-create-before-pause.jpg)
 - [Fresh decision after sixth Resume](native-continuation-screenshots/50-resume-six-fresh-decision-required.jpg)
+
+- [Integrated dirty Trash guard](native-continuation-screenshots/55-integrated-dirty-trash.jpg)
+- [Integrated settled metadata](native-continuation-screenshots/58-integrated-pdf-metadata-settled.jpg)
+- [Integrated uncommitted preview](native-continuation-screenshots/60-integrated-pdf-preview.jpg)
+- [Integrated cancellation retained three records](native-continuation-screenshots/61-integrated-cancelled-three-records.jpg)
