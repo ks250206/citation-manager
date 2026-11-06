@@ -15,7 +15,7 @@ No PR #45 source was imported.
 
 ## Meaningful exercised behavior
 
-The 15 new tests in `crates/core/tests/search_query.rs` cover:
+The focused tests in `crates/core/tests/search_query.rs` cover:
 
 - All five DESIGN §10.3 example strings and each expected typed clause. Multiple
   conditions retain order and duplicates (including contradictory year ranges)
@@ -60,7 +60,7 @@ The initial clippy run rejected hex seed digit grouping; only grouping was fixed
 
 ## Required checks
 
-Final results after the complete workspace run: 171 unit/integration tests and
+Original `f34398f` results after the complete workspace run: 171 unit/integration tests and
 1 compile-fail doctest passed, including the 15 new DSL tests, with 0 failures or
 ignored tests. Both pre-existing 1000-record BibTeX/RIS real-SQLite roundtrips
 completed successfully (their 3-test target took 127.66 s). No test filters were
@@ -83,6 +83,28 @@ Direct byte comparison of Cargo.lock to the base succeeds. Python `tomllib`
 confirms exactly 636 locked package entries; no identities/versions/checksums
 changed. Workspace/core manifests, toolchain, schema and migration files remain
 unchanged. The parser has no new dependency or transport serialization.
+
+## Independent review follow-up
+
+The [Opus 5.5 medium review of `f34398f`](https://github.com/ks250206/citation-manager/pull/48#issuecomment-6695994891)
+found no blockers and verified 218 tracked hashes unchanged. It ran the 15 focused
+tests plus an independent 32-input probe. Root addressed its three low/nit notes:
+uppercase-only reserved operator words preserve natural English connectives;
+known-field lexical corrections preserve the predicate kind; and the EBNF now
+defines its character/value productions explicitly. Two new semantic regressions
+exercise lowercase/mixed-case English and all five fields' empty/escaped/quoted
+errors with Japanese prefixes and complete replacement spans. There are now 17
+focused tests; the finite 24,669-case regression is retained.
+
+Follow-up checks passed: `cargo test -p cm-core --test search_query --locked`
+(17 tests), `cargo test -p cm-core --locked` (38 total including the compile-fail
+doctest, overlapping the 17), `cargo fmt --all -- --check`, warnings-denied locked
+workspace all-target Clippy, locked workspace build, architecture, immutable
+migration checks against `fd50af1` and whitespace. Root's focused core output is
+`/tmp/citation-manager-pr48-review/root-core-tests.log`. The full workspace and
+Python suites were not repeated locally for this four-file follow-up; their earlier
+counts above belong to `f34398f`. Final-head full CI and an independent narrow
+recheck are separately required. No dependency/manifest/SQL or AST shape changed.
 
 ## Unrun / integration handoff
 

@@ -11,6 +11,13 @@ pub const MAX_TERMS: usize = 64;
 pub const MAX_VALUE_BYTES: usize = 1024;
 pub const MAX_DIAGNOSTICS: usize = 16;
 pub const MAX_CORRECTIONS: usize = 3;
+const FIELD_EXAMPLES: [(&str, &str); 5] = [
+    ("doi", "DOI:10.1234/example"),
+    ("tag", "tag:anode"),
+    ("year", "year:2020..2026"),
+    ("collection", "collection:reading"),
+    ("has", "has:pdf"),
+];
 
 /// Half-open UTF-8 byte offsets into the original input, always at char boundaries.
 /// `start` is the error position; zero-width spans can point at EOF.
@@ -87,7 +94,7 @@ impl DiagnosticCode {
             }
             Self::ControlCharacter => "non-whitespace control characters are not allowed",
             Self::UnsupportedSyntax => {
-                "Boolean operators, grouping, wildcards, and boosts are not supported; quote literal text"
+                "Uppercase Boolean operators, grouping, wildcards, and boosts are not supported; quote literal text"
             }
             Self::InvalidDoi => "invalid DOI; use the existing DOI format",
             Self::InvalidTag => "tag must satisfy the shared TagKey rules",
@@ -238,9 +245,9 @@ fn parse_clause(raw: &str, span: Span) -> Result<ClauseKind, Diagnostic> {
     let (key, raw_value, offset) = if raw.starts_with('"') {
         (None, raw, span.start)
     } else if let Some((key, value)) = raw.split_once(':') {
-        if !["doi", "tag", "year", "collection", "has"]
+        if !FIELD_EXAMPLES
             .iter()
-            .any(|known| key.eq_ignore_ascii_case(known))
+            .any(|(known, _)| key.eq_ignore_ascii_case(known))
         {
             return Err(diagnostic(
                 DiagnosticCode::UnknownField,
@@ -259,14 +266,23 @@ fn parse_clause(raw: &str, span: Span) -> Result<ClauseKind, Diagnostic> {
         start: offset,
         end: span.end,
     };
-    let (value, quoted) = decode_value(raw_value, value_span, span)?;
+    let (value, quoted) = decode_value(raw_value, value_span, span).map_err(|mut error| {
+        if !error.corrections.is_empty()
+            && let Some(replacement) = key.and_then(|key| {
+                FIELD_EXAMPLES
+                    .iter()
+                    .find(|(known, _)| key.eq_ignore_ascii_case(known))
+                    .map(|(_, example)| *example)
+            })
+        {
+            error.corrections = vec![Correction { span, replacement }];
+        }
+        error
+    })?;
     let invalid = |code| diagnostic(code, value_span, span);
     let Some(key) = key else {
         if !quoted
-            && (value.eq_ignore_ascii_case("OR")
-                || value.eq_ignore_ascii_case("AND")
-                || value.eq_ignore_ascii_case("NOT")
-                || value.eq_ignore_ascii_case("NEAR")
+            && (matches!(value.as_str(), "OR" | "AND" | "NOT" | "NEAR")
                 || value.starts_with(['+', '-'])
                 || value.contains(['(', ')', '[', ']', '{', '}', '*', '^', '|', '&', '!']))
         {

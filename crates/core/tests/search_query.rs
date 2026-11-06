@@ -301,7 +301,6 @@ fn empty_values_unknown_keys_and_unsupported_has_are_explicit_errors() {
 fn boolean_fts_and_group_syntax_are_rejected_and_quoted_literals_are_data() {
     for input in [
         "a OR b",
-        "a or b",
         "a AND b",
         "NOT a",
         "NEAR",
@@ -347,6 +346,64 @@ fn boolean_fts_and_group_syntax_are_rejected_and_quoted_literals_are_data() {
             ClauseKind::Term("10%".into())
         ]
     );
+}
+
+#[test]
+fn english_connectives_are_literal_terms_unless_spelled_as_uppercase_operators() {
+    for word in ["and", "or", "not", "near", "And", "Or", "Not", "Near"] {
+        assert_eq!(
+            kinds(&format!("cats {word} dogs")),
+            vec![
+                ClauseKind::Term("cats".into()),
+                ClauseKind::Term(word.into()),
+                ClauseKind::Term("dogs".into()),
+            ]
+        );
+    }
+    for word in ["AND", "OR", "NOT", "NEAR"] {
+        error(
+            &format!("cats {word} dogs"),
+            DiagnosticCode::UnsupportedSyntax,
+        );
+    }
+}
+
+#[test]
+fn malformed_known_fields_keep_the_predicate_kind_in_correction_examples() {
+    for (key, expected) in [
+        ("DoI", ClauseKind::Doi("10.1234/example".into())),
+        ("tAg", ClauseKind::Tag(TagKey::new("anode").unwrap())),
+        (
+            "YEAR",
+            ClauseKind::YearRange {
+                from: 2020,
+                to: 2026,
+            },
+        ),
+        ("Collection", ClauseKind::Collection("reading".into())),
+        ("HAS", ClauseKind::HasPdf),
+    ] {
+        for value in ["", r"a\b", "\"a\"b", "\"unfinished", "\"\""] {
+            let clause = format!("{key}:{value}");
+            let input = format!("電池 {clause}");
+            let errors = parse(&input).unwrap_err();
+            assert_eq!(errors.diagnostics.len(), 1, "{input}");
+            let corrections = &errors.diagnostics[0].corrections;
+            assert_eq!(corrections.len(), 1, "{input}");
+            let correction = &corrections[0];
+            assert_eq!(&input[correction.span.start..correction.span.end], clause);
+            let mut edited = input;
+            edited.replace_range(
+                correction.span.start..correction.span.end,
+                correction.replacement,
+            );
+            assert_eq!(
+                kinds(&edited),
+                vec![ClauseKind::Term("電池".into()), expected.clone()],
+                "{edited}"
+            );
+        }
+    }
 }
 
 #[test]

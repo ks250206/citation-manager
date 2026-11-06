@@ -15,6 +15,12 @@ field       = "doi" | "tag" | "year" | "collection" | "has"
 value       = bare-value | quoted
 quoted      = '"' (quoted-char | '\"' | '\\')* '"'
 year-value  = digit digit digit digit ".." digit digit digit digit
+bare-value  = bare-char+
+bare-term   = term-char+
+whitespace  = ? Unicode scalar satisfying char::is_whitespace ?
+quoted-char = ? Unicode scalar except double quote, backslash and non-whitespace controls ?
+bare-char   = ? Unicode scalar except whitespace, double quote, backslash and controls ?
+term-char   = ? bare-char except colon and ()[]{}*^|&! ?
 ```
 
 This notation's `\"` and `\\` are exactly the two-character source escape
@@ -35,8 +41,12 @@ bare segments. A field value may be quoted, including year and has values.
   bare backslashes fail. `\n`, `\t`, `\uXXXX` and single-quote quoting are not
   supported; an apostrophe remains an ordinary literal character.
 - Bare terms obey the bare-value rules, additionally excluding `:` and
-  `()[]{}*^|&!` anywhere, a leading `+`/`-`, and whole-word ASCII-case-insensitive
+  `()[]{}*^|&!` anywhere, a leading `+`/`-`, and whole-word uppercase
   `OR`, `AND`, `NOT`, `NEAR`. These receive explicit unsupported-syntax errors.
+  Lowercase and mixed-case words (`cats and dogs`, `near`, `And`) remain literal
+  terms, so ordinary English does not need quoting. This does not add Boolean
+  execution: all accepted terms remain conjunctive, untrusted data. These reserved
+  words and the leading-sign checks are additional semantic restrictions on `bare-term`.
   Hyphens within a word (`solid-state`), apostrophes and `%` remain literal.
   Quote text such as `"OR"`, `"a*"`, `"(a)"`, `"https://example.com"` when intended
   literally. An unquoted colon always introduces a field; `C:\papers` and bare
@@ -125,6 +135,9 @@ full-clause example. For unknown fields the examples are `tag:anode`,
 `year:2020..2026`, `has:pdf`; they are not fuzzy matching or guessed intent. Other
 syntax/semantic errors have at most one example. Size/count/control errors have
 no candidate because dropping or rewriting arbitrary input would be misleading.
+For a known field's empty/malformed quoted/escaped value, the example keeps the
+predicate kind (`tag:anode`, `DOI:10.1234/example`, `year:2020..2026`,
+`collection:reading`, `has:pdf`) instead of replacing it with an ordinary term.
 Applying one example does not guarantee other errors or whole-query budgets are
 fixed; callers must reparse the entire edited input.
 
