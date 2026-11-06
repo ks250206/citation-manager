@@ -32,3 +32,8 @@ required-features = ["desktop-bootstrap"]
 tempfile.workspace = true
 sha2.workspace = true
 serde_json.workspace = true
+
+# Composition-only DOI -> common import -> SQLite tests; no daemon implementation.
+[[test]]
+name = "doi_import"
+path = "../../tests/integration/doi_import.rs"

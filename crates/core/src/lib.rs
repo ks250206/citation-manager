@@ -4,6 +4,7 @@ pub mod collections;
 pub mod export;
 pub mod import;
 pub mod library_query;
+pub mod metadata_resolve;
 pub mod papers;
 pub mod ports;
 pub mod tags;
