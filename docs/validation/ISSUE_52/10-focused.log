@@ -1,0 +1,26 @@
+   Compiling cm-desktop v0.1.0 (/Users/ryojikanno/.t3/worktrees/citation-manager/t3-52b5e36a/crates/desktop)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.96s
+     Running tests/commands_keymap.rs (target/debug/deps/commands_keymap-9ca34eeb321ad88a)
+
+running 19 tests
+test known_pdf_api_commands_remain_disabled_even_when_host_claims_connection ... ok
+test availability_requires_connection_and_current_resources_without_grant_semantics ... ok
+test feature_registration_is_additive_and_duplicate_failure_preserves_original ... ok
+test custom_contexts_and_modes_do_not_leak_bindings ... ok
+test known_disabled_command_is_valid_configuration_but_cannot_become_enabled_by_matching ... ok
+test modifier_aliases_cannot_hide_duplicates_and_invalid_key_spellings_are_rejected ... ok
+test availability_is_evaluated_at_match_time_and_unknown_registry_fails_closed ... ok
+test escape_cancels_pending_sequence_and_explicit_reset_discards_it ... ok
+test mismatch_passes_unknown_event_and_retries_known_event_without_stale_prefix ... ok
+test prefix_conflicts_are_order_independent_but_sibling_sequences_and_different_scopes_are_valid ... ok
+test normal_insert_vim_off_transitions_preserve_editing_keys_and_drop_sequences ... ok
+test malformed_json_duplicate_fields_and_unknown_schema_fields_fail_with_structured_diagnostics ... ok
+test default_navigation_resolves_in_both_contexts_and_command_k_is_mode_independent ... ok
+test quoted_braces_escapes_and_unicode_are_json_data_not_structural_depth_or_executable_ids ... ok
+test unsupported_version_is_not_guessed_and_valid_empty_map_is_not_replaced ... ok
+test prefix_timeout_backwards_time_and_context_switch_cannot_finish_old_sequence ... ok
+test editing_and_ime_pass_every_event_and_reset_prefix_even_for_escape_and_command_k ... ok
+test unknown_commands_invalid_keys_and_duplicates_reject_entire_document_before_default_fallback ... ok
+test resource_limits_cover_exact_boundaries_and_default_registry_failure_is_explicit ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s

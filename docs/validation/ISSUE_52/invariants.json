@@ -1,0 +1,11 @@
+{
+  "base": "9e7e66e3e284a047096eae0707b823233206fe8c",
+  "package_count": 636,
+  "package_pins_and_checksums": "unchanged",
+  "lock_change": "cm-desktop adds existing serde dependency only",
+  "immutable_migrations": {
+    "crates/storage/migrations/20261106T090000Z_issue-8_002_relations.sql": "54f446f55adc0602c24d2489075b3e6ad6092907aaa31fc60863701d1b29cd9c",
+    "crates/storage/migrations/20261106T090000Z_issue-8_001_papers.sql": "b0c824cfd8123b9d13b52eace3d577342a4031bfd06dce6657f474aac3b7367f",
+    "crates/storage/migrations/manifest.json": "321775b8518c47570ada5eb75c66abcf997b32109881120aacf3e98e6751f467"
+  }
+}
