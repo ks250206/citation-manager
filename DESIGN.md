@@ -892,3 +892,14 @@ reference-manager/
   1PRずつ現行baseでlock再生成・再検証。独立したadditive開発の並行進行は禁止しない。
 - [依存確認](docs/validation/DEPENDENCIES.md)と[検証分担表](docs/validation/TEST_MATRIX.md):
   実測/未実施/環境blockerを分離する。未実装のwindow/server/toolsや未検証のPDFium ABI/署名を成功扱いしない。
+
+## 27. #8 SQLite 永続化の確定事項
+
+[SQLite library ADR](docs/ADR/sqlite-library.md) が §6–7 の実装上の明確化となる。
+全 relational table、外部ID、順序付きrole、annotation provenance/未解決状態をimmutable SQLに含め、
+PaperService/SQLite repositoryで手動作成・全書誌情報編集・一覧・soft delete・復元を提供する。
+内部UUIDはstorageのUUIDv7、日時はUTC、通常一覧は削除済みを除外するkeyset pagination。
+同一DOI/引用キーはConflictで停止し、自動upsert/mergeをしない。
+既存DBのupgradeにはpre-migration backup hookを必須とする。空DBの初期作成に既存データbackupは不要。
+§7の実file store/製品backupは#9、FTSは#18、daemonの単一起動/書込制御は#25が実装する。
+現在のAPI/正確な保証範囲とtemp DBによるruntime証跡はADRと[#8検証](docs/validation/ISSUE_8.md)に記録する。

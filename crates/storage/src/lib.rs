@@ -1,7 +1,37 @@
-//! SQLite / file-store boundary; repositories and migrations are implemented in #8.
+//! SQLite persistence. File-store/backups belong to #9; daemon ownership to #25.
+pub mod db;
+mod error;
+pub mod migrations;
+pub mod repositories;
+pub use db::{LibraryDb, paths::LibraryDirectory};
+pub use error::StorageError;
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn every_factory_connection_enforces_foreign_keys() {
+        let temp = tempfile::tempdir().unwrap();
+        let directory =
+            super::LibraryDirectory::prepare(temp.path().canonicalize().unwrap().join("library"))
+                .unwrap();
+        let file = super::LibraryDb::open(&directory).unwrap();
+        let reopened = super::LibraryDb::open(&directory).unwrap();
+        let memory = super::LibraryDb::in_memory().unwrap();
+        for db in [file, reopened, memory] {
+            let error = db
+                .connection
+                .execute(
+                    "INSERT INTO paper_tags(paper_id,tag_id) VALUES ('absent','absent')",
+                    [],
+                )
+                .unwrap_err();
+            assert_eq!(
+                error.sqlite_error().unwrap().extended_code,
+                rusqlite::ffi::SQLITE_CONSTRAINT_FOREIGNKEY
+            );
+        }
+    }
+
     /// Dependency capability probe, not a library schema or repository implementation.
     #[test]
     fn pinned_bundled_sqlite_supports_fts5_and_backup() -> rusqlite::Result<()> {

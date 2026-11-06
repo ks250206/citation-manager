@@ -28,6 +28,59 @@ pub struct Paper {
     pub id: PaperId,
     pub title: String,
     pub external_ids: Vec<ExternalId>,
+    #[serde(flatten)]
+    pub bibliography: Bibliography,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deleted_at: Option<String>,
+}
+
+/// Bibliographic metadata; absent additions preserve the #7 JSON fixtures.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Bibliography {
+    #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
+    pub paper_type: Option<String>,
+    #[serde(rename = "abstract", skip_serializing_if = "Option::is_none")]
+    pub abstract_text: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub year: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub publication_date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub journal: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub volume: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub issue: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pages: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub doi: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub citation_key: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub authors: Vec<Contributor>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extra_json: Option<serde_json::Value>,
+}
+
+/// Ordered contributors, including author/editor and literal organizations.
+/// Names/ORCID are retained verbatim; provider-specific reconciliation is #33.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Contributor {
+    pub given_name: Option<String>,
+    pub family_name: Option<String>,
+    pub literal_name: Option<String>,
+    pub orcid: Option<String>,
+    pub role: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
