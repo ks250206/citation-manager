@@ -113,3 +113,17 @@ New/selection/quit are not implemented. Native IME protocol/UTF-16 conversion an
 text are wired from the pinned official example; Japanese input-source candidate UI was
 not exercised. Unicode/grapheme/clipboard/editing were exercised as described above.
 Developer ID signing/notarization remain unavailable/outside #10; local unsigned run passed.
+
+## Root integration on current main
+
+Integrated merged #11 (`239c5a0`) before independent review. Both DESIGN appendices and
+README capability statements are retained; all three CI lanes remain enabled.
+Root passed workspace fmt/clippy/tests (36 unit/integration + 1 compile-fail doctest),
+build, architecture/migration preservation, Python 18 tests, native-feature clippy,
+6 worker/state tests and actual executable linking. No transitive package versions changed:
+the combined lock only adds the feature-owned crate dependency edges above current main.
+GUI/service source is unchanged by integration. The native CUA evidence above belongs to
+the original feature head `f79ebc3`; root inspected the screenshot and rebuilt the integrated
+executable, but did not repeat CUA interaction. The independently reviewed PDF runtime
+source is preserved; the remote PDFium lane remains an integrated-head gate.
+Integrated local executable SHA-256: `273c4fff3b47d302d7743446f6dba71da344fcd9390b4f5fd9ebe79ab546011e`.
