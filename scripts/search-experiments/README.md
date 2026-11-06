@@ -55,13 +55,15 @@ case/normalization policy.
 The storage test-only example uses workspace `rusqlite =0.41.1` with bundled
 `libsqlite3-sys =0.39.1`; no Python or system SQLite is executed. Runner records
 source/package hashes, Cargo library artifact feature sets, runtime version/source
-ID and all `PRAGMA compile_options`. It requires bundled features, rejects the five
-SQLite-specific overrides listed in `SQLITE_BUILD_OVERRIDES` (including `LIBSQLITE3_FLAGS`)
+ID and all `PRAGMA compile_options`. It requires bundled features, rejects the eight
+SQLite-specific overrides listed in `SQLITE_BUILD_OVERRIDES` (including `LIBSQLITE3_FLAGS`
+and the three `SQLITE_MAX_*` build settings), even when present with an empty or `0` value,
 and alternate engine features, and matches the runtime ID/version to the pinned
 C source. It records build flags, binary hash, CPU/RAM/OS, toolchains and a hash of
 the environment record (canonical sorted JSON before adding its hash). Existing
 636 locked packages and immutable migrations are untouched.
-Other compiler flags are recorded, not exhaustively prohibited; this is not a
+Unset those eight variables rather than setting a disabling value. Other compiler
+flags are recorded, not exhaustively prohibited; this is not a
 hermetic toolchain or a guarantee that every possible compiler override is rejected.
 
 Experiment-only FTS tables each have one `text` column, `detail=full`,

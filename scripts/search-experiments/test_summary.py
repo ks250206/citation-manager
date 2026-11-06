@@ -104,8 +104,9 @@ class SearchSummaryTests(unittest.TestCase):
         with patch.dict(os.environ, {}, clear=True):
             runner.reject_engine_overrides()
             for name in runner.SQLITE_BUILD_OVERRIDES:
-                with patch.dict(os.environ, {name: 'override'}), self.assertRaises(ValueError):
-                    runner.reject_engine_overrides()
+                for value in ('', '0', 'override'):
+                    with patch.dict(os.environ, {name: value}), self.assertRaises(ValueError):
+                        runner.reject_engine_overrides()
 
 
 if __name__ == '__main__':

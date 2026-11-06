@@ -18,7 +18,8 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
 SQLITE_BUILD_OVERRIDES = ('LIBSQLITE3_SYS_USE_PKG_CONFIG', 'SQLITE3_LIB_DIR',
-                          'SQLITE3_INCLUDE_DIR', 'SQLITE3_STATIC', 'LIBSQLITE3_FLAGS')
+                          'SQLITE3_INCLUDE_DIR', 'SQLITE3_STATIC', 'LIBSQLITE3_FLAGS',
+                          'SQLITE_MAX_VARIABLE_NUMBER', 'SQLITE_MAX_EXPR_DEPTH', 'SQLITE_MAX_COLUMN')
 
 
 def quantile(values, fraction):
@@ -153,7 +154,7 @@ def new_output(name):
 
 
 def reject_engine_overrides():
-    if any(os.environ.get(k) for k in SQLITE_BUILD_OVERRIDES):
+    if any(k in os.environ for k in SQLITE_BUILD_OVERRIDES):
         raise ValueError('remove SQLite engine build overrides; pinned bundled build required')
 
 
@@ -185,7 +186,7 @@ def main():
                git_status=capture(['git', 'status', '--porcelain']), os=platform.platform(), machine=platform.machine(),
                rust=capture(['rustc', '-Vv']), cargo=capture(['cargo', '-V']), python=sys.version,
                pinned_engine_sources=pinned, source_sha256={str(p.relative_to(ROOT)): sha(p) for p in files},
-               build_environment={k: os.environ.get(k) for k in ('RUSTFLAGS', 'CARGO_ENCODED_RUSTFLAGS', 'CARGO_BUILD_TARGET', 'CARGO_TARGET_DIR', 'LIBSQLITE3_SYS_USE_PKG_CONFIG', 'SQLITE3_LIB_DIR', 'SQLITE3_INCLUDE_DIR', 'SQLITE3_STATIC', 'LIBSQLITE3_FLAGS', 'CC', 'CFLAGS', 'CPPFLAGS')},
+               build_environment={k: os.environ.get(k) for k in (*SQLITE_BUILD_OVERRIDES, 'RUSTFLAGS', 'CARGO_ENCODED_RUSTFLAGS', 'CARGO_BUILD_TARGET', 'CARGO_TARGET_DIR', 'CC', 'CFLAGS', 'CPPFLAGS')},
                limitations='Small direct-SQL synthetic tokenizer experiment, not import/extraction/service/GUI/16GB/RSS or #18/#30 acceptance')
     if platform.system() == 'Darwin':
         env['hardware'] = {k: capture(['sysctl', '-n', k]) for k in
