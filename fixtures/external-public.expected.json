@@ -1,0 +1,29 @@
+[
+  {
+    "key": "Schroder2020",
+    "title": "A DNA study: email @ example",
+    "type": "article",
+    "year": 2020,
+    "journal": "Journal of Synthetic Examples",
+    "doi": "10.9999/a_b%20c&d#e",
+    "url": "https://example.invalid/a_b%20c?x=1&y=2#frag",
+    "authors": [
+      ["Jörg", "Schröder", null, "author"],
+      ["John", "Smith", null, "author"],
+      [null, null, "Research and Development Council", "author"]
+    ]
+  },
+  {
+    "key": "Garcia2019",
+    "title": "Collected examples",
+    "type": "book",
+    "year": 2019,
+    "journal": null,
+    "doi": null,
+    "url": null,
+    "authors": [
+      ["José", "García", null, "author"],
+      ["Jiří", "Dvořák", null, "author"]
+    ]
+  }
+]

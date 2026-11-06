@@ -8,7 +8,12 @@ use cm_core::{
 use cm_domain::Paper;
 use serde_json::json;
 
-type Entry = (String, String, Vec<(String, String)>);
+struct FieldValue {
+    text: String,
+    // Exact source expression for identifiers/concatenations; never evaluated.
+    expression: Option<String>,
+}
+type Entry = (String, String, Vec<(String, FieldValue)>);
 
 struct Reader<'a> {
     text: &'a str,
@@ -57,20 +62,46 @@ impl<'a> Reader<'a> {
         self.pos += 1;
         Ok(())
     }
-    fn value(&mut self) -> Result<String, &'static str> {
+    fn value(&mut self) -> Result<FieldValue, &'static str> {
+        self.skip();
+        let start = self.pos;
+        let (text, mut unresolved) = self.atom()?;
+        let mut end = self.pos;
+        self.skip();
+        while self.byte() == Some(b'#') {
+            unresolved = true;
+            self.pos += 1;
+            self.atom()?;
+            end = self.pos;
+            self.skip();
+            if self.pos - start > MAX_RECORD_BYTES {
+                return Err("Record expression byte budget exceeded");
+            }
+        }
+        Ok(FieldValue {
+            text,
+            expression: unresolved.then(|| self.text[start..end].to_owned()),
+        })
+    }
+    fn atom(&mut self) -> Result<(String, bool), &'static str> {
         self.skip();
         let opener = self.byte().ok_or("Missing field value")?;
         if !b"{\"".contains(&opener) {
             let start = self.pos;
-            while self.byte().is_some_and(|v| v.is_ascii_digit()) {
+            while self
+                .byte()
+                .is_some_and(|v| v.is_ascii_alphanumeric() || b"_-:.".contains(&v))
+            {
                 self.pos += 1;
+                if self.pos - start > 128 {
+                    return Err("Value identifier byte budget exceeded");
+                }
             }
             if self.pos == start {
-                return Err(
-                    "Unsupported macro/reference: use quoted/braced text; no expansion performed",
-                );
+                return Err("Expected braced/quoted text, number or raw identifier");
             }
-            return Ok(self.text[start..self.pos].into());
+            let raw = &self.text[start..self.pos];
+            return Ok((raw.into(), !raw.bytes().all(|v| v.is_ascii_digit())));
         }
         self.pos += 1;
         let start = self.pos;
@@ -100,7 +131,7 @@ impl<'a> Reader<'a> {
             {
                 let value = self.text[start..self.pos].to_owned();
                 self.pos += 1;
-                return Ok(value);
+                return Ok((value, false));
             }
             if b == b'{' {
                 level += 1;
@@ -119,6 +150,9 @@ impl<'a> Reader<'a> {
         let record_start = self.pos;
         self.take(b'@')?;
         let kind = self.ident()?;
+        if ["string", "preamble", "comment"].contains(&kind.as_str()) {
+            return Err("BibTeX directive ignored; no definitions executed or expanded");
+        }
         self.skip();
         let close = match self.byte() {
             Some(b'{') => b'}',
@@ -156,7 +190,7 @@ impl<'a> Reader<'a> {
             if self.byte() == Some(b',') {
                 self.pos += 1;
             } else if self.byte() != Some(close) {
-                return Err("Expected field comma; concatenation/expansion is unsupported");
+                return Err("Expected field comma or closing delimiter");
             }
         }
         if self.pos - record_start > MAX_RECORD_BYTES {
@@ -165,13 +199,196 @@ impl<'a> Reader<'a> {
         Ok((kind, key, fields))
     }
 }
+// Exactly one balanced group must enclose the whole name, not {Smith}, {John}.
+fn outer_group(s: &str) -> bool {
+    if !s.starts_with('{') {
+        return false;
+    }
+    let mut depth = 0usize;
+    let mut escaped = false;
+    for (i, c) in s.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match c {
+            '\\' => escaped = true,
+            '{' => depth += 1,
+            '}' => {
+                let Some(n) = depth.checked_sub(1) else {
+                    return false;
+                };
+                depth = n;
+                if depth == 0 {
+                    return i + 1 == s.len();
+                }
+            }
+            _ => {}
+        }
+    }
+    false
+}
+fn has_group(s: &str) -> bool {
+    let mut escaped = false;
+    for (i, c) in s.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if c == '\\' {
+            escaped = true;
+        } else if c == '{' && !s[i..].starts_with("{}") && !s[i..].starts_with("{@}") {
+            return true;
+        }
+    }
+    false
+}
+fn validate_verbatim(s: &str) -> Result<(), ServiceError> {
+    let mut depth = 0usize;
+    for c in s.chars() {
+        match c {
+            '\\' | '\n' | '\r' => {
+                return Err(invalid(
+                    "BibTeX verbatim DOI/URL cannot represent backslashes or newlines safely",
+                ));
+            }
+            '{' => {
+                depth += 1;
+                if depth > MAX_DEPTH {
+                    return Err(invalid("BibTeX verbatim brace depth exceeded"));
+                }
+            }
+            '}' => {
+                depth = depth
+                    .checked_sub(1)
+                    .ok_or_else(|| invalid("Unmatched BibTeX verbatim brace"))?;
+            }
+            _ => {}
+        }
+    }
+    if depth != 0 {
+        return Err(invalid("Unmatched BibTeX verbatim brace"));
+    }
+    Ok(())
+}
+// Finite character conversion only: no command definitions, expansion or TeX engine.
+// Precomposed common Latin pairs plus a fixed Unicode combining mark for other ASCII letters.
+fn accent(command: &str, base: char) -> Option<String> {
+    let (bases, composed, mark) = match command {
+        "\"" => ("aAeEiIoOuUyY", "äÄëËïÏöÖüÜÿŸ", '\u{308}'),
+        "'" => (
+            "aAcCeEiIlLnNoOrRsSuUyYzZ",
+            "áÁćĆéÉíÍĺĹńŃóÓŕŔśŚúÚýÝźŹ",
+            '\u{301}',
+        ),
+        "`" => ("aAeEiIoOuU", "àÀèÈìÌòÒùÙ", '\u{300}'),
+        "^" => (
+            "aAcCeEgGhHiIjJoOsSuUwWyY",
+            "âÂĉĈêÊĝĜĥĤîÎĵĴôÔŝŜûÛŵŴŷŶ",
+            '\u{302}',
+        ),
+        "~" => ("aAiInNoOuU", "ãÃĩĨñÑõÕũŨ", '\u{303}'),
+        "c" => ("cCgGkKlLnNrRsStT", "çÇģĢķĶļĻņŅŗŖşŞţŢ", '\u{327}'),
+        "v" => ("cCdDeElLnNrRsStTzZ", "čČďĎěĚľĽňŇřŘšŠťŤžŽ", '\u{30c}'),
+        "u" => ("aAeEgGiIoOuU", "ăĂĕĔğĞĭĬŏŎŭŬ", '\u{306}'),
+        "H" => ("oOuU", "őŐűŰ", '\u{30b}'),
+        "k" => ("aAeEiIoOuU", "ąĄęĘįĮǫǪųŲ", '\u{328}'),
+        "=" => ("aAeEiIoOuU", "āĀēĒīĪōŌūŪ", '\u{304}'),
+        "." => ("cCeEgGIiZz", "ċĊėĖġĠİiŻż", '\u{307}'),
+        _ => return None,
+    };
+    if let Some(i) = bases.chars().position(|c| c == base) {
+        return Some(composed.chars().nth(i)?.to_string());
+    }
+    base.is_ascii_alphabetic().then(|| format!("{base}{mark}"))
+}
+fn tex_character(rest: &str) -> Option<(String, usize)> {
+    let tail = rest.strip_prefix('\\')?;
+    let n = tail.bytes().take_while(u8::is_ascii_alphabetic).count();
+    let n = if n == 0 {
+        tail.chars().next()?.len_utf8()
+    } else {
+        n
+    };
+    let command = &tail[..n];
+    let remaining = &tail[n..];
+    let character = match command {
+        "ss" => Some('ß'),
+        "o" => Some('ø'),
+        "O" => Some('Ø'),
+        "aa" => Some('å'),
+        "AA" => Some('Å'),
+        "l" => Some('ł'),
+        "L" => Some('Ł'),
+        "ae" => Some('æ'),
+        "AE" => Some('Æ'),
+        "oe" => Some('œ'),
+        "OE" => Some('Œ'),
+        "i" => Some('ı'),
+        "j" => Some('ȷ'),
+        _ => None,
+    };
+    if let Some(c) = character {
+        let consumed = if remaining.starts_with("{}") {
+            2
+        } else {
+            remaining.len() - remaining.trim_start_matches(char::is_whitespace).len()
+        };
+        return Some((c.to_string(), 1 + n + consumed));
+    }
+    let argument = remaining.trim_start_matches(char::is_whitespace);
+    let whitespace = remaining.len() - argument.len();
+    let (base, consumed) = if let Some(group) = argument.strip_prefix('{') {
+        let end = group.find('}')?;
+        let raw = &group[..end];
+        let base = if raw == "\\i" {
+            'i'
+        } else if raw == "\\j" {
+            'j'
+        } else {
+            let mut chars = raw.chars();
+            let base = chars.next()?;
+            if chars.next().is_some() {
+                return None;
+            }
+            base
+        };
+        (base, end + 2)
+    } else if argument.starts_with("\\i") || argument.starts_with("\\j") {
+        // A following letter would belong to the command name, not its argument.
+        if argument
+            .as_bytes()
+            .get(2)
+            .is_some_and(u8::is_ascii_alphabetic)
+        {
+            return None;
+        }
+        (
+            if argument.starts_with("\\i") {
+                'i'
+            } else {
+                'j'
+            },
+            2,
+        )
+    } else {
+        let base = argument.chars().next()?;
+        (base, base.len_utf8())
+    };
+    Some((accent(command, base)?, 1 + n + whitespace + consumed))
+}
 /// Remove protection groups and decode escaped punctuation. Unknown TeX commands
-/// stay verbatim (with a warning); accents should be supplied as Unicode.
+/// stay verbatim (with a warning); only the finite character table is converted.
 fn decode(text: &str) -> (String, bool) {
     let mut out = String::new();
     let mut rest = text;
     let mut unsupported = false;
     while !rest.is_empty() {
+        if let Some((character, consumed)) = tex_character(rest) {
+            out.push_str(&character);
+            rest = &rest[consumed..];
+            continue;
+        }
         if let Some(tail) = rest.strip_prefix("\\textbackslash{}") {
             out.push('\\');
             rest = tail;
@@ -181,7 +398,7 @@ fn decode(text: &str) -> (String, bool) {
         rest = &rest[c.len_utf8()..];
         if c == '\\' {
             if let Some(next) = rest.chars().next()
-                && "{}%&#_$@\\".contains(next)
+                && "{}%&#_$\\".contains(next)
             {
                 out.push(next);
                 rest = &rest[next.len_utf8()..];
@@ -270,7 +487,7 @@ fn authors(raw: &str, role: &str, d: &mut PaperDraft) {
     parts.push(&raw[start..]);
     for p in parts {
         let p = p.trim();
-        let literal = p.starts_with('{') && p.ends_with('}');
+        let literal = outer_group(p);
         let raw = if literal { &p[1..p.len() - 1] } else { p };
         let (text, unknown) = decode(raw);
         if unknown {
@@ -296,7 +513,11 @@ fn authors(raw: &str, role: &str, d: &mut PaperDraft) {
         ));
     }
 }
-fn draft(kind: String, key: String, fields: Vec<(String, String)>) -> PaperDraft {
+fn draft(
+    kind: String,
+    key: String,
+    fields: Vec<(String, FieldValue)>,
+) -> Result<PaperDraft, ServiceError> {
     let mut d = PaperDraft::default();
     d.bibliography.paper_type = Some(kind.clone());
     if !key.is_empty() {
@@ -325,7 +546,8 @@ fn draft(kind: String, key: String, fields: Vec<(String, String)>) -> PaperDraft
     let mut unknown = vec![];
     let mut extension = None;
     let mut used = std::collections::HashSet::new();
-    for (field, raw) in fields {
+    for (field, parsed) in fields {
+        let raw = parsed.text;
         if !used.insert(
             match field.as_str() {
                 "journal" | "journaltitle" => "journal",
@@ -341,11 +563,48 @@ fn draft(kind: String, key: String, fields: Vec<(String, String)>) -> PaperDraft
                 true,
             );
         }
-        if field == "author" || field == "editor" {
-            authors(&raw, &field, &mut d);
+        if let Some(expression) = parsed.expression {
+            let standard_month = field == "month"
+                && [
+                    "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov",
+                    "dec",
+                ]
+                .contains(&expression.to_ascii_lowercase().as_str());
+            warn(
+                &mut d,
+                &field,
+                if standard_month {
+                    "Standard month identifier retained as raw syntax; no expansion"
+                } else {
+                    "Unresolved identifier/concatenation retained as raw syntax; review required, no evaluation"
+                },
+                !standard_month,
+            );
+            unknown.push((format!("expression:{field}"), expression));
             continue;
         }
-        let (value, tex) = decode(&raw);
+        if field == "author" || field == "editor" {
+            authors(&raw, &field, &mut d);
+            if raw.contains('\\') {
+                unknown.push((format!("raw:{field}"), raw));
+            }
+            continue;
+        }
+        let verbatim = field == "doi" || field == "url";
+        let (value, tex) = if verbatim {
+            (raw.clone(), false)
+        } else {
+            decode(&raw)
+        };
+        if !verbatim && has_group(&raw) {
+            warn(
+                &mut d,
+                &field,
+                "BibTeX protection groups decoded: public re-export loses case protection; raw field retained in extra_json",
+                false,
+            );
+            unknown.push((format!("protection:{field}"), raw.clone()));
+        }
         if tex {
             warn(
                 &mut d,
@@ -395,6 +654,20 @@ fn draft(kind: String, key: String, fields: Vec<(String, String)>) -> PaperDraft
             }
         }
     }
+    if let (Some(year), Some(date)) = (d.bibliography.year, &d.bibliography.publication_date)
+        && date
+            .split(['-', '/'])
+            .next()
+            .and_then(|s| s.parse::<i32>().ok())
+            .is_some_and(|y| y != year)
+    {
+        warn(
+            &mut d,
+            "year",
+            "Conflicting BibTeX year/date; review required",
+            true,
+        );
+    }
     if !unknown.is_empty() {
         extra(&mut d, "bibtex", json!(unknown));
         warn(
@@ -405,8 +678,11 @@ fn draft(kind: String, key: String, fields: Vec<(String, String)>) -> PaperDraft
         );
     }
     if let Some(e) = extension
-        && apply_extension(&mut d, &e).is_err()
+        && let Err(error) = apply_extension(&mut d, &e)
     {
+        if error.to_string().contains("budget") {
+            return Err(error);
+        }
         warn(
             &mut d,
             "cm-v1",
@@ -414,7 +690,7 @@ fn draft(kind: String, key: String, fields: Vec<(String, String)>) -> PaperDraft
             true,
         );
     }
-    d
+    Ok(d)
 }
 pub fn parse(input: &[u8]) -> Result<ParseReport, ServiceError> {
     let text = utf8(input)?;
@@ -436,20 +712,11 @@ pub fn parse(input: &[u8]) -> Result<ParseReport, ServiceError> {
             return Err(invalid("BibTeX block/diagnostic budget exceeded"));
         }
         match r.entry() {
-            Ok((kind, key, fields))
-                if !["string", "preamble", "comment"].contains(&kind.as_str()) =>
-            {
-                report.push(draft(kind, key, fields), "bibtex", line)?
-            }
-            Ok(_) => report.diagnostic(
-                line,
-                "BibTeX directive unsupported; no macro/TeX expansion performed",
-                true,
-            ),
+            Ok((kind, key, fields)) => match draft(kind, key, fields) {
+                Ok(d) => report.push(d, "bibtex", line)?,
+                Err(e) => report.diagnostic(line, format!("Record rejected: {e}"), true),
+            },
             Err(e) => {
-                if e.contains("budget") {
-                    return Err(invalid(e));
-                }
                 report.diagnostic(line, e, true);
                 // Recover only at an explicit physical-line entry start, never by
                 // guessing an arbitrary @ inside an email/URL or broken value.
@@ -477,7 +744,8 @@ fn escape(text: &str) -> String {
     for c in text.chars() {
         match c {
             '\\' => out.push_str("\\textbackslash{}"),
-            '{' | '}' | '%' | '&' | '#' | '_' | '$' | '@' => {
+            '@' => out.push_str("{@}"),
+            '{' | '}' | '%' | '&' | '#' | '_' | '$' => {
                 out.push('\\');
                 out.push(c);
             }
@@ -508,9 +776,17 @@ impl BibliographySerializer for BibtexSerializer {
                 "citation key is not representable safely in BibTeX",
             ));
         }
+        for v in [&b.doi, &b.url].into_iter().flatten() {
+            validate_verbatim(v)?;
+        }
         let mut out = format!("@{kind}{{{key},\n");
         let mut field = |k: &str, v: &str| {
-            out.push_str(&format!("  {k} = {{{}}},\n", escape(v)));
+            let value = if k == "doi" || k == "url" {
+                v.to_owned()
+            } else {
+                escape(v)
+            };
+            out.push_str(&format!("  {k} = {{{value}}},\n"));
         };
         field("title", &p.title);
         for (k, v) in [
@@ -552,6 +828,9 @@ impl BibliographySerializer for BibtexSerializer {
                     item.get(0).and_then(|v| v.as_str()),
                     item.get(1).and_then(|v| v.as_str()),
                 ) && identifier(k)
+                    && !k.starts_with("raw:")
+                    && !k.starts_with("protection:")
+                    && !k.starts_with("expression:")
                     && ![
                         "title",
                         "author",
@@ -609,6 +888,25 @@ impl BibliographySerializer for BibtexSerializer {
         }
         let ext = extension(p, native)?;
         out.push_str(&format!("  cm_data = {{{ext}}},\n}}\n\n"));
-        finish_record(p, out, "BibTeX")
+        let mut encoded = finish_record(p, out, "BibTeX")?;
+        if let Some(fields) = b
+            .extra_json
+            .as_ref()
+            .and_then(|e| e.get("bibtex"))
+            .and_then(|v| v.as_array())
+        {
+            for field in fields
+                .iter()
+                .filter_map(|v| v.get(0)?.as_str()?.strip_prefix("protection:"))
+            {
+                if !encoded.diagnostics.iter().any(|d| d.field == field) {
+                    encoded.diagnostics.push(cm_core::export::ExportDiagnostic {
+                        paper: Some(p.id), field: field.into(),
+                        message: "Public BibTeX field loses original case protection; raw syntax is retained only in cm-v1/extra_json".into(),
+                    });
+                }
+            }
+        }
+        Ok(encoded)
     }
 }

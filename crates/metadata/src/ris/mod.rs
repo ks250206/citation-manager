@@ -33,7 +33,7 @@ fn ty(kind: &str) -> &str {
         _ => "GEN",
     }
 }
-fn draft(fields: Vec<(String, String)>) -> PaperDraft {
+fn draft(fields: Vec<(String, String)>) -> Result<PaperDraft, ServiceError> {
     let mut d = PaperDraft::default();
     let mut unknown = vec![];
     let mut keywords = vec![];
@@ -180,8 +180,11 @@ fn draft(fields: Vec<(String, String)>) -> PaperDraft {
         );
     }
     if let Some(e) = ext
-        && apply_extension(&mut d, &e).is_err()
+        && let Err(error) = apply_extension(&mut d, &e)
     {
+        if error.to_string().contains("budget") {
+            return Err(error);
+        }
         warn(
             &mut d,
             "cm-v1",
@@ -189,7 +192,7 @@ fn draft(fields: Vec<(String, String)>) -> PaperDraft {
             true,
         );
     }
-    d
+    Ok(d)
 }
 fn tag(line: &str) -> Option<(&str, &str)> {
     let bytes = line.as_bytes();
@@ -214,44 +217,63 @@ pub fn parse(input: &[u8]) -> Result<ParseReport, ServiceError> {
     let mut start = 0;
     let mut bytes = 0;
     let mut damaged = false;
+    let mut discarding = false;
     let mut blocks = 0;
     for (index, physical) in text.split_inclusive('\n').enumerate() {
+        if report.diagnostics.len() > exchange::MAX_RECORDS {
+            return Err(invalid("RIS diagnostic budget exceeded"));
+        }
         let line = physical.strip_suffix('\n').unwrap_or(physical);
         let line = line.strip_suffix('\r').unwrap_or(line);
         let row = index as u64 + 1;
-        if let Some((key, value)) = tag(line) {
-            if key == "TY" {
-                blocks += 1;
-                if blocks > exchange::MAX_RECORDS {
-                    return Err(invalid("RIS record budget exceeded"));
-                }
-                if !fields.is_empty() {
-                    report.diagnostic(
-                        start,
-                        "Missing ER: incomplete record rejected before next TY",
-                        true,
-                    );
-                }
-                fields.clear();
-                start = row;
-                bytes = 0;
-                damaged = false;
-            } else if fields.is_empty() {
-                if !line.trim().is_empty() {
-                    report.diagnostic(row, "RIS tag outside TY/ER record ignored", true);
-                }
-                if report.diagnostics.len() > exchange::MAX_RECORDS {
-                    return Err(invalid("RIS diagnostic budget exceeded"));
-                }
-                continue;
+        let tagged = tag(line);
+        if tagged.is_some_and(|(key, _)| key == "TY") {
+            blocks += 1;
+            if blocks > exchange::MAX_RECORDS {
+                return Err(invalid("RIS record budget exceeded"));
             }
-            bytes += physical.len();
-            if bytes > MAX_RECORD_BYTES || fields.len() >= 256 {
-                return Err(invalid("RIS record byte/field budget exceeded"));
+            if !fields.is_empty() {
+                report.diagnostic(
+                    start,
+                    "Missing ER: incomplete record rejected before next TY",
+                    true,
+                );
             }
+            fields.clear();
+            start = row;
+            bytes = 0;
+            damaged = false;
+            discarding = false;
+        } else if discarding {
+            // No retained fragments or per-line allocation until the next physical TY.
+            continue;
+        } else if fields.is_empty() {
+            if !line.trim().is_empty() {
+                report.diagnostic(row, "RIS content outside TY/ER record ignored", true);
+            }
+            continue;
+        }
+        bytes += physical.len();
+        if bytes > MAX_RECORD_BYTES || (tagged.is_some() && fields.len() >= 256) {
+            report.diagnostic(
+                start,
+                format!("RIS record byte/field budget exceeded at line {row}; record rejected"),
+                true,
+            );
+            fields.clear();
+            discarding = true;
+            continue;
+        }
+        if let Some((key, value)) = tagged {
             fields.push((key.into(), value.into()));
             if key == "ER" {
-                let mut d = draft(std::mem::take(&mut fields));
+                let mut d = match draft(std::mem::take(&mut fields)) {
+                    Ok(d) => d,
+                    Err(e) => {
+                        report.diagnostic(start, format!("Record rejected: {e}"), true);
+                        continue;
+                    }
+                };
                 if damaged {
                     warn(
                         &mut d,
@@ -262,11 +284,7 @@ pub fn parse(input: &[u8]) -> Result<ParseReport, ServiceError> {
                 }
                 report.push(d, "ris", start)?;
             }
-        } else if !fields.is_empty() && line.starts_with([' ', '\t']) {
-            bytes += physical.len();
-            if bytes > MAX_RECORD_BYTES {
-                return Err(invalid("RIS record byte budget exceeded"));
-            }
+        } else if line.starts_with([' ', '\t']) {
             let last = fields.last_mut().unwrap();
             last.1.push('\n');
             last.1.push_str(
@@ -280,16 +298,17 @@ pub fn parse(input: &[u8]) -> Result<ParseReport, ServiceError> {
                 true,
             );
             damaged = true;
-            if report.diagnostics.len() > exchange::MAX_RECORDS {
-                return Err(invalid("RIS diagnostic budget exceeded"));
-            }
         }
     }
     if !fields.is_empty() {
         report.diagnostic(start, "Missing ER at EOF: incomplete record rejected", true);
     }
+    if report.diagnostics.len() > exchange::MAX_RECORDS {
+        return Err(invalid("RIS diagnostic budget exceeded"));
+    }
     Ok(report)
 }
+
 fn has_cr(v: &serde_json::Value) -> bool {
     match v {
         serde_json::Value::String(s) => s.contains('\r'),
@@ -403,6 +422,37 @@ impl BibliographySerializer for RisSerializer {
         let ext = extension(p, native)?;
         out.truncate(out.len() - "ER  - \n".len());
         out.push_str(&format!("C9  - cm-v1:{ext}\nER  - \n\n"));
-        finish_record(p, out, "RIS")
+        let mut encoded = finish_record(p, out, "RIS")?;
+        let original = b.paper_type.as_deref().unwrap_or("misc");
+        let public = kind(ty(original));
+        if original != public {
+            encoded.diagnostics.push(cm_core::export::ExportDiagnostic {
+                paper: Some(p.id),
+                field: "paper_type".into(),
+                message: format!(
+                    "Public RIS type {} maps {original} to {public}; exact type requires cm-v1",
+                    ty(original)
+                ),
+            });
+        }
+        if let Some(fields) = b
+            .extra_json
+            .as_ref()
+            .and_then(|e| e.get("bibtex"))
+            .and_then(|v| v.as_array())
+        {
+            for field in fields
+                .iter()
+                .filter_map(|v| v.get(0)?.as_str()?.strip_prefix("protection:"))
+            {
+                if !encoded.diagnostics.iter().any(|d| d.field == field) {
+                    encoded.diagnostics.push(cm_core::export::ExportDiagnostic {
+                        paper: Some(p.id), field: field.into(),
+                        message: "Public RIS field cannot carry BibTeX case protection; raw syntax is retained only in cm-v1/extra_json".into(),
+                    });
+                }
+            }
+        }
+        Ok(encoded)
     }
 }

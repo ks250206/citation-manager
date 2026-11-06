@@ -32,16 +32,18 @@ fn commit(p: &ImportPreview, actions: Vec<ImportAction>) -> ImportCommit {
 #[test]
 fn malformed_recovery_line_numbers_no_macro_or_tex_execution() {
     let r=bibtex::parse(b"@article{bad, title={unclosed\n@book{good,title={Good},year=2026}\n@misc{macro,title=loop # loop}\n@misc{safe,title={Safe},note={\\write18{touch /tmp/no-execution}}}\n").unwrap();
-    assert_eq!(r.candidates.len(), 2);
+    assert_eq!(r.candidates.len(), 3);
     assert_eq!(r.candidates[0].title, "Good");
     assert_eq!(r.candidates[0].source.row, Some(2));
-    assert_eq!(r.candidates[1].source.row, Some(4));
+    assert_eq!(r.candidates[1].source.row, Some(3));
+    assert!(r.candidates[1].diagnostics.iter().any(|d| d.error));
+    assert_eq!(r.candidates[2].source.row, Some(4));
     assert_eq!(
         r.diagnostics.iter().map(|v| v.line).collect::<Vec<_>>(),
-        vec![1, 3]
+        vec![1]
     );
     assert!(
-        r.candidates[1].bibliography.extra_json.as_ref().unwrap()["bibtex"]
+        r.candidates[2].bibliography.extra_json.as_ref().unwrap()["bibtex"]
             .to_string()
             .contains("write18")
     );
@@ -87,12 +89,16 @@ fn encodings_budgets_and_unsupported_syntax_are_explicit() {
         "{".repeat(MAX_DEPTH + 1),
         "}".repeat(MAX_DEPTH + 1)
     );
-    assert!(bibtex::parse(deep.as_bytes()).is_err());
+    let rejected = bibtex::parse(deep.as_bytes()).unwrap();
+    assert!(rejected.candidates.is_empty());
+    assert!(rejected.diagnostics[0].error);
     let huge = format!(
         "TY  - JOUR\nTI  - {}\nER  -\n",
         "a".repeat(cm_metadata::exchange::MAX_RECORD_BYTES)
     );
-    assert!(ris::parse(huge.as_bytes()).is_err());
+    let rejected = ris::parse(huge.as_bytes()).unwrap();
+    assert!(rejected.candidates.is_empty());
+    assert!(rejected.diagnostics[0].error);
     let many = "TY  - JOUR\nTI  - x\nER  -\n".repeat(cm_metadata::exchange::MAX_RECORDS + 1);
     assert!(ris::parse(many.as_bytes()).is_err());
     let many = "@misc{x,title={x}}\n".repeat(cm_metadata::exchange::MAX_RECORDS + 1);
@@ -343,12 +349,12 @@ fn extensions_preserve_non_native_metadata_and_detect_edited_public_fields() {
                 .any(|d| d.error && d.field == "cm-v1")
         );
     }
-    // Unknown accent commands are kept verbatim, with explicit unsupported warnings.
+    // Standard finite accents decode to literal Unicode without TeX execution.
     let r =
         bibtex::parse(br#"@misc{x,title={Garc\'{i}a and \"{o}},author={Garc\'{i}a, Jos\'{e}}}"#)
             .unwrap();
-    assert_eq!(r.candidates[0].title, r#"Garc\'{i}a and \"{o}"#);
-    assert!(r.candidates[0].diagnostics.iter().any(|d| d.field == "tex"));
+    assert_eq!(r.candidates[0].title, "García and ö");
+    assert!(!r.candidates[0].diagnostics.iter().any(|d| d.field == "tex"));
 }
 
 #[test]

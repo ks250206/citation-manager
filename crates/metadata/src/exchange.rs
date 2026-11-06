@@ -85,7 +85,10 @@ impl ParseReport {
             row: Some(line),
             sha256: Some(self.sha256),
         };
-        validate_limits(&draft)?;
+        if let Err(e) = validate_limits(&draft) {
+            self.diagnostic(line, format!("Record rejected: {e}"), true);
+            return Ok(());
+        }
         self.draft_bytes += serde_json::to_vec(&draft)
             .map_err(|_| invalid("draft serialization failed"))?
             .len();
@@ -221,6 +224,36 @@ pub(crate) fn apply_extension(d: &mut PaperDraft, text: &str) -> Result<(), Serv
         .map(|s| u8::from_str_radix(std::str::from_utf8(s).unwrap(), 16))
         .collect();
     let bytes = bytes.map_err(|_| invalid("invalid cm-v1 extension hex"))?;
+    // Iterative preflight rejects hostile deep JSON before serde's recursive reader.
+    let mut nesting = 0usize;
+    let mut quoted = false;
+    let mut escaped = false;
+    for &byte in &bytes {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if quoted && byte == b'\\' {
+            escaped = true;
+            continue;
+        }
+        if byte == b'"' {
+            quoted = !quoted;
+            continue;
+        }
+        if !quoted {
+            match byte {
+                b'{' | b'[' => {
+                    nesting += 1;
+                    if nesting > MAX_DEPTH {
+                        return Err(invalid("extension JSON nesting budget exceeded"));
+                    }
+                }
+                b'}' | b']' => nesting = nesting.saturating_sub(1),
+                _ => {}
+            }
+        }
+    }
     let value: Value =
         serde_json::from_slice(&bytes).map_err(|_| invalid("invalid cm-v1 extension JSON"))?;
     if !depth(&value, 0) {
