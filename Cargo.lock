@@ -747,6 +747,7 @@ dependencies = [
  "cm-domain",
  "rusqlite",
  "rustix",
+ "serde",
  "serde_json",
  "sha2",
  "tempfile",

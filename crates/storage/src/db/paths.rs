@@ -85,7 +85,7 @@ fn prepare(path: &Path) -> Result<(), StorageError> {
 }
 
 #[cfg(unix)]
-fn check_file_if_present(path: &Path) -> Result<(), StorageError> {
+pub(crate) fn check_file_if_present(path: &Path) -> Result<(), StorageError> {
     use std::{fs, os::unix::fs::MetadataExt};
     match fs::symlink_metadata(path) {
         Ok(m)
@@ -123,7 +123,7 @@ fn prepare(_: &Path) -> Result<(), StorageError> {
     Err(StorageError::UnsupportedPlatform)
 }
 #[cfg(not(unix))]
-fn check_file_if_present(_: &Path) -> Result<(), StorageError> {
+pub(crate) fn check_file_if_present(_: &Path) -> Result<(), StorageError> {
     Err(StorageError::UnsupportedPlatform)
 }
 #[cfg(not(unix))]
