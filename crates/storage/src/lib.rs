@@ -1,6 +1,9 @@
-//! SQLite persistence. File-store/backups belong to #9; daemon ownership to #25.
+//! SQLite persistence, immutable attachments and WAL-safe backup/restore. Daemon ownership is #25.
+pub mod attachments;
+pub mod backup;
 pub mod db;
 mod error;
+pub mod integrity;
 pub mod migrations;
 pub mod repositories;
 pub use db::{LibraryDb, paths::LibraryDirectory};

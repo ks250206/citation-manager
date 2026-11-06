@@ -8,6 +8,10 @@ pub enum StorageError {
     UnsupportedPlatform,
     Migration(String),
     BackupRequired,
+    Integrity(String),
+    DigestMismatch,
+    CorruptBlob,
+    MissingSource,
 }
 impl fmt::Display for StorageError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -19,6 +23,10 @@ impl fmt::Display for StorageError {
                 f.write_str("private library paths require Unix permissions")
             }
             Self::Migration(e) => write!(f, "migration refused: {e}"),
+            Self::Integrity(reason) => write!(f, "integrity check failed: {reason}"),
+            Self::DigestMismatch => f.write_str("copied attachment digest mismatch"),
+            Self::CorruptBlob => f.write_str("existing shared blob is corrupt"),
+            Self::MissingSource => f.write_str("attachment source does not exist"),
             Self::BackupRequired => {
                 f.write_str("existing library upgrade requires a pre-migration backup hook")
             }
