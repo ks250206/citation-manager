@@ -1,0 +1,20 @@
+[package]
+name = "cm-desktop"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+cm-protocol.workspace = true
+
+[features]
+default = []
+native-gpui = ["dep:gpui", "dep:gpui_platform"]
+
+[target.'cfg(target_os = "macos")'.dependencies]
+gpui = { workspace = true, optional = true }
+gpui_platform = { workspace = true, optional = true }

@@ -1,0 +1,2 @@
+# Preserve the supplied DESIGN.md's intentional Markdown hard line breaks.
+DESIGN.md whitespace=-blank-at-eol

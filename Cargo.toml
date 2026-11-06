@@ -1,0 +1,40 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/domain", "crates/core", "crates/storage", "crates/search",
+    "crates/pdf", "crates/metadata", "crates/protocol", "crates/desktop",
+    "crates/daemon", "crates/cli", "crates/mcp", "crates/native-host",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99.1"
+publish = false
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.dependencies]
+cm-domain = { path = "crates/domain" }
+cm-core = { path = "crates/core" }
+cm-storage = { path = "crates/storage" }
+cm-search = { path = "crates/search" }
+cm-pdf = { path = "crates/pdf" }
+cm-metadata = { path = "crates/metadata" }
+cm-protocol = { path = "crates/protocol" }
+cm-mcp = { path = "crates/mcp" }
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.154"
+uuid = { version = "=1.29.0", features = ["serde"] }
+rusqlite = { version = "=0.41.1", default-features = false, features = ["bundled", "backup"] }
+gpui = { git = "https://github.com/zed-industries/zed", rev = "4a6121bb0f10c6e8037b741b7dc0a4cd639ae289", default-features = false }
+gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "4a6121bb0f10c6e8037b741b7dc0a4cd639ae289", default-features = false, features = ["font-kit"] }
+pdfium-render = { version = "=0.9.5", default-features = false, features = ["pdfium_8125", "thread_safe"] }
+# Known later-issue dependencies: declarations do not imply implemented adapters.
+rmcp = { version = "=3.9.0", default-features = false, features = ["server", "transport-io"] }
+tokio = { version = "=1.54.1", features = ["rt-multi-thread", "macros"] }
+axum = "=0.8.9"
+clap = { version = "=4.6.7", features = ["derive"] }
+reqwest = { version = "=0.13.5", default-features = false, features = ["json", "rustls"] }
+tracing = "=0.1.44"
