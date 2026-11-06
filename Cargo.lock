@@ -712,6 +712,7 @@ dependencies = [
  "cm-protocol",
  "cm-search",
  "cm-storage",
+ "rustix",
  "serde_json",
  "sha2",
  "tempfile",
@@ -772,6 +773,7 @@ dependencies = [
  "cm-core",
  "cm-domain",
  "pdfium-render",
+ "roxmltree 0.21.2",
  "serde",
  "serde_json",
  "sha2",
@@ -783,6 +785,7 @@ version = "0.1.0"
 dependencies = [
  "cm-core",
  "cm-domain",
+ "serde",
 ]
 
 [[package]]

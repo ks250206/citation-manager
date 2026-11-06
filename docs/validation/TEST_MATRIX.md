@@ -68,3 +68,20 @@ GitHub runner の OS/Xcode 差による失敗は PR 上で実結果を確認す�
 
 UI/browser の未実施は自動 contract test で充足した扱いにしない。fallback ユーザーがまだ実行していない項目を
 passed と記さない。Developer ID 不在は将来 #31 の blocker として維持し、#7 の未署名 compile を妨げない。
+
+## #15 library workbench (2026-11-07, draft)
+
+[ISSUE_15](ISSUE_15.md) / [exact command logs and hashes](issue-15/checks.json):
+workspace fmt/clippy/test/build (164 tests plus one subsequent targeted attachment test),
+architecture, immutable migration base fd50af1 and Python 19 validators passed.
+Native-feature check/clippy/service-state tests (53) and executable link passed; a current
+desktop-only 13-test pass follows the final UI label/progress-coalescing changes.
+Real fixed-hash PDFium runtime/metadata tests (8) and runtime clippy passed. All 636 locked
+package identities/checksums remain unchanged. These are headless/compile/ABI results.
+
+**Native GUI acceptance remains blocked/unrun**: CUA returned cgWindowNotFound for two
+fresh private actual-executable test bundles. No successful screenshot or GUI operation
+was obtained; cause unresolved. 1000 UI imports/classification/search/export, pickers/D&D,
+folder partial/cancel/retry, settings Cmd+Q/relaunch and Details/PDF host UI all still need
+actual native evidence. #34 gates remain held/closed, with no browser/VM/signing/native-host
+or #23/#25 work. Root owns independent review, CI monitoring and any merge.

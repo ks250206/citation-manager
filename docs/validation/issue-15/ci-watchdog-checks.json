@@ -1,0 +1,191 @@
+{
+  "previous_head": "3ad121e1d50bf485d4958a8dd3d36114ccaf5067",
+  "failed_ci": {
+    "run": 42286082857,
+    "native_job": 128127300646,
+    "test": "thousand_file_ten_reviewed_batches_classification_query_export_and_reopen",
+    "failure": "worker callback Timeout (30-second test watchdog; no request/stage recorded)",
+    "test_binary_elapsed_seconds": 236.65,
+    "other_jobs": {
+      "contracts": "SUCCESS",
+      "pdfium-runtime": "SUCCESS"
+    }
+  },
+  "change": "test-only 120-second finite watchdog for 1000-record batch preview/commit; ordinary requests stay at 30 seconds; stage/range/timing/Timeout-vs-Disconnected diagnostics",
+  "test_source_sha256": "9173a3b1c4592957e184e5b12d4675c908bfdb7e8799206f7371d5f655f702c0",
+  "local_validation": {
+    "environment": "macOS arm64, Rust 1.99.1, unoptimized test profile; not a release benchmark",
+    "command": "cargo test -p cm-daemon -p cm-desktop --features cm-daemon/desktop-bootstrap --locked --test library_workbench -- --nocapture",
+    "passed": 5,
+    "failed": 0,
+    "ignored": 0,
+    "filtered": 0,
+    "test_binary_elapsed_seconds": 121.74,
+    "log": "/tmp/citation-manager-pr45-review/native-watchdog-recheck.log",
+    "stages": [
+      {
+        "batch": 1,
+        "start": 0,
+        "end": 100,
+        "operation": "preview",
+        "elapsed_seconds": 0.7611615420000001
+      },
+      {
+        "batch": 1,
+        "start": 0,
+        "end": 100,
+        "operation": "commit",
+        "elapsed_seconds": 0.401505916
+      },
+      {
+        "batch": 2,
+        "start": 100,
+        "end": 200,
+        "operation": "preview",
+        "elapsed_seconds": 2.311802416
+      },
+      {
+        "batch": 2,
+        "start": 100,
+        "end": 200,
+        "operation": "commit",
+        "elapsed_seconds": 1.195583083
+      },
+      {
+        "batch": 3,
+        "start": 200,
+        "end": 300,
+        "operation": "preview",
+        "elapsed_seconds": 3.873805167
+      },
+      {
+        "batch": 3,
+        "start": 200,
+        "end": 300,
+        "operation": "commit",
+        "elapsed_seconds": 2.020342542
+      },
+      {
+        "batch": 4,
+        "start": 300,
+        "end": 400,
+        "operation": "preview",
+        "elapsed_seconds": 5.4280445
+      },
+      {
+        "batch": 4,
+        "start": 300,
+        "end": 400,
+        "operation": "commit",
+        "elapsed_seconds": 2.826848417
+      },
+      {
+        "batch": 5,
+        "start": 400,
+        "end": 500,
+        "operation": "preview",
+        "elapsed_seconds": 7.100340375
+      },
+      {
+        "batch": 5,
+        "start": 400,
+        "end": 500,
+        "operation": "commit",
+        "elapsed_seconds": 3.680810709
+      },
+      {
+        "batch": 6,
+        "start": 500,
+        "end": 600,
+        "operation": "preview",
+        "elapsed_seconds": 8.703882333
+      },
+      {
+        "batch": 6,
+        "start": 500,
+        "end": 600,
+        "operation": "commit",
+        "elapsed_seconds": 4.525318459
+      },
+      {
+        "batch": 7,
+        "start": 600,
+        "end": 700,
+        "operation": "preview",
+        "elapsed_seconds": 10.387652292
+      },
+      {
+        "batch": 7,
+        "start": 600,
+        "end": 700,
+        "operation": "commit",
+        "elapsed_seconds": 5.335123417
+      },
+      {
+        "batch": 8,
+        "start": 700,
+        "end": 800,
+        "operation": "preview",
+        "elapsed_seconds": 12.033202708
+      },
+      {
+        "batch": 8,
+        "start": 700,
+        "end": 800,
+        "operation": "commit",
+        "elapsed_seconds": 6.207741375
+      },
+      {
+        "batch": 9,
+        "start": 800,
+        "end": 900,
+        "operation": "preview",
+        "elapsed_seconds": 13.764392042
+      },
+      {
+        "batch": 9,
+        "start": 800,
+        "end": 900,
+        "operation": "commit",
+        "elapsed_seconds": 7.0714
+      },
+      {
+        "batch": 10,
+        "start": 900,
+        "end": 1000,
+        "operation": "preview",
+        "elapsed_seconds": 15.368915666
+      },
+      {
+        "batch": 10,
+        "start": 900,
+        "end": 1000,
+        "operation": "commit",
+        "elapsed_seconds": 7.930699166
+      }
+    ],
+    "max_preview_seconds": 15.368915666,
+    "max_commit_seconds": 7.930699166,
+    "other_passed": [
+      "cargo fmt --all -- --check",
+      "cargo clippy -p cm-daemon --all-targets --features desktop-bootstrap --locked -- -D warnings",
+      "git diff --check"
+    ]
+  },
+  "unchanged": [
+    "production code",
+    "workflow",
+    "all 1000 records and ten separately approved batches",
+    "no-write and outcome/query/classification/export/reopen assertions",
+    "dependencies",
+    "SQL",
+    "product TTL/resource/latency policy"
+  ],
+  "not_claimed": [
+    "old timed-out callback eventual delivery",
+    "release performance/SLO compliance",
+    "native GUI acceptance"
+  ],
+  "final_ci": "pending updated head",
+  "final_review": "pending narrow test-only independent recheck"
+}

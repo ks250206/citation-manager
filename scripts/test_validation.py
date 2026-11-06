@@ -25,7 +25,7 @@ class ArchitectureTests(unittest.TestCase):
         daemon = next(p for p in metadata['packages'] if p['name'] == 'cm-daemon')
         good = {'name': 'cm-desktop', 'optional': True, 'target': 'cfg(target_os = "macos")', 'kind': None}
         daemon['dependencies'] = [good.copy()]
-        daemon['features'] = {'default': [], 'desktop-bootstrap': ['dep:cm-desktop', 'cm-desktop/native-gpui']}
+        daemon['features'] = {'default': [], 'desktop-bootstrap': ['dep:cm-desktop', 'cm-desktop/native-gpui', 'pdf-metadata'], 'pdf-metadata': ['cm-pdf/runtime']}
         architecture.validate(metadata)
         for field, value in [('optional', False), ('target', None), ('target', 'cfg(unix)'), ('kind', 'dev'), ('kind', 'build')]:
             with self.subTest(field=field, value=value):
@@ -41,8 +41,18 @@ class ArchitectureTests(unittest.TestCase):
         daemon['features']['desktop-bootstrap'] = ['dep:cm-desktop']
         with self.assertRaisesRegex(ValueError, 'bootstrap must be optional'):
             architecture.validate(metadata)
+        daemon['features']['desktop-bootstrap'] = ['dep:cm-desktop', 'cm-desktop/native-gpui', 'pdf-metadata']
+        daemon['features']['pdf-metadata'] = ['cm-pdf/runtime', 'unexpected-feature']
+        with self.assertRaisesRegex(ValueError, 'bootstrap must be optional'):
+            architecture.validate(metadata)
+        daemon['features']['pdf-metadata'] = ['cm-pdf/runtime']
+        daemon['features']['default'] = ['pdf-metadata']
+        with self.assertRaisesRegex(ValueError, 'disabled by default'):
+            architecture.validate(metadata)
+        daemon['features']['default'] = []
+        daemon['features']['desktop-bootstrap'] = ['dep:cm-desktop']
         desktop = next(p for p in metadata['packages'] if p['name'] == 'cm-desktop')
-        daemon['features']['desktop-bootstrap'].append('cm-desktop/native-gpui')
+        daemon['features']['desktop-bootstrap'].extend(['cm-desktop/native-gpui', 'pdf-metadata'])
         desktop['dependencies'] = [{'name': 'cm-daemon'}]
         with self.assertRaisesRegex(ValueError, 'forbidden dependency'):
             architecture.validate(metadata)

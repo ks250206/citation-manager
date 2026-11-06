@@ -6,3 +6,9 @@ compile_error!("native-gpui currently requires macOS; use the default contract l
 mod native;
 #[cfg(all(feature = "native-gpui", target_os = "macos"))]
 pub use native::run;
+
+pub mod attachments;
+pub mod details;
+pub mod import_dialogs;
+pub mod library;
+pub mod settings;
