@@ -67,3 +67,14 @@ SQLite FULL and publication is atomic/no-replace. No hardware power-cut, malicio
 Windows publication, GPUI/native window or PDFium runtime validation was performed. The unchanged optional
 native dependency lane is left to CI/root integration. No CLI cross-model review was run: root owns the
 required independent different-model review and merge. This document reports local checks, not remote CI.
+
+## Root integration on current main
+
+Integrated merged #11 (`239c5a0`) before independent review. Both DESIGN appendices are
+preserved (#11 §28, #9 §29), and immutable #8 SQL/manifest remain unchanged.
+Root passed workspace fmt, clippy, 46 unit/integration tests plus 1 compile-fail doctest,
+build, architecture, migration preservation against current main, and 17 Python tests.
+An offline full lockfile regeneration was inspected and rejected because the local cache
+selected unrelated transitive upgrades/downgrades. The automatically combined lock retains
+both already-reviewed feature entries without that churn; all checks used `--locked`.
+Optional GPUI and PDFium runtime lanes on this integrated head are remote CI gates.
