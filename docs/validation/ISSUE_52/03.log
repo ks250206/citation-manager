@@ -1,0 +1,583 @@
+   Compiling libc v0.2.191
+   Compiling smallvec v1.16.4
+   Compiling once_cell v1.21.4
+   Compiling bitflags v2.13.2
+   Compiling typenum v1.20.1
+   Compiling stable_deref_trait v1.2.1
+   Compiling pin-project-lite v0.2.17
+   Compiling bytes v1.12.1
+   Compiling futures-core v0.3.34
+   Compiling utf_types v1.0.0
+   Compiling writeable v0.6.4
+   Compiling serde v1.0.229
+   Compiling zerofrom v0.1.8
+   Compiling litemap v0.8.3
+   Compiling yoke v0.8.4
+   Compiling utf8_iter v1.1.0
+   Compiling zeroize v1.9.1
+   Compiling fallible-iterator v0.3.0
+   Compiling fallible-streaming-iterator v0.1.9
+   Compiling icu_normalizer_data v2.4.0
+   Compiling icu_properties_data v2.4.0
+   Compiling untrusted v0.9.0
+   Compiling slab v0.4.12
+   Compiling zerovec v0.11.9
+   Compiling zerotrie v0.2.5
+   Compiling http v1.5.0
+   Compiling rustls-pki-types v1.15.1
+   Compiling fastrand v2.5.0
+   Compiling percent-encoding v2.3.2
+   Compiling generic-array v0.14.7
+   Compiling futures-task v0.3.34
+   Compiling tower-service v0.3.3
+   Compiling core-foundation-sys v0.8.7
+   Compiling getrandom v0.4.3
+   Compiling jobserver v0.1.35
+   Compiling cpufeatures v0.2.17
+   Compiling errno v0.3.14
+   Compiling uuid v1.29.0
+   Compiling socket2 v0.6.5
+   Compiling mio v1.2.4
+   Compiling futures-util v0.3.34
+   Compiling try-lock v0.2.5
+   Compiling subtle v2.6.1
+   Compiling httparse v1.10.1
+   Compiling cc v1.11.0
+   Compiling tinystr v0.8.5
+   Compiling rustix v1.1.6
+   Compiling potential_utf v0.1.6
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.7
+   Compiling want v0.3.2
+   Compiling http-body v1.1.0
+   Compiling cm-domain v0.1.0 (/Users/ryojikanno/.t3/worktrees/citation-manager/t3-52b5e36a/crates/domain)
+   Compiling digest v0.10.7
+   Compiling icu_locale_core v2.4.0
+   Compiling tokio v1.54.1
+   Compiling icu_collections v2.4.0
+   Compiling tracing-core v0.1.36
+   Compiling atomic-waker v1.1.2
+   Compiling security-framework-sys v2.17.0
+   Compiling core-foundation v0.10.1
+   Compiling form_urlencoded v1.2.2
+   Compiling sha2 v0.10.9
+   Compiling sync_wrapper v1.0.2
+   Compiling futures-channel v0.3.34
+   Compiling tracing v0.1.44
+   Compiling base64 v0.23.1
+   Compiling cm-core v0.1.0 (/Users/ryojikanno/.t3/worktrees/citation-manager/t3-52b5e36a/crates/core)
+   Compiling cmake v0.1.58
+   Compiling ipnet v2.12.2
+   Compiling tower-layer v0.3.3
+   Compiling security-framework v3.7.0
+   Compiling log v0.4.35
+   Compiling tempfile v3.27.0
+   Compiling icu_provider v2.4.0
+   Compiling http-body-util v0.1.5
+   Compiling httpdate v1.0.3
+   Compiling icu_properties v2.4.0
+   Compiling icu_normalizer v2.4.0
+   Compiling aws-lc-sys v0.47.0
+   Compiling libsqlite3-sys v0.39.1
+   Compiling cm-protocol v0.1.0 (/Users/ryojikanno/.t3/worktrees/citation-manager/t3-52b5e36a/crates/protocol)
+   Compiling cm-pdf v0.1.0 (/Users/ryojikanno/.t3/worktrees/citation-manager/t3-52b5e36a/crates/pdf)
+   Compiling cm-search v0.1.0 (/Users/ryojikanno/.t3/worktrees/citation-manager/t3-52b5e36a/crates/search)
+   Compiling cm-mcp v0.1.0 (/Users/ryojikanno/.t3/worktrees/citation-manager/t3-52b5e36a/crates/mcp)
+   Compiling cm-desktop v0.1.0 (/Users/ryojikanno/.t3/worktrees/citation-manager/t3-52b5e36a/crates/desktop)
+   Compiling cm-native-host v0.1.0 (/Users/ryojikanno/.t3/worktrees/citation-manager/t3-52b5e36a/crates/native-host)
+   Compiling cm-cli v0.1.0 (/Users/ryojikanno/.t3/worktrees/citation-manager/t3-52b5e36a/crates/cli)
+   Compiling idna_adapter v1.2.2
+   Compiling idna v1.1.0
+   Compiling url v2.5.8
+   Compiling hyper v1.12.0
+   Compiling tower v0.5.3
+   Compiling tower-http v0.6.11
+   Compiling hyper-util v0.1.21
+   Compiling rusqlite v0.41.1
+   Compiling cm-storage v0.1.0 (/Users/ryojikanno/.t3/worktrees/citation-manager/t3-52b5e36a/crates/storage)
+   Compiling aws-lc-rs v1.19.0
+   Compiling rustls v0.23.46
+   Compiling rustls-webpki v0.103.16
+   Compiling tokio-rustls v0.26.6
+   Compiling rustls-platform-verifier v0.7.1
+   Compiling hyper-rustls v0.27.10
+   Compiling reqwest v0.13.5
+   Compiling cm-metadata v0.1.0 (/Users/ryojikanno/.t3/worktrees/citation-manager/t3-52b5e36a/crates/metadata)
+   Compiling cm-daemon v0.1.0 (/Users/ryojikanno/.t3/worktrees/citation-manager/t3-52b5e36a/crates/daemon)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 26.78s
+     Running unittests src/lib.rs (target/debug/deps/cm_cli-210668fd3d80d642)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/cm_core-ff44fcc6bbe136e9)
+
+running 7 tests
+test papers::tests::doi_normalization_rejects_malformed_prefixes_and_unparsed_urls ... ok
+test papers::tests::doi_resolver_wrappers_and_registrant_subdivisions_are_normalized ... ok
+test metadata_resolve::tests::invalid_input_and_pre_cancelled_calls_do_no_provider_work ... ok
+test metadata_resolve::tests::port_mismatched_doi_is_rejected_and_empty_records_remain_manual ... ok
+test metadata_resolve::tests::different_year_complement_cannot_create_inconsistent_date ... ok
+test metadata_resolve::tests::invalid_port_identifier_discards_only_that_provider_and_allows_fallback ... ok
+test metadata_resolve::tests::combined_evidence_overflow_is_diagnostic_manual_fallback_without_truncation ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/import_common.rs (target/debug/deps/import_common-ad3c178fd6dade6a)
+
+running 10 tests
+test arxiv_wrappers_and_page_ranges_preserve_literal_elocators ... ok
+test doi_one_shared_canonical_point_distinguishes_raw_and_resolver_escapes ... ok
+test pdf_policy_mock_metadata_and_folder_partial_success_cancel_retry_contract ... ok
+test doi_matching_collects_bibliography_and_every_external_doi ... ok
+test normalizer_preserves_full_unicode_bibliography_and_resolves_identifiers ... ok
+test reimport_retains_a_key_owned_by_its_single_exact_match ... ok
+test future_adapters_use_real_coordinator_with_mock_port_and_bounded_handles ... ok
+test input_limits_are_explicit_and_never_truncate_fields ... ok
+test preview_handles_do_not_alias_after_a_real_process_restart ... ok
+test key_and_batch_boundaries_and_bibliographic_suggestions_are_honest ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running tests/library_query.rs (target/debug/deps/library_query-e869edff184b5dc3)
+
+running 1 test
+test filters_and_cursor_validate_at_the_common_boundary ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/ports.rs (target/debug/deps/ports-3ca5e91bf82651cb)
+
+running 2 tests
+test an_adapter_can_preview_then_explicitly_skip_without_transport_or_persisted_paper ... ok
+test repository_port_is_replaceable_without_sqlite_and_retains_external_ids ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/search_query.rs (target/debug/deps/search_query-45b74567068a3697)
+
+running 17 tests
+test diagnostics_point_to_safe_original_unicode_positions_and_recover_at_clauses ... ok
+test empty_values_unknown_keys_and_unsupported_has_are_explicit_errors ... ok
+test every_design_example_has_the_expected_typed_meaning ... ok
+test quotes_preserve_text_and_only_two_escapes_decode ... ok
+test doi_wrappers_decoding_and_percent_literals_match_existing_identity_policy ... ok
+test field_values_reuse_shared_semantics_without_collapsing_distinct_keys ... ok
+test english_connectives_are_literal_terms_unless_spelled_as_uppercase_operators ... ok
+test boolean_fts_and_group_syntax_are_rejected_and_quoted_literals_are_data ... ok
+test repeated_conditions_remain_ordered_conjunctions_without_last_value_wins ... ok
+test correction_examples_are_bounded_valid_edits_of_the_entire_offending_clause ... ok
+test raw_value_and_unicode_name_boundaries_are_enforced_without_truncation ... ok
+test years_are_closed_inclusive_four_digit_positive_ranges ... ok
+test malformed_known_fields_keep_the_predicate_kind_in_correction_examples ... ok
+test unicode_whitespace_separates_clauses_and_spans_reference_original_text ... ok
+test term_and_diagnostic_budgets_include_invalid_clauses_and_report_unexamined_input ... ok
+test whole_input_limit_rejects_before_parsing_and_never_splits_unicode ... ok
+test bounded_malformed_corpus_is_reproducible_and_utf8_safe ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+
+     Running unittests src/lib.rs (target/debug/deps/cm_daemon-a6900bc559f03963)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/bibliography_behavior.rs (target/debug/deps/bibliography_behavior-4a7dba633675ff07)
+
+running 7 tests
+test malformed_recovery_line_numbers_no_macro_or_tex_execution ... ok
+test extensions_preserve_non_native_metadata_and_detect_edited_public_fields ... ok
+test names_escaping_unknown_fields_are_observable_without_extension ... ok
+test export_missing_trashed_duplicate_ids_and_unsafe_keys_fail_explicitly ... ok
+test multiline_record_markers_crlf_and_output_budgets_do_not_corrupt_records ... ok
+test adapter_merge_skip_cancel_keys_dryrun_preserve_real_attachments_and_relationships ... ok
+test encodings_budgets_and_unsupported_syntax_are_explicit ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.38s
+
+     Running tests/bibliography_interop.rs (target/debug/deps/bibliography_interop-74c340c5e05abf03)
+
+running 20 tests
+test public_text_caret_and_tilde_use_literal_tex_commands_and_decode_without_extension ... ok
+test public_verbatim_fields_and_literal_at_have_independent_native_expectations ... ok
+test deeply_nested_extensions_skip_only_bad_record_without_recursive_json_work ... ok
+test protection_loss_is_per_field_on_import_and_both_public_exports ... ok
+test ris_grouped_family_comma_is_not_a_person_separator ... ok
+test bibtex_nonbreaking_ties_are_not_literal_tilde_glyphs ... ok
+test unknown_commands_raw_names_and_literal_braces_backslash_survive ... ok
+test public_ris_type_conversions_have_specific_loss_diagnostics ... ok
+test ris_protected_person_parts_and_whole_corporate_group_use_distinct_names ... ok
+test finite_accents_protected_braced_unbraced_and_special_letters_are_unicode ... ok
+test fixed_long_author_and_malformed_neighbor_fixtures_recover_normal_records ... ok
+test independent_exporter_shaped_fixtures_and_public_same_cross_format_expectations ... ok
+test standard_month_tokens_survive_public_bibtex_and_have_specific_ris_loss ... ok
+test ambiguous_multiline_recovery_marks_all_later_candidates_non_creatable ... ok
+test same_field_reports_both_tie_and_protection_loss_exactly_once ... ok
+test identifiers_and_concatenations_retain_usable_bibliography_without_evaluation ... ok
+test shared_import_tie_normalization_preserves_raw_evidence_and_reports_spacing_loss ... ok
+test date_year_conflicts_are_review_only_in_both_orders ... ok
+test record_local_limits_skip_only_bad_record_in_both_formats ... ok
+test total_draft_budget_remains_file_fatal_after_local_recovery ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.20s
+
+     Running tests/bibliography_roundtrip.rs (target/debug/deps/bibliography_roundtrip-7520402a48aef20d)
+
+running 3 tests
+test original_fixtures_have_observable_unicode_ordered_authors_and_fields ... ok
+test thousand_bibtex_real_sqlite_all_selected_collection_roundtrip has been running for over 60 seconds
+test thousand_ris_real_sqlite_all_selected_collection_roundtrip has been running for over 60 seconds
+test thousand_ris_real_sqlite_all_selected_collection_roundtrip ... ok
+test thousand_bibtex_real_sqlite_all_selected_collection_roundtrip ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 128.31s
+
+     Running tests/desktop_worker.rs (target/debug/deps/desktop_worker-2b211a3c482bdf50)
+
+running 2 tests
+test worker_reports_open_and_validation_errors_and_completes_on_worker ... ok
+test worker_create_edit_reopen_preserves_unicode_and_metadata ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running ../../tests/integration/doi_import.rs (target/debug/deps/doi_import-67757c834085a78e)
+
+running 3 tests
+test resolved_draft_uses_shared_external_ids_bibliographic_suggestions_and_keys ... ok
+test resolve_preview_cancel_is_byte_unchanged_and_only_approved_merge_fields_are_written ... ok
+test resolver_keeps_witnessed_legacy_values_and_reports_unwitnessed_ambiguity ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+
+     Running unittests ../../scripts/benchmarks/import.rs (target/debug/examples/backend_bench_import-c1a9ca43cb49e0ec)
+
+running 1 test
+test tests::small_parser_preview_commit_no_write_and_reopen ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.28s
+
+     Running unittests src/lib.rs (target/debug/deps/cm_desktop-edcd50c10a5927b8)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/async_state.rs (target/debug/deps/async_state-af3c9aba563a9c50)
+
+running 9 tests
+test a_replacement_client_can_deliver_deferred_errors_without_saved_data ... ok
+test failed_save_keeps_confirmed_paper_and_success_preserves_unedited_fields ... ok
+test a_late_list_snapshot_cannot_hide_a_newly_saved_paper ... ok
+test superseded_responses_and_old_errors_cannot_replace_current_state ... ok
+test load_more_survives_new_draft_and_editor_requests_without_replacing_the_editor ... ok
+test late_list_success_or_failure_keeps_the_confirmed_save_status ... ok
+test title_edit_preserves_absent_or_multiline_abstract_exactly ... ok
+test creating_a_new_paper_does_not_skip_unloaded_keyset_pages ... ok
+test abandoned_or_panicked_transport_completes_once_and_unlocks_save ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/commands_keymap.rs (target/debug/deps/commands_keymap-8ef5031036a23e06)
+
+running 19 tests
+test custom_contexts_and_modes_do_not_leak_bindings ... ok
+test availability_is_evaluated_at_match_time_and_unknown_registry_fails_closed ... ok
+test escape_cancels_pending_sequence_and_explicit_reset_discards_it ... ok
+test mismatch_passes_unknown_event_and_retries_known_event_without_stale_prefix ... ok
+test known_disabled_command_is_valid_configuration_but_cannot_become_enabled_by_matching ... ok
+test modifier_aliases_cannot_hide_duplicates_and_invalid_key_spellings_are_rejected ... ok
+test availability_requires_connection_and_current_resources_without_grant_semantics ... ok
+test feature_registration_is_additive_and_duplicate_failure_preserves_original ... ok
+test known_pdf_api_commands_remain_disabled_even_when_host_claims_connection ... ok
+test normal_insert_vim_off_transitions_preserve_editing_keys_and_drop_sequences ... ok
+test prefix_conflicts_are_order_independent_but_sibling_sequences_and_different_scopes_are_valid ... ok
+test unsupported_version_is_not_guessed_and_valid_empty_map_is_not_replaced ... ok
+test quoted_braces_escapes_and_unicode_are_json_data_not_structural_depth_or_executable_ids ... ok
+test prefix_timeout_backwards_time_and_context_switch_cannot_finish_old_sequence ... ok
+test malformed_json_duplicate_fields_and_unknown_schema_fields_fail_with_structured_diagnostics ... ok
+test unknown_commands_invalid_keys_and_duplicates_reject_entire_document_before_default_fallback ... ok
+test default_navigation_resolves_in_both_contexts_and_command_k_is_mode_independent ... ok
+test editing_and_ime_pass_every_event_and_reset_prefix_even_for_escape_and_command_k ... ok
+test resource_limits_cover_exact_boundaries_and_default_registry_failure_is_explicit ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src/lib.rs (target/debug/deps/cm_domain-b3e9c911b8ddb56a)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/contracts.rs (target/debug/deps/contracts-ae4e50a0f45d3d7c)
+
+running 5 tests
+test page_boundaries_and_wire_values_cannot_bypass_validation ... ok
+test storage_keys_reject_path_escape_on_construction_and_deserialization ... ok
+test an_unknown_page_field_does_not_promote_an_unresolved_anchor ... ok
+test page_label_is_not_a_physical_display_number_and_unresolved_ai_is_retained ... ok
+test paper_and_attachment_roundtrip_preserves_internal_and_external_identity ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/organization.rs (target/debug/deps/organization-413b7aea7b644cfe)
+
+running 1 test
+test tag_keys_share_unicode_whitespace_and_case_policy_and_serde_validation ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/cm_mcp-b7fdf54552e7c99e)
+
+running 1 test
+test tests::unavailable_is_an_error_not_a_fake_handshake ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/cm_metadata-35a5bd3e948baf7e)
+
+running 20 tests
+test doi::tests::long_retry_after_is_not_shortened_and_suppresses_later_fetches ... ok
+test doi::tests::crossref_full_success_skips_datacite_preserves_unicode_and_common_normalization ... ok
+test doi::tests::config_bounds_and_async_context_are_rejected_without_fetching ... ok
+test doi::tests::safe_endpoint_building_and_candidate_urls_cannot_trigger_requests ... ok
+test doi::tests::datacite_complements_only_absent_fields_and_keeps_conflicts_with_provenance ... ok
+test doi::tests::fallback_after_not_found_maps_full_datacite_authors_roles_precision_and_ids ... ok
+test doi::tests::rate_limit_backoff_http_dates_and_advertised_rate_are_deterministic ... ok
+test doi::tests::cache_expiry_negative_ttl_canonical_wrappers_and_failure_retry_are_explicit ... ok
+test doi::tests::retry_after_http_date_and_exhausted_server_errors_have_bounded_attempts ... ok
+test doi::tests::stream_and_declared_length_body_limits_reject_without_unbounded_reads ... ok
+test doi::tests::excluded_landing_urls_do_not_discard_other_metadata_or_relax_pdf_policy ... ok
+test doi::tests::cache_canonical_key_provider_isolation_ttl_negative_ttl_and_eviction ... ok
+test doi::tests::unregistered_returns_editable_manual_draft_and_explicit_diagnostics ... ok
+test doi::tests::shared_normalizer_preserves_raw_percent_identity_and_rejects_provider_substitution ... ok
+test doi::tests::crossref_unknown_date_keeps_metadata_and_tries_the_next_date_source ... ok
+test doi::tests::persistent_network_failure_and_invalid_json_fall_back_without_caching_errors ... ok
+test doi::tests::response_failures_are_distinct_and_never_cached_or_redirected ... ok
+test doi::tests::schema_and_record_budgets_reject_wrong_types_dates_and_identity_conflicts ... ok
+test doi::tests::datacite_issued_dates_reduce_precision_or_remain_raw_without_losing_metadata ... ok
+test doi::tests::timeouts_network_and_cancellation_are_bounded_and_retry_only_transient_failures ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running unittests src/lib.rs (target/debug/deps/cm_native_host-d26737ae88943615)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/cm_pdf-6bf3983f0aff5c28)
+
+running 1 test
+test geometry::tests::nonzero_crop_all_rotations_zoom_and_origins ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/cm_protocol-b177db794e29df88)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/cm_search-684ebe61d5dc7928)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/cm_storage-0171b88f273a5996)
+
+running 26 tests
+test crash_recovery::owned_child_entry ... ok
+test backup::tests::atomic_publish_refuses_existing_file_and_directory_without_overwriting ... ok
+test backup::tests::competing_initial_publication_keeps_winner_and_removes_only_own_stage ... ok
+test attachments::tests::lost_response_after_commit_keeps_durable_new_and_old_references_on_reopen ... ok
+test attachments::tests::corruption_missing_and_expected_hash_errors_preserve_original_and_are_typed ... ok
+test migrations::tests::applied_checksum_future_versions_and_nonprefix_history_fail_closed ... ok
+test migrations::tests::backup_error_or_raced_schema_aborts_upgrade ... ok
+test migrations::tests::embedded_registry_matches_manifest_and_initial_bootstrap_is_atomic ... ok
+test migrations::tests::empty_history_cannot_adopt_an_unversioned_nonempty_database ... ok
+test backup::tests::failure_after_staging_database_never_activates_or_overwrites_a_library ... ok
+test attachments::tests::shared_blob_survives_association_failure_and_soft_delete ... ok
+test migrations::tests::pending_batch_failure_rolls_back_prior_pending_ddl_data_and_history ... ok
+test tests::pinned_bundled_sqlite_supports_fts5_and_backup ... ok
+test attachments::tests::source_and_store_traps_are_rejected_without_changing_targets ... ok
+test tests::every_factory_connection_enforces_foreign_keys ... ok
+test migrations::tests::real_old_database_upgrades_with_backup_boundary_and_preserves_records_on_reopen ... ok
+test crash_recovery::sigkill_metadata_commit_retains_whole_new_generation ... ok
+test crash_recovery::sigkill_metadata_transaction_recovers_whole_old_generation ... ok
+test crash_recovery::sigkill_attachment_staged_reports_complete_partial ... ok
+test crash_recovery::sigkill_attachment_published_reports_orphan_and_reuses_it ... ok
+test crash_recovery::sigkill_attachment_transaction_rolls_back_reference ... ok
+test crash_recovery::sigkill_attachment_committed_inspects_and_retains_result_without_retry ... ok
+test crash_recovery::sigkill_shared_blob_commit_inspects_without_duplicate ... ok
+test crash_recovery::sigkill_shared_blob_transaction_preserves_refs_and_explicit_retry ... ok
+test crash_recovery::harness_failures_reap_owned_children_without_reader_threads ... ok
+test attachments::tests::interruptions_retain_old_associations_and_are_detectable_and_retryable ... ok
+
+test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.73s
+
+     Running tests/import_common.rs (target/debug/deps/import_common-7b5306519258e586)
+
+running 10 tests
+test duplicate_merge_targets_and_unreviewed_indices_are_rejected_before_writes ... ok
+test retained_payload_full_metadata_keys_unicode_and_replay ... ok
+test normalized_external_ids_doi_disagreement_and_citation_collisions ... ok
+test exact_batch_duplicates_trash_and_similarity_are_reviewed_explicitly ... ok
+test preview_candidate_budget_fails_explicitly_without_truncating_legacy_fields ... ok
+test dry_run_cancel_are_byte_unchanged_and_handles_cannot_cross_libraries ... ok
+test stale_merge_target_and_mixed_merge_create_rollback_preserve_reviewed_paper ... ok
+test explicit_merge_preserves_ids_contributors_metadata_relationships_and_original_files ... ok
+test midbatch_paper_author_and_membership_failures_roll_back_every_write_and_retry ... ok
+test concurrent_changes_invalidate_preview_including_aba_and_destination_deletion ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.46s
+
+     Running tests/legacy_doi.rs (target/debug/deps/legacy_doi-9d1fc9b5a8a19684)
+
+running 7 tests
+test raw_percent_identifiers_without_resolver_evidence_remain_distinct ... ok
+test true_disagreement_and_new_input_cannot_claim_stored_legacy_exception ... ok
+test malformed_legacy_urls_are_preserved_but_never_accepted_as_new_urls ... ok
+test manual_create_save_update_and_trash_cannot_bypass_legacy_equivalence ... ok
+test legacy_equivalent_existing_rows_are_all_reported_and_fail_closed ... ok
+test old_api_disk_reopen_title_edits_and_exact_preview_create_conflict_are_lossless ... ok
+test approved_merge_keeps_unselected_legacy_doi_raw_ids_metadata_and_attachment ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.27s
+
+     Running tests/library.rs (target/debug/deps/library-1657cec0b5c6d821)
+
+running 7 tests
+test in_memory_has_same_schema_and_foreign_keys_but_uses_memory_journal ... ok
+test duplicate_external_ids_are_invalid_input_and_leave_existing_records_unchanged ... ok
+test metadata_edits_and_soft_delete_preserve_people_attachment_and_related_data ... ok
+test unique_doi_citation_key_and_relation_failures_never_overwrite_or_partially_update ... ok
+test full_metadata_ordered_authors_and_external_ids_survive_real_reopen ... ok
+test service_crud_soft_delete_restore_and_paginated_visibility ... ok
+test opening_a_file_database_refuses_modified_history_or_a_future_schema ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
+
+     Running tests/library_organization.rs (target/debug/deps/library_organization-c4453ff9cde00e24)
+
+running 8 tests
+test empty_memory_library_and_invalid_destinations_use_the_same_contracts ... ok
+test hierarchy_cycles_multiple_memberships_safe_delete_and_reopen ... ok
+test transaction_failures_roll_back_child_promotion_and_destination_memberships ... ok
+test tag_collisions_rename_set_membership_delete_and_import_destination ... ok
+test common_query_combines_predicates_literal_unicode_keywords_and_trash ... ok
+test oversized_title_cursor_has_a_bounded_error_and_id_sort_remains_available ... ok
+test stable_keyset_pagination_handles_all_sorts_directions_nulls_and_ties ... ok
+test managed_ingestion_pdf_filter_accepts_case_and_parameter_variants ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s
+
+     Running tests/path_safety.rs (target/debug/deps/path_safety-5100549eb2d3e982)
+
+running 4 tests
+test rejects_relative_traversal_symlink_and_public_directory_without_chmod ... ok
+test reopening_revalidates_directory_permissions ... ok
+test creates_only_explicit_private_library_and_private_database_sidecars ... ok
+test rejects_database_symlinks_hardlinks_insecure_modes_and_sidecar_traps ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+     Running tests/recovery.rs (target/debug/deps/recovery-a4f00f2e7d891262)
+
+running 12 tests
+test real_pre_migration_hook_snapshots_old_wal_state_before_upgrading ... ok
+test refused_migration_snapshot_never_changes_existing_data_or_history ... ok
+test baseline_is_real_valid_idempotent_and_never_overwritten ... ok
+test backup_refuses_missing_or_corrupt_source_blobs_and_unsafe_destinations ... ok
+test case_aliases_cannot_place_backups_or_restores_inside_their_source ... ok
+test failed_restore_preserves_existing_destination_and_unrelated_paths ... ok
+test wal_backup_roundtrip_retains_full_metadata_relations_annotations_and_immutable_files ... ok
+test bundle_ddl_changes_are_rejected_even_after_rehashing_the_database ... ok
+test corrupt_diagnostic_baseline_is_reported_without_blocking_live_library_recovery ... ok
+test snapshot_references_are_stable_after_new_ingest_and_soft_delete ... ok
+test malformed_traversing_absolute_duplicate_unsupported_and_incomplete_manifests_fail_closed ... ok
+test missing_corrupt_and_linked_bundle_files_and_schema_mismatches_are_rejected ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.56s
+
+     Running unittests ../../scripts/benchmarks/query.rs (target/debug/examples/backend_bench_query-83c7f06ee38e00bf)
+
+running 1 test
+test tests::small_real_disk_fixture_counts_metadata_and_cursor ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s
+
+   Doc-tests cm_cli
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests cm_core
+
+running 1 test
+test crates/core/src/import.rs - import::_ (line 164) - compile fail ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+   Doc-tests cm_daemon
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests cm_desktop
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests cm_domain
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests cm_mcp
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests cm_metadata
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests cm_native_host
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests cm_pdf
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests cm_protocol
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests cm_search
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests cm_storage
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s

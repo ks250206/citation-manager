@@ -1,0 +1,148 @@
+[
+  {
+    "command": [
+      "cargo",
+      "fmt",
+      "--all",
+      "--",
+      "--check"
+    ],
+    "exit_code": 0,
+    "seconds": 0.34,
+    "log": "01.log"
+  },
+  {
+    "command": [
+      "cargo",
+      "clippy",
+      "--workspace",
+      "--all-targets",
+      "--locked",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "exit_code": 0,
+    "seconds": 14.77,
+    "log": "02.log"
+  },
+  {
+    "command": [
+      "cargo",
+      "test",
+      "--workspace",
+      "--locked"
+    ],
+    "exit_code": 0,
+    "seconds": 179.77,
+    "log": "03.log"
+  },
+  {
+    "command": [
+      "cargo",
+      "build",
+      "--workspace",
+      "--locked"
+    ],
+    "exit_code": 0,
+    "seconds": 0.91,
+    "log": "04.log"
+  },
+  {
+    "command": [
+      "python3",
+      "scripts/check_architecture.py"
+    ],
+    "exit_code": 0,
+    "seconds": 0.07,
+    "log": "05.log"
+  },
+  {
+    "command": [
+      "python3",
+      "scripts/check_migrations.py",
+      "--base",
+      "9e7e66e3e284a047096eae0707b823233206fe8c"
+    ],
+    "exit_code": 0,
+    "seconds": 0.13,
+    "log": "06.log"
+  },
+  {
+    "command": [
+      "python3",
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      "scripts",
+      "-p",
+      "test_*.py",
+      "-v"
+    ],
+    "exit_code": 0,
+    "seconds": 0.19,
+    "log": "07.log"
+  },
+  {
+    "command": [
+      "python3",
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      "scripts/benchmarks",
+      "-p",
+      "test_*.py",
+      "-v"
+    ],
+    "exit_code": 1,
+    "seconds": 0.05,
+    "log": "08.log"
+  },
+  {
+    "command": [
+      "python3",
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      "scripts/benchmarks",
+      "-p",
+      "test_*.py",
+      "-v"
+    ],
+    "environment": {
+      "PYTHONPATH": "scripts"
+    },
+    "exit_code": 0,
+    "seconds": 0.14,
+    "log": "08-corrected.log"
+  },
+  {
+    "command": [
+      "git",
+      "diff",
+      "--check"
+    ],
+    "environment": {},
+    "exit_code": 0,
+    "seconds": 0.04,
+    "log": "09.log"
+  },
+  {
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "cm-desktop",
+      "--test",
+      "commands_keymap",
+      "--locked"
+    ],
+    "environment": {},
+    "exit_code": 0,
+    "seconds": 1.34,
+    "log": "10-focused.log"
+  }
+]
