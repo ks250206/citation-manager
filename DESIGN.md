@@ -912,7 +912,18 @@ PaperService/SQLite repositoryで手動作成・全書誌情報編集・一覧�
 原本不変で標準注釈を搬出し、nativeの/AP欠落にはexport-only補完を使いPDFKitで独立照合する。
 製品export helper配送は#20、.app実ロードは#34、署名/trust policyは#31で未完。
 
-## 29. #12 整理と M1 書誌検索の確定事項
+## 29. #9 添付ストア・バックアップ実装への追記
+
+SHA-256添付はprivate tempへのstream copy・再hash検証・no-replace atomic rename・fsync後に
+DB参照を追加する。同一hashを複数文献で共有し、関連付け失敗で既存blobを削除しない。
+整合性scanはmissing/corrupt参照・orphan・partial・unsafe pathを報告し、自動削除しない。
+初回/移行前DBはSQLite online backupでWALを含めてsnapshotする。可搬bundleはsnapshotの
+参照集合とmanifest/hashを用い、検証後に新しい復元先のみへ公開する。稼働libraryの上書きや
+daemonの排他/activationは実装しない。#25がmigration/GC/復元activationの排他を担当する。
+利用API、保存条件、復旧手順と一貫性の限界は
+[attachments-backup ADR](docs/ADR/attachments-backup.md)を正本とする。
+
+## 30. #12 整理と M1 書誌検索の確定事項
 
 [Collection / Tag / LibraryQuery ADR](docs/ADR/library-organization-query.md) が §6/10/19.1 の
 M1 実装上の明確化となる。循環を防ぐ collection CRUD/move、複数所属、共通 domain TagKey、
