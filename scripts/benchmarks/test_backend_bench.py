@@ -3,8 +3,9 @@ import csv
 import io
 import math
 import unittest
+import xml.etree.ElementTree as ET
 
-from benchmarks.run import csv_text, quantile, summarize
+from benchmarks.run import csv_text, import_chart, quantile, summarize
 
 
 def reports():
@@ -43,6 +44,33 @@ class InstrumentTests(unittest.TestCase):
         self.assertNotIn('\r', csv_text(rows))
         self.assertEqual(len(parsed), len(rows))
         self.assertEqual(parsed[0]['metric'], rows[0]['metric'])
+        opening = [r for r in rows if r['metric'] == 'connection_open']
+        self.assertEqual(len(opening), 8)
+        self.assertTrue(all(r['condition'] == 'reopened_connection_os_cache_uncontrolled' for r in opening))
+
+    def test_standalone_chart_geometry_matches_measured_quantiles(self):
+        rows = [dict(metric=metric, case='import', batch=batch, samples=3, p50_ms=p50, p95_ms=p95)
+                for batch, metric, p50, p95 in [(0, 'preview', 25, 50), (0, 'commit', 10, 20),
+                                               (1, 'preview', 100, 200), (1, 'commit', 50, 75)]]
+        svg = ET.fromstring(import_chart(rows))
+        scale = (float(svg.attrib['data-plot-bottom']) - float(svg.attrib['data-plot-top'])) / float(svg.attrib['data-y-max-ms'])
+        bottom = float(svg.attrib['data-plot-bottom'])
+        points = [v for v in svg.iter() if 'data-stat' in v.attrib]
+        self.assertEqual(len(points), 8)
+        for point in points:
+            row = next(r for r in rows if r['batch'] == int(point.attrib['data-batch'])
+                       and r['metric'] == point.attrib['data-series'])
+            ms = row[point.attrib['data-stat'] + '_ms']
+            self.assertEqual(float(point.attrib['data-ms']), ms)
+            if point.attrib['data-stat'] == 'p50':
+                self.assertAlmostEqual(float(point.attrib['height']), ms * scale, places=5)
+                self.assertAlmostEqual(float(point.attrib['y']) + float(point.attrib['height']), bottom, places=5)
+            else:
+                self.assertAlmostEqual(float(point.attrib['y1']), bottom - ms * scale, places=5)
+        self.assertEqual(import_chart(rows), import_chart(rows))
+        for bad in [[], rows[:-1], [dict(rows[0], p95_ms=math.nan), *rows[1:]]]:
+            with self.assertRaises(ValueError):
+                import_chart(bad)
 
     def test_incomplete_samples_bad_counts_and_preview_writes_fail(self):
         query, imported = reports()

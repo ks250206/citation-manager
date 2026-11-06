@@ -61,6 +61,8 @@ conditions execute in a fixed order; conditions are not randomized. Query timers
 include validation, SQL, full Paper materialization and cursor construction in
 the real LibraryQueryService/adapter, excluding the harness's expected-value
 comparisons. JSON/CSV serialization is outside those timers.
+Only reopened conditions produce `connection_open` summary rows. Warm raw
+`open_ms=0` is a sentinel for no timed open, not a zero-millisecond measurement.
 
 Import fixture seed 47 generates BibTeX in memory, with diverse SHA-derived
 titles, unique DOI/keys, two authors and an editor, Unicode, dates, journal,
@@ -97,6 +99,26 @@ are kept; summaries use **nearest rank `sorted[ceil(p*N)-1]`**, no interpolation
 With three import repeats p95 is the maximum, not a stable tail estimate or a
 confidence interval. Returned counts are part of each query sample and summary;
 import rows report created counts. A nonzero exit or missing summary is failure.
+The runner records the actual executable path returned by Cargo in its commands
+and environment artifact metadata, including when `CARGO_TARGET_DIR` is set.
+It also writes the standalone `import-batches.svg` from the same summary rows:
+bars are p50 and whiskers are p95 in milliseconds. To regenerate CSV and chart
+from existing raw data, without another measurement:
+
+```sh
+PYTHONPATH=scripts python3 - <<'PY'
+import json
+from pathlib import Path
+from benchmarks.run import csv_text, import_chart, summarize
+p = Path('target/backend-benchmark/representative')
+env = json.loads((p / 'environment.json').read_text())
+rows = summarize(json.loads((p / 'query.json').read_text()),
+                 json.loads((p / 'import.json').read_text()),
+                 env['query_samples'], env['import_samples'])
+(p / 'summary.csv').write_text(csv_text(rows))
+(p / 'import-batches.svg').write_text(import_chart(rows))
+PY
+```
 
 Environment records Mac model/OS/CPU/RAM, Rust/Cargo, build environment/profile,
 Git revision/status, harness and Cargo.lock hashes, dataset seed/size/hash and

@@ -67,8 +67,9 @@ def summarize(query, imported, query_samples, import_samples):
             raise ValueError('query page count mismatch')
         rows.append(summary_row('query', name, condition, page, '',
                                 [s['elapsed_ms'] for s in samples], [s['returned'] for s in samples]))
-        rows.append(summary_row('connection_open', name, condition, page, '',
-                                [s['open_ms'] for s in samples], [s['returned'] for s in samples]))
+        if condition == 'reopened_connection_os_cache_uncontrolled':
+            rows.append(summary_row('connection_open', name, condition, page, '',
+                                    [s['open_ms'] for s in samples], [s['returned'] for s in samples]))
     runs = imported['runs']
     if sorted(r['sample'] for r in runs) != list(range(import_samples)):
         raise ValueError('import repeat coverage mismatch')
@@ -104,6 +105,54 @@ def csv_text(rows):
     return out.getvalue()
 
 
+def import_chart(rows):
+    """Standalone SVG: median bars and nearest-rank p95 whiskers in milliseconds."""
+    groups = {}
+    for row in rows:
+        if row['metric'] in ('preview', 'commit') and row['case'] == 'import':
+            groups.setdefault(int(row['batch']), {})[row['metric']] = row
+    if not groups or any(set(v) != {'preview', 'commit'} for v in groups.values()):
+        raise ValueError('chart requires complete import preview/commit groups')
+    for group in groups.values():
+        for row in group.values():
+            if not (math.isfinite(row['p50_ms']) and math.isfinite(row['p95_ms'])
+                    and 0 <= row['p50_ms'] <= row['p95_ms']):
+                raise ValueError('invalid chart quantiles')
+    ceiling = max(100, math.ceil(max(v['p95_ms'] for g in groups.values() for v in g.values()) / 100) * 100)
+    left, right, top, bottom = 75, 855, 70, 370
+    width = (right - left) / len(groups)
+    y = lambda ms: bottom - ms / ceiling * (bottom - top)
+    parts = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 480" '
+             f'data-y-max-ms="{ceiling}" data-plot-top="{top}" data-plot-bottom="{bottom}">',
+             '<title>Measured import batches: p50 bars and p95 whiskers</title>',
+             '<rect width="900" height="480" fill="white"/>',
+             '<g font-family="sans-serif" font-size="13" fill="#172033">',
+             '<text x="75" y="26" font-size="19">Headless release import: preview / commit</text>',
+             '<text x="75" y="48">Milliseconds; bars = p50, whiskers = nearest-rank p95</text>']
+    for tick in range(6):
+        value = ceiling * tick / 5
+        parts.extend([f'<line x1="{left}" x2="{right}" y1="{y(value):.6f}" y2="{y(value):.6f}" stroke="#dce2ea"/>',
+                      f'<text x="65" y="{y(value) + 4:.6f}" text-anchor="end">{value:g}</text>'])
+    for index, (batch, group) in enumerate(sorted(groups.items())):
+        center = left + (index + .5) * width
+        parts.append(f'<text x="{center:.6f}" y="392" text-anchor="middle">{batch + 1}</text>')
+        for metric, offset, color in [('preview', -.2, '#2563eb'), ('commit', .2, '#d97706')]:
+            row = group[metric]
+            x, bar_width = center + offset * width, width * .26
+            common = f'data-batch="{batch}" data-series="{metric}"'
+            parts.extend([
+                f'<rect {common} data-stat="p50" data-ms="{row["p50_ms"]:.9f}" x="{x - bar_width / 2:.6f}" y="{y(row["p50_ms"]):.6f}" width="{bar_width:.6f}" height="{bottom - y(row["p50_ms"]):.6f}" fill="{color}"/>',
+                f'<line {common} data-stat="p95" data-ms="{row["p95_ms"]:.9f}" x1="{x:.6f}" x2="{x:.6f}" y1="{y(row["p95_ms"]):.6f}" y2="{y(row["p50_ms"]):.6f}" stroke="#172033"/>',
+                f'<line x1="{x - 4:.6f}" x2="{x + 4:.6f}" y1="{y(row["p95_ms"]):.6f}" y2="{y(row["p95_ms"]):.6f}" stroke="#172033"/>'])
+    counts = ', '.join(map(str, sorted({v['samples'] for g in groups.values() for v in g.values()})))
+    parts.extend(['<text x="465" y="415" text-anchor="middle">Batch (increasing existing inventory)</text>',
+                  '<rect x="75" y="434" width="14" height="14" fill="#2563eb"/><text x="96" y="446">Preview</text>',
+                  '<rect x="200" y="434" width="14" height="14" fill="#d97706"/><text x="221" y="446">Commit</text>',
+                  f'<text x="365" y="446">N per batch: {counts}; small-N p95 may be the maximum</text>',
+                  '</g></svg>'])
+    return '\n'.join(parts) + '\n'
+
+
 def capture(args):
     return subprocess.check_output(args, cwd=ROOT, text=True).strip()
 
@@ -132,7 +181,7 @@ def build(package, example, out):
     if artifact['profile']['debug_assertions'] or artifact['profile']['opt_level'] != '3':
         raise ValueError('baseline requires the default optimized release profile')
     executable = artifact['executable']
-    evidence = dict(profile=artifact['profile'], features=artifact['features'],
+    evidence = dict(profile=artifact['profile'], features=artifact['features'], executable=executable,
                     executable_sha256=hashlib.sha256(Path(executable).read_bytes()).hexdigest())
     return executable, args, evidence
 
@@ -164,8 +213,8 @@ def main():
         logical_cpu_count=capture(['sysctl', '-n', 'hw.logicalcpu']),
         ram_bytes=int(capture(['sysctl', '-n', 'hw.memsize'])), os=capture(['sw_vers']),
         rust=capture(['rustc', '-Vv']), cargo=capture(['cargo', '-V']), profile='release',
-        build_flags='--release --locked; no feature flags; default Cargo release profile',
-        build_environment={k: os.environ.get(k) for k in ('RUSTFLAGS', 'CARGO_ENCODED_RUSTFLAGS', 'CARGO_BUILD_TARGET')},
+        build_flags='--release --locked; no explicit --features; default features and release profile',
+        build_environment={k: os.environ.get(k) for k in ('RUSTFLAGS', 'CARGO_ENCODED_RUSTFLAGS', 'CARGO_BUILD_TARGET', 'CARGO_TARGET_DIR')},
         git_head=capture(['git', 'rev-parse', 'HEAD']), git_status=capture(['git', 'status', '--porcelain']),
         harness_sha256=harness_digest(), cargo_lock_sha256=hashlib.sha256((ROOT / 'Cargo.lock').read_bytes()).hexdigest(),
         query_records=query_count, import_records=import_count,
@@ -189,13 +238,14 @@ def main():
         with (out / f'{name}.json').open('w') as output, (out / f'{name}.log').open('w') as log:
             subprocess.run(run_args, cwd=ROOT, stdout=output, stderr=log, check=True)
         reports.append(json.loads((out / f'{name}.json').read_text()))
-        commands.extend([build_args, [f'target/release/examples/{example}', str(count), str(repeats)]])
+        commands.extend([build_args, run_args])
     rows = summarize(*reports, args.query_samples, args.import_samples)
     summary = dict(quantile='nearest rank ceil(p*N)-1; small N p95 may be maximum; no confidence interval',
                    environment_file='environment.json', query_file='query.json', import_file='import.json',
                    commands=commands, rows=rows)
     (out / 'summary.json').write_text(json.dumps(summary, indent=2) + '\n')
     (out / 'summary.csv').write_text(csv_text(rows))
+    (out / 'import-batches.svg').write_text(import_chart(rows))
     print(out)
 
 
