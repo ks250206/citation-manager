@@ -1,6 +1,6 @@
 # #12 実行証跡
 
-2026-11-06。現行基点 main `1c113292f88a4189f7f91c13cfdbe45eeb11d7ac`（#9 統合済み）。
+2026-11-06。現行基点 main `8b11ac1f53086ef9c2a610ad10a9ec360c826a75`（#9・#10 統合済み）。
 Rust/Cargo 1.99.1、Python 3.14.0、macOS の T3 専用 worktree で実行。
 実ユーザーの library / config / 他 worktree は使用していない。
 
@@ -26,7 +26,7 @@ Rust/Cargo 1.99.1、Python 3.14.0、macOS の T3 専用 worktree で実行。
 
 ## 完了したコマンド
 
-すべて exit 0。workspace は60 unit/integration tests + 1 compile-fail doctest。
+すべて exit 0。workspace は71 unit/integration tests + 1 compile-fail doctest。
 
 ```sh
 cargo fmt --all -- --check
@@ -40,7 +40,7 @@ git diff --check
 ```
 
 architecture は12 cratesの許可依存方向/platform isolation、migrationは既存2件のID/checksumと
-base不変を確認。Python17テストはarchitecture/migration validatorとPDFium toolのfixture/pin検証。
+base不変を確認。Python18テストはarchitecture/migration validatorとPDFium toolのfixture/pin検証。
 新規migrationは不要。Cargo.lock差分は `cm-core` の既存固定serdeへの依存edge1行だけで、
 依存バージョン/source/checksumの変更はない。
 
@@ -56,15 +56,20 @@ base不変を確認。Python17テストはarchitecture/migration validatorとPDF
 M1 keywordはscanによる書誌substring。FTS/PDF本文/notes/relevance/性能目標は未実装/未測定。
 #33のpreview/merge/作成を含むatomic import、GUI、daemon認可は対象外。
 #9 file store の実装は基点に含まれ、ここでは既存 ingestion API と query の連携を検証した。
-optional native GPUI/PDFium runtime / signing laneはこの変更でローカル再実行していない。
+統合後の native-feature clippy / 12 tests / 実行ファイル link は通過。
+GUI 操作・PDFium runtime・signing は本Issueでローカル再実行していない。
 独立した異モデルreviewとmergeはrootがこのPRのexact headに対して実施する。
 
-## Integration after #9
+## Current main integration
 
-Integrated merged #9 (`1c11329`) before final review. Both feature appendices and module
-registrations are preserved; no applied SQL/checksums or dependency versions changed.
-Root passed integrated workspace fmt/clippy/test/build, architecture, migration preservation
-and Python validators. Workspace tests including compile-fail doctest: 61.
+Integrated merged #9 and #10 (`8b11ac1`) before final integration review. Both feature
+appendices and module registrations are preserved; no applied SQL/checksums or dependency
+versions changed. The query/domain/storage feature code is unchanged from independently
+reviewed `f65daa7`. The only integration conflict was the appended DESIGN section: #10 §30
+and #12 §31 are both retained. Root passed workspace fmt/clippy/72 tests including the
+compile-fail doctest/build, architecture, migration preservation and Python 18 tests.
+Native-feature clippy/12 worker+UI-state tests and actual executable linking also passed.
+The existing #10 ignored target cache was reused; no native app was launched for this check.
 
 ## Independent review response
 
