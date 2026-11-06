@@ -29,6 +29,129 @@ fn public(text: &str) -> String {
         .map(|s| format!("{s}\n"))
         .collect()
 }
+#[test]
+fn standard_month_tokens_survive_public_bibtex_and_have_specific_ris_loss() {
+    for month in [
+        "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+    ] {
+        let input = format!(
+            "@article{{month,title={{Month}},month={}}}",
+            month.to_uppercase()
+        );
+        let parsed = bibtex::parse(input.as_bytes()).unwrap();
+        assert_eq!(parsed.candidates.len(), 1);
+        let d = &parsed.candidates[0];
+        assert!(!d.diagnostics.iter().any(|d| d.error));
+        let bib = BibtexSerializer.encode(&paper(d)).unwrap();
+        let native = public(&bib.text);
+        assert!(native.contains(&format!("month = {month},")), "{native}");
+        let again = bibtex::parse(native.as_bytes()).unwrap();
+        assert_eq!(
+            again.candidates[0]
+                .bibliography
+                .extra_json
+                .as_ref()
+                .unwrap()["bibtex"][0],
+            json!(["expression:month", month])
+        );
+        assert!(!again.candidates[0].diagnostics.iter().any(|d| d.error));
+        let ris = RisSerializer.encode(&paper(d)).unwrap();
+        assert!(
+            ris.diagnostics
+                .iter()
+                .any(|d| d.field == "month" && d.message.contains(month))
+        );
+    }
+}
+
+#[test]
+fn ambiguous_multiline_recovery_marks_all_later_candidates_non_creatable() {
+    let input = b"@article{before,title={Before}}\n@article{real,title={Real},abstract={line one\n@article{fake,title={Injected},doi={10.9/evil}}\n@book{fake2,title={Also injected}}\nrest}\n@misc{after,title={After}}\n";
+    let parsed = bibtex::parse(input).unwrap();
+    assert_eq!(
+        parsed
+            .candidates
+            .iter()
+            .map(|d| d.title.as_str())
+            .collect::<Vec<_>>(),
+        vec!["Before", "Injected", "Also injected", "After"]
+    );
+    assert!(!parsed.candidates[0].diagnostics.iter().any(|d| d.error));
+    for (draft, line) in parsed.candidates[1..].iter().zip([3, 4, 6]) {
+        assert_eq!(draft.source.row, Some(line));
+        assert!(
+            draft
+                .diagnostics
+                .iter()
+                .any(|d| d.error && d.field == "syntax" && d.message.contains("line 2"))
+        );
+    }
+    let mut db = LibraryDb::in_memory().unwrap();
+    let mut service = ImportCoordinator::new(db.imports());
+    let preview = service
+        .preview(parsed.batch(0, 4, Default::default()).unwrap())
+        .unwrap();
+    let decisions = |skip: bool| ImportCommit {
+        preview_id: preview.id.clone(),
+        decisions: (0..4)
+            .map(|i| ImportDecision {
+                candidate_index: i,
+                action: if skip && i > 0 {
+                    ImportAction::Skip
+                } else {
+                    ImportAction::Create
+                },
+            })
+            .collect(),
+    };
+    assert!(service.commit(decisions(false)).is_err());
+    let outcome = service.commit(decisions(true)).unwrap();
+    assert_eq!(outcome.created.len(), 1);
+    assert_eq!(outcome.skipped, 3);
+}
+
+#[test]
+fn public_text_caret_and_tilde_use_literal_tex_commands_and_decode_without_extension() {
+    let mut d = PaperDraft::titled("Ca^2+ and 50~nm");
+    d.bibliography.abstract_text = Some("literal ^ and ~".into());
+    let encoded = BibtexSerializer.encode(&paper(&d)).unwrap();
+    let native = public(&encoded.text);
+    assert!(native.contains("title = {Ca\\textasciicircum{}2+ and 50\\textasciitilde{}nm}"));
+    assert!(!native.contains('^') && !native.contains('~'));
+    let parsed = bibtex::parse(native.as_bytes()).unwrap();
+    assert_eq!(parsed.candidates[0].title, d.title);
+    assert_eq!(
+        parsed.candidates[0].bibliography.abstract_text,
+        d.bibliography.abstract_text
+    );
+    assert!(
+        !parsed.candidates[0]
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("Unknown") || d.error)
+    );
+}
+
+#[test]
+fn ris_protected_person_parts_and_whole_corporate_group_use_distinct_names() {
+    let parsed = ris::parse(b"TY  - JOUR\nTI  - Names\nAU  - {Smith}, {John}\nAU  - {Barnes and Noble}\nED  - {Editor}, {Ann}\nER  -\n").unwrap();
+    let names = &parsed.candidates[0].bibliography.authors;
+    assert_eq!(names[0].family_name.as_deref(), Some("Smith"));
+    assert_eq!(names[0].given_name.as_deref(), Some("John"));
+    assert!(names[0].literal_name.is_none());
+    assert_eq!(names[1].literal_name.as_deref(), Some("Barnes and Noble"));
+    assert_eq!(names[2].family_name.as_deref(), Some("Editor"));
+    assert_eq!(names[2].given_name.as_deref(), Some("Ann"));
+    assert_eq!(names[2].role, "editor");
+    for serializer in [
+        &BibtexSerializer as &dyn BibliographySerializer,
+        &RisSerializer,
+    ] {
+        let encoded = serializer.encode(&paper(&parsed.candidates[0])).unwrap();
+        assert!(public(&encoded.text).contains("Smith, John"));
+        assert!(public(&encoded.text).contains("{Barnes and Noble}"));
+    }
+}
 fn projection(d: &PaperDraft) -> Value {
     let b = &d.bibliography;
     json!({"key": b.citation_key, "title": d.title, "type": b.paper_type, "year": b.year,

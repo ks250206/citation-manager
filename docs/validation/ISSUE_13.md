@@ -21,7 +21,7 @@ git diff --check
 git diff --exit-code 427f130e0ba56d40327451bd5ef28b963dffefb6 -- crates/storage/migrations
 ```
 
-Passed: fmt, warnings-as-errors workspace clippy, **149 Rust tests including doctests**,
+Passed: fmt, warnings-as-errors workspace clippy, **153 Rust tests including doctests**,
 locked workspace build, architecture (12 crates), migration validator (**2 immutable
 migrations**, explicit base preserved), **18 Python tests**, whitespace and unchanged
 migration-tree comparison. The real-DB adapter tests run in the workspace suite; the
@@ -165,6 +165,30 @@ executed. No dependency activation, version or checksum change was needed. No Bi
 runtime/rendering compatibility test is claimed.
 
 ## Limits and handoff
+
+### Final P3 corrections after independent re-review
+
+Opus 5.5 medium re-reviewed `b858e4d` and confirmed the original nine findings resolved,
+including independent probes and the public-field, DOI and 1,000-record tests. The report
+is recorded at PR comment6690698482. Root addressed the four new nonblocking P3s:
+
+- All twelve standard month tokens survive cm-v1-free public BibTeX output as bare tokens;
+  RIS reports a field-specific month loss instead of relying on the generic extension notice.
+- Once a multiline `@` boundary is ambiguous, **all** subsequently recovered drafts carry
+  an error identifying the original line. Real #33 preview cannot commit them as Create;
+  earlier safe records can still commit if recovered rows are explicitly skipped.
+- Literal general-text caret/tilde use `\textasciicircum{}` / `\textasciitilde{}` and decode
+  without cm-v1. The [official LaTeX2e source](https://latex-project.org/help/documentation/source2e.pdf)
+  defines these text commands. No TeX/Biber rendering or execution is claimed.
+- One outer-group predicate is shared by BibTeX and RIS; separately protected RIS family/
+  given components remain person names, while a whole grouped organization remains literal.
+
+Four additional regression tests cover these public expectations and actual rejected/Skip
+commit behavior. Focused bibliography behavior7 + interoperability16 tests pass. Root reran
+the full workspace:153 Rust tests including the two1,000-record round-trips,18 Python tests,
+fmt, locked warnings-denied clippy/build, architecture, immutable migrations against427f130
+and whitespace all passed. Exact-head independent re-review and CI remain pending.
+Dependency pins, Cargo.lock and immutable migrations are unchanged by this correction.
 
 - BibTeX/RIS transfer bibliography only. PDFs, attachments, annotations, collection/tag
   relationships and internal IDs need separate migration. Source provenance is reported,

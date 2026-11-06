@@ -199,35 +199,6 @@ impl<'a> Reader<'a> {
         Ok((kind, key, fields))
     }
 }
-// Exactly one balanced group must enclose the whole name, not {Smith}, {John}.
-fn outer_group(s: &str) -> bool {
-    if !s.starts_with('{') {
-        return false;
-    }
-    let mut depth = 0usize;
-    let mut escaped = false;
-    for (i, c) in s.char_indices() {
-        if escaped {
-            escaped = false;
-            continue;
-        }
-        match c {
-            '\\' => escaped = true,
-            '{' => depth += 1,
-            '}' => {
-                let Some(n) = depth.checked_sub(1) else {
-                    return false;
-                };
-                depth = n;
-                if depth == 0 {
-                    return i + 1 == s.len();
-                }
-            }
-            _ => {}
-        }
-    }
-    false
-}
 fn has_group(s: &str) -> bool {
     let mut escaped = false;
     for (i, c) in s.char_indices() {
@@ -391,6 +362,16 @@ fn decode(text: &str) -> (String, bool) {
         }
         if let Some(tail) = rest.strip_prefix("\\textbackslash{}") {
             out.push('\\');
+            rest = tail;
+            continue;
+        }
+        if let Some(tail) = rest.strip_prefix("\\textasciicircum{}") {
+            out.push('^');
+            rest = tail;
+            continue;
+        }
+        if let Some(tail) = rest.strip_prefix("\\textasciitilde{}") {
+            out.push('~');
             rest = tail;
             continue;
         }
@@ -564,12 +545,8 @@ fn draft(
             );
         }
         if let Some(expression) = parsed.expression {
-            let standard_month = field == "month"
-                && [
-                    "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov",
-                    "dec",
-                ]
-                .contains(&expression.to_ascii_lowercase().as_str());
+            let standard_month =
+                field == "month" && standard_month_identifier(&expression).is_some();
             warn(
                 &mut d,
                 &field,
@@ -699,6 +676,7 @@ pub fn parse(input: &[u8]) -> Result<ParseReport, ServiceError> {
     let mut blocks = 0;
     let mut line = 1u64;
     let mut counted = 0;
+    let mut ambiguous_line = None;
     while r.pos < text.len() {
         r.skip();
         if r.pos == text.len() {
@@ -713,10 +691,25 @@ pub fn parse(input: &[u8]) -> Result<ParseReport, ServiceError> {
         }
         match r.entry() {
             Ok((kind, key, fields)) => match draft(kind, key, fields) {
-                Ok(d) => report.push(d, "bibtex", line)?,
+                Ok(mut d) => {
+                    if let Some(origin) = ambiguous_line {
+                        warn(
+                            &mut d,
+                            "syntax",
+                            &format!(
+                                "Recovered after ambiguous boundary at line {origin}; edit source and reparse before saving"
+                            ),
+                            true,
+                        );
+                    }
+                    report.push(d, "bibtex", line)?;
+                }
                 Err(e) => report.diagnostic(line, format!("Record rejected: {e}"), true),
             },
             Err(e) => {
+                if e.starts_with("Ambiguous entry boundary") && ambiguous_line.is_none() {
+                    ambiguous_line = Some(line);
+                }
                 report.diagnostic(line, e, true);
                 // Recover only at an explicit physical-line entry start, never by
                 // guessing an arbitrary @ inside an email/URL or broken value.
@@ -744,6 +737,8 @@ fn escape(text: &str) -> String {
     for c in text.chars() {
         match c {
             '\\' => out.push_str("\\textbackslash{}"),
+            '^' => out.push_str("\\textasciicircum{}"),
+            '~' => out.push_str("\\textasciitilde{}"),
             '@' => out.push_str("{@}"),
             '{' | '}' | '%' | '&' | '#' | '_' | '$' => {
                 out.push('\\');
@@ -856,6 +851,10 @@ impl BibliographySerializer for BibtexSerializer {
                     field(k, &decode(v).0);
                 }
             }
+        }
+        // Only the closed set of standard month tokens is replayed without expansion.
+        if let Some(month) = standard_month(p) {
+            out.push_str(&format!("  month = {month},\n"));
         }
         // Names need grouping that protects organizations and literal "and".
         for role in ["author", "editor"] {

@@ -145,6 +145,57 @@ pub(crate) fn person(name: &str, role: &str, literal: bool) -> Contributor {
         role: role.into(),
     }
 }
+// Exactly one balanced group must enclose the whole name, not {Smith}, {John}.
+pub(crate) fn outer_group(s: &str) -> bool {
+    if !s.starts_with('{') {
+        return false;
+    }
+    let mut depth = 0usize;
+    let mut escaped = false;
+    for (i, c) in s.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match c {
+            '\\' => escaped = true,
+            '{' => depth += 1,
+            '}' => {
+                let Some(n) = depth.checked_sub(1) else {
+                    return false;
+                };
+                depth = n;
+                if depth == 0 {
+                    return i + 1 == s.len();
+                }
+            }
+            _ => {}
+        }
+    }
+    false
+}
+pub(crate) fn standard_month_identifier(raw: &str) -> Option<&'static str> {
+    [
+        "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+    ]
+    .into_iter()
+    .find(|month| raw.eq_ignore_ascii_case(month))
+}
+pub(crate) fn standard_month(p: &Paper) -> Option<&'static str> {
+    p.bibliography
+        .extra_json
+        .as_ref()?
+        .get("bibtex")?
+        .as_array()?
+        .iter()
+        .find_map(|entry| {
+            if entry.get(0)?.as_str()? == "expression:month" {
+                standard_month_identifier(entry.get(1)?.as_str()?)
+            } else {
+                None
+            }
+        })
+}
 pub(crate) fn name(p: &Contributor) -> String {
     p.literal_name
         .clone()

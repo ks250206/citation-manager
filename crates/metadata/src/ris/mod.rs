@@ -95,13 +95,24 @@ fn draft(fields: Vec<(String, String)>) -> Result<PaperDraft, ServiceError> {
                 } else {
                     "editor"
                 };
-                let literal = value.starts_with('{') && value.ends_with('}');
+                let literal = outer_group(&value);
                 let name = if literal {
-                    &value[1..value.len() - 1]
+                    value[1..value.len() - 1].to_owned()
                 } else {
-                    &value
+                    value
+                        .split(',')
+                        .map(|part| {
+                            let part = part.trim();
+                            if outer_group(part) {
+                                &part[1..part.len() - 1]
+                            } else {
+                                part
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 };
-                b.authors.push(person(name, role, literal));
+                b.authors.push(person(&name, role, literal));
             }
             "JO" | "JF" | "JA" | "T2" => {
                 if b.journal.as_ref().is_some_and(|v| v != &value) {
@@ -423,6 +434,12 @@ impl BibliographySerializer for RisSerializer {
         out.truncate(out.len() - "ER  - \n".len());
         out.push_str(&format!("C9  - cm-v1:{ext}\nER  - \n\n"));
         let mut encoded = finish_record(p, out, "RIS")?;
+        if let Some(month) = standard_month(p) {
+            encoded.diagnostics.push(cm_core::export::ExportDiagnostic {
+                paper: Some(p.id), field: "month".into(),
+                message: format!("Public RIS cannot retain BibTeX month identifier {month}; exact syntax requires cm-v1"),
+            });
+        }
         let original = b.paper_type.as_deref().unwrap_or("misc");
         let public = kind(ty(original));
         if original != public {

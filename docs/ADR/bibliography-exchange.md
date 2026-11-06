@@ -84,12 +84,17 @@ change the set. Export from a quiescent library for a reproducible migration.
   exactly under `extra_json.bibtex` as `expression:<field>` pairs. Standard month identifiers
   jan…dec are warning-only; all other unresolved expressions make the retained draft
   review-only, preserving its usable title/authors/DOI. Definitions are never looked up.
-  Expressions are not replayed as public native fields; exact raw syntax requires extra_json/
-  cm-v1 and explicit review. Both year and date stay present on disagreement with a row error.
+  Only the fixed twelve standard month tokens are replayed publicly as bare BibTeX month
+  values, without evaluation. RIS emits a month-specific loss diagnostic; cm-v1 retains
+  the syntax. Other expressions are not replayed as public native fields; exact raw syntax
+  requires extra_json/cm-v1 and explicit review. Both year and date stay present on
+  disagreement with a row error.
 - Native DOI/URL are verbatim, on both reading and writing: `_`, `%`, `&`, `#` and balanced
   braces are not TeX-escaped or decoded. Export explicitly rejects unmatched/deep braces,
   backslashes and CR/LF in these fields. General text uses grouped literal `{@}` (including
-  line boundaries), never the LaTeX spacing command `\@`.
+  line boundaries), never the LaTeX spacing command `\@`. General-text caret and tilde use
+  `\textasciicircum{}` / `\textasciitilde{}`, decoded back to literal characters without TeX
+  execution; verbatim DOI/URL remain unchanged.
 - Ordinary fields are written publicly. Every export additionally emits a **private,
   versioned `cm-v1` extension** (`cm_data` in BibTeX, `C9  - cm-v1:` in RIS): bounded hex-encoded
   JSON for exact contributors/order/roles/ORCID, external IDs, arbitrary extra_json, publication
@@ -138,7 +143,12 @@ their definitions. `crossref`
 and `xdata` are preserved without inheritance. Recovery after broken syntax is only at a
 physical-line entry start, not an arbitrary `@` in an email/URL. An unescaped line starting
 with `@` inside a multiline field is ambiguous and rejected conservatively; the serializer
-groups literal `@` so multiline records reparse without changing its TeX meaning. Record-local
+groups literal `@` so multiline records reparse without changing its TeX meaning. After such
+an ambiguous boundary, all subsequently recovered drafts have a source-line row error and
+cannot Create/Merge; file syntax must be corrected and reparsed, or those drafts explicitly
+skipped. The parser cannot prove whether later apparent entries were embedded in the broken
+value. Records recovered after ordinary local limit failures retain the previous behavior.
+Record-local
 byte/field/author/draft/depth failures skip only the offending record and recover at the next
 physical `@` entry or RIS TY. Rejected content is not retained or truncated into a false draft;
 all examined blocks still count against the file-wide block budget. RIS starts at TY, ends at ER,
