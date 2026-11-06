@@ -1,216 +1,172 @@
-# #53: measured bundled SQLite tokenizer and finite short-query fallback
+# #53: corrected bundled-SQLite Japanese tokenizer experiment
 
-The 23-record measurements below are the original baseline. Review found that
-co-located normalization variants could mask missing cross-form matches. They are
-retained as historical evidence; the corrected 30-record run is documented separately
-after isolated variant expectations are committed. Neither run proves product #18.
-
-Measured on 2026-11-07 JST at clean implementation commit
-`0d7942fbe5767886b254af1c2d2ac4dd9c99e819`, based on prepared main
-`9e7e66e3e284a047096eae0707b823233206fe8c`. Subsequent changes retain evidence
-and this report. This completes the independent measurement scope of #53 only.
-#18 remains dependent on #25; #30 full-load acceptance remains open. #34 is HELD
-and #23/#25 gates stay closed. #15's GUI worker remains the sole GUI operator;
-this task performed no GUI/browser/native changes or GUI actions.
+The current result is the review-corrected **30-record** corpus, measured at clean
+commit `ca1df7662982f9e877144695344075efe6ce2803` on 2026-11-07 JST, based on main
+`9e7e66e3e284a047096eae0707b823233206fe8c`. The source/expected sets were committed
+before this corrected run. Later changes retain its evidence and this report.
+Only #53 is covered: #18 still depends on #25; #30, GUI #15 and held #34 are not
+completed, and #23/#25 gates remain closed.
 
 ## Reproduction and provenance
 
 ```sh
 python3 scripts/search-experiments/run.py --out a-new-issue53-run
+cargo test --locked -p cm-storage --example search_experiment
+python3 -m unittest discover -s scripts -p 'test_*.py'
 ```
 
-[Exact method and limitations](../../scripts/search-experiments/README.md),
-[23-record synthetic CC0 corpus](../../scripts/search-experiments/fixture.json),
-[independent expected hit sets](../../scripts/search-experiments/expected.json), and
-[license](../../scripts/search-experiments/LICENSE.fixture) are committed separately
-from observations. The author's claim that the original hand-enumerated expectations
-predate execution cannot be established from git history: oracle and instrument were
-introduced in the same commit. No third-party/user literature is present.
-There is no DB path option: the Rust instrument owns a new private TempDir DB,
-uses a canonical path with SQLite NOFOLLOW, and deletes it on exit. The runner
-refuses to overwrite its dedicated output directory.
+[Method](../../scripts/search-experiments/README.md),
+[synthetic CC0 fixture](../../scripts/search-experiments/fixture.json),
+[expected ID sets](../../scripts/search-experiments/expected.json), and
+[license](../../scripts/search-experiments/LICENSE.fixture) are retained.
+No user/third-party literature or real library is used. The original claim that
+expectations were authored before execution rests on the author's report: original
+oracle and instrument shared commit `0d7942f`, so git cannot establish that ordering.
+The revised expectations were manually enumerated using isolated texts and earlier
+observed semantics, not generated from the corrected run's output. They were
+committed at `ca1df7662982f9e877144695344075efe6ce2803` before rerunning; that chronology
+does not imply that the expectations were uninformed by prior measurements.
 
-Retained [environment/source/binary hashes](SEARCH_EXPERIMENT_2026-11-07/environment.json),
-[raw SQL observations and all timings](SEARCH_EXPERIMENT_2026-11-07/raw.json),
-[validated summary JSON](SEARCH_EXPERIMENT_2026-11-07/summary.json),
-[CSV](SEARCH_EXPERIMENT_2026-11-07/summary.csv), and
-[Cargo artifact build log](SEARCH_EXPERIMENT_2026-11-07/build.log) are inspectable.
-The raw file SHA-256 is in summary.json; environment_sha256 is sorted JSON before
-adding its own hash. Source hashes cover fixture/oracle, Rust/Python instrument
-and pinned SQLite C/build sources. Summary and CSV regenerate exactly from raw
-with the functions documented in the method. Build artifacts live in target and
-are not required to inspect the retained JSON.
+The original [23-record data](SEARCH_EXPERIMENT_2026-11-07/raw.json) and
+[original check logs](SEARCH_EXPERIMENT_2026-11-07/checks.json) remain historical.
+Their co-located width/kana/accent variants masked cross-form behavior; their
+67-case/2,077-call timings are superseded, not combined with this run.
 
-Environment: Mac16,6 Apple M4 Max, arm64, 14 physical/logical cores,
-**36 GiB RAM (38,654,705,664 bytes)**, macOS 27.2 (26B123), Rust/Cargo 1.99.1.
-Default release opt-level 3 with no debug assertions; recorded build overrides
-were unset. No workspace checks were started by this implementation during the
-measurement. Other processes/parallel tasks and OS caches were uncontrolled.
+Current [environment/source/binary hashes](SEARCH_EXPERIMENT_REVIEW_2026-11-07/environment.json),
+[raw observations](SEARCH_EXPERIMENT_REVIEW_2026-11-07/raw.json),
+[summary JSON](SEARCH_EXPERIMENT_REVIEW_2026-11-07/summary.json),
+[CSV](SEARCH_EXPERIMENT_REVIEW_2026-11-07/summary.csv) and
+[Cargo build log](SEARCH_EXPERIMENT_REVIEW_2026-11-07/build.log) record the clean
+measured source and real optimized executable. Raw/environment hashes and source
+hashes are independently recomputable; summary/CSV regenerate from raw using the
+runner. The runtime is pinned bundled SQLite **3.54.1**, through
+rusqlite 0.41.1 / libsqlite3-sys 0.39.1, not Python/system SQLite. Its source ID is
+`2026-10-16 14:45:20 555e07ef33f69a0957d24d8e555b702464a131d6f1607f4c3c1e4551e8e6ca76`. All 51 compile options are in raw;
+FTS5 and DBSTAT are enabled, ICU is not. Five SQLite-specific environment overrides,
+including LIBSQLITE3_FLAGS, are rejected before output creation. Other compiler
+flags are recorded rather than exhaustively prohibited; this is not a hermetic build.
 
-The instrument ran `rusqlite 0.41.1` / `libsqlite3-sys 0.39.1`, both with Cargo's
-bundled feature, and runtime **SQLite 3.54.1**. Runtime source ID exactly matched
-the pinned C source:
+Environment: Mac16,6 Apple M4 Max, **36 GiB**, arm64, macOS 27.2 (26B123),
+Rust/Cargo 1.99.1. Release opt-level 3, debug assertions disabled. No root test/build
+checks ran concurrently with the measurement; other processes and OS caches were
+uncontrolled. The owned private TempDB uses canonical paths, SQLite NOFOLLOW,
+0700, DELETE journal and synchronous FULL, then is removed. There is no DB path
+argument. Output rejects overwrite and checks target/parent with lstat before mkdir;
+this is not a defense against a malicious same-user path replacement race.
 
-```text
-2026-10-16 14:45:20 555e07ef33f69a0957d24d8e555b702464a131d6f1607f4c3c1e4551e8e6ca76
-```
+## Corrected behavior: variants in separate records
 
-All 51 compile options are in raw.json, including `ENABLE_FTS5`,
-`ENABLE_DBSTAT_VTAB`, `THREADSAFE=1`, and `COMPILER=clang-21.0.0`. The runner
-checked compiled artifact features and runtime source/version against pinned source;
-it did not execute system or Python SQLite. Experiment DB settings: 4,096-byte
-pages, DELETE journal, synchronous FULL. Tables use stored content, detail full,
-columnsize 1; tokenizers explicitly use `unicode61 remove_diacritics 1` and
-`trigram case_sensitive 0 remove_diacritics 0`, with remaining options default.
-
-## Measured behavior
-
-Actual instance vocabulary contains 72 unicode61 token occurrences / 45 distinct
-terms, and 281 trigram occurrences / 186 distinct terms. Query text is inserted
-into separate probe indexes to observe index-time tokens. Candidates are a SQL
-union of documents sharing any probe token, not an instrumented FTS planner list.
-The exact hit column executes separately quoted-phrase MATCH. All corpus/query
-term/doc/offset records and every expected/actual ID set are retained in raw.json.
-
-**Literal reference:** ASCII case-insensitive exact substring, preserving all
-Unicode normalization, non-ASCII case, width and accent differences. Length is
-Unicode scalar count. No silent NFC/NFKC/full folding is performed. FTS tokenizer
-semantics differ deliberately; recall against this literal reference is diagnostic,
-not a claim that all FTS matches have literal precision.
+IDs 7/24/25 contain full-width/ASCII upper/ASCII lower strings separately. IDs
+8/26/27 contain half-width/composed/decomposed kana separately, and 28 contains
+plain `カ ラス`. Accent forms are separated at 6/30 and 20/29. Literal reference
+folds ASCII A-Z only: no NFC/NFKC, accent, width or non-ASCII case folding. Query
+length counts Unicode scalars, not bytes or graphemes. Every expected hit set is
+asserted by real SQL; CI also asserts the isolated unicode61 token sequences.
 
 | Query | Literal expected IDs | unicode61 MATCH IDs | trigram MATCH IDs |
 |---|---|---|---|
-| `電` (1 scalar) | 1,2,3,9,10,16,17,22 | 9 | none: no tokens |
-| `電池` (2) | 3,9,10,16,17,22 | 9,17,22 | none: no tokens |
-| `固体電` (3) | 1,3,16 | none | 1,3,16 |
-| `電解質` (3) | 1,2,16 | 2 | 1,2,16 |
+| `電` | 1,2,3,9,10,16,17,22 | 9 | none |
+| `電池` | 3,9,10,16,17,22 | 9,17,22 | none |
+| `固体電` | 1,3,16 | none | 1,3,16 |
+| `電解質` | 1,2,16 | 2 | 1,2,16 |
+| `ABC` | 18,24,25 | 18,24,25 | 18,24,25 |
+| `ＡＢＣ` | 7 | 7 | 7 |
+| `ｶﾞﾗｽ` | 8 | 8 | 8 |
+| `ガラス` | 26 | 26 | 26 |
+| `ガラス` | 27 | 27,28 | 27 |
+| `カ ラス` | 28 | 27,28 | 28 |
+| `café` | 6 | 6,23,30 | 6,23 |
+| `café` | 30 | 6,23,30 | 30 |
+| `é` | 6,20 | 20,29 | none |
+| `é` | 29,30 | 20,29 | none |
 | `alpha beta` | 11 | 11,12 | 11 |
 | `alpha, beta` | 12 | 11,12 | 12 |
-| `café` (NFC) | 6 | 6,23 | 6,23 |
-| `café` (NFD) | 6 | 6,23 | 6 |
-| `ω` | 15 | 15,23 | none: no tokens |
 
-For example, row 1 `固体電解質リチウム` is one unicode61 token; row 2's spaces
-split it. Probe `固体電` has no shared unicode61 corpus token, while trigram has
-that token at rows 1,3,16. The `alpha beta` vocabulary union returns candidates
-11,12,13 for both tokenizers: unicode61 phrase order removes 13; trigram requires
-the actual space sequence and also removes 12. The NFD `café` query has unicode61 probe `cafe`,
-but trigram probes `caf`, `afe`, `fé`; its candidates include 23 via `caf`, while
-exact trigram MATCH removes 23. These are SQL observations, not documentation-based
-predictions substituted for execution. Extra FTS accent/case hits are preserved.
+The important measured boundary is **dakuten splitting**: unicode61 emits one
+`ガラス` token for composed document 26, but `カ` and `ラス` for decomposed document
+27. A composed query misses 27; a decomposed query matches both 27 and plain-kana
+28. Conversely `カ ラス` hits decomposed glass at 27 as well as its literal record
+28. This is a false positive relative to this literal oracle, not Japanese word
+understanding. Neither tokenizer performs width/NFC normalization: trigram also
+keeps the three kana spellings separate. No general Japanese recall guarantee follows.
 
-## Separate bounded literal fallback
+For Latin accents, unicode61's configured remove_diacritics=1 maps both isolated
+é/e+combining-acute to token e. Trigram has remove_diacritics=0 and distinguishes
+NFC/NFD `café`/`café`; the **NFD** probe is caf, afe, fe+combining-acute. unicode61
+phrases can match across punctuation (`alpha beta` matches rows 11 and 12).
+All instance vocabulary is retained: 73 occurrences/45 terms for unicode61,
+261 occurrences/173 terms for trigram. Candidate IDs mean the SQL union of documents
+sharing any probe token, not internal planner candidates. Exact MATCH hits remain
+separate. All text is bound; quoted phrase escaping is inside the FTS timer.
 
-`bucket='materials'` selects ten records in ascending ID order:
-1,2,3,4,5,9,10,16,18,22. Each call counts that filter's records, then reads id/text
-with SQL LIMIT before literal comparison. Cap is 1..64; this is a row-count bound,
-not a timeout/byte/general SQL-work guarantee. The count may scan the filtered
-index; unsearched/excluded ID diagnostics occur outside the timer. The product's
-PDF/collection/field scopes and continuation are not implemented.
+## Separate bounded short-query series and timings
 
-| Case | Cap / read | Returned IDs | Unsearched eligible | Oracle recall within filter | Scope status |
-|---|---:|---|---:|---:|---|
-| `電池` cap 2 | 2 / 2 | empty | 8 | 0/5 | partial_unsearched |
-| `電池` cap 4 | 4 / 4 | 3 | 6 | 1/5 | partial_unsearched |
-| `電池` cap 64 | 64 / 10 | 3,9,10,16,22 | 0 | 5/5 | complete_within_filter |
-| `電` cap 4 | 4 / 4 | 1,2,3 | 6 | 3/7 | partial_unsearched |
-| `電` cap 64 | 64 / 10 | 1,2,3,9,10,16,22 | 0 | 7/7 | complete_within_filter |
-| `li` cap 64 | 64 / 10 | 3,4,5 | 0 | 3/3 | complete_within_filter |
-| `_`, language filter | 3 / 3 | empty | 8 | 0/1 | partial_unsearched |
-| `雪` cap 2 | 2 / 2 | empty | 8 | null (empty oracle) | partial_unsearched |
-| `電`, empty filter | 2 / 0 | empty | 0 | null (empty oracle) | complete_within_filter |
+**69 cases = 30 queries × 2 tokenizers + 9 fallback cases**, with 5 untimed warmups
+and 31 timed repetitions each: **2,139 timed calls**. Same connection and prior
+setup/probes make these warm observations; there is no cold-cache control.
+Nearest-rank p50/p95 use ranks 16/30 of N=31, no interpolation or confidence interval.
+FTS includes phrase quoting, prepare/bind/step and ordered IDs. Fallback includes
+cap/length checks, filtered count, capped ordered text fetch and ASCII literal
+comparison/ID/byte-count collection. Setup, probes/oracle/scope diagnostics and
+serialization are excluded. Not import, PDF extraction or product service throughput.
 
-The cap-2 empty return is **not a zero-match conclusion**: five expected matches
-remain unsearched. Even the complete materials result excludes 13 corpus records,
-including matching outside-filter row 17. Raw output lists every unsearched and
-excluded ID. Recall is possible here only because the fixture oracle is known;
-a product cannot infer recall from unsearched user data. Empty denominators remain
-null even when fixture inspection confirms absence.
-
-## Timing and index size
-
-67 separate cases (29 queries × 2 tokenizers + 9 fallback) each have 5 untimed
-warmups and 31 timed repetitions: **2,077 timed calls**. Setup, vocabulary/correctness
-probes and the same connection warm the database; no cold-cache measurement occurred.
-Exact timers are in raw.json and README: FTS includes phrase quoting/prepare/bind/
-step/ordered IDs; fallback includes filtered count/capped text fetch/ASCII literal
-comparison/ID collection. Oracle checks, scope-ID diagnostics and serialization are
-outside. Seed/indexing/import/extraction are not throughput measurements. p50/p95
-are nearest-rank ranks 16/30 of N=31, no interpolation/confidence interval.
-
-FTS normal series, selected cases, milliseconds:
-
-| Query | unicode61 p50 / p95 | trigram p50 / p95 |
+| Query | unicode61 p50 / p95 ms | trigram p50 / p95 ms |
 |---|---:|---:|
-| `電` | 0.007084 / 0.009209 | 0.005166 / 0.005375 |
-| `電池` | 0.007167 / 0.008208 | 0.014750 / 0.019917 |
-| `固体電` | 0.006834 / 0.007541 | 0.007250 / 0.007916 |
-| `電解質` | 0.007459 / 0.008459 | 0.007167 / 0.007875 |
-| `alpha beta` | 0.008458 / 0.009167 | 0.010916 / 0.011875 |
-| `alpha, beta` | 0.007250 / 0.008500 | 0.029000 / 0.097083 |
+| `電` | 0.006542 / 0.009125 | 0.004917 / 0.006333 |
+| `電池` | 0.006333 / 0.007291 | 0.004875 / 0.005084 |
+| `固体電` | 0.006292 / 0.018250 | 0.018292 / 0.018959 |
+| `電解質` | 0.006166 / 0.012542 | 0.006375 / 0.007250 |
+| `ガラス` | 0.006959 / 0.007333 | 0.007042 / 0.007209 |
+| `カ ラス` | 0.019917 / 0.052125 | 0.007416 / 0.015041 |
 
-Short-query fallback series (separate), milliseconds:
+Short-query fallback has explicit bucket filter and row cap 1..64; no hidden
+unlimited text search precedes LIMIT. Filter counts can scan the bucket index,
+so this is a row-count bound, not a timeout/byte/SQL-operation budget. Materials
+contains ten records; a complete materials search still excludes 20 other records,
+including outside-filter match 17. The expanded language bucket has 18 records.
 
-| Case | p50 / p95 |
-|---|---:|
-| `電池` cap 2 | 0.011875 / 0.013042 |
-| `電池` cap 4 | 0.012250 / 0.013209 |
-| `電池` cap 64 | 0.014000 / 0.016584 |
-| `電` cap 4 | 0.013000 / 0.014292 |
-| `電` cap 64 | 0.013542 / 0.014542 |
-| `li` cap 64 | 0.013625 / 0.015000 |
-| `_`, language | 0.012000 / 0.013291 |
-| `雪` cap 2 | 0.011917 / 0.013292 |
-| empty filter | 0.011208 / 0.012208 |
+| Case | cap / read | returned count | unsearched in filter | status | p50 / p95 ms |
+|---|---:|---:|---:|---|---:|
+| two_cap2 | 2 / 2 | 0 | 8 | partial_unsearched | 0.011625 / 0.018583 |
+| two_cap4 | 4 / 4 | 1 | 6 | partial_unsearched | 0.011500 / 0.013583 |
+| two_complete | 64 / 10 | 5 | 0 | complete_within_filter | 0.013208 / 0.027792 |
+| one_cap4 | 4 / 4 | 3 | 6 | partial_unsearched | 0.011334 / 0.015042 |
+| one_complete | 64 / 10 | 7 | 0 | complete_within_filter | 0.013333 / 0.025292 |
+| ascii_two | 64 / 10 | 3 | 0 | complete_within_filter | 0.013000 / 0.027625 |
+| punctuation_partial | 3 / 3 | 0 | 15 | partial_unsearched | 0.010958 / 0.011291 |
+| absent_partial | 2 / 2 | 0 | 8 | partial_unsearched | 0.010708 / 0.011875 |
+| empty_filter | 2 / 0 | 0 | 0 | complete_within_filter | 0.009917 / 0.011833 |
 
-These microsecond-scale values and visible variation do not establish comparative
-product performance. No pooling across tokenizers/fallback or extrapolation to
-10,000 papers/20,000 pages/16GB is justified.
+Empty hits plus partial_unsearched does not mean zero matches. For two_cap2, all
+five expected in-filter hits remain unsearched. Expected-oracle recall is meaningful
+only for this synthetic corpus; empty denominators remain null. IDs of unsearched
+and excluded records and compared bytes are in raw. Production continuation,
+result/time/byte bounds and field/collection/PDF scopes remain unimplemented.
 
-Actual `dbstat` `_data` + `_idx` allocation is **8,192 bytes per tokenizer**,
-including unused page space. Each uses two 4,096-byte pages, so equal allocations
-here hide payload differences: data BLOBs are 577 bytes unicode61 / 1,949 trigram;
-logical SQL-value payloads including `_idx` are 579 / 1,951 bytes. Full definitions
-and per-object payload/unused bytes are in raw.json. These exclude stored content,
-docsize/config, corpus, probe tables, freelist and file header; neither measure is
-total FTS/database storage or a frozen product field-projection decision.
+Both index `_data` + `_idx` B-trees allocate **8,192 bytes**, two 4 KiB pages each.
+Data BLOBs are 588 bytes unicode61 / 1,818 trigram; logical SQL-value payloads
+including `_idx` are 590 / 1,820 bytes. Definitions/per-object unused space are
+retained. This excludes content/docsize/config/corpus/probes/freelist/file headers:
+it is neither total FTS storage nor production field-projection cost. Tiny timing
+and allocation figures cannot be extrapolated to 10,000 papers/20,000 pages/16GB.
 
-## Design recommendations and unfinished product work
+## Design consequences and validation status
 
-Measured behavior supports keeping a distinct, explicitly bounded short-query
-path and reporting its unsearched scope. A trigram index can recover demonstrated
-Japanese substrings of at least three scalars; unicode61 alone cannot guarantee
-literal Japanese substring recall. These are recommendations from this corpus,
-not general recall/performance guarantees or a finalized schema/field policy.
+Keep short-query fallback and unsearched scope distinct. Trigram recovers the
+shown 3+ scalar substrings, but width/NFC folding and decomposed dakuten require an
+explicit product normalization/position policy, with regression cases like these.
+unicode61 alone does not guarantee Japanese substring recall or literal precision.
+These are measured constraints/recommendations, not a chosen product schema.
+#18 owns projection/trigger synchronization/rebuild/ranking/normalization/extraction;
+#25 owns jobs/IPC/lifecycle and #21 the GUI. None were simulated or enabled here.
+#30's full-load/RSS/security/cross-interface requirements remain open.
 
-#18 still owns production FTS projection, synchronization triggers, rebuild,
-weighted candidate merging/ranking, PDF extraction and annotation integration,
-query/result/time/byte bounds, continuation and the chosen case/normalization
-contract. #25 owns actual jobs/IPC/lifecycle; #21 owns GUI search. None were wired
-or simulated here. #30 still owns representative 16GB/PDF/GUI/total-RSS/CPU/I/O and
-cross-interface/failure acceptance. No DESIGN §16 target is claimed achieved.
-
-## Validation and review status
-
-All required local checks passed; [commands, counts and hashes](SEARCH_EXPERIMENT_2026-11-07/checks.json)
-and eight accompanying `.log` files retain exact exit status and timings (only trailing
-blank lines normalized; both raw/stored SHA-256 retained):
-
-- `cargo fmt --all -- --check`.
-- `cargo clippy --workspace --all-targets --locked -- -D warnings`.
-- `cargo test --workspace --locked`: 189 passed, zero failures/ignored;
-  includes the registered example's three real SQLite/literal/bounds regressions,
-  existing 1,000-record round trips, and compile-fail doctest.
-- `cargo build --workspace --locked`.
-- Architecture validator; migration validator against exact prepared base `9e7e66e3`.
-- Python discovery: 25 passed, including three new summary/scope/overwrite regressions.
-- `git diff --check`; summary/CSV regeneration and source/environment/raw hashes.
-
-[Protected-file integrity record](SEARCH_EXPERIMENT_2026-11-07/integrity.json)
-confirms root manifest, Cargo.lock's 636 packages, both SQL files and migration
-manifest are byte-identical to the prepared base. The sole shared-file change is
-an additive storage example registration using existing dependencies. No dependency
-edge, new package, version or production source was needed.
-Independent Opus medium review and final CI integration are root-owned; this
-implementation did not invoke child agents or CLI reviewers. CI is inspected once
-after creating the ready PR; pending checks/review are not passed acceptance.
+Original baseline checks passed 189 Rust tests and 25 Python tests, with required
+fmt/Clippy/build/validators; their retained logs are historical, not claims for the
+corrected fixture. Root follow-up passed the full locked workspace **189 tests**, Python **27 tests**,
+fmt, workspace all-targets locked Clippy, locked build, architecture, base-specified
+migrations and diff-check. [Root commands/counts/output hashes](SEARCH_EXPERIMENT_REVIEW_2026-11-07/root-checks.json)
+record these results. Summary/CSV regenerated exactly; recorded source/environment
+hashes matched. Independent exact-head recheck and final CI remain pending. Production source,
+Cargo.lock's 636 pins and both immutable migrations/manifest remain unchanged;
+the only shared addition is the storage experiment example registration.

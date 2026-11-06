@@ -1,0 +1,70 @@
+series,tokenizer,case,query,samples,p50_ms,p95_ms,candidate_count,hits,literal_oracle_hits,literal_oracle_recall,candidate_cap,scope_status,unsearched_within_filter
+fts,unicode61,ja_one,電,31,0.006542,0.009125,1,1,8,0.125,,whole_synthetic_corpus,0
+fts,unicode61,ja_two,電池,31,0.006333,0.007291,3,3,6,0.5,,whole_synthetic_corpus,0
+fts,unicode61,ja_one_suffix,池,31,0.017499999999999998,0.036417,1,1,6,0.16666666666666666,,whole_synthetic_corpus,0
+fts,unicode61,ja_two_prefix,固体,31,0.016249999999999997,0.017917000000000002,1,1,4,0.25,,whole_synthetic_corpus,0
+fts,unicode61,ja_three,固体電,31,0.006292,0.01825,0,0,3,0.0,,whole_synthetic_corpus,0
+fts,unicode61,ja_three_inside,電解質,31,0.006166,0.012542,1,1,3,0.3333333333333333,,whole_synthetic_corpus,0
+fts,unicode61,ja_four,リチウム,31,0.006333,0.007042,1,1,2,0.5,,whole_synthetic_corpus,0
+fts,unicode61,en_word,lithium,31,0.006958,0.02375,3,3,3,1.0,,whole_synthetic_corpus,0
+fts,unicode61,en_two,li,31,0.005875,0.006125,1,1,5,0.2,,whole_synthetic_corpus,0
+fts,unicode61,en_one,a,31,0.005917,0.007375,1,1,15,0.06666666666666667,,whole_synthetic_corpus,0
+fts,unicode61,en_two_inside,ab,31,0.007292,0.034749999999999996,2,2,4,0.5,,whole_synthetic_corpus,0
+fts,unicode61,ascii_case,ABC,31,0.006125,0.006417,3,3,3,1.0,,whole_synthetic_corpus,0
+fts,unicode61,width,ＡＢＣ,31,0.00625,0.013292,1,1,1,1.0,,whole_synthetic_corpus,0
+fts,unicode61,accent_nfc,café,31,0.017499999999999998,0.060333,3,3,1,1.0,,whole_synthetic_corpus,0
+fts,unicode61,accent_nfd,café,31,0.017374999999999998,0.024749999999999998,3,3,1,1.0,,whole_synthetic_corpus,0
+fts,unicode61,accent_one,é,31,0.006125,0.007583,2,2,2,0.5,,whole_synthetic_corpus,0
+fts,unicode61,accent_two_scalars,é,31,0.006,0.007500000000000001,2,2,2,0.5,,whole_synthetic_corpus,0
+fts,unicode61,kana_width_half,ｶﾞﾗｽ,31,0.017458,0.018792,1,1,1,1.0,,whole_synthetic_corpus,0
+fts,unicode61,kana_composed,ガラス,31,0.006459,0.012875,1,1,1,1.0,,whole_synthetic_corpus,0
+fts,unicode61,kana_decomposed,ガラス,31,0.006959,0.007333,2,2,1,1.0,,whole_synthetic_corpus,0
+fts,unicode61,phrase_space,alpha beta,31,0.006916,0.007625,3,2,1,1.0,,whole_synthetic_corpus,0
+fts,unicode61,phrase_punctuation,"alpha, beta",31,0.02175,0.033207999999999994,3,2,1,1.0,,whole_synthetic_corpus,0
+fts,unicode61,quote_escape,"""quoted""",31,0.006416,0.014292,1,1,1,1.0,,whole_synthetic_corpus,0
+fts,unicode61,doi_punctuation,10.1234/ab-c,31,0.008291999999999999,0.01,2,1,1,1.0,,whole_synthetic_corpus,0
+fts,unicode61,percent_literal,100%,31,0.006083,0.006334,1,1,1,1.0,,whole_synthetic_corpus,0
+fts,unicode61,underscore_literal,_,31,0.013709,0.01875,0,0,1,0.0,,whole_synthetic_corpus,0
+fts,unicode61,unicode_case,ω,31,0.006292,0.008124999999999999,2,2,1,1.0,,whole_synthetic_corpus,0
+fts,unicode61,sharp_s,strasse,31,0.018292,0.019,1,1,1,1.0,,whole_synthetic_corpus,0
+fts,unicode61,absent,雪,31,0.016917,0.048417,0,0,0,,,whole_synthetic_corpus,0
+fts,unicode61,kana_unvoiced_phrase,カ ラス,31,0.019917,0.052125,2,2,1,1.0,,whole_synthetic_corpus,0
+fts,trigram,ja_one,電,31,0.0049169999999999995,0.006333,0,0,8,0.0,,whole_synthetic_corpus,0
+fts,trigram,ja_two,電池,31,0.004875,0.005084,0,0,6,0.0,,whole_synthetic_corpus,0
+fts,trigram,ja_one_suffix,池,31,0.013917,0.014792,0,0,6,0.0,,whole_synthetic_corpus,0
+fts,trigram,ja_two_prefix,固体,31,0.014083,0.021334,0,0,4,0.0,,whole_synthetic_corpus,0
+fts,trigram,ja_three,固体電,31,0.018292,0.018959,3,3,3,1.0,,whole_synthetic_corpus,0
+fts,trigram,ja_three_inside,電解質,31,0.006375,0.00725,3,3,3,1.0,,whole_synthetic_corpus,0
+fts,trigram,ja_four,リチウム,31,0.007500000000000001,0.009125,2,2,2,1.0,,whole_synthetic_corpus,0
+fts,trigram,en_word,lithium,31,0.009208000000000001,0.009917,5,3,3,1.0,,whole_synthetic_corpus,0
+fts,trigram,en_two,li,31,0.005125,0.014,0,0,5,0.0,,whole_synthetic_corpus,0
+fts,trigram,en_one,a,31,0.005417,0.005791,0,0,15,0.0,,whole_synthetic_corpus,0
+fts,trigram,en_two_inside,ab,31,0.004959,0.012707999999999999,0,0,4,0.0,,whole_synthetic_corpus,0
+fts,trigram,ascii_case,ABC,31,0.016333,0.06825,3,3,3,1.0,,whole_synthetic_corpus,0
+fts,trigram,width,ＡＢＣ,31,0.006666,0.014416,1,1,1,1.0,,whole_synthetic_corpus,0
+fts,trigram,accent_nfc,café,31,0.015333000000000001,0.02225,3,2,1,1.0,,whole_synthetic_corpus,0
+fts,trigram,accent_nfd,café,31,0.007459,0.009292,3,1,1,1.0,,whole_synthetic_corpus,0
+fts,trigram,accent_one,é,31,0.005083000000000001,0.009375,0,0,2,0.0,,whole_synthetic_corpus,0
+fts,trigram,accent_two_scalars,é,31,0.004958,0.006166,0,0,2,0.0,,whole_synthetic_corpus,0
+fts,trigram,kana_width_half,ｶﾞﾗｽ,31,0.00725,0.007875,1,1,1,1.0,,whole_synthetic_corpus,0
+fts,trigram,kana_composed,ガラス,31,0.006292,0.006583,1,1,1,1.0,,whole_synthetic_corpus,0
+fts,trigram,kana_decomposed,ガラス,31,0.007042,0.007209,1,1,1,1.0,,whole_synthetic_corpus,0
+fts,trigram,phrase_space,alpha beta,31,0.018792,0.027083000000000003,3,1,1,1.0,,whole_synthetic_corpus,0
+fts,trigram,phrase_punctuation,"alpha, beta",31,0.012374999999999999,0.039375,3,1,1,1.0,,whole_synthetic_corpus,0
+fts,trigram,quote_escape,"""quoted""",31,0.009415999999999999,0.0115,1,1,1,1.0,,whole_synthetic_corpus,0
+fts,trigram,doi_punctuation,10.1234/ab-c,31,0.011458,0.017458,1,1,1,1.0,,whole_synthetic_corpus,0
+fts,trigram,percent_literal,100%,31,0.006875,0.0085,1,1,1,1.0,,whole_synthetic_corpus,0
+fts,trigram,underscore_literal,_,31,0.004875,0.005417,0,0,1,0.0,,whole_synthetic_corpus,0
+fts,trigram,unicode_case,ω,31,0.004958,0.006166,0,0,1,0.0,,whole_synthetic_corpus,0
+fts,trigram,sharp_s,strasse,31,0.008792,0.009208000000000001,2,1,1,1.0,,whole_synthetic_corpus,0
+fts,trigram,absent,雪,31,0.004875,0.005167,0,0,0,,,whole_synthetic_corpus,0
+fts,trigram,kana_unvoiced_phrase,カ ラス,31,0.007416,0.015041,1,1,1,1.0,,whole_synthetic_corpus,0
+bounded_literal,,two_cap2,電池,31,0.011625,0.018583000000000002,2,0,5,0.0,2,partial_unsearched,8
+bounded_literal,,two_cap4,電池,31,0.0115,0.013583,4,1,5,0.2,4,partial_unsearched,6
+bounded_literal,,two_complete,電池,31,0.013208,0.027792,10,5,5,1.0,64,complete_within_filter,0
+bounded_literal,,one_cap4,電,31,0.011334,0.015042,4,3,7,0.42857142857142855,4,partial_unsearched,6
+bounded_literal,,one_complete,電,31,0.013333,0.025292000000000002,10,7,7,1.0,64,complete_within_filter,0
+bounded_literal,,ascii_two,li,31,0.013,0.027625,10,3,3,1.0,64,complete_within_filter,0
+bounded_literal,,punctuation_partial,_,31,0.010958,0.011291,3,0,1,0.0,3,partial_unsearched,15
+bounded_literal,,absent_partial,雪,31,0.010708,0.011875,2,0,0,,2,partial_unsearched,8
+bounded_literal,,empty_filter,電,31,0.009917,0.011833,0,0,0,,2,complete_within_filter,0

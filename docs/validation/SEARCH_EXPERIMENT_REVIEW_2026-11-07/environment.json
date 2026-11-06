@@ -1,0 +1,111 @@
+{
+  "started_utc": "2026-11-06T23:33:23.995667+00:00",
+  "git_head": "ca1df7662982f9e877144695344075efe6ce2803",
+  "git_status": "",
+  "os": "macOS-27.2-arm64-arm-64bit-Mach-O",
+  "machine": "arm64",
+  "rust": "rustc 1.99.1 (58cf8f9c3 2026-10-13)\nbinary: rustc\ncommit-hash: 58cf8f9c35b355199727627d07ae34a4e2846d67\ncommit-date: 2026-10-13\nhost: aarch64-apple-darwin\nrelease: 1.99.1\nLLVM version: 23.1.1",
+  "cargo": "cargo 1.99.1 (5f94df478 2026-08-27)",
+  "python": "3.14.0 (main, Oct 28 2025, 12:03:45) [Clang 20.1.4 ]",
+  "pinned_engine_sources": {
+    "rusqlite": {
+      "version": "0.41.1",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "files": {
+        "Cargo.toml": "8a18d2cfc64f75140c5d23633bbd2bbbc77d719a0c3d844f8929cd6bc319f9ed",
+        "src/lib.rs": "9eaedb45cb295a96c31c5dfeb82542fba472d3438ed69fb8b88d1f7c18bd0001"
+      }
+    },
+    "libsqlite3-sys": {
+      "version": "0.39.1",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "files": {
+        "Cargo.toml": "3fb7e11b7b71251e7e360511000befe692e5aee8d31415d477774f060577bb15",
+        "sqlite3/sqlite3.c": "0c657666d819f261cc4007526ad57e1669de9949df7a8ea847aa284a2bf0ee52",
+        "build.rs": "769b31370a41aa722e1d5a530012432c985bb142eab34d095481ffd1a3436e1b"
+      }
+    }
+  },
+  "source_sha256": {
+    "scripts/search-experiments/__init__.py": "a97818a67f17e4d2c27a95aa572577303bb1752e121c860abb303dfdc59250c0",
+    "scripts/search-experiments/expected.json": "2e97dc5570c895e2fa5514a1c83ad7281dde6f9cfbd5fc926de8996f2787cb9a",
+    "scripts/search-experiments/experiment.rs": "ca656d599533ed0012e38c641e5e90b3e77ac2efcf52d20774b8aecd016ae156",
+    "scripts/search-experiments/fixture.json": "c9f3548151c83f07894e00f7c7dfebd9631805f5b3f839fbbfd8d9c9e07c46d5",
+    "scripts/search-experiments/run.py": "27f5e1fd49a09a25d07078d5801278875bc9c60c1ca32af7857bfbc5409e0c43",
+    "scripts/search-experiments/test_summary.py": "c4c5aa6ff81cbe003e305708bbc5b7571d4fc9d86ab56ade70cdcde78c9147f1",
+    "Cargo.toml": "5748e9644678d8de47474e38a19f496710faeb35c9735c0af5e08df898f17d71",
+    "Cargo.lock": "7349aaa20b3c77266ce9df81fc85b2d59747be1491f3c620c2e1c286101270a9",
+    "crates/storage/Cargo.toml": "b2fe02f796ef26637d4a999d2159e98298305ea04f2e2d9576d6a34a5276de9a"
+  },
+  "build_environment": {
+    "RUSTFLAGS": null,
+    "CARGO_ENCODED_RUSTFLAGS": null,
+    "CARGO_BUILD_TARGET": null,
+    "CARGO_TARGET_DIR": null,
+    "LIBSQLITE3_SYS_USE_PKG_CONFIG": null,
+    "SQLITE3_LIB_DIR": null,
+    "SQLITE3_INCLUDE_DIR": null,
+    "SQLITE3_STATIC": null,
+    "LIBSQLITE3_FLAGS": null,
+    "CC": null,
+    "CFLAGS": null,
+    "CPPFLAGS": null
+  },
+  "limitations": "Small direct-SQL synthetic tokenizer experiment, not import/extraction/service/GUI/16GB/RSS or #18/#30 acceptance",
+  "hardware": {
+    "hw.model": "Mac16,6",
+    "machdep.cpu.brand_string": "Apple M4 Max",
+    "hw.memsize": "38654705664",
+    "hw.physicalcpu": "14",
+    "hw.logicalcpu": "14"
+  },
+  "macos": "ProductName:\t\tmacOS\nProductVersion:\t\t27.2\nBuildVersion:\t\t26B123",
+  "engine_features": {
+    "libsqlite3_sys": [
+      "bundled",
+      "bundled_bindings",
+      "cc",
+      "default",
+      "min_sqlite_version_3_45_3",
+      "pkg-config",
+      "vcpkg"
+    ],
+    "rusqlite": [
+      "backup",
+      "bundled",
+      "modern_sqlite"
+    ]
+  },
+  "pinned_sqlite_source_id": "2026-10-16 14:45:20 555e07ef33f69a0957d24d8e555b702464a131d6f1607f4c3c1e4551e8e6ca76",
+  "artifact": {
+    "executable": "/Users/ryojikanno/.t3/worktrees/citation-manager/t3-dc932e3d/target/release/examples/search_experiment",
+    "sha256": "da44e47c047ef0f9a77cca8e8d7c509325aee26ed1f30eb4d044e8ec2418edfe",
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 0,
+      "debug_assertions": false,
+      "overflow_checks": false,
+      "test": false
+    },
+    "features": []
+  },
+  "commands": [
+    [
+      "cargo",
+      "build",
+      "--release",
+      "--locked",
+      "-p",
+      "cm-storage",
+      "--example",
+      "search_experiment",
+      "--message-format=json"
+    ],
+    [
+      "/Users/ryojikanno/.t3/worktrees/citation-manager/t3-dc932e3d/target/release/examples/search_experiment",
+      "31",
+      "5"
+    ]
+  ],
+  "environment_sha256": "7fdadadc34ae62ef412b68aa159ba848c32baa8fc25b42438681e6841ad61764"
+}
