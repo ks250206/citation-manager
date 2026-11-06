@@ -40,6 +40,7 @@ class InstrumentTests(unittest.TestCase):
         row = next(r for r in rows if r['metric'] == 'query' and r['case'] == 'list' and r['page'] == 1)
         self.assertEqual((row['p50_ms'], row['p95_ms'], row['returned_min'], row['returned_max']), (2, 3, 1, 1))
         parsed = list(csv.DictReader(io.StringIO(csv_text(rows))))
+        self.assertNotIn('\r', csv_text(rows))
         self.assertEqual(len(parsed), len(rows))
         self.assertEqual(parsed[0]['metric'], rows[0]['metric'])
 
