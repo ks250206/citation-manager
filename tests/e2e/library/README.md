@@ -41,3 +41,11 @@ report must retain the non-PDF preview. Cancel DOI while PDF work runs and cance
 while a DOI lookup runs; each token must affect only its own operation, and idle PDF
 Cancel must do nothing. Verify that a partial attachment failure summary survives the
 subsequent paper Get reply.
+
+Also verify that failed forward/back queries keep the visible page number, rows and
+cursor and allow the same move to be retried. Edit library metadata, then try New,
+paper selection, DOI replacement and trash/restore: the form must remain until saved
+or explicitly discarded. Repeat while a PDF report/Get arrives. Discard must restore
+original form values without deleting saved records. Confirm that the unsaved banner
+survives unrelated operation messages, and the export Save picker starts at HOME.
+These root integration paths are likewise unverified in the native GUI.

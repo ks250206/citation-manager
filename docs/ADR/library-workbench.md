@@ -39,9 +39,21 @@ Library pages use #12's real combined filters and cursor identity, at most 100 f
 papers per UI page, with uniform_list virtualization. Filter/sort/membership/metadata/
 import/attachment changes reload the cursor. Selection across pages is explicit IDs.
 The tree uses direct membership, tags support AND/OR, and metadata search has no FTS claim.
+Forward/back navigation commits its cursor and history only when the page query succeeds.
+A failed query keeps the previous visible page and permits the same move to be retried;
+stale replies cannot commit or cancel a newer navigation.
+Reload/filter/sort resets clear the old table rows so a failure cannot present them
+under a different cursor identity. The separate metadata form is retained.
 CRUD, multiple memberships and trash/restore delegate to existing services. Unedited
 bibliography/roles/ORCID/external IDs/extra data survive form edits; editing Authors uses
 explicit semicolon-delimited literal names, without guessing a person's name structure.
+Unsaved library metadata remains in its form when changing screens. New, paper selection,
+DOI replacement and trash/restore are blocked until Save or the explicit Discard metadata
+edits control. Background Get also retains a dirty form, including after a separate
+import/PDF commit: the confirmed record is saved, but the form is not silently replaced.
+Discard restores the form's original values and does not delete any committed record.
+The persistent unsaved banner is independent of operation status messages. Quit still
+has the documented unknown-write/unsaved-draft limitation; no quit confirmation is claimed.
 
 New manual/DOI and bibliography records pass through #33 preview/decisions. #13 adapters
 parse bounded UTF-8 on the worker, retain both file and row diagnostics, source lines,
@@ -60,6 +72,10 @@ Export All/selected/direct collection calls #13 ExportService on the actual #12 
 writes a new selected filename, and surfaces losses and the bibliography-only migration
 notice. An export IO failure may leave a partial new output file; it never overwrites an
 existing destination or claims completion in that case.
+The native Save picker starts at the absolute HOME directory rather than a shared
+temporary directory. Missing/relative HOME produces a visible error without selecting a
+fallback path. The operator still chooses the actual output; filesystem IO remains on
+the worker, including the existing private-output and no-overwrite checks.
 
 PDF selection uses actual GPUI native Open/Save pickers and ExternalPaths drop handlers.
 PDF metadata uses a dedicated form bound to row index, source path and digest; it cannot

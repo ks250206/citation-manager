@@ -364,8 +364,19 @@ impl LibraryView {
             }
         };
         let format = self.export_format;
+        let Some(directory) = std::env::var_os("HOME")
+            .map(std::path::PathBuf::from)
+            .filter(|path| path.is_absolute())
+        else {
+            self.status(
+                "Cannot open export picker: home directory is unavailable",
+                true,
+                cx,
+            );
+            return;
+        };
         let picker = cx.prompt_for_new_path(
-            std::path::Path::new("/private/tmp"),
+            &directory,
             Some(if format == Format::Bibtex {
                 "bibliography.bib"
             } else {

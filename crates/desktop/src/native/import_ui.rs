@@ -201,7 +201,7 @@ impl LibraryView {
         self.lock_fields(cx);
     }
     pub(super) fn lookup_doi(&mut self, cx: &mut Context<Self>) {
-        if self.locked() || self.busy(Lane::Doi) {
+        if self.locked() || self.busy(Lane::Doi) || !self.can_replace_editor(cx) {
             return;
         }
         let input = self.doi.read(cx).content.to_string();
@@ -224,6 +224,9 @@ impl LibraryView {
     ) {
         match result {
             Ok(resolution) => {
+                if !self.can_replace_editor(cx) {
+                    return;
+                }
                 self.diagnostics = resolution
                     .outcomes
                     .iter()

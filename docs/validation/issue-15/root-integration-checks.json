@@ -1,0 +1,62 @@
+{
+  "base": "fd50af1fe385c30b8581f06c90247630f27caf55",
+  "integrated_follow_up": "17a0e8e87c5c054b3aaa6e95f8b4fef8aed5302e",
+  "paging_base_commit": "5d41f6d",
+  "scope": "root integration after P2 fixes; code/state/build evidence only",
+  "source_sha256": {
+    "crates/desktop/src/library.rs": "5347e1d324c88eb8f9cfb77d97620a862239ce9cb20e310daea59c6d1a485a89",
+    "crates/desktop/src/native/mod.rs": "c363db294ce35e50f5a6b33535eadac6dc2e68e1fd0f15d15ae8a52d77dbb162",
+    "crates/desktop/src/native/details_ui.rs": "b2c1a0567338d6696ce4cdb36775a22e23df574956cf6d3c26376f9a303b4581",
+    "crates/desktop/src/native/import_ui.rs": "6e383780f1a6ede783737787f3e8eaa6178fe760dcfc5d30f4c4f80050c9b2bc",
+    "crates/desktop/src/native/settings_ui.rs": "ca1c3fafc3b4ca68073826702119a0a44b420b1a89e58b15b5b31198b0be2efe",
+    "crates/desktop/tests/workbench_state.rs": "c735dea94c1f12764514b3d8597b48638912fdcb98ed7a79727cefdf22f2b73f"
+  },
+  "native_binary_sha256": "a6d7d7b8bbb6165574435eaa18843e13b3bfa443cfddb9378bcf1717b4575bfa",
+  "checks": {
+    "cargo test --workspace --locked": {
+      "passed": 171,
+      "failed": 0,
+      "includes_compile_fail_doctest": true,
+      "full_thousand_record_tests": "ran unfiltered",
+      "log": "/tmp/citation-manager-pr45-review/root-integrated-tests.log",
+      "source_note": "Final two-line reload clear/assert refinement was applied after this suite compiled desktop; final focused 5 and native desktop 19 cover that refinement. Updated-head CI must run the complete final source."
+    },
+    "cargo test --locked -p cm-desktop --features native-gpui": {
+      "passed": 19,
+      "failed": 0,
+      "overlaps_workspace": true,
+      "log": "/tmp/citation-manager-pr45-review/root-integrated-native-tests.log"
+    },
+    "cargo build --workspace --locked": {
+      "exit": 0,
+      "log": "/tmp/citation-manager-pr45-review/root-integrated-build.log"
+    },
+    "cargo build --locked -p cm-daemon --features desktop-bootstrap": {
+      "exit": 0,
+      "log": "/tmp/citation-manager-pr45-review/root-integrated-native-build.log"
+    },
+    "python validators": {
+      "architecture": "passed",
+      "immutable_migrations": "2 SQL files and manifest unchanged",
+      "python_tests": 19
+    },
+    "lockfile": {
+      "all_636_package_identities_and_checksums": "unchanged"
+    },
+    "cargo fmt --all -- --check": {
+      "exit": 0
+    },
+    "cargo clippy --workspace --all-targets --features cm-daemon/desktop-bootstrap --locked -- -D warnings": {
+      "exit": 0
+    },
+    "cargo test --locked -p cm-desktop --test workbench_state": {
+      "passed": 5,
+      "failed": 0,
+      "note": "final model with reload clearing rerun after full workspace suite; native desktop suite also compiled the final model"
+    }
+  },
+  "gui_acceptance": "unrun; baseline/published/follow-up cgWindowNotFound; no additional root UI attempt on this binary",
+  "held_scope": "#34 unchanged; #23/#25 gates remain closed",
+  "independent_review": "pending updated-source review",
+  "ci": "pending updated-head checks"
+}

@@ -40,9 +40,27 @@ reported no P0/P1 and three P2 findings. This follow-up addresses their code pat
   Leaving for the PDF screen invalidates the earlier DOI response generation. Attach,
   retry and commit cannot replace the DOI cancellation token.
 - Adjacent P3-1: Get replies use a separate load event and no longer display “Saved
-  locally” or erase the PDF partial-failure summary. This does not fix the separate
-  unsaved-draft navigation or export-default findings. Paging and its failure hook are
-  reserved for root; this checkout does not modify `library.rs` or `workbench_state.rs`.
+  locally” or erase the PDF partial-failure summary.
+
+Root integrated the follow-up `17a0e8e` with the reserved paging change `5d41f6d`,
+then addressed the remaining P3 code paths:
+
+- Next/previous page requests retain the current rows, cursor and history until success.
+  The native query error handler releases pending navigation, so the same direction can
+  be retried. Two model regressions cover failed forward/back moves, successful retries,
+  reload and stale success/error replies. These do not exercise native interactions.
+  Reload clears old rows instead of displaying them under reset filters/cursors.
+- A persistent unsaved banner and explicit Discard metadata edits action preserve the
+  library form across screens. New/selection/DOI replacement/trash/restore require saved
+  or explicitly discarded edits. Background Get retains dirty fields instead of replacing
+  them, even after an independently confirmed import/PDF commit. This also means that a
+  dirty manual form can remain after its record is saved through preview/commit; select
+  the saved record after discarding the retained form. No automatic retry or second Create
+  is performed. Native confirmation of these paths remains unrun.
+- Export Save picker starts in absolute HOME, not `/private/tmp`; absent/relative HOME
+  shows an error instead of falling back to a shared directory. The exact pinned GPUI
+  `App::prompt_for_new_path` and macOS NSSavePanel adapter were read to verify that this
+  argument selects only the starting directory. Actual picker operation remains unrun.
 
 New tests are **state/worker evidence**, not native acceptance: four pure-state tests
 exercise PDF origin changes, retained handles/batch counters, failed cancellation
@@ -94,6 +112,15 @@ Original implementation commands, results and source/binary hashes are in
 [checks.json](issue-15/checks.json). Follow-up results, final binary/source hashes and
 the baseline comparison are in [follow-up-checks.json](issue-15/follow-up-checks.json);
 supporting logs are retained separately and identified there.
+Root integration ran the unfiltered workspace suite (171 including the compile-fail
+doctest and all thousand-record tests), native-feature desktop suite (19, overlapping
+workspace tests), workspace/native executable builds, final all-target workspace native
+Clippy, formatting and validators (19 Python tests). The last reload-clear refinement
+was applied after the full suite had compiled desktop; final focused paging tests (5)
+and the native desktop suite cover that refinement. Final-source full CI remains due.
+See [root integration checks and binary/source hashes](issue-15/root-integration-checks.json).
+This final root executable was built, not launched in CUA again; the preceding controlled
+baseline/follow-up observation failures remain the blocker, not a new observation claim.
 Workspace tests, native-feature tests and PDF runtime tests are separate lanes. CI and
 independent different-model review belong to root and are not implied by local success.
 

@@ -13,7 +13,7 @@ impl LibraryView {
                     _=>div().flex().flex_col().gap_2()
                         .child(line(if self.editor.is_some(){"Paper metadata"}else{"New paper — review before save"}))
                         .child(button("save",if self.editor.is_some(){"Save changes  ⌘S"}else{"Preview new paper  ⌘S"},enabled).on_click(cx.listener(|this,_,w,cx|this.save(&Save,w,cx))))
-                        .when_some(self.editor.as_ref(),|el,p|{let id=p.id;let deleted=p.deleted_at.is_some();el.child(button("delete-restore",if deleted{"Restore paper"}else{"Move paper to Trash"},enabled).on_click(cx.listener(move|this,_,_,cx|{if this.locked(){return;}this.call(Lane::Editor,Event::Editor,|c,done|c.lifecycle(id,!deleted,Box::new(move|result|done(result.map(|p|LibraryReply::Paper(Box::new(p)))))));cx.notify();})))
+                        .when_some(self.editor.as_ref(),|el,p|{let id=p.id;let deleted=p.deleted_at.is_some();el.child(button("delete-restore",if deleted{"Restore paper"}else{"Move paper to Trash"},enabled).on_click(cx.listener(move|this,_,_,cx|{if this.locked() || !this.can_replace_editor(cx){return;}this.call(Lane::Editor,Event::Editor,|c,done|c.lifecycle(id,!deleted,Box::new(move|result|done(result.map(|p|LibraryReply::Paper(Box::new(p)))))));cx.notify();})))
                             .child(line(format!("Citation key: {}",p.bibliography.citation_key.as_deref().unwrap_or("—"))))})
                         .when(self.editor.as_ref().is_some_and(|p|p.deleted_at.is_none()),|el|el.child(self.memberships(cx)))
                         .children(crate::details::FIELDS.iter().zip(self.fields.iter()).map(|(name,field)|div().child(line(*name)).child(field.clone())))

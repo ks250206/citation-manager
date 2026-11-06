@@ -21,6 +21,8 @@ impl Library {
         self.query.after = None;
         self.previous.clear();
         self.next = None;
+        // A new filter/sort starts a new cursor identity; old rows no longer apply.
+        self.papers.clear();
         self.query.clone()
     }
     pub fn next_page(&mut self) -> Option<LibraryQuery> {

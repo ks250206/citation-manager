@@ -74,6 +74,9 @@ fn stale_page_errors_cannot_cancel_a_new_navigation_after_reload() {
     let stale = library.generation;
     library.query.filter.keyword = Some("new query".into());
     let query = library.reload();
+    assert!(library.papers.is_empty());
+    assert!(library.query.after.is_none());
+    assert!(library.previous.is_empty());
     let new_cursor =
         LibraryCursor::from_position(&query, PaperId(first_id.parse().unwrap()), SortValue::Id)
             .unwrap();

@@ -324,11 +324,14 @@ impl LibraryView {
                         self.status("Library loaded", false, cx);
                     }
                 }
-                Err(e) => self.status(
-                    format!("Library query failed: {e}. Reload to retry"),
-                    true,
-                    cx,
-                ),
+                Err(e) => {
+                    self.library.fail(self.library.generation);
+                    self.status(
+                        format!("Library query failed: {e}. Retry the page or Reload"),
+                        true,
+                        cx,
+                    );
+                }
             },
             Event::Editor(result) => match result {
                 Ok(LibraryReply::Paper(p)) => {
@@ -340,7 +343,17 @@ impl LibraryView {
                 Err(e) => self.status(format!("Save/load failed: {e}. Draft retained"), true, cx),
             },
             Event::Loaded(result) => match result {
-                Ok(LibraryReply::Paper(p)) => self.set_editor(Some(*p), None, cx),
+                Ok(LibraryReply::Paper(p)) => {
+                    if self.dirty {
+                        self.status(
+                            format!("{}; unsaved metadata edits retained. Select the saved paper after saving or discarding these edits", self.message),
+                            self.error,
+                            cx,
+                        );
+                    } else {
+                        self.set_editor(Some(*p), None, cx);
+                    }
+                }
                 Ok(_) => self.status("Unexpected load reply", true, cx),
                 Err(e) => self.status(
                     format!("{}; paper load failed: {e}", self.message),
@@ -444,6 +457,30 @@ impl LibraryView {
             self.cancels.cancel_doi();
         }
     }
+    fn can_replace_editor(&mut self, cx: &mut Context<Self>) -> bool {
+        if self.dirty {
+            self.status(
+                "Unsaved metadata edits retained. Save or explicitly discard them before replacing this draft",
+                false,
+                cx,
+            );
+            false
+        } else {
+            true
+        }
+    }
+    fn discard_edits(&mut self, cx: &mut Context<Self>) {
+        if self.locked() || !self.dirty {
+            return;
+        }
+        self.set_editor(self.editor.clone(), Some(self.draft.clone()), cx);
+        self.screen = Screen::Library;
+        self.status(
+            "Metadata edits discarded; original form restored",
+            false,
+            cx,
+        );
+    }
     fn set_editor(
         &mut self,
         paper: Option<Paper>,
@@ -522,7 +559,7 @@ impl LibraryView {
         }
     }
     fn new_paper(&mut self, _: &New, _: &mut Window, cx: &mut Context<Self>) {
-        if self.locked() {
+        if self.locked() || !self.can_replace_editor(cx) {
             return;
         }
         if !self.cancel_preview() {
@@ -597,7 +634,7 @@ impl LibraryView {
         fields[next].focus_handle(cx).focus(window, cx);
     }
     fn select(&mut self, id: PaperId, multiple: bool, cx: &mut Context<Self>) {
-        if self.locked() {
+        if self.locked() || !self.can_replace_editor(cx) {
             return;
         }
         if !self.cancel_preview() {
@@ -659,6 +696,25 @@ impl Render for LibraryView {
             .on_action(cx.listener(Self::next_field))
             .on_action(cx.listener(Self::previous_field))
             .child(self.toolbar(cx))
+            .when(self.dirty, |el| {
+                el.child(
+                    div()
+                        .px_4()
+                        .py_2()
+                        .flex()
+                        .items_center()
+                        .gap_2()
+                        .child("Unsaved metadata edits — return to Library to save")
+                        .child(
+                            button(
+                                "discard-metadata-edits",
+                                "Discard metadata edits",
+                                !self.locked(),
+                            )
+                            .on_click(cx.listener(|this, _, _, cx| this.discard_edits(cx))),
+                        ),
+                )
+            })
             .child(
                 div()
                     .px_4()
