@@ -111,7 +111,17 @@ pub struct Note {
     pub bounds: Rect,
     pub contents: String,
 }
+#[derive(Debug, Clone)]
+pub struct MetadataSnapshot {
+    pub sha256: [u8; 32],
+    pub draft: cm_core::import::PaperDraft,
+    pub page_count: i32,
+    pub warnings: Vec<String>,
+}
 pub enum Operation {
+    Metadata {
+        source: Source,
+    },
     Page {
         source: Source,
         page_index: PageIndex,
@@ -135,6 +145,7 @@ pub enum AppearanceStatus {
     RequiresExportCompletion,
 }
 pub enum Output {
+    Metadata(Box<MetadataSnapshot>),
     Page(Box<PageSnapshot>),
     Export(NativeExport),
 }
@@ -285,7 +296,9 @@ pub(crate) fn claim_process() -> Result<(), PdfError> {
 }
 fn validate_operation(op: &Operation) -> Result<(), PdfError> {
     let source = match op {
-        Operation::Page { source, .. } | Operation::Export { source, .. } => source,
+        Operation::Page { source, .. }
+        | Operation::Export { source, .. }
+        | Operation::Metadata { source } => source,
     };
     if !source.path.is_absolute()
         || source

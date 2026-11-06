@@ -1,0 +1,35 @@
+2026-11-07 JST. Isolated checkout t3-6fa2df7e; no browser/VM/native-host/signing work.
+Native CUA initialization: cua.getState(), then getApp(path/id).
+
+Fresh private test root:
+/private/var/folders/y1/84n75pz56qg1b36t882r8n900000gn/T/cm-m0-smoke-2ojw6agu
+Library: <root>/library
+Settings: <root>/library/ui-settings.json
+Actual executable: <root>/Citation Manager Smoke.app/Contents/MacOS/citation-manager
+Second fresh identity: <root>/CitationManagerIssue15.app/Contents/MacOS/citation-manager
+Both test .apps contain a real copied GPUI Mach-O executable, not a shell launcher.
+The trusted PDFium dylib was copied into the private test artifact only, from the
+fixed hash-verified fetch. This is not a #34 product bundle/lifetime result.
+
+Observed native CUA errors:
+- getApp(first absolute .app path): Computer Use server error -10005: timeoutReached
+- getApp(dev.citation-manager.issue15-smoke): Computer Use server error -10005: cgWindowNotFound
+- getApp(first absolute path), retry with foreground real executable: same cgWindowNotFound
+- getApp(new fresh absolute CitationManagerIssue15.app path): same cgWindowNotFound
+- display-name lookups returned Invalid app.
+- listApps saw Citation Manager Issue15 running. No usable native window/AX/screenshot
+  was returned. No mouse/key/file-picker/drag/drop/import GUI action was performed.
+
+A temporary source-level startup diagnostic (removed from final source) reported:
+  native: entering application
+  native: launch callback
+  native: opening window
+  native: window activated
+These are program logs, NOT proof of a visible/rendered window or successful UI actions.
+A sample of a test process showed the AppKit run loop. Cause of the CUA/window mismatch
+is unresolved; do not assume either that the app UI passed or that CUA alone is faulty.
+No browser substitute, mocked UI, AppleScript automation or system-setting workaround used.
+
+Only this run's test processes were terminated after the blocked observations. Temp
+libraries/bundles/fixtures/logs were preserved. Final source was rebuilt separately;
+it did not receive successful native CUA interaction. See ISSUE_15.md for all unrun paths.

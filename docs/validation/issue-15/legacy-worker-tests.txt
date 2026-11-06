@@ -1,0 +1,9 @@
+   Compiling cm-daemon v0.1.0 (/Users/ryojikanno/.t3/worktrees/citation-manager/t3-6fa2df7e/crates/daemon)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 12.69s
+     Running tests/desktop_worker.rs (target/debug/deps/desktop_worker-c5e5fe129b240749)
+
+running 2 tests
+test worker_reports_open_and_validation_errors_and_completes_on_worker ... ok
+test worker_create_edit_reopen_preserves_unicode_and_metadata ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s

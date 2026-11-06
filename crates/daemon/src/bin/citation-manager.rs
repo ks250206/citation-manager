@@ -4,22 +4,33 @@ fn main() {
     use cm_daemon::desktop_worker::InProcessLibraryClient;
     use std::{path::PathBuf, sync::Arc};
     let mut args = std::env::args_os().skip(1);
-    // Explicit path keeps the bootstrap from accidentally opening a real user library.
-    let path = match (args.next(), args.next(), args.next()) {
-        (Some(flag), Some(path), None)
-            if flag == "--library" && PathBuf::from(&path).is_absolute() =>
-        {
-            PathBuf::from(path)
-        }
-        _ => {
-            eprintln!("Usage: citation-manager --library /absolute/path/to/dedicated-library");
+    let mut path = None;
+    let mut settings = None;
+    while let Some(flag) = args.next() {
+        let Some(value) = args.next().map(PathBuf::from).filter(|p| p.is_absolute()) else {
+            eprintln!("Paths must be explicit and absolute");
+            std::process::exit(2);
+        };
+        if flag == "--library" && path.is_none() {
+            path = Some(value);
+        } else if flag == "--settings" && settings.is_none() {
+            settings = Some(value);
+        } else {
+            eprintln!("Unknown or duplicate option");
             std::process::exit(2);
         }
+    }
+    let Some(path) = path else {
+        eprintln!(
+            "Usage: citation-manager --library /absolute/private/library [--settings /absolute/private/ui.json]"
+        );
+        std::process::exit(2);
     };
-    let client = InProcessLibraryClient::start(path).unwrap_or_else(|error| {
-        eprintln!("Cannot start library worker: {error}");
-        std::process::exit(1);
-    });
+    let client =
+        InProcessLibraryClient::start_with_settings(path, settings).unwrap_or_else(|error| {
+            eprintln!("Cannot start library worker: {error}");
+            std::process::exit(1);
+        });
     cm_desktop::run(Arc::new(client));
 }
 #[cfg(not(target_os = "macos"))]

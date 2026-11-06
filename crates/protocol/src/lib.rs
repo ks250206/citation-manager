@@ -7,3 +7,12 @@ pub use cm_core::import;
 pub use cm_domain as domain;
 
 pub mod library;
+
+pub mod attachments;
+pub mod exchange;
+pub mod organization;
+pub mod settings;
+pub mod library_query {
+    pub use cm_core::library_query::*;
+    pub use cm_core::papers::PaperVisibility;
+}
