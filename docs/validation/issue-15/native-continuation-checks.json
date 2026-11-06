@@ -1,0 +1,62 @@
+{
+  "tested_runtime_source_head": "9ea22dd2d343cfa921ba12377cd24ba62500adbf",
+  "main": "5f0fb1dfa139afc567a492a309c1f5f4728ffbed",
+  "changes": "documentation/evidence only; runtime source and pins/SQL unchanged",
+  "checks": [
+    {
+      "name": "native-build",
+      "command": "cargo build --locked -p cm-daemon --features desktop-bootstrap --bin citation-manager",
+      "exit_code": 0,
+      "log": "/private/tmp/cm-pr45-348-build.log",
+      "sha256": "6e0e55ddd0c257c47279915a270f12a377e2e11f49d44af9cb8ef0451ed3944e"
+    },
+    {
+      "name": "fmt",
+      "command": "cargo fmt --all -- --check",
+      "exit_code": 0,
+      "log": "/private/tmp/cm-pr45-348-fmt.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "architecture",
+      "command": "python3 scripts/check_architecture.py",
+      "exit_code": 0,
+      "log": "/private/tmp/cm-pr45-348-architecture.log",
+      "sha256": "7a5f780819b4ec02a7b577aa8979ef8a6a64326d56e33c0d753e8a988f989109"
+    },
+    {
+      "name": "migrations",
+      "command": "python3 scripts/check_migrations.py --base origin/main",
+      "exit_code": 0,
+      "log": "/private/tmp/cm-pr45-348-migrations.log",
+      "sha256": "92423d36fa24dfbf57562970b44f53b1abee88b95621c71f456abcbca257409a"
+    },
+    {
+      "name": "python",
+      "command": "python3 -m unittest discover -s scripts -p test_*.py -v",
+      "exit_code": 0,
+      "log": "/private/tmp/cm-pr45-348-python.log",
+      "sha256": "96e452646f7feaf7d5b42afe80b74b5eeefdb1bee1c945de19959680589285ef"
+    }
+  ],
+  "artifact_integrity": {
+    "retained_CUA_JPEGs": 51,
+    "published_originals": 8,
+    "all_screenshot_hashes_match": true,
+    "all_inputs_unchanged": true,
+    "managed_attachment_source_blob_pairs_equal": true,
+    "runtime_sources_match_prelaunch_snapshot": true,
+    "executable_matches_prelaunch_sha256": true,
+    "lock_packages": 636,
+    "all_package_identities_checksums_unchanged": true,
+    "both_SQL_and_manifest_unchanged": true
+  },
+  "normal_owned_app_exit_code": 0,
+  "remaining_native_gates": [
+    "external_drag_drop",
+    "offline_doi",
+    "simultaneous_cancellation",
+    "failed_page_retry"
+  ],
+  "not_rerun": "Full Rust/headless/native/runtime tests from awake report; no product code changed. Final-head CI and independent review belong to root."
+}

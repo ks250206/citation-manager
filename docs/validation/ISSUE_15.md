@@ -180,18 +180,20 @@ all-target native daemon Clippy passed. [Exact stage timings and failure context
 | Required path | Observed result after wake |
 |---|---|
 | Actual 1000-record import, ten separate approvals | Passed in actual GUI on an earlier corrected binary; not rerun on the final binary. Exactly 1000 synthetic DOIs corroborated read-only |
-| Classification, combined filters, multiselect, paging, loading/empty/error, trash/restore | Observed; Title/Year/ID/created/updated sorting observed; failed-query paging/retry and collection edit/move/delete remain unverified |
+| Classification, combined filters, multiselect, paging, loading/empty/error, trash/restore | Observed; Title/Year/ID/created/updated sorting observed; continuation observed collection rename/move/delete and child promotion; failed-query paging/retry remains unverified |
 | Manual preview/Create, exact duplicate selected-title Merge, error-row Skip | Observed; invalid candidate could not Create |
 | DOI lookup/cancel | Actual loading/cancel and public provider response into uncommitted review observed; no DOI paper saved; offline fallback remains unverified |
 | Native Open/Save pickers, exports/readback | PDF Attach/New pickers, All RIS 1000 / selected BibTeX 2 / direct collection RIS 1 passed; real D&D remains unverified |
-| PDF folder/metadata/fallback/progress/cancel/retry/partial success | Recursive5/nonrecursive 4, digest duplicate, symlink/non-PDF, malformed/encrypted fallback forms; cancel20/500 then retry500; attach cancel retained 9, explicit resume completed 500; retained-new-paper failure/retry observed |
+| PDF folder/metadata/fallback/progress/cancel/retry/partial success | Recursive5/nonrecursive 4, digest duplicate, symlink/non-PDF, malformed/encrypted fallback forms; cancel20/500 then retry500; attach cancel retained 9, explicit resume completed 500; retained-new-paper failure/retry observed; continuation observed 33MiB parser fallback and257MiB exclusion |
 | Layout/settings and attached-paper correction | Actual quit/relaunch, tabs/reading/columns/panes, invalidJSON warning/reset and later metadata correction observed;502 managed blobs match original source hashes |
-| Review regressions | PDF form/Library/New/CmdS, bibliography pause/resume/fresh decisions, dirty guards, failure-survives-Get, HOME Save picker observed; simultaneous cancellation and dirty/non-PDF preview plus unrelated Attach/Get remain unverified |
+| Review regressions | PDF form/Library/New/CmdS, bibliography pause/resume/fresh decisions, dirty guards, failure-survives-Get, HOME Save picker observed; continuation retained screenshots of dirty selection/Trash guards, dirty/non-PDF preview plus unrelated Attach/Get, and six manual-preview/Resume cycles with fresh decisions; simultaneous cancellation remains unverified |
 
 The [native run log](issue-15/native-awake.md) distinguishes earlier observations from
 final-binary retests and retains the incomplete gates. It does not map every phase or
-screenshot to an executable hash. Earlier headless results above remain headless
-results. No viewer, annotations/note editor, saved advanced search or command/keymap
+screenshot to an executable hash. The [fresh continuation](issue-15/native-continuation.md)
+maps all its new screenshot/action ranges to one exact executable and retains the
+outstanding D&D, offline, simultaneous-cancellation and failed-page constraints.
+Earlier headless results above remain headless results. No viewer, annotations/note editor, saved advanced search or command/keymap
 registry is claimed; #52/#53 parallel work is outside PR45. The checklist remains at
 [tests/e2e/library](../../tests/e2e/library/README.md).
 

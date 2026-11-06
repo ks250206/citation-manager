@@ -108,3 +108,14 @@ The final normal native process exited0 after Cmd+Q. Both network-restricted set
 attempts were terminated143 and are excluded from normal-exit/offline success claims.
 All 14 original input digests and all 502 attachment source/blob pairs were rechecked
 unchanged; the complete private screenshot manifest is retained.
+
+## Subsequent isolated continuation
+
+[The fresh continuation](native-continuation.md) at source head `9ea22dd` used its own
+private app/library/settings and maps every new screenshot/action range to executable
+`0eaaec984e238371415d264a244529ce357bae175119313335f036826c70c682`.
+It observed collection rename/move/delete, oversize limits, screenshot-backed dirty
+selection/Trash guards, unrelated Attach/Get preservation and six manual-preview/Resume
+cycles. The remaining list above describes this earlier run; consult the continuation
+for the current gates. D&D, offline DOI, simultaneous cancellation and failed-page retry
+remain unproven. Earlier binary observations above retain their original provenance.

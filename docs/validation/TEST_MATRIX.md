@@ -79,9 +79,13 @@ desktop-only 13-test pass follows the final UI label/progress-coalescing changes
 Real fixed-hash PDFium runtime/metadata tests (8) and runtime clippy passed. All 636 locked
 package identities/checksums remain unchanged. These are headless/compile/ABI results.
 
-**Native GUI acceptance remains blocked/unrun**: CUA returned cgWindowNotFound for two
-fresh private actual-executable test bundles. No successful screenshot or GUI operation
-was obtained; cause unresolved. 1000 UI imports/classification/search/export, pickers/D&D,
-folder partial/cancel/retry, settings Cmd+Q/relaunch and Details/PDF host UI all still need
-actual native evidence. #34 gates remain held/closed, with no browser/VM/signing/native-host
-or #23/#25 work. Root owns independent review, CI monitoring and any merge.
+**Native GUI works; acceptance remains incomplete.** The historical cgWindowNotFound
+failures above are superseded by the [awake run](issue-15/native-awake.md): actual ten-batch
+1000-row import, classification/search/export, pickers/folder/partial retry, settings
+quit/relaunch and attachment host actions. That report distinguishes earlier-binary proof
+from affected-control retests. The [fresh continuation](issue-15/native-continuation.md)
+adds exact-executable evidence for collection rename/move/delete, both oversize limits,
+dirty selection/Trash guards, unrelated Attach/Get preservation and six preview/Resume
+cycles. Genuine D&D, offline DOI, simultaneous DOI/PDF cancellation and failed page-query
+retry remain unverified. Keep PR45 Draft and #15 open. #34 remains HELD; #23/#25 stay
+closed. Root owns independent final review, CI and any merge.
