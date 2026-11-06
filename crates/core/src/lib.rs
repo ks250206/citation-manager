@@ -7,6 +7,7 @@ pub mod library_query;
 pub mod metadata_resolve;
 pub mod papers;
 pub mod ports;
+pub mod search;
 pub mod tags;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
