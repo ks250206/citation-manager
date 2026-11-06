@@ -1,0 +1,58 @@
+{
+  "old": "/private/tmp/cm34 外部 bundle/Citation Layout 日本語.app",
+  "new": "/private/tmp/cm34 移設後 外部/Moved Citation 日本語.app",
+  "old_absent": true,
+  "before": [
+    {
+      "path": "/private/tmp/cm34 外部 bundle/registration-chromium/test.citationmanager.move.json",
+      "manifest": {
+        "name": "test.citationmanager.move",
+        "description": "#34 test-only nonce ping",
+        "path": "/private/tmp/cm34 外部 bundle/Citation Layout 日本語.app/Contents/MacOS/cm34-probe-host",
+        "type": "stdio",
+        "allowed_origins": [
+          "chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/"
+        ]
+      }
+    },
+    {
+      "path": "/private/tmp/cm34 外部 bundle/registration-firefox/test.citationmanager.move.json",
+      "manifest": {
+        "name": "test.citationmanager.move",
+        "description": "#34 test-only nonce ping",
+        "path": "/private/tmp/cm34 外部 bundle/Citation Layout 日本語.app/Contents/MacOS/cm34-probe-host",
+        "type": "stdio",
+        "allowed_extensions": [
+          "cm34-probe@fixture.invalid"
+        ]
+      }
+    }
+  ],
+  "after": [
+    {
+      "path": "/private/tmp/cm34 移設後 外部/registration-chromium/test.citationmanager.move.json",
+      "manifest": {
+        "name": "test.citationmanager.move",
+        "description": "#34 test-only nonce ping",
+        "path": "/private/tmp/cm34 移設後 外部/Moved Citation 日本語.app/Contents/MacOS/cm34-probe-host",
+        "type": "stdio",
+        "allowed_origins": [
+          "chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/"
+        ]
+      }
+    },
+    {
+      "path": "/private/tmp/cm34 移設後 外部/registration-firefox/test.citationmanager.move.json",
+      "manifest": {
+        "name": "test.citationmanager.move",
+        "description": "#34 test-only nonce ping",
+        "path": "/private/tmp/cm34 移設後 外部/Moved Citation 日本語.app/Contents/MacOS/cm34-probe-host",
+        "type": "stdio",
+        "allowed_extensions": [
+          "cm34-probe@fixture.invalid"
+        ]
+      }
+    }
+  ],
+  "temporary_registrations_removed": true
+}

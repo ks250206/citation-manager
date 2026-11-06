@@ -1,0 +1,35 @@
+[1106/235137.223756:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:208] open $USER_HOME/Library/Application Support/Google/Chrome for Testing/Crashpad/settings.dat: Operation not permitted (1)
+[1106/235137.224856:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:208] open $USER_HOME/Library/Application Support/Google/Chrome for Testing/Crashpad/settings.dat: Operation not permitted (1)
+sandbox_extension_issue_file_to_process failed for /tmp/cm34-browsers/chrome/chrome-mac-arm64/Google Chrome for Testing.app: 1 (Operation not permitted)
+[75682:32325055:1106/235137.485690:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:208] open $USER_HOME/Library/Application Support/Google/Chrome for Testing/Crashpad/settings.dat: Operation not permitted (1)
+sandbox initialization failed: Operation not permitted
+aperitif: Failed to initialize sandbox
+sandbox initialization failed: Operation not permitted
+aperitif: Failed to initialize sandbox
+aperitif: Failed to initialize sandbox
+DevTools listening on ws://127.0.0.1:52349/devtools/browser/f899358c-9b75-465a-b751-f3bdbeb1fee7
+aperitif: Failed to initialize sandbox
+aperitif: Failed to initialize sandbox
+aperitif: Failed to initialize sandbox
+[1106/235137.775820:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:208] open $USER_HOME/Library/Application Support/Google/Chrome for Testing/Crashpad/settings.dat: Operation not permitted (1)
+[1106/235137.777795:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:153] open $USER_HOME/Library/Application Support/Google/Chrome for Testing/Crashpad/new/4e53e674-d6f5-418c-98ed-b5c6dd79a9cf.dmp: Operation not permitted (1)
+sandbox initialization failed: Operation not permitted
+aperitif: Failed to initialize sandbox
+aperitif: Failed to initialize sandbox
+aperitif: Failed to initialize sandbox
+aperitif: Failed to initialize sandbox
+[1106/235138.042967:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:153] open $USER_HOME/Library/Application Support/Google/Chrome for Testing/Crashpad/new/713a7d73-650f-40d9-abaf-a09a6278f527.dmp: Operation not permitted (1)
+sandbox initialization failed: Operation not permitted
+aperitif: Failed to initialize sandbox
+[1106/235138.273842:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:153] open $USER_HOME/Library/Application Support/Google/Chrome for Testing/Crashpad/new/4e17ad7a-55c1-4a5f-a845-9b5ff39ce067.dmp: Operation not permitted (1)
+aperitif: Failed to initialize sandbox
+[1106/235138.506708:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:153] open $USER_HOME/Library/Application Support/Google/Chrome for Testing/Crashpad/new/89fab4d8-c3ba-45b6-9c79-394ba23b332a.dmp: Operation not permitted (1)
+aperitif: Failed to initialize sandbox
+[1106/235138.765066:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:153] open $USER_HOME/Library/Application Support/Google/Chrome for Testing/Crashpad/new/9f97c7cf-3a05-4217-8d0c-2854f3524907.dmp: Operation not permitted (1)
+[1106/235139.045413:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:153] open $USER_HOME/Library/Application Support/Google/Chrome for Testing/Crashpad/new/3b7dfd26-a6d3-450b-9cd8-3efd37718bcf.dmp: Operation not permitted (1)
+[1106/235139.274225:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:153] open $USER_HOME/Library/Application Support/Google/Chrome for Testing/Crashpad/new/39401af5-ea63-4014-847a-b11ba8a229d7.dmp: Operation not permitted (1)
+sandbox initialization failed: Operation not permitted
+aperitif: Failed to initialize sandbox
+[1106/235139.505222:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:153] open $USER_HOME/Library/Application Support/Google/Chrome for Testing/Crashpad/new/9f192c32-5271-47ee-b0ff-d22f1a3c234d.dmp: Operation not permitted (1)
+[1106/235139.724950:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:153] open $USER_HOME/Library/Application Support/Google/Chrome for Testing/Crashpad/new/085e34de-78fb-4d8b-9d40-54fadf05573e.dmp: Operation not permitted (1)
+[1106/235140.000760:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:153] open $USER_HOME/Library/Application Support/Google/Chrome for Testing/Crashpad/new/55b48d57-9074-4a8a-ba4f-7f3fe17fe33e.dmp: Operation not permitted (1)

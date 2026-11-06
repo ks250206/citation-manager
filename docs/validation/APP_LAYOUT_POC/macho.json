@@ -1,0 +1,332 @@
+{
+  "bundle": "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app",
+  "commands": [
+    {
+      "argv": [
+        "/usr/bin/file",
+        "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/citation-manager"
+      ],
+      "status": 0,
+      "stdout": "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/citation-manager: Mach-O 64-bit executable arm64\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/usr/bin/lipo",
+        "-archs",
+        "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/citation-manager"
+      ],
+      "status": 0,
+      "stdout": "arm64\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/usr/bin/otool",
+        "-L",
+        "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/citation-manager"
+      ],
+      "status": 0,
+      "stdout": "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/citation-manager:\n\t/System/Library/Frameworks/ApplicationServices.framework/Versions/A/ApplicationServices (compatibility version 1.0.0, current version 66.0.0)\n\t/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation (compatibility version 150.0.0, current version 5026.5.4)\n\t/System/Library/Frameworks/CoreVideo.framework/Versions/A/CoreVideo (compatibility version 1.2.0, current version 734.4.0)\n\t/System/Library/Frameworks/Carbon.framework/Versions/A/Carbon (compatibility version 2.0.0, current version 170.0.0)\n\t/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit (compatibility version 45.0.0, current version 2685.60.104)\n\t/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation (compatibility version 300.0.0, current version 5026.5.4)\n\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1356.0.0)\n\t/usr/lib/libobjc.A.dylib (compatibility version 1.0.0, current version 228.0.0)\n\t/System/Library/Frameworks/UserNotifications.framework/Versions/A/UserNotifications (compatibility version 1.0.0, current version 1.0.0)\n\t/System/Library/Frameworks/CoreText.framework/Versions/A/CoreText (compatibility version 1.0.0, current version 877.4.0)\n\t/System/Library/Frameworks/Security.framework/Versions/A/Security (compatibility version 1.0.0, current version 61901.120.67)\n\t/System/Library/Frameworks/QuartzCore.framework/Versions/A/QuartzCore (compatibility version 1.2.0, current version 1195.14.4)\n\t/System/Library/Frameworks/CoreGraphics.framework/Versions/A/CoreGraphics (compatibility version 64.0.0, current version 1965.5.1)\n\t/System/Library/Frameworks/UniformTypeIdentifiers.framework/Versions/A/UniformTypeIdentifiers (compatibility version 1.0.0, current version 709.0.0)\n\t/System/Library/Frameworks/Metal.framework/Versions/A/Metal (compatibility version 1.0.0, current version 373.2.0)\n\t/usr/lib/libiconv.2.dylib (compatibility version 7.0.0, current version 7.0.0)\n\t/System/Library/Frameworks/ColorSync.framework/Versions/A/ColorSync (compatibility version 1.0.0, current version 3813.5.1)\n\t/System/Library/Frameworks/CoreServices.framework/Versions/A/CoreServices (compatibility version 1.0.0, current version 1226.0.0)\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/usr/bin/otool",
+        "-D",
+        "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/citation-manager"
+      ],
+      "status": 0,
+      "stdout": "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/citation-manager:\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/usr/bin/otool",
+        "-l",
+        "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/citation-manager"
+      ],
+      "status": 0,
+      "stdout": "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/citation-manager:\nLoad command 0\n      cmd LC_SEGMENT_64\n  cmdsize 72\n  segname __PAGEZERO\n   vmaddr 0x0000000000000000\n   vmsize 0x0000000100000000\n  fileoff 0\n filesize 0\n  maxprot 0x00000000\n initprot 0x00000000\n   nsects 0\n    flags 0x0\nLoad command 1\n      cmd LC_SEGMENT_64\n  cmdsize 792\n  segname __TEXT\n   vmaddr 0x0000000100000000\n   vmsize 0x0000000001658000\n  fileoff 0\n filesize 23429120\n  maxprot 0x00000005\n initprot 0x00000005\n   nsects 9\n    flags 0x0\nSection\n  sectname __text\n   segname __TEXT\n      addr 0x00000001000010c0\n      size 0x0000000000fe4ebc\n    offset 4288\n     align 2^6 (64)\n    reloff 0\n    nreloc 0\n     flags 0x80000400\n reserved1 0\n reserved2 0\nSection\n  sectname __text_startup\n   segname __TEXT\n      addr 0x0000000100fe5f7c\n      size 0x00000000000016cc\n    offset 16670588\n     align 2^2 (4)\n    reloff 0\n    nreloc 0\n     flags 0x80000400\n reserved1 0\n reserved2 0\nSection\n  sectname __stubs\n   segname __TEXT\n      addr 0x0000000100fe7648\n      size 0x0000000000001188\n    offset 16676424\n     align 2^2 (4)\n    reloff 0\n    nreloc 0\n     flags 0x80000408\n reserved1 0 (index into indirect symbol table)\n reserved2 12 (size of stubs)\nSection\n  sectname __stub_helper\n   segname __TEXT\n      addr 0x0000000100fe87d0\n      size 0x00000000000011a0\n    offset 16680912\n     align 2^2 (4)\n    reloff 0\n    nreloc 0\n     flags 0x80000400\n reserved1 0\n reserved2 0\nSection\n  sectname __const\n   segname __TEXT\n      addr 0x0000000100fe9980\n      size 0x0000000000117040\n    offset 16685440\n     align 2^6 (64)\n    reloff 0\n    nreloc 0\n     flags 0x00000000\n reserved1 0\n reserved2 0\nSection\n  sectname __cstring\n   segname __TEXT\n      addr 0x00000001011009c0\n      size 0x000000000002d4d7\n    offset 17828288\n     align 2^2 (4)\n    reloff 0\n    nreloc 0\n     flags 0x00000002\n reserved1 0\n reserved2 0\nSection\n  sectname __gcc_except_tab\n   segname __TEXT\n      addr 0x000000010112de98\n      size 0x000000000006cdf8\n    offset 18013848\n     align 2^2 (4)\n    reloff 0\n    nreloc 0\n     flags 0x00000000\n reserved1 0\n reserved2 0\nSection\n  sectname __unwind_info\n   segname __TEXT\n      addr 0x000000010119ac90\n      size 0x00000000000bdd68\n    offset 18459792\n     align 2^2 (4)\n    reloff 0\n    nreloc 0\n     flags 0x00000000\n reserved1 0\n reserved2 0\nSection\n  sectname __eh_frame\n   segname __TEXT\n      addr 0x00000001012589f8\n      size 0x00000000003fc850\n    offset 19237368\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x6800000b\n reserved1 0\n reserved2 0\nLoad command 2\n      cmd LC_SEGMENT_64\n  cmdsize 312\n  segname __DATA_CONST\n   vmaddr 0x0000000101658000\n   vmsize 0x00000000000c0000\n  fileoff 23429120\n filesize 786432\n  maxprot 0x00000003\n initprot 0x00000003\n   nsects 3\n    flags 0x10\nSection\n  sectname __got\n   segname __DATA_CONST\n      addr 0x0000000101658000\n      size 0x0000000000000458\n    offset 23429120\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000006\n reserved1 374 (index into indirect symbol table)\n reserved2 0\nSection\n  sectname __mod_init_func\n   segname __DATA_CONST\n      addr 0x0000000101658458\n      size 0x00000000000000c0\n    offset 23430232\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000009\n reserved1 0\n reserved2 0\nSection\n  sectname __const\n   segname __DATA_CONST\n      addr 0x0000000101658518\n      size 0x00000000000bc140\n    offset 23430424\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000000\n reserved1 0\n reserved2 0\nLoad command 3\n      cmd LC_SEGMENT_64\n  cmdsize 872\n  segname __DATA\n   vmaddr 0x0000000101718000\n   vmsize 0x000000000000c000\n  fileoff 24215552\n filesize 32768\n  maxprot 0x00000003\n initprot 0x00000003\n   nsects 10\n    flags 0x0\nSection\n  sectname __la_symbol_ptr\n   segname __DATA\n      addr 0x0000000101718000\n      size 0x0000000000000bb0\n    offset 24215552\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000007\n reserved1 513 (index into indirect symbol table)\n reserved2 0\nSection\n  sectname __data\n   segname __DATA\n      addr 0x0000000101718c00\n      size 0x0000000000006bc0\n    offset 24218624\n     align 2^7 (128)\n    reloff 0\n    nreloc 0\n     flags 0x00000000\n reserved1 0\n reserved2 0\nSection\n  sectname __ctor_force\n   segname __DATA\n      addr 0x000000010171f7c0\n      size 0x0000000000000010\n    offset 24246208\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000000\n reserved1 0\n reserved2 0\nSection\n  sectname _CTOR0_ISIZE_FN\n   segname __DATA\n      addr 0x000000010171f7d0\n      size 0x0000000000000020\n    offset 24246224\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000000\n reserved1 0\n reserved2 0\nSection\n  sectname _CTR0GR_ISIZE_FN\n   segname __DATA\n      addr 0x000000010171f7f0\n      size 0x0000000000000001\n    offset 24246256\n     align 2^0 (1)\n    reloff 0\n    nreloc 0\n     flags 0x00000000\n reserved1 0\n reserved2 0\nSection\n  sectname __thread_vars\n   segname __DATA\n      addr 0x000000010171f7f8\n      size 0x0000000000000228\n    offset 24246264\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000013\n reserved1 0\n reserved2 0\nSection\n  sectname __thread_data\n   segname __DATA\n      addr 0x000000010171fa20\n      size 0x0000000000000098\n    offset 24246816\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000011\n reserved1 0\n reserved2 0\nSection\n  sectname __thread_bss\n   segname __DATA\n      addr 0x000000010171fab8\n      size 0x0000000000000308\n    offset 0\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000012\n reserved1 0\n reserved2 0\nSection\n  sectname __bss\n   segname __DATA\n      addr 0x000000010171fdc0\n      size 0x00000000000020b8\n    offset 0\n     align 2^4 (16)\n    reloff 0\n    nreloc 0\n     flags 0x00000001\n reserved1 0\n reserved2 0\nSection\n  sectname __common\n   segname __DATA\n      addr 0x0000000101721e78\n      size 0x00000000000004b8\n    offset 0\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000001\n reserved1 0\n reserved2 0\nLoad command 4\n      cmd LC_SEGMENT_64\n  cmdsize 72\n  segname __LINKEDIT\n   vmaddr 0x0000000101724000\n   vmsize 0x0000000001f74000\n  fileoff 24248320\n filesize 32971600\n  maxprot 0x00000001\n initprot 0x00000001\n   nsects 0\n    flags 0x0\nLoad command 5\n            cmd LC_DYLD_INFO_ONLY\n        cmdsize 48\n     rebase_off 24248320\n    rebase_size 8616\n       bind_off 24256936\n      bind_size 4648\n  weak_bind_off 0\n weak_bind_size 0\n  lazy_bind_off 24261584\n lazy_bind_size 9568\n     export_off 24271152\n    export_size 6892000\nLoad command 6\n     cmd LC_SYMTAB\n cmdsize 24\n  symoff 31287744\n   nsyms 476411\n  stroff 38913872\n strsize 17862312\nLoad command 7\n            cmd LC_DYSYMTAB\n        cmdsize 80\n      ilocalsym 0\n      nlocalsym 406778\n     iextdefsym 406778\n     nextdefsym 69112\n      iundefsym 475890\n      nundefsym 521\n         tocoff 0\n           ntoc 0\n      modtaboff 0\n        nmodtab 0\n   extrefsymoff 0\n    nextrefsyms 0\n indirectsymoff 38910320\n  nindirectsyms 887\n      extreloff 0\n        nextrel 0\n      locreloff 0\n        nlocrel 0\nLoad command 8\n          cmd LC_LOAD_DYLINKER\n      cmdsize 32\n         name /usr/lib/dyld (offset 12)\nLoad command 9\n     cmd LC_UUID\n cmdsize 24\n    uuid 345CF2AA-AB73-3274-A780-A2A6661E1993\nLoad command 10\n      cmd LC_BUILD_VERSION\n  cmdsize 32\n platform 1\n    minos 11.0\n      sdk 26.5\n   ntools 1\n     tool 3\n  version 1267.0\nLoad command 11\n      cmd LC_SOURCE_VERSION\n  cmdsize 16\n  version 0.0\nLoad command 12\n       cmd LC_MAIN\n   cmdsize 24\n  entryoff 8572\n stacksize 0\nLoad command 13\n          cmd LC_LOAD_DYLIB\n      cmdsize 112\n         name /System/Library/Frameworks/ApplicationServices.framework/Versions/A/ApplicationServices (offset 24)\n   time stamp 2 Thu Jan  1 09:00:02 1970\n      current version 66.0.0\ncompatibility version 1.0.0\nLoad command 14\n          cmd LC_LOAD_DYLIB\n      cmdsize 104\n         name /System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation (offset 24)\n   time stamp 2 Thu Jan  1 09:00:02 1970\n      current version 5026.5.4\ncompatibility version 150.0.0\nLoad command 15\n          cmd LC_LOAD_DYLIB\n      cmdsize 96\n         name /System/Library/Frameworks/CoreVideo.framework/Versions/A/CoreVideo (offset 24)\n   time stamp 2 Thu Jan  1 09:00:02 1970\n      current version 734.4.0\ncompatibility version 1.2.0\nLoad command 16\n          cmd LC_LOAD_DYLIB\n      cmdsize 88\n         name /System/Library/Frameworks/Carbon.framework/Versions/A/Carbon (offset 24)\n   time stamp 2 Thu Jan  1 09:00:02 1970\n      current version 170.0.0\ncompatibility version 2.0.0\nLoad command 17\n          cmd LC_LOAD_DYLIB\n      cmdsize 88\n         name /System/Library/Frameworks/AppKit.framework/Versions/C/AppKit (offset 24)\n   time stamp 2 Thu Jan  1 09:00:02 1970\n      current version 2685.60.104\ncompatibility version 45.0.0\nLoad command 18\n          cmd LC_LOAD_DYLIB\n      cmdsize 96\n         name /System/Library/Frameworks/Foundation.framework/Versions/C/Foundation (offset 24)\n   time stamp 2 Thu Jan  1 09:00:02 1970\n      current version 5026.5.4\ncompatibility version 300.0.0\nLoad command 19\n          cmd LC_LOAD_DYLIB\n      cmdsize 56\n         name /usr/lib/libSystem.B.dylib (offset 24)\n   time stamp 2 Thu Jan  1 09:00:02 1970\n      current version 1356.0.0\ncompatibility version 1.0.0\nLoad command 20\n          cmd LC_LOAD_DYLIB\n      cmdsize 56\n         name /usr/lib/libobjc.A.dylib (offset 24)\n   time stamp 2 Thu Jan  1 09:00:02 1970\n      current version 228.0.0\ncompatibility version 1.0.0\nLoad command 21\n          cmd LC_LOAD_DYLIB\n      cmdsize 112\n         name /System/Library/Frameworks/UserNotifications.framework/Versions/A/UserNotifications (offset 24)\n   time stamp 2 Thu Jan  1 09:00:02 1970\n      current version 1.0.0\ncompatibility version 1.0.0\nLoad command 22\n          cmd LC_LOAD_DYLIB\n      cmdsize 96\n         name /System/Library/Frameworks/CoreText.framework/Versions/A/CoreText (offset 24)\n   time stamp 2 Thu Jan  1 09:00:02 1970\n      current version 877.4.0\ncompatibility version 1.0.0\nLoad command 23\n          cmd LC_LOAD_DYLIB\n      cmdsize 96\n         name /System/Library/Frameworks/Security.framework/Versions/A/Security (offset 24)\n   time stamp 2 Thu Jan  1 09:00:02 1970\n      current version 61901.120.67\ncompatibility version 1.0.0\nLoad command 24\n          cmd LC_LOAD_DYLIB\n      cmdsize 96\n         name /System/Library/Frameworks/QuartzCore.framework/Versions/A/QuartzCore (offset 24)\n   time stamp 2 Thu Jan  1 09:00:02 1970\n      current version 1195.14.4\ncompatibility version 1.2.0\nLoad command 25\n          cmd LC_LOAD_DYLIB\n      cmdsize 104\n         name /System/Library/Frameworks/CoreGraphics.framework/Versions/A/CoreGraphics (offset 24)\n   time stamp 2 Thu Jan  1 09:00:02 1970\n      current version 1965.5.1\ncompatibility version 64.0.0\nLoad command 26\n          cmd LC_LOAD_DYLIB\n      cmdsize 120\n         name /System/Library/Frameworks/UniformTypeIdentifiers.framework/Versions/A/UniformTypeIdentifiers (offset 24)\n   time stamp 2 Thu Jan  1 09:00:02 1970\n      current version 709.0.0\ncompatibility version 1.0.0\nLoad command 27\n          cmd LC_LOAD_DYLIB\n      cmdsize 88\n         name /System/Library/Frameworks/Metal.framework/Versions/A/Metal (offset 24)\n   time stamp 2 Thu Jan  1 09:00:02 1970\n      current version 373.2.0\ncompatibility version 1.0.0\nLoad command 28\n          cmd LC_LOAD_DYLIB\n      cmdsize 56\n         name /usr/lib/libiconv.2.dylib (offset 24)\n   time stamp 2 Thu Jan  1 09:00:02 1970\n      current version 7.0.0\ncompatibility version 7.0.0\nLoad command 29\n          cmd LC_LOAD_DYLIB\n      cmdsize 96\n         name /System/Library/Frameworks/ColorSync.framework/Versions/A/ColorSync (offset 24)\n   time stamp 2 Thu Jan  1 09:00:02 1970\n      current version 3813.5.1\ncompatibility version 1.0.0\nLoad command 30\n          cmd LC_LOAD_DYLIB\n      cmdsize 104\n         name /System/Library/Frameworks/CoreServices.framework/Versions/A/CoreServices (offset 24)\n   time stamp 2 Thu Jan  1 09:00:02 1970\n      current version 1226.0.0\ncompatibility version 1.0.0\nLoad command 31\n      cmd LC_FUNCTION_STARTS\n  cmdsize 16\n  dataoff 31163152\n datasize 124592\nLoad command 32\n      cmd LC_DATA_IN_CODE\n  cmdsize 16\n  dataoff 31287744\n datasize 0\nLoad command 33\n      cmd LC_CODE_SIGNATURE\n  cmdsize 16\n  dataoff 56776192\n datasize 443728\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/usr/bin/codesign",
+        "--display",
+        "--verbose=4",
+        "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/citation-manager"
+      ],
+      "status": 0,
+      "stdout": "",
+      "stderr": "Executable=/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/citation-manager\nIdentifier=citation_manager-82f6c2a231f291b3\nFormat=app bundle with Mach-O thin (arm64)\nCodeDirectory v=20400 size=443706 flags=0x20002(adhoc,linker-signed) hashes=13862+0 location=embedded\nVersionPlatform=1\nVersionMin=720896\nVersionSDK=1705216\nHash type=sha256 size=32\nCandidateCDHash sha256=1d97de1843bcf3acadfa6fe70e38758bfac69f35\nCandidateCDHashFull sha256=1d97de1843bcf3acadfa6fe70e38758bfac69f35dbfef6c88d625ae16d2aebbc\nHash choices=sha256\nCMSDigest=1d97de1843bcf3acadfa6fe70e38758bfac69f35dbfef6c88d625ae16d2aebbc\nCMSDigestType=2\nExecutable Segment base=0\nExecutable Segment limit=16666300\nExecutable Segment flags=0x1\nPage size=4096\nCDHash=1d97de1843bcf3acadfa6fe70e38758bfac69f35\nSignature=adhoc\nInfo.plist=not bound\nTeamIdentifier=not set\nSealed Resources=none\nInternal requirements=none\n"
+    },
+    {
+      "argv": [
+        "/usr/bin/codesign",
+        "--verify",
+        "--strict",
+        "--verbose=2",
+        "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/citation-manager"
+      ],
+      "status": 1,
+      "stdout": "",
+      "stderr": "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/citation-manager: code has no resources but signature indicates they must be present\n"
+    },
+    {
+      "argv": [
+        "/usr/bin/file",
+        "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/cm34-probe-host"
+      ],
+      "status": 0,
+      "stdout": "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/cm34-probe-host: Mach-O 64-bit executable arm64\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/usr/bin/lipo",
+        "-archs",
+        "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/cm34-probe-host"
+      ],
+      "status": 0,
+      "stdout": "arm64\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/usr/bin/otool",
+        "-L",
+        "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/cm34-probe-host"
+      ],
+      "status": 0,
+      "stdout": "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/cm34-probe-host:\n\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1356.0.0)\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/usr/bin/otool",
+        "-D",
+        "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/cm34-probe-host"
+      ],
+      "status": 0,
+      "stdout": "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/cm34-probe-host:\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/usr/bin/otool",
+        "-l",
+        "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/cm34-probe-host"
+      ],
+      "status": 0,
+      "stdout": "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/cm34-probe-host:\nLoad command 0\n      cmd LC_SEGMENT_64\n  cmdsize 72\n  segname __PAGEZERO\n   vmaddr 0x0000000000000000\n   vmsize 0x0000000100000000\n  fileoff 0\n filesize 0\n  maxprot 0x00000000\n initprot 0x00000000\n   nsects 0\n    flags 0x0\nLoad command 1\n      cmd LC_SEGMENT_64\n  cmdsize 712\n  segname __TEXT\n   vmaddr 0x0000000100000000\n   vmsize 0x0000000000070000\n  fileoff 0\n filesize 458752\n  maxprot 0x00000005\n initprot 0x00000005\n   nsects 8\n    flags 0x0\nSection\n  sectname __text\n   segname __TEXT\n      addr 0x00000001000008c0\n      size 0x0000000000052fbc\n    offset 2240\n     align 2^6 (64)\n    reloff 0\n    nreloc 0\n     flags 0x80000400\n reserved1 0\n reserved2 0\nSection\n  sectname __stubs\n   segname __TEXT\n      addr 0x000000010005387c\n      size 0x00000000000005ac\n    offset 342140\n     align 2^2 (4)\n    reloff 0\n    nreloc 0\n     flags 0x80000408\n reserved1 0 (index into indirect symbol table)\n reserved2 12 (size of stubs)\nSection\n  sectname __stub_helper\n   segname __TEXT\n      addr 0x0000000100053e28\n      size 0x00000000000005c4\n    offset 343592\n     align 2^2 (4)\n    reloff 0\n    nreloc 0\n     flags 0x80000400\n reserved1 0\n reserved2 0\nSection\n  sectname __gcc_except_tab\n   segname __TEXT\n      addr 0x00000001000543ec\n      size 0x000000000000295c\n    offset 345068\n     align 2^2 (4)\n    reloff 0\n    nreloc 0\n     flags 0x00000000\n reserved1 0\n reserved2 0\nSection\n  sectname __cstring\n   segname __TEXT\n      addr 0x0000000100056d48\n      size 0x0000000000002dd8\n    offset 355656\n     align 2^0 (1)\n    reloff 0\n    nreloc 0\n     flags 0x00000002\n reserved1 0\n reserved2 0\nSection\n  sectname __const\n   segname __TEXT\n      addr 0x0000000100059b20\n      size 0x0000000000004cc0\n    offset 367392\n     align 2^4 (16)\n    reloff 0\n    nreloc 0\n     flags 0x00000000\n reserved1 0\n reserved2 0\nSection\n  sectname __unwind_info\n   segname __TEXT\n      addr 0x000000010005e7e0\n      size 0x0000000000002c88\n    offset 387040\n     align 2^2 (4)\n    reloff 0\n    nreloc 0\n     flags 0x00000000\n reserved1 0\n reserved2 0\nSection\n  sectname __eh_frame\n   segname __TEXT\n      addr 0x0000000100061468\n      size 0x000000000000eb90\n    offset 398440\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x6800000b\n reserved1 0\n reserved2 0\nLoad command 2\n      cmd LC_SEGMENT_64\n  cmdsize 232\n  segname __DATA_CONST\n   vmaddr 0x0000000100070000\n   vmsize 0x0000000000004000\n  fileoff 458752\n filesize 16384\n  maxprot 0x00000003\n initprot 0x00000003\n   nsects 2\n    flags 0x10\nSection\n  sectname __got\n   segname __DATA_CONST\n      addr 0x0000000100070000\n      size 0x0000000000000010\n    offset 458752\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000006\n reserved1 121 (index into indirect symbol table)\n reserved2 0\nSection\n  sectname __const\n   segname __DATA_CONST\n      addr 0x0000000100070010\n      size 0x00000000000030b0\n    offset 458768\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000000\n reserved1 0\n reserved2 0\nLoad command 3\n      cmd LC_SEGMENT_64\n  cmdsize 632\n  segname __DATA\n   vmaddr 0x0000000100074000\n   vmsize 0x0000000000004000\n  fileoff 475136\n filesize 16384\n  maxprot 0x00000003\n initprot 0x00000003\n   nsects 7\n    flags 0x0\nSection\n  sectname __la_symbol_ptr\n   segname __DATA\n      addr 0x0000000100074000\n      size 0x00000000000003c8\n    offset 475136\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000007\n reserved1 123 (index into indirect symbol table)\n reserved2 0\nSection\n  sectname __data\n   segname __DATA\n      addr 0x00000001000743c8\n      size 0x0000000000000a98\n    offset 476104\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000000\n reserved1 0\n reserved2 0\nSection\n  sectname __thread_vars\n   segname __DATA\n      addr 0x0000000100074e60\n      size 0x00000000000000a8\n    offset 478816\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000013\n reserved1 0\n reserved2 0\nSection\n  sectname __thread_data\n   segname __DATA\n      addr 0x0000000100074f08\n      size 0x0000000000000040\n    offset 478984\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000011\n reserved1 0\n reserved2 0\nSection\n  sectname __thread_bss\n   segname __DATA\n      addr 0x0000000100074f48\n      size 0x0000000000000028\n    offset 0\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000012\n reserved1 0\n reserved2 0\nSection\n  sectname __common\n   segname __DATA\n      addr 0x0000000100074f70\n      size 0x0000000000000050\n    offset 0\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000001\n reserved1 0\n reserved2 0\nSection\n  sectname __bss\n   segname __DATA\n      addr 0x0000000100074fc0\n      size 0x0000000000000080\n    offset 0\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000001\n reserved1 0\n reserved2 0\nLoad command 4\n      cmd LC_SEGMENT_64\n  cmdsize 72\n  segname __LINKEDIT\n   vmaddr 0x0000000100078000\n   vmsize 0x0000000000048000\n  fileoff 491520\n filesize 294416\n  maxprot 0x00000001\n initprot 0x00000001\n   nsects 0\n    flags 0x0\nLoad command 5\n            cmd LC_DYLD_INFO_ONLY\n        cmdsize 48\n     rebase_off 491520\n    rebase_size 272\n       bind_off 491792\n      bind_size 48\n  weak_bind_off 0\n weak_bind_size 0\n  lazy_bind_off 491840\n lazy_bind_size 2560\n     export_off 494400\n    export_size 28208\nLoad command 6\n     cmd LC_SYMTAB\n cmdsize 24\n  symoff 524544\n   nsyms 4581\n  stroff 598816\n strsize 180880\nLoad command 7\n            cmd LC_DYSYMTAB\n        cmdsize 80\n      ilocalsym 0\n      nlocalsym 4083\n     iextdefsym 4083\n     nextdefsym 375\n      iundefsym 4458\n      nundefsym 123\n         tocoff 0\n           ntoc 0\n      modtaboff 0\n        nmodtab 0\n   extrefsymoff 0\n    nextrefsyms 0\n indirectsymoff 597840\n  nindirectsyms 244\n      extreloff 0\n        nextrel 0\n      locreloff 0\n        nlocrel 0\nLoad command 8\n          cmd LC_LOAD_DYLINKER\n      cmdsize 32\n         name /usr/lib/dyld (offset 12)\nLoad command 9\n     cmd LC_UUID\n cmdsize 24\n    uuid 2166C3A1-319E-3992-AECE-5280483791C6\nLoad command 10\n      cmd LC_BUILD_VERSION\n  cmdsize 32\n platform 1\n    minos 11.0\n      sdk 26.5\n   ntools 1\n     tool 3\n  version 1267.0\nLoad command 11\n      cmd LC_SOURCE_VERSION\n  cmdsize 16\n  version 0.0\nLoad command 12\n       cmd LC_MAIN\n   cmdsize 24\n  entryoff 31632\n stacksize 0\nLoad command 13\n          cmd LC_LOAD_DYLIB\n      cmdsize 56\n         name /usr/lib/libSystem.B.dylib (offset 24)\n   time stamp 2 Thu Jan  1 09:00:02 1970\n      current version 1356.0.0\ncompatibility version 1.0.0\nLoad command 14\n      cmd LC_FUNCTION_STARTS\n  cmdsize 16\n  dataoff 522608\n datasize 1936\nLoad command 15\n      cmd LC_DATA_IN_CODE\n  cmdsize 16\n  dataoff 524544\n datasize 0\nLoad command 16\n      cmd LC_CODE_SIGNATURE\n  cmdsize 16\n  dataoff 779696\n datasize 6240\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/usr/bin/codesign",
+        "--display",
+        "--verbose=4",
+        "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/cm34-probe-host"
+      ],
+      "status": 0,
+      "stdout": "",
+      "stderr": "Executable=/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/cm34-probe-host\nIdentifier=cm34-probe-host\nFormat=Mach-O thin (arm64)\nCodeDirectory v=20400 size=6216 flags=0x20002(adhoc,linker-signed) hashes=191+0 location=embedded\nVersionPlatform=1\nVersionMin=720896\nVersionSDK=1705216\nHash type=sha256 size=32\nCandidateCDHash sha256=f911e72d22448b919edc25ad43ef2377085fa882\nCandidateCDHashFull sha256=f911e72d22448b919edc25ad43ef2377085fa882ab7c05d5cd4cd3229f6417a3\nHash choices=sha256\nCMSDigest=f911e72d22448b919edc25ad43ef2377085fa882ab7c05d5cd4cd3229f6417a3\nCMSDigestType=2\nExecutable Segment base=0\nExecutable Segment limit=339900\nExecutable Segment flags=0x1\nPage size=4096\nCDHash=f911e72d22448b919edc25ad43ef2377085fa882\nSignature=adhoc\nInfo.plist=not bound\nTeamIdentifier=not set\nSealed Resources=none\nInternal requirements=none\n"
+    },
+    {
+      "argv": [
+        "/usr/bin/codesign",
+        "--verify",
+        "--strict",
+        "--verbose=2",
+        "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/cm34-probe-host"
+      ],
+      "status": 0,
+      "stdout": "",
+      "stderr": "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/cm34-probe-host: valid on disk\n/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/cm34-probe-host: satisfies its Designated Requirement\n"
+    },
+    {
+      "argv": [
+        "/usr/bin/file",
+        "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/cm34-probe-daemon"
+      ],
+      "status": 0,
+      "stdout": "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/cm34-probe-daemon: Mach-O 64-bit executable arm64\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/usr/bin/lipo",
+        "-archs",
+        "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/cm34-probe-daemon"
+      ],
+      "status": 0,
+      "stdout": "arm64\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/usr/bin/otool",
+        "-L",
+        "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/cm34-probe-daemon"
+      ],
+      "status": 0,
+      "stdout": "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/cm34-probe-daemon:\n\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1356.0.0)\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/usr/bin/otool",
+        "-D",
+        "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/cm34-probe-daemon"
+      ],
+      "status": 0,
+      "stdout": "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/cm34-probe-daemon:\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/usr/bin/otool",
+        "-l",
+        "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/cm34-probe-daemon"
+      ],
+      "status": 0,
+      "stdout": "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/cm34-probe-daemon:\nLoad command 0\n      cmd LC_SEGMENT_64\n  cmdsize 72\n  segname __PAGEZERO\n   vmaddr 0x0000000000000000\n   vmsize 0x0000000100000000\n  fileoff 0\n filesize 0\n  maxprot 0x00000000\n initprot 0x00000000\n   nsects 0\n    flags 0x0\nLoad command 1\n      cmd LC_SEGMENT_64\n  cmdsize 712\n  segname __TEXT\n   vmaddr 0x0000000100000000\n   vmsize 0x0000000000070000\n  fileoff 0\n filesize 458752\n  maxprot 0x00000005\n initprot 0x00000005\n   nsects 8\n    flags 0x0\nSection\n  sectname __text\n   segname __TEXT\n      addr 0x00000001000008c0\n      size 0x0000000000052fbc\n    offset 2240\n     align 2^6 (64)\n    reloff 0\n    nreloc 0\n     flags 0x80000400\n reserved1 0\n reserved2 0\nSection\n  sectname __stubs\n   segname __TEXT\n      addr 0x000000010005387c\n      size 0x00000000000005ac\n    offset 342140\n     align 2^2 (4)\n    reloff 0\n    nreloc 0\n     flags 0x80000408\n reserved1 0 (index into indirect symbol table)\n reserved2 12 (size of stubs)\nSection\n  sectname __stub_helper\n   segname __TEXT\n      addr 0x0000000100053e28\n      size 0x00000000000005c4\n    offset 343592\n     align 2^2 (4)\n    reloff 0\n    nreloc 0\n     flags 0x80000400\n reserved1 0\n reserved2 0\nSection\n  sectname __gcc_except_tab\n   segname __TEXT\n      addr 0x00000001000543ec\n      size 0x000000000000295c\n    offset 345068\n     align 2^2 (4)\n    reloff 0\n    nreloc 0\n     flags 0x00000000\n reserved1 0\n reserved2 0\nSection\n  sectname __cstring\n   segname __TEXT\n      addr 0x0000000100056d48\n      size 0x0000000000002dd8\n    offset 355656\n     align 2^0 (1)\n    reloff 0\n    nreloc 0\n     flags 0x00000002\n reserved1 0\n reserved2 0\nSection\n  sectname __const\n   segname __TEXT\n      addr 0x0000000100059b20\n      size 0x0000000000004cc0\n    offset 367392\n     align 2^4 (16)\n    reloff 0\n    nreloc 0\n     flags 0x00000000\n reserved1 0\n reserved2 0\nSection\n  sectname __unwind_info\n   segname __TEXT\n      addr 0x000000010005e7e0\n      size 0x0000000000002c88\n    offset 387040\n     align 2^2 (4)\n    reloff 0\n    nreloc 0\n     flags 0x00000000\n reserved1 0\n reserved2 0\nSection\n  sectname __eh_frame\n   segname __TEXT\n      addr 0x0000000100061468\n      size 0x000000000000eb90\n    offset 398440\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x6800000b\n reserved1 0\n reserved2 0\nLoad command 2\n      cmd LC_SEGMENT_64\n  cmdsize 232\n  segname __DATA_CONST\n   vmaddr 0x0000000100070000\n   vmsize 0x0000000000004000\n  fileoff 458752\n filesize 16384\n  maxprot 0x00000003\n initprot 0x00000003\n   nsects 2\n    flags 0x10\nSection\n  sectname __got\n   segname __DATA_CONST\n      addr 0x0000000100070000\n      size 0x0000000000000010\n    offset 458752\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000006\n reserved1 121 (index into indirect symbol table)\n reserved2 0\nSection\n  sectname __const\n   segname __DATA_CONST\n      addr 0x0000000100070010\n      size 0x00000000000030b0\n    offset 458768\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000000\n reserved1 0\n reserved2 0\nLoad command 3\n      cmd LC_SEGMENT_64\n  cmdsize 632\n  segname __DATA\n   vmaddr 0x0000000100074000\n   vmsize 0x0000000000004000\n  fileoff 475136\n filesize 16384\n  maxprot 0x00000003\n initprot 0x00000003\n   nsects 7\n    flags 0x0\nSection\n  sectname __la_symbol_ptr\n   segname __DATA\n      addr 0x0000000100074000\n      size 0x00000000000003c8\n    offset 475136\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000007\n reserved1 123 (index into indirect symbol table)\n reserved2 0\nSection\n  sectname __data\n   segname __DATA\n      addr 0x00000001000743c8\n      size 0x0000000000000a98\n    offset 476104\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000000\n reserved1 0\n reserved2 0\nSection\n  sectname __thread_vars\n   segname __DATA\n      addr 0x0000000100074e60\n      size 0x00000000000000a8\n    offset 478816\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000013\n reserved1 0\n reserved2 0\nSection\n  sectname __thread_data\n   segname __DATA\n      addr 0x0000000100074f08\n      size 0x0000000000000040\n    offset 478984\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000011\n reserved1 0\n reserved2 0\nSection\n  sectname __thread_bss\n   segname __DATA\n      addr 0x0000000100074f48\n      size 0x0000000000000028\n    offset 0\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000012\n reserved1 0\n reserved2 0\nSection\n  sectname __common\n   segname __DATA\n      addr 0x0000000100074f70\n      size 0x0000000000000050\n    offset 0\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000001\n reserved1 0\n reserved2 0\nSection\n  sectname __bss\n   segname __DATA\n      addr 0x0000000100074fc0\n      size 0x0000000000000080\n    offset 0\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000001\n reserved1 0\n reserved2 0\nLoad command 4\n      cmd LC_SEGMENT_64\n  cmdsize 72\n  segname __LINKEDIT\n   vmaddr 0x0000000100078000\n   vmsize 0x0000000000048000\n  fileoff 491520\n filesize 294416\n  maxprot 0x00000001\n initprot 0x00000001\n   nsects 0\n    flags 0x0\nLoad command 5\n            cmd LC_DYLD_INFO_ONLY\n        cmdsize 48\n     rebase_off 491520\n    rebase_size 272\n       bind_off 491792\n      bind_size 48\n  weak_bind_off 0\n weak_bind_size 0\n  lazy_bind_off 491840\n lazy_bind_size 2560\n     export_off 494400\n    export_size 28208\nLoad command 6\n     cmd LC_SYMTAB\n cmdsize 24\n  symoff 524544\n   nsyms 4581\n  stroff 598816\n strsize 180880\nLoad command 7\n            cmd LC_DYSYMTAB\n        cmdsize 80\n      ilocalsym 0\n      nlocalsym 4083\n     iextdefsym 4083\n     nextdefsym 375\n      iundefsym 4458\n      nundefsym 123\n         tocoff 0\n           ntoc 0\n      modtaboff 0\n        nmodtab 0\n   extrefsymoff 0\n    nextrefsyms 0\n indirectsymoff 597840\n  nindirectsyms 244\n      extreloff 0\n        nextrel 0\n      locreloff 0\n        nlocrel 0\nLoad command 8\n          cmd LC_LOAD_DYLINKER\n      cmdsize 32\n         name /usr/lib/dyld (offset 12)\nLoad command 9\n     cmd LC_UUID\n cmdsize 24\n    uuid 2166C3A1-319E-3992-AECE-5280483791C6\nLoad command 10\n      cmd LC_BUILD_VERSION\n  cmdsize 32\n platform 1\n    minos 11.0\n      sdk 26.5\n   ntools 1\n     tool 3\n  version 1267.0\nLoad command 11\n      cmd LC_SOURCE_VERSION\n  cmdsize 16\n  version 0.0\nLoad command 12\n       cmd LC_MAIN\n   cmdsize 24\n  entryoff 31632\n stacksize 0\nLoad command 13\n          cmd LC_LOAD_DYLIB\n      cmdsize 56\n         name /usr/lib/libSystem.B.dylib (offset 24)\n   time stamp 2 Thu Jan  1 09:00:02 1970\n      current version 1356.0.0\ncompatibility version 1.0.0\nLoad command 14\n      cmd LC_FUNCTION_STARTS\n  cmdsize 16\n  dataoff 522608\n datasize 1936\nLoad command 15\n      cmd LC_DATA_IN_CODE\n  cmdsize 16\n  dataoff 524544\n datasize 0\nLoad command 16\n      cmd LC_CODE_SIGNATURE\n  cmdsize 16\n  dataoff 779696\n datasize 6240\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/usr/bin/codesign",
+        "--display",
+        "--verbose=4",
+        "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/cm34-probe-daemon"
+      ],
+      "status": 0,
+      "stdout": "",
+      "stderr": "Executable=/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/cm34-probe-daemon\nIdentifier=cm34-probe-host\nFormat=Mach-O thin (arm64)\nCodeDirectory v=20400 size=6216 flags=0x20002(adhoc,linker-signed) hashes=191+0 location=embedded\nVersionPlatform=1\nVersionMin=720896\nVersionSDK=1705216\nHash type=sha256 size=32\nCandidateCDHash sha256=f911e72d22448b919edc25ad43ef2377085fa882\nCandidateCDHashFull sha256=f911e72d22448b919edc25ad43ef2377085fa882ab7c05d5cd4cd3229f6417a3\nHash choices=sha256\nCMSDigest=f911e72d22448b919edc25ad43ef2377085fa882ab7c05d5cd4cd3229f6417a3\nCMSDigestType=2\nExecutable Segment base=0\nExecutable Segment limit=339900\nExecutable Segment flags=0x1\nPage size=4096\nCDHash=f911e72d22448b919edc25ad43ef2377085fa882\nSignature=adhoc\nInfo.plist=not bound\nTeamIdentifier=not set\nSealed Resources=none\nInternal requirements=none\n"
+    },
+    {
+      "argv": [
+        "/usr/bin/codesign",
+        "--verify",
+        "--strict",
+        "--verbose=2",
+        "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/cm34-probe-daemon"
+      ],
+      "status": 0,
+      "stdout": "",
+      "stderr": "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/cm34-probe-daemon: valid on disk\n/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/cm34-probe-daemon: satisfies its Designated Requirement\n"
+    },
+    {
+      "argv": [
+        "/usr/bin/file",
+        "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/Frameworks/libpdfium.dylib"
+      ],
+      "status": 0,
+      "stdout": "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/Frameworks/libpdfium.dylib: Mach-O universal binary with 2 architectures: [x86_64:Mach-O 64-bit dynamically linked shared library x86_64] [arm64]\n/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/Frameworks/libpdfium.dylib (for architecture x86_64):\tMach-O 64-bit dynamically linked shared library x86_64\n/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/Frameworks/libpdfium.dylib (for architecture arm64):\tMach-O 64-bit dynamically linked shared library arm64\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/usr/bin/lipo",
+        "-archs",
+        "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/Frameworks/libpdfium.dylib"
+      ],
+      "status": 0,
+      "stdout": "x86_64 arm64\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/usr/bin/otool",
+        "-L",
+        "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/Frameworks/libpdfium.dylib"
+      ],
+      "status": 0,
+      "stdout": "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/Frameworks/libpdfium.dylib (architecture x86_64):\n\t./libpdfium.dylib (compatibility version 0.0.0, current version 0.0.0)\n\t/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit (compatibility version 45.0.0, current version 2685.10.108)\n\t/System/Library/Frameworks/CoreGraphics.framework/Versions/A/CoreGraphics (compatibility version 64.0.0, current version 1957.0.0)\n\t/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation (compatibility version 150.0.0, current version 4040.1.255)\n\t/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation (compatibility version 300.0.0, current version 4040.1.255)\n\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1356.0.0)\n/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/Frameworks/libpdfium.dylib (architecture arm64):\n\t./libpdfium.dylib (compatibility version 0.0.0, current version 0.0.0)\n\t/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit (compatibility version 45.0.0, current version 2685.10.108)\n\t/System/Library/Frameworks/CoreGraphics.framework/Versions/A/CoreGraphics (compatibility version 64.0.0, current version 1957.0.0)\n\t/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation (compatibility version 150.0.0, current version 4040.1.255)\n\t/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation (compatibility version 300.0.0, current version 4040.1.255)\n\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1356.0.0)\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/usr/bin/otool",
+        "-D",
+        "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/Frameworks/libpdfium.dylib"
+      ],
+      "status": 0,
+      "stdout": "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/Frameworks/libpdfium.dylib (architecture x86_64):\n./libpdfium.dylib\n/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/Frameworks/libpdfium.dylib (architecture arm64):\n./libpdfium.dylib\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/usr/bin/otool",
+        "-l",
+        "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/Frameworks/libpdfium.dylib"
+      ],
+      "status": 0,
+      "stdout": "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/Frameworks/libpdfium.dylib (architecture x86_64):\nLoad command 0\n      cmd LC_SEGMENT_64\n  cmdsize 712\n  segname __TEXT\n   vmaddr 0x0000000000000000\n   vmsize 0x00000000005f2000\n  fileoff 0\n filesize 6234112\n  maxprot 0x00000005\n initprot 0x00000005\n   nsects 8\n    flags 0x0\nSection\n  sectname __text\n   segname __TEXT\n      addr 0x0000000000002120\n      size 0x00000000004069f0\n    offset 8480\n     align 2^5 (32)\n    reloff 0\n    nreloc 0\n     flags 0x80000400\n reserved1 0\n reserved2 0\nSection\n  sectname __stubs\n   segname __TEXT\n      addr 0x0000000000408b10\n      size 0x00000000000003ae\n    offset 4229904\n     align 2^2 (4)\n    reloff 0\n    nreloc 0\n     flags 0x80000408\n reserved1 176 (index into indirect symbol table)\n reserved2 6 (size of stubs)\nSection\n  sectname __cstring\n   segname __TEXT\n      addr 0x0000000000408ec0\n      size 0x000000000000a510\n    offset 4230848\n     align 2^4 (16)\n    reloff 0\n    nreloc 0\n     flags 0x00000002\n reserved1 0\n reserved2 0\nSection\n  sectname __literals\n   segname __TEXT\n      addr 0x00000000004133d0\n      size 0x0000000000003850\n    offset 4273104\n     align 2^4 (16)\n    reloff 0\n    nreloc 0\n     flags 0x00000000\n reserved1 0\n reserved2 0\nSection\n  sectname __const\n   segname __TEXT\n      addr 0x0000000000416c20\n      size 0x00000000001d3541\n    offset 4287520\n     align 2^5 (32)\n    reloff 0\n    nreloc 0\n     flags 0x00000000\n reserved1 0\n reserved2 0\nSection\n  sectname __ustring\n   segname __TEXT\n      addr 0x00000000005ea170\n      size 0x0000000000000484\n    offset 6201712\n     align 2^4 (16)\n    reloff 0\n    nreloc 0\n     flags 0x00000000\n reserved1 0\n reserved2 0\nSection\n  sectname __gcc_except_tab\n   segname __TEXT\n      addr 0x00000000005ea5f4\n      size 0x00000000000012fc\n    offset 6202868\n     align 2^2 (4)\n    reloff 0\n    nreloc 0\n     flags 0x00000000\n reserved1 0\n reserved2 0\nSection\n  sectname __unwind_info\n   segname __TEXT\n      addr 0x00000000005eb8f0\n      size 0x00000000000064a4\n    offset 6207728\n     align 2^2 (4)\n    reloff 0\n    nreloc 0\n     flags 0x00000000\n reserved1 0\n reserved2 0\nLoad command 1\n      cmd LC_SEGMENT_64\n  cmdsize 232\n  segname __DATA_CONST\n   vmaddr 0x00000000005f2000\n   vmsize 0x0000000000014000\n  fileoff 6234112\n filesize 81920\n  maxprot 0x00000003\n initprot 0x00000003\n   nsects 2\n    flags 0x10\nSection\n  sectname __got\n   segname __DATA_CONST\n      addr 0x00000000005f2000\n      size 0x0000000000000580\n    offset 6234112\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000006\n reserved1 0 (index into indirect symbol table)\n reserved2 0\nSection\n  sectname __const\n   segname __DATA_CONST\n      addr 0x00000000005f2580\n      size 0x0000000000012c90\n    offset 6235520\n     align 2^4 (16)\n    reloff 0\n    nreloc 0\n     flags 0x00000000\n reserved1 0\n reserved2 0\nLoad command 2\n      cmd LC_SEGMENT_64\n  cmdsize 552\n  segname __DATA\n   vmaddr 0x0000000000606000\n   vmsize 0x0000000000006000\n  fileoff 6316032\n filesize 16384\n  maxprot 0x00000003\n initprot 0x00000003\n   nsects 6\n    flags 0x0\nSection\n  sectname __data\n   segname __DATA\n      addr 0x0000000000606000\n      size 0x00000000000034c8\n    offset 6316032\n     align 2^4 (16)\n    reloff 0\n    nreloc 0\n     flags 0x00000000\n reserved1 0\n reserved2 0\nSection\n  sectname __thread_vars\n   segname __DATA\n      addr 0x00000000006094c8\n      size 0x0000000000000060\n    offset 6329544\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000013\n reserved1 0\n reserved2 0\nSection\n  sectname __thread_data\n   segname __DATA\n      addr 0x0000000000609528\n      size 0x0000000000000008\n    offset 6329640\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000011\n reserved1 0\n reserved2 0\nSection\n  sectname __thread_bss\n   segname __DATA\n      addr 0x0000000000609530\n      size 0x0000000000000018\n    offset 0\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000012\n reserved1 0\n reserved2 0\nSection\n  sectname __bss\n   segname __DATA\n      addr 0x0000000000609550\n      size 0x00000000000019f0\n    offset 0\n     align 2^4 (16)\n    reloff 0\n    nreloc 0\n     flags 0x00000001\n reserved1 0\n reserved2 0\nSection\n  sectname __common\n   segname __DATA\n      addr 0x000000000060af40\n      size 0x00000000000004f0\n    offset 0\n     align 2^4 (16)\n    reloff 0\n    nreloc 0\n     flags 0x00000001\n reserved1 0\n reserved2 0\nLoad command 3\n      cmd LC_SEGMENT_64\n  cmdsize 72\n  segname __LINKEDIT\n   vmaddr 0x000000000060c000\n   vmsize 0x0000000000168908\n  fileoff 6332416\n filesize 1476872\n  maxprot 0x00000001\n initprot 0x00000001\n   nsects 0\n    flags 0x0\nLoad command 4\n      cmd LC_DYLD_CHAINED_FIXUPS\n  cmdsize 16\n  dataoff 6332416\n datasize 2984\nLoad command 5\n      cmd LC_DYLD_EXPORTS_TRIE\n  cmdsize 16\n  dataoff 6335400\n datasize 13040\nLoad command 6\n     cmd LC_SYMTAB\n cmdsize 24\n  symoff 6366440\n   nsyms 36174\n  stroff 6946560\n strsize 862728\nLoad command 7\n            cmd LC_DYSYMTAB\n        cmdsize 80\n      ilocalsym 0\n      nlocalsym 35384\n     iextdefsym 35384\n     nextdefsym 625\n      iundefsym 36009\n      nundefsym 165\n         tocoff 0\n           ntoc 0\n      modtaboff 0\n        nmodtab 0\n   extrefsymoff 0\n    nextrefsyms 0\n indirectsymoff 6945224\n  nindirectsyms 333\n      extreloff 0\n        nextrel 0\n      locreloff 0\n        nlocrel 0\nLoad command 8\n          cmd LC_ID_DYLIB\n      cmdsize 48\n         name ./libpdfium.dylib (offset 24)\n   time stamp 0 Thu Jan  1 09:00:00 1970\n      current version 0.0.0\ncompatibility version 0.0.0\nLoad command 9\n     cmd LC_UUID\n cmdsize 24\n    uuid 4C4C4475-5555-3144-A1FF-FECBF56ECA4C\nLoad command 10\n      cmd LC_BUILD_VERSION\n  cmdsize 32\n platform 1\n    minos 13.0\n      sdk 26.0\n   ntools 1\n     tool 4\n  version 24.0\nLoad command 11\n          cmd LC_LOAD_DYLIB\n      cmdsize 88\n         name /System/Library/Frameworks/AppKit.framework/Versions/C/AppKit (offset 24)\n   time stamp 0 Thu Jan  1 09:00:00 1970\n      current version 2685.10.108\ncompatibility version 45.0.0\nLoad command 12\n          cmd LC_LOAD_DYLIB\n      cmdsize 104\n         name /System/Library/Frameworks/CoreGraphics.framework/Versions/A/CoreGraphics (offset 24)\n   time stamp 0 Thu Jan  1 09:00:00 1970\n      current version 1957.0.0\ncompatibility version 64.0.0\nLoad command 13\n          cmd LC_LOAD_DYLIB\n      cmdsize 104\n         name /System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation (offset 24)\n   time stamp 0 Thu Jan  1 09:00:00 1970\n      current version 4040.1.255\ncompatibility version 150.0.0\nLoad command 14\n          cmd LC_LOAD_DYLIB\n      cmdsize 96\n         name /System/Library/Frameworks/Foundation.framework/Versions/C/Foundation (offset 24)\n   time stamp 0 Thu Jan  1 09:00:00 1970\n      current version 4040.1.255\ncompatibility version 300.0.0\nLoad command 15\n          cmd LC_LOAD_DYLIB\n      cmdsize 56\n         name /usr/lib/libSystem.B.dylib (offset 24)\n   time stamp 0 Thu Jan  1 09:00:00 1970\n      current version 1356.0.0\ncompatibility version 1.0.0\nLoad command 16\n      cmd LC_FUNCTION_STARTS\n  cmdsize 16\n  dataoff 6348440\n datasize 16040\nLoad command 17\n      cmd LC_DATA_IN_CODE\n  cmdsize 16\n  dataoff 6364480\n datasize 1960\n/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/Frameworks/libpdfium.dylib (architecture arm64):\nLoad command 0\n      cmd LC_SEGMENT_64\n  cmdsize 792\n  segname __TEXT\n   vmaddr 0x0000000000000000\n   vmsize 0x0000000000588000\n  fileoff 0\n filesize 5799936\n  maxprot 0x00000005\n initprot 0x00000005\n   nsects 9\n    flags 0x0\nSection\n  sectname __text\n   segname __TEXT\n      addr 0x0000000000002180\n      size 0x00000000003a01b8\n    offset 8576\n     align 2^6 (64)\n    reloff 0\n    nreloc 0\n     flags 0x80000400\n reserved1 0\n reserved2 0\nSection\n  sectname __stubs\n   segname __TEXT\n      addr 0x00000000003a2338\n      size 0x0000000000000738\n    offset 3810104\n     align 2^2 (4)\n    reloff 0\n    nreloc 0\n     flags 0x80000408\n reserved1 161 (index into indirect symbol table)\n reserved2 12 (size of stubs)\nSection\n  sectname __cstring\n   segname __TEXT\n      addr 0x00000000003a2a70\n      size 0x000000000000a628\n    offset 3811952\n     align 2^2 (4)\n    reloff 0\n    nreloc 0\n     flags 0x00000002\n reserved1 0\n reserved2 0\nSection\n  sectname __literals\n   segname __TEXT\n      addr 0x00000000003ad0a0\n      size 0x000000000000194c\n    offset 3854496\n     align 2^4 (16)\n    reloff 0\n    nreloc 0\n     flags 0x00000000\n reserved1 0\n reserved2 0\nSection\n  sectname __const\n   segname __TEXT\n      addr 0x00000000003ae9f0\n      size 0x00000000001d3b69\n    offset 3860976\n     align 2^4 (16)\n    reloff 0\n    nreloc 0\n     flags 0x00000000\n reserved1 0\n reserved2 0\nSection\n  sectname __ustring\n   segname __TEXT\n      addr 0x000000000058255a\n      size 0x000000000000047c\n    offset 5776730\n     align 2^1 (2)\n    reloff 0\n    nreloc 0\n     flags 0x00000000\n reserved1 0\n reserved2 0\nSection\n  sectname __gcc_except_tab\n   segname __TEXT\n      addr 0x00000000005829d8\n      size 0x00000000000010d4\n    offset 5777880\n     align 2^2 (4)\n    reloff 0\n    nreloc 0\n     flags 0x00000000\n reserved1 0\n reserved2 0\nSection\n  sectname __unwind_info\n   segname __TEXT\n      addr 0x0000000000583aac\n      size 0x00000000000024b8\n    offset 5782188\n     align 2^2 (4)\n    reloff 0\n    nreloc 0\n     flags 0x00000000\n reserved1 0\n reserved2 0\nSection\n  sectname __eh_frame\n   segname __TEXT\n      addr 0x0000000000585f68\n      size 0x000000000000021c\n    offset 5791592\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x6000000b\n reserved1 0\n reserved2 0\nLoad command 1\n      cmd LC_SEGMENT_64\n  cmdsize 232\n  segname __DATA_CONST\n   vmaddr 0x0000000000588000\n   vmsize 0x0000000000014000\n  fileoff 5799936\n filesize 81920\n  maxprot 0x00000003\n initprot 0x00000003\n   nsects 2\n    flags 0x10\nSection\n  sectname __got\n   segname __DATA_CONST\n      addr 0x0000000000588000\n      size 0x0000000000000508\n    offset 5799936\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000006\n reserved1 0 (index into indirect symbol table)\n reserved2 0\nSection\n  sectname __const\n   segname __DATA_CONST\n      addr 0x0000000000588510\n      size 0x0000000000012ad8\n    offset 5801232\n     align 2^4 (16)\n    reloff 0\n    nreloc 0\n     flags 0x00000000\n reserved1 0\n reserved2 0\nLoad command 2\n      cmd LC_SEGMENT_64\n  cmdsize 552\n  segname __DATA\n   vmaddr 0x000000000059c000\n   vmsize 0x0000000000008000\n  fileoff 5881856\n filesize 16384\n  maxprot 0x00000003\n initprot 0x00000003\n   nsects 6\n    flags 0x0\nSection\n  sectname __data\n   segname __DATA\n      addr 0x000000000059c000\n      size 0x00000000000034b8\n    offset 5881856\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000000\n reserved1 0\n reserved2 0\nSection\n  sectname __thread_vars\n   segname __DATA\n      addr 0x000000000059f4b8\n      size 0x0000000000000078\n    offset 5895352\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000013\n reserved1 0\n reserved2 0\nSection\n  sectname __thread_data\n   segname __DATA\n      addr 0x000000000059f530\n      size 0x000000000000000c\n    offset 5895472\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000011\n reserved1 0\n reserved2 0\nSection\n  sectname __thread_bss\n   segname __DATA\n      addr 0x000000000059f540\n      size 0x0000000000000018\n    offset 0\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000012\n reserved1 0\n reserved2 0\nSection\n  sectname __bss\n   segname __DATA\n      addr 0x000000000059f560\n      size 0x00000000000019b0\n    offset 0\n     align 2^4 (16)\n    reloff 0\n    nreloc 0\n     flags 0x00000001\n reserved1 0\n reserved2 0\nSection\n  sectname __common\n   segname __DATA\n      addr 0x00000000005a0f10\n      size 0x00000000000004e8\n    offset 0\n     align 2^3 (8)\n    reloff 0\n    nreloc 0\n     flags 0x00000001\n reserved1 0\n reserved2 0\nLoad command 3\n      cmd LC_SEGMENT_64\n  cmdsize 72\n  segname __LINKEDIT\n   vmaddr 0x00000000005a4000\n   vmsize 0x000000000016bec0\n  fileoff 5898240\n filesize 1490624\n  maxprot 0x00000001\n initprot 0x00000001\n   nsects 0\n    flags 0x0\nLoad command 4\n      cmd LC_DYLD_CHAINED_FIXUPS\n  cmdsize 16\n  dataoff 5898240\n datasize 2864\nLoad command 5\n      cmd LC_DYLD_EXPORTS_TRIE\n  cmdsize 16\n  dataoff 5901104\n datasize 13040\nLoad command 6\n     cmd LC_SYMTAB\n cmdsize 24\n  symoff 5929288\n   nsyms 35047\n  stroff 6491304\n strsize 840144\nLoad command 7\n            cmd LC_DYSYMTAB\n        cmdsize 80\n      ilocalsym 0\n      nlocalsym 34260\n     iextdefsym 34260\n     nextdefsym 625\n      iundefsym 34885\n      nundefsym 162\n         tocoff 0\n           ntoc 0\n      modtaboff 0\n        nmodtab 0\n   extrefsymoff 0\n    nextrefsyms 0\n indirectsymoff 6490040\n  nindirectsyms 315\n      extreloff 0\n        nextrel 0\n      locreloff 0\n        nlocrel 0\nLoad command 8\n          cmd LC_ID_DYLIB\n      cmdsize 48\n         name ./libpdfium.dylib (offset 24)\n   time stamp 0 Thu Jan  1 09:00:00 1970\n      current version 0.0.0\ncompatibility version 0.0.0\nLoad command 9\n     cmd LC_UUID\n cmdsize 24\n    uuid 4C4C4422-5555-3144-A1B3-68AC75C064F7\nLoad command 10\n      cmd LC_BUILD_VERSION\n  cmdsize 32\n platform 1\n    minos 13.0\n      sdk 26.0\n   ntools 1\n     tool 4\n  version 24.0\nLoad command 11\n          cmd LC_LOAD_DYLIB\n      cmdsize 88\n         name /System/Library/Frameworks/AppKit.framework/Versions/C/AppKit (offset 24)\n   time stamp 0 Thu Jan  1 09:00:00 1970\n      current version 2685.10.108\ncompatibility version 45.0.0\nLoad command 12\n          cmd LC_LOAD_DYLIB\n      cmdsize 104\n         name /System/Library/Frameworks/CoreGraphics.framework/Versions/A/CoreGraphics (offset 24)\n   time stamp 0 Thu Jan  1 09:00:00 1970\n      current version 1957.0.0\ncompatibility version 64.0.0\nLoad command 13\n          cmd LC_LOAD_DYLIB\n      cmdsize 104\n         name /System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation (offset 24)\n   time stamp 0 Thu Jan  1 09:00:00 1970\n      current version 4040.1.255\ncompatibility version 150.0.0\nLoad command 14\n          cmd LC_LOAD_DYLIB\n      cmdsize 96\n         name /System/Library/Frameworks/Foundation.framework/Versions/C/Foundation (offset 24)\n   time stamp 0 Thu Jan  1 09:00:00 1970\n      current version 4040.1.255\ncompatibility version 300.0.0\nLoad command 15\n          cmd LC_LOAD_DYLIB\n      cmdsize 56\n         name /usr/lib/libSystem.B.dylib (offset 24)\n   time stamp 0 Thu Jan  1 09:00:00 1970\n      current version 1356.0.0\ncompatibility version 1.0.0\nLoad command 16\n      cmd LC_FUNCTION_STARTS\n  cmdsize 16\n  dataoff 5914144\n datasize 15144\nLoad command 17\n      cmd LC_DATA_IN_CODE\n  cmdsize 16\n  dataoff 5929288\n datasize 0\nLoad command 18\n      cmd LC_CODE_SIGNATURE\n  cmdsize 16\n  dataoff 7331456\n datasize 57408\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/usr/bin/codesign",
+        "--display",
+        "--verbose=4",
+        "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/Frameworks/libpdfium.dylib"
+      ],
+      "status": 0,
+      "stdout": "",
+      "stderr": "Executable=/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/Frameworks/libpdfium.dylib\nIdentifier=libpdfium.dylib\nFormat=Mach-O universal (x86_64 arm64)\nCodeDirectory v=20400 size=57384 flags=0x20002(adhoc,linker-signed) hashes=1790+0 location=embedded\nVersionPlatform=1\nVersionMin=851968\nVersionSDK=1703936\nHash type=sha256 size=32\nCandidateCDHash sha256=5d194bffecec91f7b41ca8977c4b982557acf442\nCandidateCDHashFull sha256=5d194bffecec91f7b41ca8977c4b982557acf442fa2d8b544fa812b516b15e15\nHash choices=sha256\nCMSDigest=5d194bffecec91f7b41ca8977c4b982557acf442fa2d8b544fa812b516b15e15\nCMSDigestType=2\nExecutable Segment base=0\nExecutable Segment limit=5799936\nExecutable Segment flags=0x0\nPage size=4096\nCDHash=5d194bffecec91f7b41ca8977c4b982557acf442\nSignature=adhoc\nInfo.plist=not bound\nTeamIdentifier=not set\nSealed Resources=none\nInternal requirements=none\n"
+    },
+    {
+      "argv": [
+        "/usr/bin/codesign",
+        "--verify",
+        "--strict",
+        "--verbose=2",
+        "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/Frameworks/libpdfium.dylib"
+      ],
+      "status": 1,
+      "stdout": "",
+      "stderr": "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/Frameworks/libpdfium.dylib: code object is not signed at all\n"
+    },
+    {
+      "argv": [
+        "/usr/bin/security",
+        "find-identity",
+        "-v",
+        "-p",
+        "codesigning"
+      ],
+      "status": 0,
+      "stdout": "     0 valid identities found\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/usr/bin/codesign",
+        "--verify",
+        "--deep",
+        "--strict",
+        "--verbose=2",
+        "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app"
+      ],
+      "status": 1,
+      "stdout": "",
+      "stderr": "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app: code has no resources but signature indicates they must be present\n"
+    },
+    {
+      "argv": [
+        "/usr/bin/sw_vers"
+      ],
+      "status": 0,
+      "stdout": "ProductName:\t\tmacOS\nProductVersion:\t\t27.2\nBuildVersion:\t\t26B123\n",
+      "stderr": ""
+    }
+  ],
+  "sha256": {
+    "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/citation-manager": "9a8449e1f19b7f7f42ecd7e69eb6119eabf566dc3b1955a4c4c97f41a6b8d5fc",
+    "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/cm34-probe-host": "45aecf84930bd3f49abb2ae2ec0b87cda330b4828c7290e4abb0df04bd29a2c3",
+    "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/MacOS/cm34-probe-daemon": "45aecf84930bd3f49abb2ae2ec0b87cda330b4828c7290e4abb0df04bd29a2c3",
+    "/private/tmp/cm34 \u79fb\u8a2d\u5f8c \u5916\u90e8/Moved Citation \u65e5\u672c\u8a9e.app/Contents/Frameworks/libpdfium.dylib": "8d1e46a6dbe32d7cb95279ab3def2e71e557a3d4cc49162453afa3e3b250dc5e"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "recorded_utc": "2026-11-06T15:07:21.976722+00:00",
+  "removed_test_paths": [
+    "/private/tmp/cm34 外部 bundle/chromium-before/profile",
+    "/private/tmp/cm34 外部 bundle/chromium-before/extension",
+    "/private/tmp/cm34 外部 bundle/chromium-before/isolation.sb",
+    "/private/tmp/cm34 外部 bundle/firefox-before/profile",
+    "/private/tmp/cm34 外部 bundle/firefox-before/extension",
+    "/private/tmp/cm34 外部 bundle/firefox-before/native-root",
+    "/private/tmp/cm34 外部 bundle/firefox-before/isolation.sb",
+    "/private/tmp/cm34-browsers",
+    "/private/tmp/cm34-source",
+    "/private/tmp/cm34-jpn4zzn4",
+    "/private/tmp/cm34-runtime",
+    "/private/tmp/cm34-probe-host"
+  ],
+  "retained_static_bundle": "/private/tmp/cm34 移設後 外部/Moved Citation 日本語.app",
+  "retained_synthetic_artifacts": [
+    "/private/tmp/cm34 外部 bundle",
+    "/private/tmp/cm34 移設後 外部"
+  ],
+  "private_nonce_directory_removed": true,
+  "no_fixture_socket": true,
+  "no_test_processes": true,
+  "no_cm34_launchd_jobs": true,
+  "remaining_temporary_host_registrations": [],
+  "firefox_dmg_detached": true,
+  "default_native_manifests_before_after_equal": true,
+  "default_browser_settings_all_unchanged_proven": false,
+  "isolation_failure": "Downloaded CfT process without explicit profile flags was terminated after failed sandbox trial. No before-image for every default CfT profile/Crashpad/preference file; no global files were deleted/restored.",
+  "shipping_status": "unsigned/ad-hoc static test artifact only; stale helpers disabled by removing nonce state",
+  "original_repo_PDF_fixtures_and_PDFium_worker_unchanged": true
+}

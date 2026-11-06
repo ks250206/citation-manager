@@ -1,0 +1,22 @@
+{
+  "observed_by": "implementation agent through native CUA",
+  "initial_launch": "real bundle executable via LaunchServices, --layout-smoke, cwd /",
+  "before_move": {
+    "window": "Citation Manager — local library",
+    "initial_state": "0 papers loaded · offline",
+    "action": "Cmd+N, paste synthetic Layout fixture 日本語, Cmd+S",
+    "observed_result": "Saved locally"
+  },
+  "after_move": {
+    "window": "Citation Manager — local library",
+    "observed_result": "0 papers loaded · offline; bundle PDF report written again at new path"
+  },
+  "shutdown": "Cmd+Q for each run; CUA listApps returned no matching bundle ID after final quit",
+  "scope": "PDF raster written by actual executable startup worker; no full PDF viewer claimed",
+  "early_failure": "First /tmp-based synthetic library path rejected by #8 path safety; canonicalized dedicated output fixed it",
+  "app_binary_sha256": "9a8449e1f19b7f7f42ecd7e69eb6119eabf566dc3b1955a4c4c97f41a6b8d5fc",
+  "synthetic_db_integrity": "ok",
+  "synthetic_titles": [
+    "Layout fixture 日本語"
+  ]
+}

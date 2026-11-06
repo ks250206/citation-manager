@@ -1,0 +1,75 @@
+{
+  "mode": "direct-spawn-only",
+  "browser_tested": false,
+  "concurrent": [
+    {
+      "nonce": "c5080c956134b369a68b3994",
+      "host_pid": 95420,
+      "daemon_pid": 95422,
+      "host_path": "/private/tmp/cm34 移設後 外部/Moved Citation 日本語.app/Contents/MacOS/cm34-probe-host",
+      "daemon_path": "/private/tmp/cm34 移設後 外部/Moved Citation 日本語.app/Contents/MacOS/cm34-probe-daemon"
+    },
+    {
+      "nonce": "c5080c956134b369a68b3994",
+      "host_pid": 95421,
+      "daemon_pid": 95422,
+      "host_path": "/private/tmp/cm34 移設後 外部/Moved Citation 日本語.app/Contents/MacOS/cm34-probe-host",
+      "daemon_path": "/private/tmp/cm34 移設後 外部/Moved Citation 日本語.app/Contents/MacOS/cm34-probe-daemon"
+    }
+  ],
+  "active_past_idle": true,
+  "host_death_recovery": {
+    "nonce": "c5080c956134b369a68b3994",
+    "host_pid": 95469,
+    "daemon_pid": 95422,
+    "host_path": "/private/tmp/cm34 移設後 外部/Moved Citation 日本語.app/Contents/MacOS/cm34-probe-host",
+    "daemon_path": "/private/tmp/cm34 移設後 外部/Moved Citation 日本語.app/Contents/MacOS/cm34-probe-daemon"
+  },
+  "eof_daemon_survived": true,
+  "lazy_restart": {
+    "nonce": "c5080c956134b369a68b3994",
+    "host_pid": 95506,
+    "daemon_pid": 95507,
+    "host_path": "/private/tmp/cm34 移設後 外部/Moved Citation 日本語.app/Contents/MacOS/cm34-probe-host",
+    "daemon_path": "/private/tmp/cm34 移設後 外部/Moved Citation 日本語.app/Contents/MacOS/cm34-probe-daemon"
+  },
+  "rejected_frames": [
+    {
+      "exit": 1,
+      "stderr": "cm34 test probe failed: frame limit\n"
+    },
+    {
+      "exit": 1,
+      "stderr": "cm34 test probe failed: failed to fill whole buffer\n"
+    },
+    {
+      "exit": 1,
+      "stderr": "cm34 test probe failed: only the exact nonce ping fixture request is supported\n"
+    },
+    {
+      "exit": 1,
+      "stderr": "cm34 test probe failed: only the exact nonce ping fixture request is supported\n"
+    },
+    {
+      "exit": 1,
+      "stderr": "cm34 test probe failed: only the exact nonce ping fixture request is supported\n"
+    }
+  ],
+  "passed": true,
+  "events": {
+    "events-95506.txt": "host-start\nreply daemon=95507\nclient-ack daemon=95507\nhost-eof\n",
+    "events-95507.txt": "daemon-start\ndaemon-idle-exit\n",
+    "events-95584.txt": "host-start\n",
+    "events-95581.txt": "host-start\n",
+    "events-95422.txt": "daemon-start\ndaemon-idle-exit\n",
+    "events-95580.txt": "host-start\n",
+    "events-95582.txt": "host-start\n",
+    "events-95421.txt": "host-start\nreply daemon=95422\nclient-ack daemon=95422\nhost-eof\n",
+    "events-95420.txt": "host-start\nreply daemon=95422\nclient-ack daemon=95422\n",
+    "events-95583.txt": "host-start\n",
+    "events-95469.txt": "host-start\nreply daemon=95422\nclient-ack daemon=95422\nhost-eof\n"
+  },
+  "no_lingering_hosts": true,
+  "no_lingering_daemons": true,
+  "socket_removed": true
+}
