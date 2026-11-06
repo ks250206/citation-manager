@@ -30,6 +30,8 @@ required-features = ["desktop-bootstrap"]
 
 [dev-dependencies]
 tempfile.workspace = true
+sha2.workspace = true
+serde_json.workspace = true
 
 # Composition-only DOI -> common import -> SQLite tests; no daemon implementation.
 [[test]]
