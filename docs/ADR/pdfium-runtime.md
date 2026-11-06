@@ -18,6 +18,8 @@
 - 動的 loader は絶対パスの dylib hash を検証し、8125 binding の全 required symbols を解決する。
   PDFium 公開 API に library build-version 問合せはない。実行時 build の識別根拠は**実ロードした
   dylib の hash と固定 archive の VERSION**である。文書の PDF version と混同しない。
+  hash読取とdlopenは別openなので、その間の差替えをatomicに防ぐものではない。
+  信頼された開発cache/bundle pathを前提とし、署名identityを含むrelease trust policyは#31で検証する。
 - archive の `args.gn`: V8=false、XFA=false。実ロード/描画/Unicode 文字枠/標準注釈保存は実証。
   JavaScript/XFA/OCR capability を提供しない。
 - [8125 annotation header](https://pdfium.googlesource.com/pdfium/+/refs/heads/chromium/8125/public/fpdf_annot.h)
@@ -82,6 +84,9 @@ DESIGN §9.3 の代替許可を使い、**搬出に限定して pypdf 6.1.1** �
 同じ gate を再現する。Rust native output 単体を完成済み export として UI/API に渡してはいけない。
 既存注釈の任意編集、署名付き PDF の署名保持、アクセス制限付きPDFの搬出、全 annotation subtype、
 任意フォントの FreeText appearance は未検証。pypdf は抽出/表示/文字位置処理の代替にしない。
+現helperはページ内の全注釈を走査するPoC専用で、既存の/APなしHighlightも黄色/0.5へ変更し得る。
+corpusは既存注釈を持たない。#20では搬出前の注釈identity/数などで今回作成した注釈を識別し、
+既存注釈の色/opacity/APを保持する処理と回帰テストが必要。このhelperを一般PDFへそのまま接続しない。
 [公式 pypdf API](https://pypdf.readthedocs.io/en/6.1.1/modules/PdfWriter.html) と固定版 source を確認。
 
 独立系は [PDFKit quadrilateralPoints](https://developer.apple.com/documentation/pdfkit/pdfannotation/quadrilateralpoints)
@@ -110,8 +115,10 @@ release trust policy を追加する必要がある。現 loader は fail-closed
 再署名した配布物をそのままロードできるとは主張しない。
 
 [`pdfium-licenses/`](pdfium-licenses/) に固定 archive の LICENSE と全18 third-party notice の法文を保持し、
-末尾空白/EOFのみ整形する。manifest で取得時と整形後の両 hash を固定。binary 再配布には PDFium BSD 条件と各 third-party 条件が適用される。
+末尾空白/EOFのみ整形する。manifest で取得時と整形後の両 hash を固定し、fetchでLICENSE/全noticeの取得時hashとファイル集合も照合する。binary 再配布には PDFium BSD 条件と各 third-party 条件が適用される。
 FreeType の credit 要件等を含むため top-level MIT のみで済ませない。binary は Git に含めない。
-Rust wrapper は MIT OR Apache-2.0（[同梱license](pdfium-render-LICENSE.md)）で、製品再配布時にも保持する。
+Rust wrapper の同梱物は MIT OR Apache-2.0の[選択表記](pdfium-render-LICENSE.md)のみで、
+実際の許諾本文/著作権表示が揃った製品noticeではない。#31/#34で公式配布物/権利者の情報から
+選択したlicenseの実文と適切な著作権表示を収集・確認するTODOを残し、完了前に製品配送済みとしない。
 font は corpus のみ（OFL添付）、pypdf/ReportLab/fontTools/Pillow は開発検証ツールで製品には同梱しない。
 これを全製品の法務/署名確認完了と解釈しない。

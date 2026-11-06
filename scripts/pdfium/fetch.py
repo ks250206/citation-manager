@@ -12,9 +12,22 @@ if not __debug__:
 
 ROOT = Path(__file__).resolve().parents[2]
 LOCK = json.loads((Path(__file__).with_name('runtime-lock.json')).read_text())
+NOTICE_MANIFEST = json.loads((ROOT/'docs/ADR/pdfium-licenses/manifest.json').read_text())
 
 def sha(data):
     return hashlib.sha256(data).hexdigest()
+
+def verify_notices(destination):
+    expected = NOTICE_MANIFEST['upstream_files_sha256']
+    notices = destination/'licenses'
+    if not notices.is_dir() or notices.is_symlink():
+        raise ValueError('missing or unsafe upstream notice directory')
+    if {p.name for p in notices.iterdir()} != set(expected)-{'LICENSE'}:
+        raise ValueError('upstream notice file set mismatch')
+    for name, digest in expected.items():
+        path = destination/'LICENSE' if name == 'LICENSE' else notices/name
+        if not path.is_file() or path.is_symlink() or sha(path.read_bytes()) != digest:
+            raise ValueError('upstream notice checksum mismatch: '+name)
 
 def fetch(destination):
     destination.mkdir(parents=True, exist_ok=True)
@@ -36,7 +49,7 @@ def fetch(destination):
     library = destination/LOCK['library']
     assert sha(library.read_bytes()) == LOCK['library_sha256'], 'library checksum mismatch'
     assert (destination/'VERSION').read_text() == 'MAJOR=158\nMINOR=0\nBUILD=8125\nPATCH=0\n'
-    assert (destination/'LICENSE').is_file() and len(list((destination/'licenses').iterdir())) == 18
+    verify_notices(destination)
     print(library.resolve())
 
 if __name__ == '__main__':
