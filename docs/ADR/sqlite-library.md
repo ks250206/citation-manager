@@ -145,3 +145,9 @@ service.restore(created.id)?;
   #8 の update は revision/CAS を持たず、明示的な後の更新が有効になる。
 
 本Issueの実行証拠と未実施範囲は [ISSUE_8](../validation/ISSUE_8.md) を参照。
+
+## #12 の追加 port
+
+[Collection / Tag / LibraryQuery ADR](library-organization-query.md) が基礎schemaを使う操作、
+安全な collection 削除、共通 TagKey、#33 の保存先契約、M1 書誌検索と cursor の意味を確定する。
+#12 は新規 migration を必要とせず、上記の適用済み SQL/checksum と backup hook を変更しない。

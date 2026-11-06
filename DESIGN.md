@@ -911,3 +911,12 @@ PaperService/SQLite repositoryで手動作成・全書誌情報編集・一覧�
 `/Pages` 継承を解決した有効MediaBox/CropBox交差をPage/Export/Viewportで共用する。
 原本不変で標準注釈を搬出し、nativeの/AP欠落にはexport-only補完を使いPDFKitで独立照合する。
 製品export helper配送は#20、.app実ロードは#34、署名/trust policyは#31で未完。
+
+## 29. #12 整理と M1 書誌検索の確定事項
+
+[Collection / Tag / LibraryQuery ADR](docs/ADR/library-organization-query.md) が §6/10/19.1 の
+M1 実装上の明確化となる。循環を防ぐ collection CRUD/move、複数所属、共通 domain TagKey、
+AND/OR と複合 filter、stable keyset pagination を worker 側 core port / SQLite adapter で提供する。
+collection 削除は直接の子を親へ移して自身の所属だけを解除し、文献/添付を消さない。
+M1 keyword は書誌情報の literal substring で、PDF全文/FTS/relevance は #18。
+#33 は既存 ImportDestination の ID と TagKey を共有し、import commit の全体 transaction を別途所有する。

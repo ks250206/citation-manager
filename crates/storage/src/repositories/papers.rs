@@ -211,7 +211,7 @@ fn write_external_ids(db: &Connection, paper: &Paper) -> Result<(), ServiceError
     Ok(())
 }
 
-fn read(
+pub(super) fn read(
     db: &Connection,
     id: PaperId,
     include_deleted: bool,
