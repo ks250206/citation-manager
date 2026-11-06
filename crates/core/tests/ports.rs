@@ -15,6 +15,9 @@ impl ImportService for ImportSpy {
                 .map(|draft| PreviewCandidate {
                     draft,
                     existing_match: None,
+                    matches: vec![],
+                    batch_matches: vec![],
+                    diagnostics: vec![],
                 })
                 .collect(),
             warnings: vec![],
@@ -27,6 +30,7 @@ impl ImportService for ImportSpy {
         Ok(ImportOutcome {
             created: vec![],
             skipped: 1,
+            ..Default::default()
         })
     }
 }
@@ -42,6 +46,7 @@ fn an_adapter_can_preview_then_explicitly_skip_without_transport_or_persisted_pa
                 namespace: "pmid".into(),
                 value: "12345678".into(),
             }],
+            ..Default::default()
         }],
         destination: ImportDestination::default(),
     };

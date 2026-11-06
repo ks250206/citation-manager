@@ -28,4 +28,7 @@ pub trait AttachmentStore {
 pub trait ImportService {
     fn preview(&mut self, request: ImportRequest) -> Result<ImportPreview, ServiceError>;
     fn commit(&mut self, request: ImportCommit) -> Result<ImportOutcome, ServiceError>;
+    fn cancel(&mut self, _id: &PreviewId) -> Result<(), ServiceError> {
+        Err(ServiceError::Unavailable)
+    }
 }

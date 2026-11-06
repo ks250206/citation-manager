@@ -658,6 +658,7 @@ dependencies = [
  "cm-domain",
  "serde",
  "serde_json",
+ "uuid",
 ]
 
 [[package]]

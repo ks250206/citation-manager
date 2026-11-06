@@ -10,3 +10,6 @@ mod tags;
 pub use collections::SqliteCollections;
 pub use queries::SqliteLibraryQuery;
 pub use tags::SqliteTags;
+
+mod import;
+pub use import::SqliteImports;
