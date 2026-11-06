@@ -58,6 +58,19 @@ pub(crate) fn run(
     run_registry(db, &registry()?, backup)
 }
 
+/// Read-only validation for portable snapshots: no migration or implicit repair.
+pub(crate) fn validate_current(db: &Connection) -> Result<(), StorageError> {
+    let migrations = registry()?;
+    let applied = history(db)?;
+    verify_history(&migrations, &applied)?;
+    if applied.len() != migrations.len() {
+        return Err(StorageError::Migration(
+            "portable snapshot requires current schema".into(),
+        ));
+    }
+    Ok(())
+}
+
 fn run_registry(
     db: &mut Connection,
     migrations: &[Migration<'_>],

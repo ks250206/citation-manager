@@ -36,6 +36,8 @@ impl LibraryDb {
         configure(&connection, true)?;
         migrations::run(&mut connection, backup)?;
         directory.check()?;
+        crate::backup::ensure_initial(&connection, directory)?;
+        directory.check()?;
         Ok(Self { connection })
     }
     /// SQLite in-memory databases use journal_mode=memory; WAL is disk-only.

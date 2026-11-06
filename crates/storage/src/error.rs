@@ -8,6 +8,7 @@ pub enum StorageError {
     UnsupportedPlatform,
     Migration(String),
     BackupRequired,
+    Integrity(String),
 }
 impl fmt::Display for StorageError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -19,6 +20,7 @@ impl fmt::Display for StorageError {
                 f.write_str("private library paths require Unix permissions")
             }
             Self::Migration(e) => write!(f, "migration refused: {e}"),
+            Self::Integrity(reason) => write!(f, "integrity check failed: {reason}"),
             Self::BackupRequired => {
                 f.write_str("existing library upgrade requires a pre-migration backup hook")
             }
