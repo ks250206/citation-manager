@@ -21,7 +21,7 @@ git diff --check
 git diff --exit-code 427f130e0ba56d40327451bd5ef28b963dffefb6 -- crates/storage/migrations
 ```
 
-Passed: fmt, warnings-as-errors workspace clippy, **153 Rust tests including doctests**,
+Passed: fmt, warnings-as-errors workspace clippy, **156 Rust tests including doctests**,
 locked workspace build, architecture (12 crates), migration validator (**2 immutable
 migrations**, explicit base preserved), **18 Python tests**, whitespace and unchanged
 migration-tree comparison. The real-DB adapter tests run in the workspace suite; the
@@ -189,6 +189,27 @@ the full workspace:153 Rust tests including the two1,000-record round-trips,18 P
 fmt, locked warnings-denied clippy/build, architecture, immutable migrations against427f130
 and whitespace all passed. Exact-head independent re-review and CI remain pending.
 Dependency pins, Cargo.lock and immutable migrations are unchanged by this correction.
+
+### Tie regression correction
+
+The independent `bee779d` recheck found that raw BibTeX ties were being emitted as visible
+tilde glyphs. The finite text decoder now maps unescaped ties to U+00A0; BibTeX output maps
+U+00A0 back to `~`, keeping literal `\textasciitilde{}` distinct. The authored
+`fixtures/bibtex/ties.bib` includes Fig.~1, D.~E. Knuth, corporate ties, literal tildes,
+accent syntax and verbatim DOI/URL tildes.
+
+Two new regressions check public output without cm-v1 and genuine #33 preview/SQLite save/
+read/export. Shared normalization still collapses NBSP to ordinary spaces; the warning and
+raw source syntax survive review/storage, and both public exports report the field-level
+spacing limitation. Saved titles and names never acquire visible tildes from input ties.
+No shared normalization rule was changed. A third regression fixes the existing optional
+RIS protected-family comma observation, including public RIS reparse.
+
+Focused bibliography behavior7 + interoperability19 tests passed. Root also reran the full
+workspace:156 Rust tests including both1,000-record SQLite round-trips and the compile-fail
+doctest,18 Python tests, fmt, locked clippy/build, architecture, immutable migrations against
+427f130 and whitespace all passed. Exact-head re-review/CI remain pending. No actual TeX
+rendering or user library was used.
 
 - BibTeX/RIS transfer bibliography only. PDFs, attachments, annotations, collection/tag
   relationships and internal IDs need separate migration. Source provenance is reported,

@@ -174,6 +174,73 @@ pub(crate) fn outer_group(s: &str) -> bool {
     }
     false
 }
+pub(crate) fn split_protected_comma(s: &str) -> Option<(&str, &str)> {
+    let mut depth = 0usize;
+    let mut escaped = false;
+    for (i, c) in s.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match c {
+            '\\' => escaped = true,
+            '{' => depth += 1,
+            '}' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => return Some((&s[..i], &s[i + 1..])),
+            _ => {}
+        }
+    }
+    None
+}
+pub(crate) fn ungroup_name(s: &str) -> &str {
+    let s = s.trim();
+    if outer_group(s) {
+        &s[1..s.len() - 1]
+    } else {
+        s
+    }
+}
+pub(crate) fn has_unescaped_tie(s: &str) -> bool {
+    let mut escaped = false;
+    for c in s.chars() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if c == '\\' {
+            escaped = true;
+        } else if c == '~' {
+            return true;
+        }
+    }
+    false
+}
+pub(crate) fn tie_fields(p: &Paper) -> Vec<&str> {
+    let Some(fields) = p
+        .bibliography
+        .extra_json
+        .as_ref()
+        .and_then(|v| v.get("bibtex"))
+        .and_then(Value::as_array)
+    else {
+        return vec![];
+    };
+    let mut result = vec![];
+    for entry in fields {
+        if let (Some(field), Some(raw)) = (
+            entry
+                .get(0)
+                .and_then(Value::as_str)
+                .and_then(|s| s.strip_prefix("raw:")),
+            entry.get(1).and_then(Value::as_str),
+        ) && has_unescaped_tie(raw)
+            && !result.contains(&field)
+        {
+            result.push(field);
+        }
+    }
+    result
+}
 pub(crate) fn standard_month_identifier(raw: &str) -> Option<&'static str> {
     [
         "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",

@@ -99,20 +99,21 @@ fn draft(fields: Vec<(String, String)>) -> Result<PaperDraft, ServiceError> {
                 let name = if literal {
                     value[1..value.len() - 1].to_owned()
                 } else {
-                    value
-                        .split(',')
-                        .map(|part| {
-                            let part = part.trim();
-                            if outer_group(part) {
-                                &part[1..part.len() - 1]
-                            } else {
-                                part
-                            }
-                        })
-                        .collect::<Vec<_>>()
-                        .join(", ")
+                    value.clone()
                 };
-                b.authors.push(person(&name, role, literal));
+                let person = if !literal && let Some((family, given)) = split_protected_comma(&name)
+                {
+                    cm_domain::Contributor {
+                        family_name: Some(ungroup_name(family).into()),
+                        given_name: Some(ungroup_name(given).into()),
+                        literal_name: None,
+                        orcid: None,
+                        role: role.into(),
+                    }
+                } else {
+                    person(&name, role, literal)
+                };
+                b.authors.push(person);
             }
             "JO" | "JF" | "JA" | "T2" => {
                 if b.journal.as_ref().is_some_and(|v| v != &value) {
@@ -351,7 +352,14 @@ impl BibliographySerializer for RisSerializer {
         field("TI", &p.title);
         for a in &b.authors {
             if a.role == "author" || a.role == "editor" {
-                let n = name(a);
+                let n = if a.literal_name.is_none()
+                    && let (Some(family), Some(given)) = (&a.family_name, &a.given_name)
+                    && family.contains(',')
+                {
+                    format!("{{{family}}}, {given}")
+                } else {
+                    name(a)
+                };
                 field(
                     if a.role == "author" { "AU" } else { "ED" },
                     &if a.literal_name.is_some() {
@@ -434,6 +442,12 @@ impl BibliographySerializer for RisSerializer {
         out.truncate(out.len() - "ER  - \n".len());
         out.push_str(&format!("C9  - cm-v1:{ext}\nER  - \n\n"));
         let mut encoded = finish_record(p, out, "RIS")?;
+        for field in tie_fields(p) {
+            encoded.diagnostics.push(cm_core::export::ExportDiagnostic {
+                paper: Some(p.id), field: field.into(),
+                message: "Public RIS does not preserve original BibTeX nonbreaking tie syntax; raw syntax remains in cm-v1/extra_json".into(),
+            });
+        }
         if let Some(month) = standard_month(p) {
             encoded.diagnostics.push(cm_core::export::ExportDiagnostic {
                 paper: Some(p.id), field: "month".into(),

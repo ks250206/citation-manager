@@ -423,6 +423,8 @@ fn decode(text: &str) -> (String, bool) {
                 out.push_str(&rest[..end]);
                 rest = &rest[end..];
             }
+        } else if c == '~' {
+            out.push('\u{a0}');
         } else if !['{', '}'].contains(&c) {
             out.push(c);
         }
@@ -562,7 +564,15 @@ fn draft(
         }
         if field == "author" || field == "editor" {
             authors(&raw, &field, &mut d);
-            if raw.contains('\\') {
+            if has_unescaped_tie(&raw) {
+                warn(
+                    &mut d,
+                    &field,
+                    "Nonbreaking BibTeX ties may normalize to ordinary spaces in shared import; raw syntax retained",
+                    false,
+                );
+            }
+            if raw.contains('\\') || has_unescaped_tie(&raw) {
                 unknown.push((format!("raw:{field}"), raw));
             }
             continue;
@@ -573,6 +583,16 @@ fn draft(
         } else {
             decode(&raw)
         };
+        let ties = !verbatim && has_unescaped_tie(&raw);
+        if ties {
+            warn(
+                &mut d,
+                &field,
+                "Nonbreaking BibTeX ties may normalize to ordinary spaces in shared import; raw syntax retained",
+                false,
+            );
+            unknown.push((format!("raw:{field}"), raw.clone()));
+        }
         if !verbatim && has_group(&raw) {
             warn(
                 &mut d,
@@ -589,7 +609,9 @@ fn draft(
                 "Unsupported TeX commands retained literally; raw field preserved, no execution/expansion",
                 false,
             );
-            unknown.push((format!("raw:{field}"), raw.clone()));
+            if !ties {
+                unknown.push((format!("raw:{field}"), raw.clone()));
+            }
         }
         let b = &mut d.bibliography;
         match field.as_str() {
@@ -739,6 +761,7 @@ fn escape(text: &str) -> String {
             '\\' => out.push_str("\\textbackslash{}"),
             '^' => out.push_str("\\textasciicircum{}"),
             '~' => out.push_str("\\textasciitilde{}"),
+            '\u{a0}' => out.push('~'),
             '@' => out.push_str("{@}"),
             '{' | '}' | '%' | '&' | '#' | '_' | '$' => {
                 out.push('\\');
@@ -888,6 +911,12 @@ impl BibliographySerializer for BibtexSerializer {
         let ext = extension(p, native)?;
         out.push_str(&format!("  cm_data = {{{ext}}},\n}}\n\n"));
         let mut encoded = finish_record(p, out, "BibTeX")?;
+        for field in tie_fields(p) {
+            encoded.diagnostics.push(cm_core::export::ExportDiagnostic {
+                paper: Some(p.id), field: field.into(),
+                message: "Public field may lose nonbreaking spacing after shared normalization; original BibTeX tie syntax remains in cm-v1/extra_json".into(),
+            });
+        }
         if let Some(fields) = b
             .extra_json
             .as_ref()

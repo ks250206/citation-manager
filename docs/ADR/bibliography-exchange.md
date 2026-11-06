@@ -95,6 +95,15 @@ change the set. Export from a quiescent library for a reproducible migration.
   line boundaries), never the LaTeX spacing command `\@`. General-text caret and tilde use
   `\textasciicircum{}` / `\textasciitilde{}`, decoded back to literal characters without TeX
   execution; verbatim DOI/URL remain unchanged.
+- An unescaped BibTeX `~` is a nonbreaking tie, not a literal tilde glyph. The adapter
+  decodes it to U+00A0 and public BibTeX emits U+00A0 as `~`; a literal tilde from a text
+  command or another input path still emits `\textasciitilde{}`. The shared #33 whitespace
+  normalizer intentionally converts U+00A0 to ordinary spaces when saving. Affected source
+  fields carry a warning and retain their original `raw:<field>` syntax in extra_json.
+  Both exports report this nonbreaking-spacing loss per field. No raw TeX is replayed to
+  reconstruct formatting after edits; full nonbreaking layout through the DB is not claimed.
+  RIS names split only on a comma outside protected groups; e.g. `{Smith, Jr}, John` keeps
+  its comma inside the family name, and the RIS writer groups such family components.
 - Ordinary fields are written publicly. Every export additionally emits a **private,
   versioned `cm-v1` extension** (`cm_data` in BibTeX, `C9  - cm-v1:` in RIS): bounded hex-encoded
   JSON for exact contributors/order/roles/ORCID, external IDs, arbitrary extra_json, publication

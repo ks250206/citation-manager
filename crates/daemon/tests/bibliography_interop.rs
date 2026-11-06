@@ -1,5 +1,10 @@
 //! Public-format expectations authored independently of the production serializers.
-use cm_core::{ServiceError, export::BibliographySerializer, import::*, ports::ImportService};
+use cm_core::{
+    ServiceError,
+    export::BibliographySerializer,
+    import::*,
+    ports::{ImportService, PaperRepository},
+};
 use cm_metadata::{
     bibtex::{self, BibtexSerializer},
     exchange::{MAX_DEPTH, MAX_RECORD_BYTES, ParseReport},
@@ -28,6 +33,129 @@ fn public(text: &str) -> String {
         .filter(|s| !s.trim_start().starts_with("cm_data = ") && !s.starts_with("C9  - cm-v1:"))
         .map(|s| format!("{s}\n"))
         .collect()
+}
+#[test]
+fn bibtex_nonbreaking_ties_are_not_literal_tilde_glyphs() {
+    let parsed = bibtex::parse(include_bytes!("../../../fixtures/bibtex/ties.bib")).unwrap();
+    assert_eq!(parsed.candidates.len(), 2);
+    let tied = &parsed.candidates[0];
+    assert_eq!(tied.title, "See Fig.\u{a0}1 at 50\u{a0}nm");
+    assert_eq!(
+        tied.bibliography.authors[0].given_name.as_deref(),
+        Some("D.\u{a0}E.")
+    );
+    assert_eq!(
+        tied.bibliography.authors[1].given_name.as_deref(),
+        Some("J.\u{a0}R.")
+    );
+    assert!(
+        tied.diagnostics
+            .iter()
+            .any(|d| d.field == "title" && !d.error && d.message.contains("ordinary spaces"))
+    );
+    let bib = BibtexSerializer.encode(&paper(tied)).unwrap();
+    let native = public(&bib.text);
+    assert!(native.contains("title = {See Fig.~1 at 50~nm}"));
+    assert!(native.contains("Knuth, D.~E."));
+    assert!(native.contains("doi = {10.9999/ties~x}"));
+    assert!(native.contains("url = {https://example.invalid/a~b}"));
+    assert!(!native.contains("textasciitilde"));
+    let reparsed = bibtex::parse(native.as_bytes()).unwrap();
+    assert_eq!(reparsed.candidates[0].title, tied.title);
+    let literal = &parsed.candidates[1];
+    assert_eq!(literal.title, "Literal ~ glyph and ñ accent");
+    assert_eq!(
+        literal.bibliography.authors[0].literal_name.as_deref(),
+        Some("Research\u{a0}Group")
+    );
+    let native = public(&BibtexSerializer.encode(&paper(literal)).unwrap().text);
+    assert!(native.contains("Literal \\textasciitilde{} glyph"));
+    assert_eq!(
+        bibtex::parse(native.as_bytes()).unwrap().candidates[0].title,
+        literal.title
+    );
+}
+
+#[test]
+fn shared_import_tie_normalization_preserves_raw_evidence_and_reports_spacing_loss() {
+    let parsed = bibtex::parse(include_bytes!("../../../fixtures/bibtex/ties.bib")).unwrap();
+    let mut db = LibraryDb::in_memory().unwrap();
+    let mut service = ImportCoordinator::new(db.imports());
+    let preview = service
+        .preview(parsed.batch(0, 1, Default::default()).unwrap())
+        .unwrap();
+    assert_eq!(preview.candidates[0].draft.title, "See Fig. 1 at 50 nm");
+    assert!(
+        preview.candidates[0]
+            .diagnostics
+            .iter()
+            .any(|d| d.field == "title" && d.message.contains("ordinary spaces"))
+    );
+    let outcome = service
+        .commit(ImportCommit {
+            preview_id: preview.id,
+            decisions: vec![ImportDecision {
+                candidate_index: 0,
+                action: ImportAction::Create,
+            }],
+        })
+        .unwrap();
+    drop(service);
+    let saved = db.papers().get(outcome.created[0]).unwrap().unwrap();
+    assert_eq!(saved.title, "See Fig. 1 at 50 nm");
+    assert_eq!(
+        saved.bibliography.authors[0].given_name.as_deref(),
+        Some("D. E.")
+    );
+    assert!(
+        saved.bibliography.extra_json.as_ref().unwrap()["bibtex"]
+            .as_array()
+            .unwrap()
+            .contains(&json!(["raw:title", "See Fig.~1 at 50~nm"]))
+    );
+    for serializer in [
+        &BibtexSerializer as &dyn BibliographySerializer,
+        &RisSerializer,
+    ] {
+        let encoded = serializer.encode(&saved).unwrap();
+        assert!(public(&encoded.text).contains("See Fig. 1 at 50 nm"));
+        assert!(!public(&encoded.text).contains("textasciitilde"));
+        assert!(
+            encoded
+                .diagnostics
+                .iter()
+                .any(|d| d.field == "title" && d.message.contains("nonbreaking"))
+        );
+        assert!(
+            encoded
+                .diagnostics
+                .iter()
+                .any(|d| d.field == "author" && d.message.contains("nonbreaking"))
+        );
+    }
+}
+
+#[test]
+fn ris_grouped_family_comma_is_not_a_person_separator() {
+    let parsed = ris::parse(
+        b"TY  - JOUR\nTI  - Name\nAU  - {Smith, Jr}, John\nED  - {Editor, Group}, {Ann}\nER  -\n",
+    )
+    .unwrap();
+    let names = &parsed.candidates[0].bibliography.authors;
+    assert_eq!(names[0].family_name.as_deref(), Some("Smith, Jr"));
+    assert_eq!(names[0].given_name.as_deref(), Some("John"));
+    assert!(names[0].literal_name.is_none());
+    assert_eq!(names[1].family_name.as_deref(), Some("Editor, Group"));
+    assert_eq!(names[1].given_name.as_deref(), Some("Ann"));
+    let encoded = RisSerializer.encode(&paper(&parsed.candidates[0])).unwrap();
+    let native = public(&encoded.text);
+    assert!(native.contains("AU  - {Smith, Jr}, John"));
+    assert_eq!(
+        ris::parse(native.as_bytes()).unwrap().candidates[0]
+            .bibliography
+            .authors,
+        *names
+    );
 }
 #[test]
 fn standard_month_tokens_survive_public_bibtex_and_have_specific_ris_loss() {
