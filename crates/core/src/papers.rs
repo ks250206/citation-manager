@@ -96,6 +96,8 @@ impl<R: PaperLibrary> PaperService<R> {
 /// One DOI normalization point shared by manual persistence and later import adapters.
 pub fn normalize_doi(raw: &str) -> Result<String, ServiceError> {
     let mut value = raw.trim();
+    let mut resolver = false;
+    let mut decoded;
     for prefix in [
         "https://doi.org/",
         "http://doi.org/",
@@ -112,9 +114,42 @@ pub fn normalize_doi(raw: &str) -> Result<String, ServiceError> {
             .get(..prefix.len())
             .is_some_and(|s| s.eq_ignore_ascii_case(prefix))
         {
+            resolver = !prefix.eq_ignore_ascii_case("doi:");
             value = value[prefix.len()..].trim();
             break;
         }
+    }
+    // Resolver URLs decode their suffix exactly once; raw DOI percent escapes remain literal.
+    // The registrant separator must be an actual slash, not an encoded path separator.
+    if resolver {
+        value = value.split(['?', '#']).next().unwrap_or(value);
+        let (head, tail) = value
+            .split_once('/')
+            .ok_or_else(|| ServiceError::InvalidInput("invalid DOI URL".into()))?;
+        let mut bytes = Vec::with_capacity(tail.len());
+        let input = tail.as_bytes();
+        let mut i = 0;
+        while i < input.len() {
+            if input[i] == b'%' {
+                let hex = tail
+                    .get(i + 1..i + 3)
+                    .ok_or_else(|| ServiceError::InvalidInput("invalid DOI URL escape".into()))?;
+                bytes
+                    .push(u8::from_str_radix(hex, 16).map_err(|_| {
+                        ServiceError::InvalidInput("invalid DOI URL escape".into())
+                    })?);
+                i += 3;
+            } else {
+                bytes.push(input[i]);
+                i += 1;
+            }
+        }
+        decoded = format!(
+            "{head}/{}",
+            String::from_utf8(bytes)
+                .map_err(|_| ServiceError::InvalidInput("invalid DOI URL UTF-8".into()))?
+        );
+        value = &mut decoded;
     }
     let valid = value.split_once('/').is_some_and(|(head, tail)| {
         head.strip_prefix("10.").is_some_and(|registrant| {

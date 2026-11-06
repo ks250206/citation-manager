@@ -39,12 +39,7 @@ impl SqlitePapers<'_> {
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(service_error)?;
-        let now = timestamp(&tx)?;
-        paper.created_at = Some(now.clone());
-        paper.updated_at = Some(now);
-        paper.deleted_at = None;
-        write_metadata(&tx, &paper, true)?;
-        write_relations(&tx, &paper)?;
+        paper = insert_in_transaction(&tx, paper)?;
         tx.commit().map_err(service_error)?;
         Ok(paper)
     }
@@ -68,21 +63,7 @@ impl PaperLibrary for SqlitePapers<'_> {
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(service_error)?;
-        let current = read(&tx, paper.id, false)?.ok_or(ServiceError::NotFound)?;
-        paper.created_at = current.created_at;
-        paper.updated_at = Some(timestamp(&tx)?);
-        paper.deleted_at = None;
-        write_metadata(&tx, &paper, false)?;
-        // Metadata-only edits preserve person identity and never touch attachments.
-        if current.bibliography.authors != paper.bibliography.authors {
-            replace_authors(&tx, &paper)?;
-        }
-        tx.execute(
-            "DELETE FROM paper_external_ids WHERE paper_id=?1",
-            [paper.id.0.to_string()],
-        )
-        .map_err(service_error)?;
-        write_external_ids(&tx, &paper)?;
+        paper = update_in_transaction(&tx, &paper)?;
         tx.commit().map_err(service_error)?;
         Ok(paper)
     }
@@ -144,6 +125,41 @@ impl PaperLibrary for SqlitePapers<'_> {
         tx.commit().map_err(service_error)?;
         Ok(paper)
     }
+}
+
+/// Transaction-non-owning metadata helpers, shared with atomic import.
+pub(crate) fn insert_in_transaction(
+    db: &Connection,
+    mut paper: Paper,
+) -> Result<Paper, ServiceError> {
+    validate_metadata(&mut paper)?;
+    let now = timestamp(db)?;
+    paper.created_at = Some(now.clone());
+    paper.updated_at = Some(now);
+    paper.deleted_at = None;
+    write_metadata(db, &paper, true)?;
+    write_relations(db, &paper)?;
+    Ok(paper)
+}
+pub(crate) fn update_in_transaction(db: &Connection, paper: &Paper) -> Result<Paper, ServiceError> {
+    let mut paper = paper.clone();
+    validate_metadata(&mut paper)?;
+    let current = read(db, paper.id, false)?.ok_or(ServiceError::NotFound)?;
+    paper.created_at = current.created_at;
+    paper.updated_at = Some(timestamp(db)?);
+    paper.deleted_at = None;
+    write_metadata(db, &paper, false)?;
+    // Metadata-only edits preserve person identity and never touch attachments.
+    if current.bibliography.authors != paper.bibliography.authors {
+        replace_authors(db, &paper)?;
+    }
+    db.execute(
+        "DELETE FROM paper_external_ids WHERE paper_id=?1",
+        [paper.id.0.to_string()],
+    )
+    .map_err(service_error)?;
+    write_external_ids(db, &paper)?;
+    Ok(paper)
 }
 
 fn timestamp(db: &Connection) -> Result<String, ServiceError> {

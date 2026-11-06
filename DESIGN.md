@@ -320,6 +320,35 @@ CREATE VIRTUAL TABLE page_fts USING fts5(
 - インポート時は dry-run プレビュー、重複マージ/スキップ選択、処理レポートを提示。
 - 書き出しは全件/選択/コレクション単位。UTF-8 を基本とする。
 
+### 8.4 共通 ImportService（#33）
+
+全取り込み経路は framework-free な `PaperDraft`（全書誌・順序付き contributor・外部ID・
+source/行診断）を `ImportCoordinator` の preview/commit に渡す。
+[共通 import ADR](docs/ADR/import-service.md) を正本とし、DOI/著者/日付/頁/引用キーを一箇所で正規化する。
+DOI→arXiv/PMID の exact duplicate と題名/著者/年・類似題名の確認候補を区別し、
+差分を確認して create / フィールド選択 merge / skip / cancel を決める。
+preview は DB/添付を書かず、期限・件数・サイズ上限のある service 内 state に保存する。
+commit は保存先 ID を固定し、stale revision・全 decision・ID/引用キー衝突を再検証して、
+全承認文献と #12 の追加所属を同一 SQLite transaction で保存する。無確認の上書き/復元はしない。
+preview handle は認可 credential ではなく、呼出 grant は #25 の責務。
+新規 import title は最大16 KiB、batch100件。既存の巨大 title は切り詰めず、
+#12 cursor 制限と ID 順の迂回を保持する。その他の入力/候補/state 上限と retry/replay は ADR に定義する。
+
+### 8.5 PDF ファイル・フォルダ登録方針（#33 契約、parser は #15/#28）
+
+既存文献への**明示添付**と**新規文献登録**を分ける。明示添付は文献IDへの添付のみで、
+埋込情報から既存書誌を更新しない。新規文献は明示入力を優先し、欠けた情報を妥当な
+XMP/DOI の候補で補い、題名が未解決ならファイル名から仮題名を提示する。
+不足・埋込候補・仮題名は unresolved として表示し、手動編集後に再 preview できる。
+
+フォルダはユーザー選択範囲内の PDF のみ。再帰は明示し、symlink/unsafe ancestor・
+非regular・対象外・過大ファイル（既定256 MiB）を個別に除外/診断する。
+既知の同一hashは選択batch内で重複skip、未hashは後続adapterが検証する。
+per-file progress/result/partial success/cancel/retry の中立契約を用意し、
+失敗ファイルだけを再選択・再 preview できる。#33 の mock は候補/方針/レポートの検証であり、
+実ディレクトリ走査・PDF parsing・XMP抽出は実装しない。実原本取り込みは #9 の port と
+後続 #15 統合を使い、未実装経路の file+DB atomicity は主張しない。
+
 ## 9. PDF 表示・注釈
 
 ### 9.1 Viewer
