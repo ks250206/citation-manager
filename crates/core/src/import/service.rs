@@ -281,10 +281,7 @@ fn validate_decisions(plan: &PreparedImport) -> Result<(), ServiceError> {
                 if !targets.insert(candidate.existing.id) {
                     return Err(invalid("multiple rows cannot merge the same paper"));
                 }
-                if dedup::doi(&row.draft)
-                    .zip(dedup::doi(&paper_draft(&candidate.existing)))
-                    .is_some_and(|(a, b)| a != b)
-                {
+                if dedup::doi_disagreement(&row.draft, &paper_draft(&candidate.existing)) {
                     return Err(invalid(
                         "DOI disagreement; correct metadata and preview again",
                     ));

@@ -1,7 +1,10 @@
 use crate::error::service_error;
 use cm_core::{
     ServiceError,
-    papers::{NewPaper, PaperLibrary, PaperList, PaperVisibility, validate_metadata},
+    papers::{
+        NewPaper, PaperLibrary, PaperList, PaperVisibility, doi_forms, normalize_doi,
+        validate_metadata, validate_metadata_update,
+    },
     ports::PaperRepository,
 };
 use cm_domain::{Bibliography, Contributor, ExternalId, Paper, PaperId};
@@ -58,7 +61,6 @@ impl PaperLibrary for SqlitePapers<'_> {
     }
     fn update(&mut self, paper: &Paper) -> Result<Paper, ServiceError> {
         let mut paper = paper.clone();
-        validate_metadata(&mut paper)?;
         let tx = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
@@ -133,6 +135,7 @@ pub(crate) fn insert_in_transaction(
     mut paper: Paper,
 ) -> Result<Paper, ServiceError> {
     validate_metadata(&mut paper)?;
+    ensure_unique_doi(db, &paper)?;
     let now = timestamp(db)?;
     paper.created_at = Some(now.clone());
     paper.updated_at = Some(now);
@@ -143,8 +146,9 @@ pub(crate) fn insert_in_transaction(
 }
 pub(crate) fn update_in_transaction(db: &Connection, paper: &Paper) -> Result<Paper, ServiceError> {
     let mut paper = paper.clone();
-    validate_metadata(&mut paper)?;
     let current = read(db, paper.id, false)?.ok_or(ServiceError::NotFound)?;
+    validate_metadata_update(&mut paper, &current)?;
+    ensure_unique_doi(db, &paper)?;
     paper.created_at = current.created_at;
     paper.updated_at = Some(timestamp(db)?);
     paper.deleted_at = None;
@@ -160,6 +164,40 @@ pub(crate) fn update_in_transaction(db: &Connection, paper: &Paper) -> Result<Pa
     .map_err(service_error)?;
     write_external_ids(db, &paper)?;
     Ok(paper)
+}
+
+/// Called under the caller's IMMEDIATE writer transaction, including manual CRUD.
+/// Stream DOI columns only: no unbounded full-paper inventory or implicit data repair.
+fn ensure_unique_doi(db: &Connection, paper: &Paper) -> Result<(), ServiceError> {
+    let forms = doi_forms(&paper.bibliography, &paper.external_ids);
+    if forms.is_empty() {
+        return Ok(());
+    }
+    let mut statement = db
+        .prepare(
+            "SELECT p.doi_normalized, e.value FROM papers p LEFT JOIN paper_external_ids e
+         ON e.paper_id=p.id AND lower(e.namespace)='doi' WHERE p.id<>?1",
+        )
+        .map_err(service_error)?;
+    let mut rows = statement
+        .query([paper.id.0.to_string()])
+        .map_err(service_error)?;
+    while let Some(row) = rows.next().map_err(service_error)? {
+        for raw in [
+            row.get::<_, Option<String>>(0),
+            row.get::<_, Option<String>>(1),
+        ] {
+            if raw
+                .map_err(service_error)?
+                .as_deref()
+                .and_then(|raw| normalize_doi(raw).ok())
+                .is_some_and(|doi| forms.contains(&doi))
+            {
+                return Err(ServiceError::Conflict);
+            }
+        }
+    }
+    Ok(())
 }
 
 fn timestamp(db: &Connection) -> Result<String, ServiceError> {

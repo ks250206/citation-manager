@@ -330,6 +330,11 @@ DOI→arXiv/PMID の exact duplicate と題名/著者/年・類似題名の確�
 preview は DB/添付を書かず、期限・件数・サイズ上限のある service 内 state に保存する。
 commit は保存先 ID を固定し、stale revision・全 decision・ID/引用キー衝突を再検証して、
 全承認文献と #12 の追加所属を同一 SQLite transaction で保存する。無確認の上書き/復元はしない。
+旧APIが保存したDOIとraw resolver外部IDの組を証拠として、無関係な編集・未選択mergeでは
+旧表記を保持する。書誌と全DOI外部IDの有効な表記を照合し、手動CRUDもwriter transaction内で
+旧/新resolver表記の重複を拒否する。raw DOIのpercent文字は一律decodeしない。
+既存の衝突は全候補を報告してConflictで停止し、自動書換え・統合・migrationは行わない。
+詳細な証拠条件、URL不正escapeとquery/fragmentの扱いは共通ADRに定義する。
 preview handle は認可 credential ではなく、呼出 grant は #25 の責務。
 新規 import title は最大16 KiB、batch100件。既存の巨大 title は切り詰めず、
 #12 cursor 制限と ID 順の迂回を保持する。その他の入力/候補/state 上限と retry/replay は ADR に定義する。

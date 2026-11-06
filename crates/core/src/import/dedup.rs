@@ -1,6 +1,7 @@
 use super::*;
 use normalize::{external_id, spaces};
 
+/// First valid DOI for display/backward source compatibility; matching uses `dois`.
 pub fn doi(draft: &PaperDraft) -> Option<String> {
     draft
         .bibliography
@@ -15,6 +16,16 @@ pub fn doi(draft: &PaperDraft) -> Option<String> {
                 .find(|id| id.namespace == "doi")
                 .map(|id| id.value)
         })
+}
+/// All valid DOI representations participate, including a stored legacy literal and
+/// its retained resolver URL. Raw percent literals are never decoded as aliases.
+pub fn dois(draft: &PaperDraft) -> std::collections::HashSet<String> {
+    crate::papers::doi_forms(&draft.bibliography, &draft.external_ids)
+}
+pub fn doi_disagreement(a: &PaperDraft, b: &PaperDraft) -> bool {
+    let a = dois(a);
+    let b = dois(b);
+    !a.is_empty() && !b.is_empty() && a.is_disjoint(&b)
 }
 fn ids(draft: &PaperDraft) -> Vec<ExternalId> {
     draft
@@ -37,7 +48,7 @@ fn author(d: &PaperDraft) -> Option<String> {
 }
 /// Identifier equality is exact. Bibliographic resemblance is only a review suggestion.
 pub fn classify(a: &PaperDraft, b: &PaperDraft) -> Option<MatchKind> {
-    if doi(a).zip(doi(b)).is_some_and(|(a, b)| a == b) {
+    if !dois(a).is_disjoint(&dois(b)) {
         return Some(MatchKind::Doi);
     }
     let other = ids(b);
@@ -137,6 +148,6 @@ pub fn merge(
     result.bibliography =
         serde_json::from_value(b).map_err(|_| invalid("invalid bibliography diff"))?;
     // Validate DOI coherence but preserve every unselected existing field verbatim.
-    crate::papers::validate_metadata(&mut result)?;
+    crate::papers::validate_metadata_update(&mut result, &candidate.existing)?;
     Ok(result)
 }

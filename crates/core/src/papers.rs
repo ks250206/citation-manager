@@ -93,11 +93,9 @@ impl<R: PaperLibrary> PaperService<R> {
     }
 }
 
-/// One DOI normalization point shared by manual persistence and later import adapters.
-pub fn normalize_doi(raw: &str) -> Result<String, ServiceError> {
-    let mut value = raw.trim();
-    let mut resolver = false;
-    let mut decoded;
+// Share wrapper recognition with the persisted legacy-spelling witness.
+fn doi_suffix(raw: &str) -> (&str, bool) {
+    let value = raw.trim();
     for prefix in [
         "https://doi.org/",
         "http://doi.org/",
@@ -114,11 +112,16 @@ pub fn normalize_doi(raw: &str) -> Result<String, ServiceError> {
             .get(..prefix.len())
             .is_some_and(|s| s.eq_ignore_ascii_case(prefix))
         {
-            resolver = !prefix.eq_ignore_ascii_case("doi:");
-            value = value[prefix.len()..].trim();
-            break;
+            return (value[prefix.len()..].trim(), prefix != "doi:");
         }
     }
+    (value, false)
+}
+
+/// One DOI normalization point shared by manual persistence and import adapters.
+pub fn normalize_doi(raw: &str) -> Result<String, ServiceError> {
+    let (mut value, resolver) = doi_suffix(raw);
+    let mut decoded;
     // Resolver URLs decode their suffix exactly once; raw DOI percent escapes remain literal.
     // The registrant separator must be an actual slash, not an encoded path separator.
     if resolver {
@@ -165,8 +168,50 @@ pub fn normalize_doi(raw: &str) -> Result<String, ServiceError> {
     Ok(value.to_ascii_lowercase())
 }
 
+/// Collect every valid DOI without guessing how an unwrapped percent literal arose.
+pub fn doi_forms(b: &Bibliography, ids: &[ExternalId]) -> std::collections::HashSet<String> {
+    b.doi
+        .iter()
+        .map(String::as_str)
+        .chain(
+            ids.iter()
+                .filter(|id| id.namespace.eq_ignore_ascii_case("doi"))
+                .map(|id| id.value.as_str()),
+        )
+        .filter_map(|raw| normalize_doi(raw).ok())
+        .collect()
+}
+
 /// Adapters must call this even when a caller bypasses PaperService.
 pub fn validate_metadata(paper: &mut Paper) -> Result<(), ServiceError> {
+    validate_metadata_inner(paper, None)
+}
+
+/// Only adapters holding a freshly read persisted record may use this compatibility path.
+/// An unchanged stored DOI plus a retained raw resolver ID proves the old normalization
+/// spelling; new inputs and explicit DOI replacements still use strict normalization.
+pub fn validate_metadata_update(paper: &mut Paper, existing: &Paper) -> Result<(), ServiceError> {
+    validate_metadata_inner(paper, Some(existing))
+}
+
+fn validate_metadata_inner(
+    paper: &mut Paper,
+    existing: Option<&Paper>,
+) -> Result<(), ServiceError> {
+    let legacy = existing.and_then(|old| {
+        let stored = old.bibliography.doi.as_deref()?;
+        if paper.bibliography.doi.as_deref() != Some(stored) {
+            return None;
+        }
+        old.external_ids.iter().find_map(|id| {
+            let (suffix, resolver) = doi_suffix(&id.value);
+            (id.namespace.eq_ignore_ascii_case("doi")
+                && resolver
+                && paper.external_ids.contains(id)
+                && suffix.to_ascii_lowercase() == stored)
+                .then(|| (stored.to_owned(), normalize_doi(&id.value).ok()))
+        })
+    });
     let invalid = |message: &str| ServiceError::InvalidInput(message.into());
     if paper.title.trim().is_empty() {
         return Err(invalid("title is required"));
@@ -200,7 +245,34 @@ pub fn validate_metadata(paper: &mut Paper) -> Result<(), ServiceError> {
             return Err(invalid("duplicate external ID within a paper"));
         }
         if id.namespace.eq_ignore_ascii_case("doi") {
-            let normalized = normalize_doi(&id.value)?;
+            let normalized = match normalize_doi(&id.value) {
+                Ok(value) => value,
+                Err(error) => {
+                    // Old CRUD accepted malformed URL escapes. Preserve only an unchanged
+                    // witnessed identifier; never grant that exception to new input.
+                    let inherited = existing.is_some_and(|old| old.external_ids.contains(id));
+                    let (suffix, resolver) = doi_suffix(&id.value);
+                    if inherited
+                        && resolver
+                        && legacy
+                            .as_ref()
+                            .is_some_and(|(stored, _)| suffix.to_ascii_lowercase() == *stored)
+                    {
+                        legacy.as_ref().expect("checked legacy witness").0.clone()
+                    } else {
+                        return Err(error);
+                    }
+                }
+            };
+            let normalized = if let Some((stored, Some(canonical))) = &legacy {
+                if &normalized == canonical {
+                    stored.clone()
+                } else {
+                    normalized
+                }
+            } else {
+                normalized
+            };
             if doi.as_ref().is_some_and(|d| *d != normalized) {
                 return Err(invalid("conflicting DOIs within a paper"));
             }

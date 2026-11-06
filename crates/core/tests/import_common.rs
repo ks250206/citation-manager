@@ -510,3 +510,36 @@ fn reimport_retains_a_key_owned_by_its_single_exact_match() {
             .any(|d| d.field == "citation_key")
     );
 }
+
+#[test]
+fn doi_matching_collects_bibliography_and_every_external_doi() {
+    let mut existing = PaperDraft::titled("Persisted representation");
+    existing.bibliography.doi = Some("10.1002/old%3c493%3e".into());
+    existing.external_ids = vec![
+        cm_domain::ExternalId {
+            namespace: "doi".into(),
+            value: "10.1002/old%3c493%3e".into(),
+        },
+        cm_domain::ExternalId {
+            namespace: "DOI".into(),
+            value: "https://doi.org/10.1002/old%3C493%3E".into(),
+        },
+        cm_domain::ExternalId {
+            namespace: "doi".into(),
+            value: "10.1002/third".into(),
+        },
+    ];
+    for value in ["10.1002/old%3c493%3e", "10.1002/old<493>", "10.1002/third"] {
+        let mut incoming = PaperDraft::titled("Incoming representation");
+        incoming.bibliography.doi = Some(value.into());
+        assert_eq!(dedup::classify(&incoming, &existing), Some(MatchKind::Doi));
+        assert_eq!(dedup::classify(&existing, &incoming), Some(MatchKind::Doi));
+        assert!(!dedup::doi_disagreement(&incoming, &existing));
+    }
+    let mut unknown = PaperDraft::titled("Unknown");
+    unknown.bibliography.doi = Some("10.1002/unrelated".into());
+    assert!(dedup::doi_disagreement(&unknown, &existing));
+    // Matching reports identifiers even on inconsistent stored records; it does not
+    // grant permission to merge them or turn new inconsistent metadata into valid input.
+    assert!(normalize::normalize(&existing).is_err());
+}

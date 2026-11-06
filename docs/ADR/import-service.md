@@ -40,7 +40,8 @@ intentionally extended for the new result fields, not replaced by production cla
   and reject malformed escapes/decoded whitespace/control characters. The registrant's
   slash must be literal. Raw DOI / `doi:` suffix percent escapes stay literal. Thus
   raw `10.12/a%2Fb` differs from resolver `https://doi.org/10.12/a%2Fb` (`10.12/a/b`).
-  This resolves the #8 deferral; double encoding decodes only once.
+  This resolves the new-input #8 deferral; double encoding decodes only once. Existing
+  persisted data uses the compatibility policy below.
 - DOI bibliography/external-ID disagreement is a row error. Known DOI/arXiv/PMID namespaces
   canonicalize; PMID leading zeros are removed, arXiv prefixes (`arxiv:` and HTTP/HTTPS/schemeless arxiv.org/abs/) compare ASCII
   case-insensitively and normalize while
@@ -66,6 +67,53 @@ intentionally extended for the new result fields, not replaced by production cla
   exact match. A batch cannot create duplicate identifiers or merge two rows into one
   target; skip redundant rows and review again if needed. Fuzzy candidates may explicitly
   create a distinct paper. Existing multiple exact matches are all exposed, not auto-selected.
+
+## Legacy DOI compatibility (P1 repair)
+
+Base `42345cc` manual CRUD stored the lowercase resolver suffix without decoding, and
+retained the original external-ID URL. For example a real old-API-created record has
+`doi_normalized = 10.1002/abc%3c493%3e` and external ID
+`https://doi.org/10.1002/abc%3C493%3E`. New input maps that URL to `10.1002/abc<493>`.
+Changing the new-input normalizer globally would conflate raw percent-literal identifiers.
+Instead, compatibility uses the persisted pair as narrow provenance evidence:
+
+- Create/preview input always uses strict current normalization. A caller cannot manufacture
+  a legacy exception by supplying an inconsistent bibliography plus a raw resolver URL.
+- Update/merge validates against the freshly read persisted paper. Only when the stored DOI
+  is unchanged **and** a retained, unchanged external resolver URL has a stripped/lowercase
+  suffix exactly equal to that stored DOI does the old spelling remain valid alongside that
+  URL's current canonical form. All other DOI values must agree with that identity. Removing
+  the witness or explicitly replacing the bibliography DOI restores strict validation.
+  Unselected DOI, raw external IDs and all other metadata remain verbatim. Selected external
+  IDs remain an additive union; an explicitly selected canonical DOI can be saved only when
+  it agrees with every retained DOI ID. Unknown/incompatible DOI edits still fail.
+- Matching collects **all** valid DOI forms from bibliography and every DOI external ID.
+  Equality of any form is an exact match; merge disagreement uses the same set intersection.
+  The stored escaped literal remains reserved too: without durable source provenance it may
+  be ambiguous whether a raw input intended the historical literal or resolver identity.
+  We conservatively report/block that match for explicit review. A raw percent DOI with no
+  resolver witness is never decoded, so independent literal and decoded records can coexist.
+- Manual create/save/update and shared import writes check all equivalent DOI forms against
+  every other row (including trash) while holding the IMMEDIATE writer transaction. Manual
+  checks stream only DOI columns/IDs, without imposing import title/inventory budgets. The
+  import's decision validator, final-state checks and SQLite glue use this same identity
+  policy. DOI and citation-key SQL UNIQUE constraints remain the final defense.
+- If existing rows already overlap (e.g. a duplicate created by the broken intermediate
+  version), preview reports all matches. Create, merge into either colliding row and metadata
+  update fail closed with Conflict; no row is chosen, merged, truncated or rewritten. Skip
+  and cancel remain available. Resolving preexisting collisions requires separate explicit
+  metadata decisions outside this repair; no automatic collision-repair tool is claimed.
+- Valid old resolver queries/fragments are ignored only for matching the current URL form;
+  the stored literal (including query/fragment) and raw URL survive an unrelated edit.
+  Double encoding decodes once. Malformed escapes, invalid UTF-8 and decoded whitespace or
+  control characters get **no guessed decoded alias**. Only unchanged old witnessed values
+  can survive update/merge; those URLs still fail strict new-input validation. The valid raw
+  stored literal can still be reviewed/matched. New malformed/changed URLs are rejected.
+
+No migration is required. Open and preview do not bulk rewrite metadata or delete raw IDs;
+existing migration SQL/IDs/checksums and the backup/upgrade gate are unchanged. Regression
+provenance and exact old-API generation instructions are in
+[the fixture README](../../crates/storage/tests/fixtures/legacy_doi/README.md).
 
 ## Review, revision and transaction semantics
 
