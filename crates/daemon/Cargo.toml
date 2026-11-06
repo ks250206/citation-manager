@@ -30,3 +30,8 @@ required-features = ["desktop-bootstrap"]
 
 [dev-dependencies]
 tempfile.workspace = true
+
+# Composition-only DOI -> common import -> SQLite tests; no daemon implementation.
+[[test]]
+name = "doi_import"
+path = "../../tests/integration/doi_import.rs"
