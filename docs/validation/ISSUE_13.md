@@ -35,7 +35,8 @@ Integration tests live in `cm-daemon`, the allowed metadata+storage composition 
 There is **no metadata→storage dev dependency** and no added driver/framework in core/domain/
 protocol. Combined main's DOI resolver/providers, production reqwest/Tokio HTTP/TLS features,
 exact httpdate pin, core metadata_resolve, and registered `doi_import` test target remain intact.
-The main lockfile was used as the baseline and Cargo resolved only local dependency edges;
+The main lockfile was used as the baseline and `cargo metadata --format-version 1`
+resolved only local dependency edges;
 no lock package entries were hand-spliced. Parsed lock inspection verifies **636→636 package
 identities/checksums retained**, including all **573 original + 63 HTTP/TLS/helper packages**.
 Only cm-daemon's local test serde_json/sha2 edges are added relative to current main; no new
@@ -45,6 +46,8 @@ current-main migration comparisons preserve the same two immutable migrations.
 Combined workspace testing includes **core resolver tests, 20 DOI metadata tests and 3 DOI
 SQLite integration tests**, along with all existing library/import/attachment tests and the
 BibTeX/RIS suites below. No #14 provider code or DOI behavior was rewritten to integrate #13.
+The combined workspace test command completed in 177.56 s; its two 1,000-record DB tests
+ran in parallel and completed in 124.24 s. This is execution evidence, not a speed target.
 
 ## Observable acceptance evidence
 
@@ -177,6 +180,6 @@ runtime/rendering compatibility test is claimed.
   Those lanes were not started. Main's #14 DOI/providers/metadata_resolve are integrated
   unchanged; held #34, #23/#25, future GUI/IPC and other worktrees/configuration stay untouched.
 - Independent different-model review, final CI/review assessment and merge belong to the root
-  agent. No reviewer/subagent/CLI review was launched and no merge was performed. One CI
+  agent. No reviewer/subagent/CLI review was launched and no PR was merged. One CI
   inspection is made at PR delivery; its live state is reported separately, not called passed
   in this document.
