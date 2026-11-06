@@ -27,3 +27,8 @@ tempfile.workspace = true
 name = "backend_bench_query"
 path = "../../scripts/benchmarks/query.rs"
 test = true
+
+[[example]]
+name = "search_experiment"
+path = "../../scripts/search-experiments/experiment.rs"
+test = true
