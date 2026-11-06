@@ -241,12 +241,21 @@ fn unique_doi_citation_key_and_relation_failures_never_overwrite_or_partially_up
     let mut duplicate_key = NewPaper::titled("different DOI, same key");
     duplicate_key.bibliography.citation_key = original.bibliography.citation_key.clone();
     assert_eq!(repo.create(duplicate_key), Err(ServiceError::Conflict));
-    // Fail after metadata and author writes, while replacing the external-ID set.
+    // Inject a real SQL failure after metadata and author writes. Duplicate input
+    // is now rejected before a transaction, so it cannot exercise rollback here.
+    let fault = Connection::open(dir.database_path()).unwrap();
+    fault.execute_batch("CREATE TRIGGER reject_test_external_id BEFORE INSERT ON paper_external_ids WHEN NEW.namespace = 'test-reject' BEGIN SELECT RAISE(ABORT, 'test relation failure'); END").unwrap();
     let mut changed = original.clone();
     changed.title = "should roll back".into();
     changed.bibliography.authors.reverse();
-    changed.external_ids.push(changed.external_ids[1].clone());
-    assert_eq!(repo.update(&changed), Err(ServiceError::Conflict));
+    changed.external_ids.push(ExternalId {
+        namespace: "test-reject".into(),
+        value: "force SQL failure".into(),
+    });
+    assert!(matches!(
+        repo.update(&changed),
+        Err(ServiceError::InvalidInput(_))
+    ));
     assert_eq!(repo.get(original.id).unwrap(), Some(original.clone()));
     assert_eq!(repo.list(&PaperList::default()).unwrap().len(), 1);
     let mut invalid = original.clone();
@@ -269,6 +278,33 @@ fn unique_doi_citation_key_and_relation_failures_never_overwrite_or_partially_up
         db.papers().get(original.id).unwrap().unwrap().bibliography,
         original.bibliography
     );
+}
+
+#[test]
+fn duplicate_external_ids_are_invalid_input_and_leave_existing_records_unchanged() {
+    let (_temp, dir) = library();
+    let mut db = LibraryDb::open(&dir).unwrap();
+    let mut service = PaperService::new(db.papers());
+    let original = service.create(full_metadata()).unwrap();
+    let mut duplicate = NewPaper::titled("duplicate input");
+    let identifier = ExternalId {
+        namespace: "custom".into(),
+        value: "same".into(),
+    };
+    duplicate.external_ids = vec![identifier.clone(), identifier.clone()];
+    assert!(matches!(
+        service.create(duplicate),
+        Err(ServiceError::InvalidInput(_))
+    ));
+    let mut edited = original.clone();
+    edited.title = "must not be saved".into();
+    edited.external_ids = vec![identifier.clone(), identifier];
+    assert!(matches!(
+        service.update(&edited),
+        Err(ServiceError::InvalidInput(_))
+    ));
+    assert_eq!(service.get(original.id).unwrap(), original);
+    assert_eq!(service.list(&PaperList::default()).unwrap().len(), 1);
 }
 
 #[test]

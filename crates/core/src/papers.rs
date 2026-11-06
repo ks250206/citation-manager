@@ -101,6 +101,11 @@ pub fn normalize_doi(raw: &str) -> Result<String, ServiceError> {
         "http://doi.org/",
         "https://dx.doi.org/",
         "http://dx.doi.org/",
+        "https://www.doi.org/",
+        "http://www.doi.org/",
+        "www.doi.org/",
+        "doi.org/",
+        "dx.doi.org/",
         "doi:",
     ] {
         if value
@@ -112,8 +117,10 @@ pub fn normalize_doi(raw: &str) -> Result<String, ServiceError> {
         }
     }
     let valid = value.split_once('/').is_some_and(|(head, tail)| {
-        head.strip_prefix("10.").is_some_and(|digits| {
-            (4..=9).contains(&digits.len()) && digits.bytes().all(|c| c.is_ascii_digit())
+        head.strip_prefix("10.").is_some_and(|registrant| {
+            registrant
+                .split('.')
+                .all(|digits| !digits.is_empty() && digits.bytes().all(|c| c.is_ascii_digit()))
         }) && !tail.is_empty()
             && !value.chars().any(|c| c.is_whitespace() || c.is_control())
     });
@@ -149,9 +156,13 @@ pub fn validate_metadata(paper: &mut Paper) -> Result<(), ServiceError> {
         }
     }
     let mut doi = b.doi.as_deref().map(normalize_doi).transpose()?;
+    let mut external_ids = std::collections::HashSet::new();
     for id in &paper.external_ids {
         if id.namespace.trim().is_empty() || id.value.trim().is_empty() {
             return Err(invalid("external ID namespace and value are required"));
+        }
+        if !external_ids.insert((&id.namespace, &id.value)) {
+            return Err(invalid("duplicate external ID within a paper"));
         }
         if id.namespace.eq_ignore_ascii_case("doi") {
             let normalized = normalize_doi(&id.value)?;
@@ -165,4 +176,49 @@ pub fn validate_metadata(paper: &mut Paper) -> Result<(), ServiceError> {
     b.paper_type.get_or_insert_with(|| "journal-article".into());
     b.extra_json.get_or_insert_with(|| serde_json::json!({}));
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn doi_resolver_wrappers_and_registrant_subdivisions_are_normalized() {
+        for input in [
+            " https://www.doi.org/10.1000/ABC ",
+            "http://www.doi.org/10.1000/ABC",
+            "www.doi.org/10.1000/ABC",
+            "DOI.ORG/10.1000/ABC",
+            "dx.doi.org/10.1000/ABC",
+            "https://dx.doi.org/10.1000/ABC",
+            "doi:10.1000/ABC",
+        ] {
+            assert_eq!(normalize_doi(input).unwrap(), "10.1000/abc", "{input}");
+        }
+        assert_eq!(normalize_doi("10.1000.10/ABC").unwrap(), "10.1000.10/abc");
+        assert_eq!(normalize_doi("10.23/ABC").unwrap(), "10.23/abc");
+        // Raw suffix escapes are identifiers, not URL-decoding instructions.
+        assert_eq!(normalize_doi("10.1000/a%2Fb").unwrap(), "10.1000/a%2fb");
+    }
+
+    #[test]
+    fn doi_normalization_rejects_malformed_prefixes_and_unparsed_urls() {
+        for input in [
+            "10./x",
+            "10..1/x",
+            "10.1000./x",
+            "10.a/x",
+            "11.1000/x",
+            "10.1000/",
+            "10.1000/a b",
+            "10.1000/a\0b",
+            "https://doi.org.evil/10.1000/x",
+            "https://doi.org/10.1000%2Fx",
+        ] {
+            assert!(
+                matches!(normalize_doi(input), Err(ServiceError::InvalidInput(_))),
+                "{input:?}"
+            );
+        }
+    }
 }

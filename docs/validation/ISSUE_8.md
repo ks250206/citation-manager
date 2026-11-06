@@ -71,3 +71,15 @@ single-writer daemon、import preview/merge/一括transaction、FTS検索はこ�
 製品backupは #9、UIは #10、PDFは並行 #11、daemon lockは #25、共通importは #33。
 異モデル非対話reviewはrootがこのPRのexact headに対して実施する。自己reviewを代用にしない。
 CI状態はPR作成後に一度確認して引き渡す。ローカルpassedをCI passedとは記さない。
+
+## 独立レビュー後の追加回帰
+
+Opus 5.5/mediumの初回レビューでP0〜P2なし、P3が3件と独立ノートの任意確認があった。
+rootが空のmigration履歴/未管理schemaの拒否、完全一致external ID重複のInvalidInput、
+www/schemeなしDOIと数字subdivisionの正規化を補強した。独立ノートは引用なしの空文字を保存する方針をADR化した。
+追加テストは空履歴の有無/SQLite内部名に似たuser table/拒否時のschema・row不変、
+create/update時の重複ID拒否と既存文献不変、DOI wrapper/subdivision/不正prefix/raw percentを検証する。
+修正後headの独立再レビューとCIはPRコメント/checksへ記録する。
+修正後にfmt/clippy/workspace test（29件+compile-fail doctest1件）/build、
+architecture/migration/Python13件を再実行してpassed。既存の関係更新失敗テストは
+test-only SQL triggerで更新途中に中断し、書誌・著者・外部IDのrollback検証を維持した。

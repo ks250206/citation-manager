@@ -76,19 +76,10 @@ fn run_registry(
         previous = Some(m.id);
     }
     let has_history: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name='schema_migrations')", [], |r| r.get(0))?;
-    if !has_history {
-        let user_tables: u32 = db.query_row(
-            "SELECT count(*) FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'",
-            [],
-            |r| r.get(0),
-        )?;
-        if user_tables != 0 {
-            return Err(StorageError::Migration(
-                "unversioned nonempty database".into(),
-            ));
-        }
-    }
     let before = if has_history { history(db)? } else { vec![] };
+    if before.is_empty() {
+        verify_empty_bootstrap_schema(db)?;
+    }
     verify_history(migrations, &before)?;
     let pending = &migrations[before.len()..];
     if !pending.is_empty() && !before.is_empty() {
@@ -112,11 +103,28 @@ fn run_registry(
         ));
     }
     verify_history(migrations, &applied)?;
+    if applied.is_empty() {
+        verify_empty_bootstrap_schema(&tx)?;
+    }
     for m in pending {
         tx.execute_batch(m.sql)?;
         tx.execute("INSERT INTO schema_migrations(version, checksum, applied_at) VALUES (?1, ?2, strftime('%Y-%m-%dT%H:%M:%fZ','now'))", params![m.id, m.checksum])?;
     }
     tx.commit()?;
+    Ok(())
+}
+
+fn verify_empty_bootstrap_schema(db: &Connection) -> Result<(), StorageError> {
+    let user_objects: u32 = db.query_row(
+        "SELECT count(*) FROM sqlite_schema WHERE name NOT GLOB 'sqlite_*' AND name <> 'schema_migrations'",
+        [],
+        |r| r.get(0),
+    )?;
+    if user_objects != 0 {
+        return Err(StorageError::Migration(
+            "unversioned nonempty database".into(),
+        ));
+    }
     Ok(())
 }
 
@@ -191,13 +199,45 @@ mod tests {
     }
     fn schema(db: &Connection) -> Vec<(String, String)> {
         db.prepare(
-            "SELECT name,sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' ORDER BY name",
+            "SELECT name,sql FROM sqlite_schema WHERE name NOT GLOB 'sqlite_*' ORDER BY name",
         )
         .unwrap()
         .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
         .unwrap()
         .collect::<Result<_, _>>()
         .unwrap()
+    }
+
+    #[test]
+    fn empty_history_cannot_adopt_an_unversioned_nonempty_database() {
+        for table in ["foreign_records", "sqliteXrecords"] {
+            for empty_history in [false, true] {
+                let mut db = Connection::open_in_memory().unwrap();
+                db.execute_batch(&format!(
+                    "CREATE TABLE {table}(value TEXT); INSERT INTO {table} VALUES ('keep me');"
+                ))
+                .unwrap();
+                if empty_history {
+                    db.execute_batch("CREATE TABLE schema_migrations(version TEXT PRIMARY KEY NOT NULL, checksum TEXT NOT NULL, applied_at TEXT NOT NULL)").unwrap();
+                }
+                let before = schema(&db);
+                let mut backup = Snapshot::new();
+                assert!(matches!(
+                    run_registry(&mut db, &registry().unwrap(), Some(&mut backup)),
+                    Err(StorageError::Migration(_))
+                ));
+                assert_eq!(backup.calls, 0);
+                assert_eq!(schema(&db), before);
+                let value: String = db
+                    .query_row(&format!("SELECT value FROM {table}"), [], |row| row.get(0))
+                    .unwrap();
+                assert_eq!(value, "keep me");
+            }
+        }
+        let mut blank = Connection::open_in_memory().unwrap();
+        blank.execute_batch("CREATE TABLE schema_migrations(version TEXT PRIMARY KEY NOT NULL, checksum TEXT NOT NULL, applied_at TEXT NOT NULL)").unwrap();
+        run_registry(&mut blank, &registry().unwrap(), None).unwrap();
+        assert_eq!(history(&blank).unwrap().len(), 2);
     }
 
     #[test]

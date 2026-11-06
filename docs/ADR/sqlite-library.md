@@ -36,6 +36,8 @@ SQLite WAL の前提に従い、保存先は同一ホストの local filesystem 
 - `schema_migrations(version, checksum, applied_at)` が正本。version は immutable な完全ファイル名。
   recorded history は registry の厳密な prefix でなければならない。
   checksum 不一致、未認識/未来/欠落/順序違い、未version管理の非空DBでは停止し、推測して修復しない。
+  履歴tableが存在しても0行なら、他のuser objectがないことをbootstrap前とwriter transaction内で確認する。
+  SQLite内部名の除外にはliteralな `sqlite_` prefixを使い、似た名前のuser tableを見逃さない。
 - pending SQL 全体と history の更新を単一の IMMEDIATE transaction にまとめる。
   最初の history table 作成も同じ transaction。DDL/DML/後続SQLのどこかで失敗すれば全体を戻す。
   SQL は検証・版管理された application resource であり、ユーザー入力 SQL を受け付けない。
@@ -45,6 +47,7 @@ SQLite WAL の前提に従い、保存先は同一ホストの local filesystem 
   JSON/FK/unique/page range/annotation state を SQL 制約でも検査する。
   FTS index/trigger は検索実装 #18 が追加migrationで所有する。token の発行/認可、job実行、
   collection操作、annotation編集などのサービスが動いたという意味ではない。
+  独立ノートの引用なしは `quote_text=''` で表し、引用を捏造しない。位置/編集serviceは#19で実装する。
 
 ## #9 へ渡すバックアップ境界
 
@@ -77,12 +80,16 @@ publication_date は部分日付も含めた元文字列を保持する（calend
 Contributor は given/family/literal/ORCID/role を持ち、複数 role が交互に現れる順序も保持する。
 
 DOI 正規化は `cm_core::papers::normalize_doi` に集約する。前後空白、doi: と doi.org/dx.doi.org の
-http/https prefix を除き、ASCII 小文字にする。10. + 4..9桁 + `/` + 非空 suffix を検査する。
+http/https prefix（wwwを含む）とschemeなしのdoi.org/www.doi.org/dx.doi.orgを除き、ASCII小文字にする。
+10. + 非空の数字列（`.`で区切るsubdivisionを許可）+ `/` + 非空suffixを検査する。
+[DOI Handbook §3.3.2](https://www.doi.org/doi-handbook/html/)の数字列/subdivisionに合わせ、登録者codeの固定桁数を仮定しない。
+URLのpercent-decodeはraw DOI suffixを誤って変更しないよう、#33/#14のURL入力adapterで一度だけ行う方針を確定する。
+このraw normalizerはpercent escapeをdecodeせず、encoded slashしかないURLは未解析として拒否する。
 Bibliography.doi と namespace=doi（大小文字無視）の external ID が複数あれば一致を要求する。
 DB の doi_normalized に UNIQUE、citation_key に case-sensitive UNIQUE を置く。
 外部IDは namespace/value を原文と順序のまま別表に保存する。未知 namespace も保持し、
 DOI以外の provider照合/正規化/自動マージ/類似度重複判定は #33 で実装する。
-同一文献内の完全一致 namespace/value 重複は拒否するが、他文献との非DOI外部ID一致は自動統合しない。
+同一文献内の完全一致 namespace/value 重複は保存前にInvalidInputとして拒否するが、他文献との非DOI外部ID一致は自動統合しない。
 soft-deleted record の DOI/引用キーも予約を維持し、復元時の衝突を避ける。
 
 作成は insert-only。DOI/引用キー/内部IDの衝突で既存文献を自動上書きしない。
