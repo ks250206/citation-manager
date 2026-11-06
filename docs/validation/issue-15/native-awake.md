@@ -35,7 +35,7 @@ private synthetic library. No DB preseed or headless import supplied its GUI rec
 | Initial near-identical-title corpus: first 100 committed; next preview reported bounded duplicate-match error and preserved the first batch. A new, genuinely empty library received the diverse corpus above. | 02–08 |
 | Three panes; parent/child collections, two tags, one paper in both collections and both tags; AND→1 row, OR→2; Cmd-click→2 selected. Combined collection/tag/keyword/author/year/type→1; PDF filter→empty; invalid year→visible error with prior rows retained. Title sort and real forward/back paging; final-binary Year asc/desc and ID/created/updated desc matched read-only order. | 19, 40, 50–67, 105–109 |
 | Native HOME-starting Save picker: All→RIS 1000, selected→BibTeX 2, direct Child collection→RIS 1. Production parsers read all outputs with zero diagnostics. | 56–59, export-readback.txt |
-| Dirty metadata blocked New, another selection, Trash and DOI replacement; explicit Discard restored saved values. Manual preview/Create/commit saved one record. Error RIS required Skip for the invalid row and saved its valid neighbor. Exact DOI duplicate required Merge; only Title was selected. | 63–75 |
+| Dirty metadata blocked New and DOI replacement; explicit Discard restored saved values. Manual preview/Create/commit saved one record. Error RIS required Skip for the invalid row and saved its valid neighbor. Exact DOI duplicate required Merge; only Title was selected. | 63–75 |
 | Final binary: Trash/restore no longer replaced success with a false membership error; manual and PDF previews show 0/1 rather than 0/0. | 76–78 |
 | Actual PDF picker loaded bundled PDFium's Info/XMP suggestions and conflicting Info DOI. Edited PDF form survived Library selection and Cmd+N; Cmd+S did not create a manual-only paper. PDF review paused bibliography at 500/1000; Cancel retained the paused file; explicit Resume required a fresh row501 preview/decisions. | 28–36 |
 | RegisterNew metadata PDF: reviewed title/DOI then explicit Create/commit. A private regular-file obstruction at the attachment directory caused a real storage error after paper commit. Report retained paper ID `01a1b310-22d0-7590-b2a4-dd06ea152ae9`; Reload/Get preserved failure. Removing only that owned obstruction and clicking Retry attached to that same ID. | 78–81 |
@@ -48,6 +48,10 @@ private synthetic library. No DB preseed or headless import supplied its GUI rec
 The retained manual-form-after-preview limitation remains: after successful manual
 creation, explicitly discard the retained dirty form before selecting the saved record.
 No automatic retry/Create is performed. No viewer or annotation/notes editor is claimed.
+The operator also reported dirty-form guards for selecting another paper and Trash,
+but no supporting screenshots for those two guards were retained. They are not
+included in the screenshot-backed row above; screenshots 66–67 show successful
+Trash/Restore rather than a dirty-form guard.
 
 ## Corrections found through the actual window
 
