@@ -9,6 +9,9 @@ pub mod repositories;
 pub use db::{LibraryDb, paths::LibraryDirectory};
 pub use error::StorageError;
 
+#[cfg(all(test, unix))]
+mod crash_recovery;
+
 #[cfg(test)]
 mod tests {
     #[test]

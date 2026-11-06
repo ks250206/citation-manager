@@ -1,0 +1,50 @@
+   Compiling cm-storage v0.1.0 (/Users/ryojikanno/.t3/worktrees/citation-manager/t3-50338322/crates/storage)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.57s
+     Running unittests src/lib.rs (target/debug/deps/cm_storage-2c63993b41bb5817)
+
+running 10 tests
+test crash_recovery::harness_failures_reap_owned_children_without_reader_threads ... HARNESS stage=early-exit status=exit status: 0 reaped=true reader_threads=0
+HARNESS stage=no-ready status=signal: 9 (SIGKILL) reaped=true reader_threads=0
+HARNESS stage=silent-ready status=signal: 9 (SIGKILL) reaped=true reader_threads=0
+HARNESS stage=wrong-nonce status=signal: 9 (SIGKILL) reaped=true reader_threads=0
+HARNESS stage=wrong-stage status=signal: 9 (SIGKILL) reaped=true reader_threads=0
+ok
+test crash_recovery::owned_child_entry ... ok
+test crash_recovery::sigkill_attachment_committed_inspects_and_retains_result_without_retry ... CRASH ready=attachment-committed nonce_verified=true source=new signal=9 code=None reaped=true
+CRASH stage=attachment-committed shared=false before_refs=2 partials=0 orphans=0 readonly=unchanged
+CRASH backup=validated restore=fresh references=3 hashes=verified raw_relations=exact
+CRASH retry=skipped inspected_committed_result=true duplicate_refs=0
+ok
+test crash_recovery::sigkill_attachment_published_reports_orphan_and_reuses_it ... CRASH ready=attachment-published nonce_verified=true source=new signal=9 code=None reaped=true
+CRASH stage=attachment-published shared=false before_refs=1 partials=0 orphans=1 readonly=unchanged
+CRASH backup=validated restore=fresh references=2 hashes=verified raw_relations=exact
+CRASH retry=explicit previously_committed=false matching_blob_reused=true
+ok
+test crash_recovery::sigkill_attachment_staged_reports_complete_partial ... CRASH ready=attachment-staged nonce_verified=true source=new signal=9 code=None reaped=true
+CRASH stage=attachment-staged shared=false before_refs=1 partials=1 orphans=0 readonly=unchanged
+CRASH backup=validated restore=fresh references=2 hashes=verified raw_relations=exact
+CRASH retry=explicit previously_committed=false matching_blob_reused=false
+ok
+test crash_recovery::sigkill_attachment_transaction_rolls_back_reference ... CRASH ready=attachment-transaction nonce_verified=true source=new signal=9 code=None reaped=true
+CRASH stage=attachment-transaction shared=false before_refs=1 partials=0 orphans=1 readonly=unchanged
+CRASH backup=validated restore=fresh references=2 hashes=verified raw_relations=exact
+CRASH retry=explicit previously_committed=false matching_blob_reused=true
+ok
+test crash_recovery::sigkill_metadata_commit_retains_whole_new_generation ... CRASH ready=metadata-committed nonce_verified=true source=new signal=9 code=None reaped=true
+CRASH backup=validated restore=fresh references=2 hashes=verified raw_relations=exact
+ok
+test crash_recovery::sigkill_metadata_transaction_recovers_whole_old_generation ... CRASH ready=metadata-transaction nonce_verified=true source=new signal=9 code=None reaped=true
+CRASH backup=validated restore=fresh references=2 hashes=verified raw_relations=exact
+ok
+test crash_recovery::sigkill_shared_blob_commit_inspects_without_duplicate ... CRASH ready=attachment-committed nonce_verified=true source=shared signal=9 code=None reaped=true
+CRASH stage=attachment-committed shared=true before_refs=2 partials=0 orphans=0 readonly=unchanged
+CRASH backup=validated restore=fresh references=3 hashes=verified raw_relations=exact
+CRASH retry=skipped inspected_committed_result=true duplicate_refs=0
+ok
+test crash_recovery::sigkill_shared_blob_transaction_preserves_refs_and_explicit_retry ... CRASH ready=attachment-transaction nonce_verified=true source=shared signal=9 code=None reaped=true
+CRASH stage=attachment-transaction shared=true before_refs=1 partials=0 orphans=0 readonly=unchanged
+CRASH backup=validated restore=fresh references=2 hashes=verified raw_relations=exact
+CRASH retry=explicit previously_committed=false matching_blob_reused=true
+ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 16 filtered out; finished in 9.32s
