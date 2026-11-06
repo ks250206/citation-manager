@@ -31,6 +31,10 @@ handles are cancelled instead of being retained invisibly. This does not provide
 failure replay. Quit during a write can still leave an unknown result: inspect the library
 before retrying, and wait for confirmation before quitting.
 
+DOI and PDF cancellation tokens are separate. Idle PDF Cancel has no effect. Navigating
+to PDF invalidates a pending DOI lookup generation; later responses cannot replace the
+PDF review. Read-only Get completions do not claim a save or clear a PDF failure summary.
+
 Library pages use #12's real combined filters and cursor identity, at most 100 full
 papers per UI page, with uniform_list virtualization. Filter/sort/membership/metadata/
 import/attachment changes reload the cursor. Selection across pages is explicit IDs.
@@ -47,12 +51,21 @@ commit separately requires a decision for every row. No automatic next preview, 
 retry or larger budget. Default batch size 100 can be reduced explicitly for payload limits.
 A 1000-record file requires ten separately approved previews/commits. Cancellation between
 batches preserves prior commits. The displayed destination is fixed for each preview.
+Switching to PDF/manual review releases the current retained preview and pauses file
+batch counters. Resume restores file diagnostics/counters and requires a fresh preview
+and fresh decisions. An unrelated PDF report preserves a non-PDF preview. Cancel submission
+failure keeps the old handle/decisions and blocks replacement. Selecting another bibliography
+explicitly reports stopped progress before starting a new file session.
 Export All/selected/direct collection calls #13 ExportService on the actual #12 query,
 writes a new selected filename, and surfaces losses and the bibliography-only migration
 notice. An export IO failure may leave a partial new output file; it never overwrites an
 existing destination or claims completion in that case.
 
 PDF selection uses actual GPUI native Open/Save pickers and ExternalPaths drop handlers.
+PDF metadata uses a dedicated form bound to row index, source path and digest; it cannot
+read fields from the library/manual editor. Matching sources retain edits, while changed
+origins require reloading. Cmd+S only saves on the Library screen; PDF registration always
+uses the explicit PDF preview and reviewed commit, preserving attachment intent.
 Explicit AttachExisting never imports bibliography or creates a paper. RegisterNew uses
 #33 `file_metadata::propose`, then a retained ordinary preview. The serial #11 worker has
 one additive bounded Metadata operation, returning source digest, page count and neutral

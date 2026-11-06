@@ -5,7 +5,11 @@ mod pdf_ui;
 mod settings_ui;
 mod text_input;
 use self::text_input::TextInput;
-use crate::{attachments::AttachmentHost, import_dialogs::Review, library::Library};
+use crate::{
+    attachments::{AttachmentHost, OperationCancels, PdfForm},
+    import_dialogs::ReviewSessions,
+    library::Library,
+};
 use cm_protocol::{
     attachments::*, domain::*, exchange::*, import::*, library::*, library_query::*,
     organization::*, settings::*,
@@ -37,6 +41,7 @@ enum Lane {
 enum Event {
     Query(Result<LibraryPage, ServiceError>),
     Editor(Result<LibraryReply, ServiceError>),
+    Loaded(Result<LibraryReply, ServiceError>),
     Organization(Result<Organization, ServiceError>),
     Membership(Result<Organization, ServiceError>),
     Import(Result<ImportReply, ServiceError>),
@@ -93,12 +98,14 @@ struct LibraryView {
     message: String,
     error: bool,
     screen: Screen,
-    review: Review,
+    reviews: ReviewSessions,
     review_destination: String,
     batch_size: usize,
     parsed: Option<ParsedFile>,
     diagnostics: Vec<String>,
-    cancel: Cancellation,
+    cancels: OperationCancels,
+    pdf_form: PdfForm,
+    pdf_fields: Vec<Entity<TextInput>>,
     pdf_report: PdfReport,
     pdf_intent: PdfIntent,
     pdf_selection: Option<Selection>,
@@ -155,12 +162,17 @@ impl LibraryView {
             message: "Loading library…".into(),
             error: false,
             screen: Screen::Library,
-            review: Review::default(),
+            reviews: ReviewSessions::default(),
             review_destination: String::new(),
             batch_size: 100,
             parsed: None,
             diagnostics: vec![],
-            cancel: Cancellation::default(),
+            cancels: OperationCancels::default(),
+            pdf_form: PdfForm::default(),
+            pdf_fields: crate::details::FIELDS
+                .iter()
+                .map(|label| cx.new(|cx| TextInput::new(label, cx)))
+                .collect(),
             pdf_report: PdfReport::default(),
             pdf_intent: PdfIntent::RegisterNew,
             pdf_selection: None,
@@ -327,6 +339,15 @@ impl LibraryView {
                 Ok(_) => self.status("Unexpected editor reply", true, cx),
                 Err(e) => self.status(format!("Save/load failed: {e}. Draft retained"), true, cx),
             },
+            Event::Loaded(result) => match result {
+                Ok(LibraryReply::Paper(p)) => self.set_editor(Some(*p), None, cx),
+                Ok(_) => self.status("Unexpected load reply", true, cx),
+                Err(e) => self.status(
+                    format!("{}; paper load failed: {e}", self.message),
+                    true,
+                    cx,
+                ),
+            },
             Event::Organization(result) => match result {
                 Ok(org) => {
                     self.organization = org;
@@ -411,7 +432,7 @@ impl LibraryView {
     }
     fn lock_fields(&mut self, cx: &mut Context<Self>) {
         let enabled = !self.locked();
-        for field in &self.fields {
+        for field in self.fields.iter().chain(&self.pdf_fields) {
             field.update(cx, |f, cx| {
                 f.enabled = enabled;
                 cx.notify();
@@ -420,7 +441,7 @@ impl LibraryView {
     }
     fn invalidate_doi(&mut self) {
         if self.pending.remove(&Lane::Doi).is_some() {
-            self.cancel.cancel();
+            self.cancels.cancel_doi();
         }
     }
     fn set_editor(
@@ -504,13 +525,24 @@ impl LibraryView {
         if self.locked() {
             return;
         }
-        self.cancel_preview();
+        if !self.cancel_preview() {
+            cx.notify();
+            return;
+        }
         self.set_editor(None, None, cx);
         self.screen = Screen::Library;
         self.settings.details_tab = "Info".into();
         self.status("New paper — preview before saving", false, cx);
     }
     fn save(&mut self, _: &Save, _: &mut Window, cx: &mut Context<Self>) {
+        if self.screen != Screen::Library {
+            self.status(
+                "Use the explicit preview/commit controls for this operation",
+                false,
+                cx,
+            );
+            return;
+        }
         if self.locked() {
             return;
         }
@@ -546,25 +578,32 @@ impl LibraryView {
         self.move_field(true, window, cx);
     }
     fn move_field(&self, back: bool, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(index) = self
-            .fields
+        let fields = if self.screen == Screen::Pdf {
+            &self.pdf_fields
+        } else {
+            &self.fields
+        };
+        let Some(index) = fields
             .iter()
             .position(|f| f.focus_handle(cx).is_focused(window))
         else {
             return;
         };
         let next = if back {
-            (index + self.fields.len() - 1) % self.fields.len()
+            (index + fields.len() - 1) % fields.len()
         } else {
-            (index + 1) % self.fields.len()
+            (index + 1) % fields.len()
         };
-        self.fields[next].focus_handle(cx).focus(window, cx);
+        fields[next].focus_handle(cx).focus(window, cx);
     }
     fn select(&mut self, id: PaperId, multiple: bool, cx: &mut Context<Self>) {
         if self.locked() {
             return;
         }
-        self.cancel_preview();
+        if !self.cancel_preview() {
+            cx.notify();
+            return;
+        }
         self.library.select(id, multiple);
         self.set_editor(
             self.library.papers.iter().find(|p| p.id == id).cloned(),

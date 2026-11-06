@@ -30,3 +30,14 @@ The current run could not obtain the native window from CUA; every path below is
    runtime-only evidence labelled separately. Do not claim viewer/notes/command palette,
    product bundle/lifetime/browser/signing gates passed. Quit only the test app and
    preserve evidence paths at handoff.
+
+Review regressions to repeat in the actual app (still unverified in GUI): inspect a PDF,
+edit its title, visit Library/select a different paper and Cmd+N, then return to the same
+PDF row. Its own edits/DOI must survive; Cmd+S in PDF must not create a manual-only paper.
+Open a file batch preview after earlier commits, switch repeatedly between PDF/manual
+reviews, and explicitly Resume bibliography: counters and the next row must agree, while
+fresh decisions are required and no preview-slot exhaustion occurs. An unrelated Attach
+report must retain the non-PDF preview. Cancel DOI while PDF work runs and cancel PDF
+while a DOI lookup runs; each token must affect only its own operation, and idle PDF
+Cancel must do nothing. Verify that a partial attachment failure summary survives the
+subsequent paper Get reply.

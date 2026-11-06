@@ -33,3 +33,55 @@ No browser substitute, mocked UI, AppleScript automation or system-setting worka
 Only this run's test processes were terminated after the blocked observations. Temp
 libraries/bundles/fixtures/logs were preserved. Final source was rebuilt separately;
 it did not receive successful native CUA interaction. See ISSUE_15.md for all unrun paths.
+
+
+2026-11-07 JST follow-up, T3-prepared checkout t3-6bedd541.
+Controlled build sequence: fd50af1 actual baseline first, then normal fast-forward
+integration of published 0afdee4. No alternative checkout or original-worktree edits.
+Own private artifact root: /private/tmp/cm-pr45-baseline-compare-d0w783e3
+Baseline actual executable SHA-256: 4aa2f64ab129ca9c309051cd1d3aa1355ce6b01fd711cb778c8f581bacbcdf56
+Published-head actual executable SHA-256: f7d3d75444ce0b31562db4e2afc858dc216f78f349ca948bd904155ea058e6ab
+Final corrected actual executable SHA-256: 064508b847355abc412ffa68b5ce518f82dfc4d87bda12bda3536d982f388966
+Verified PDFium SHA-256: 8d1e46a6dbe32d7cb95279ab3def2e71e557a3d4cc49162453afa3e3b250dc5e
+All test .apps contain the real copied Mach-O executable (no shell launcher).
+Baseline has no UI-settings API; its settings path is unused. Published/final launch
+passed their own explicit --settings paths. Each library/settings namespace is fresh.
+
+Native CUA observations, for baseline, published candidate and final corrected source:
+  getApp(absolute app path): Computer Use server error -10005: cgWindowNotFound
+  getApp(bundle ID): Computer Use server error -10005: cgWindowNotFound
+  inventory: matching test bundle isRunning=true
+No native AX window, screenshot or UI action was obtained. No checklist path passed.
+The shared control/candidate failure identifies an unusable native-observation boundary
+in this session. The underlying display/window-lookup cause remains unresolved; it is
+not proof that CUA alone is faulty, and does not establish a #15-specific regression.
+No speculative bounds/activation/focus/window-ownership fix was applied.
+
+Temporary application-only diagnostics on original 0af source logged:
+  qa-diagnostic: entering application
+  qa-diagnostic: launch callback
+  qa-diagnostic: render=0 pending=3 rows=0
+  qa-diagnostic: open_window returned
+  qa-diagnostic: activate returned
+  qa-diagnostic: next-frame callback
+  qa-diagnostic: render=1 pending=3 rows=0
+  qa-diagnostic: receive ticket=1 pending=3
+  qa-diagnostic: receive ticket=2 pending=2
+  qa-diagnostic: receive ticket=3 pending=2
+  qa-diagnostic: receive ticket=4 pending=1
+  qa-diagnostic: receive ticket=5 pending=1
+The diagnostic explicitly scheduled a next-frame callback. These application milestones
+and worker replies are not visibility/input/first-pixel/GUI acceptance proof.
+Fixed GPUI primary source 4a6121bb was read: Application::run retains the application;
+App::open_window calls draw and retains the window/root; WindowOptions defaults show
+and focus true; the macOS backend requests makeKeyAndOrderFront for show+focus.
+https://github.com/zed-industries/zed/tree/4a6121bb0f10c6e8037b741b7dc0a4cd639ae289/crates/gpui
+find-docs documentation lookup corroborated the window APIs; pinned source was authoritative.
+Instrumentation was removed before review corrections/final checks/final rebuild.
+Final corrected source was rebuilt and retried with fresh native CUA state, same errors.
+All owned test app processes stopped (baseline [47037], published
+[47685], diagnostic [49744], final [69662]).
+Private bundles, libraries, exact binaries, logs and temporary diagnostic patch preserved.
+No actual user library, Terminal GUI, browser, CGWindow/AX script, system/profile/security
+change, signing, native-host registration, VM or alternate UI automation was used.
+#34 remains held; #23/#25 closed. Full native checklist and new UI transitions unverified.
