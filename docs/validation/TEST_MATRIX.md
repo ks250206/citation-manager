@@ -27,6 +27,9 @@ base main: `86eb892`。依存確認は [DEPENDENCIES](DEPENDENCIES.md) を参照
 GPUI と PDFium binding は別 feature lane。native lane 成功を UI/PDF runtime の成功と混同しない。
 CI は macos-15 で同じ fmt/clippy/test/build と script、別 job で native dependency lane を実行する。
 GitHub runner の OS/Xcode 差による失敗は PR 上で実結果を確認する。ローカル passed は CI passed の代用ではない。
+初回 CI の native lane は runner の Xcode 16.4 で未対応の
+`-downloadComponent` を無条件に使ったため失敗した。Metal compiler の実行可否を
+先に確認し、利用できないときだけ追加取得するよう修正した。修正版の CI 結果は PR 上で確認する。
 供給された DESIGN.md の Markdown hard break は原文維持のため `.gitattributes` で EOL 空白検査から除外する。
 
 テストの内容:

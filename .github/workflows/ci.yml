@@ -46,8 +46,14 @@ jobs:
           rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
           rustup show active-toolchain
           xcodebuild -version
-      - name: Install Xcode Metal compiler
-        run: xcodebuild -downloadComponent MetalToolchain
+      - name: Ensure Xcode Metal compiler
+        run: |
+          # Xcode 16 bundles Metal and does not support -downloadComponent.
+          # Newer Xcode releases may need the separately installed toolchain.
+          if ! xcrun --sdk macosx metal -v; then
+            xcodebuild -downloadComponent MetalToolchain
+          fi
+          xcrun --sdk macosx metal -v
       - run: cargo check -p cm-desktop --features native-gpui --locked
       - run: cargo clippy -p cm-desktop --all-targets --features native-gpui --locked -- -D warnings
       - run: cargo build -p cm-desktop --features native-gpui --locked
