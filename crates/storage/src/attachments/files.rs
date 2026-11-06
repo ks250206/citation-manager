@@ -193,6 +193,31 @@ pub(crate) fn fresh_destination(path: &Path) -> Result<LibraryDirectory, Storage
     LibraryDirectory::prepare(parent)
 }
 
+/// Compare real directory identities, including aliases on case-insensitive filesystems.
+#[cfg(unix)]
+pub(crate) fn reject_destination_within(
+    parent: &LibraryDirectory,
+    protected: &LibraryDirectory,
+) -> Result<(), StorageError> {
+    use std::os::unix::fs::MetadataExt;
+    let root = fs::symlink_metadata(protected.path())?;
+    for ancestor in parent.path().ancestors() {
+        let metadata = fs::symlink_metadata(ancestor)?;
+        if (metadata.dev(), metadata.ino()) == (root.dev(), root.ino()) {
+            return Err(StorageError::UnsafePath(parent.path().into()));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+pub(crate) fn reject_destination_within(
+    _parent: &LibraryDirectory,
+    _protected: &LibraryDirectory,
+) -> Result<(), StorageError> {
+    Err(StorageError::UnsupportedPlatform)
+}
+
 /// Atomic no-replace publication: an existing shared blob/destination is never overwritten.
 pub(crate) fn publish(from: &Path, to: &Path) -> Result<(), StorageError> {
     #[cfg(any(target_os = "macos", target_os = "linux"))]

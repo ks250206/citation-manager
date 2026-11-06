@@ -137,7 +137,11 @@ impl ManagedAttachments<'_> {
         }
         self.ingest_storage(request, cut).map_err(|e| match e {
             StorageError::UnsafePath(_) => AttachmentError::UnsafePath,
-            StorageError::Integrity(_) => AttachmentError::HashMismatch,
+            StorageError::DigestMismatch => AttachmentError::HashMismatch,
+            StorageError::CorruptBlob => AttachmentError::CorruptBlob,
+            StorageError::MissingSource => AttachmentError::Service(ServiceError::InvalidInput(
+                "attachment source does not exist".into(),
+            )),
             StorageError::Sqlite(rusqlite::Error::QueryReturnedNoRows) => {
                 AttachmentError::Service(ServiceError::NotFound)
             }
@@ -151,7 +155,12 @@ impl ManagedAttachments<'_> {
         cut: Cut,
     ) -> Result<Attachment, StorageError> {
         self.db.check_directory(&self.store.directory)?;
-        let mut original = source(&request.source)?;
+        let mut original = source(&request.source).map_err(|error| match error {
+            StorageError::Io(ref e) if e.kind() == std::io::ErrorKind::NotFound => {
+                StorageError::MissingSource
+            }
+            other => other,
+        })?;
         let staging = tree(&self.store.directory, "attachments/.staging", true)?;
         let temporary = staging.join(format!("{}.part", Uuid::now_v7()));
         let mut output = create_file(&temporary)?;
@@ -168,13 +177,13 @@ impl ManagedAttachments<'_> {
         drop(output);
         let verified = hash(File::open(&temporary)?)?;
         if verified != (digest, size) || request.expected_sha256.is_some_and(|h| h != digest) {
-            return Err(invalid("copied attachment hash mismatch"));
+            return Err(StorageError::DigestMismatch);
         }
         let storage_key = key(&digest);
         let destination = managed_path(&self.store.directory, &storage_key, true)?;
         if destination.try_exists()? {
             if self.store.verify_key(&storage_key, &digest, size)? != AttachmentStatus::Present {
-                return Err(invalid("existing blob is corrupt; refusing replacement"));
+                return Err(StorageError::CorruptBlob);
             }
             // Only the unique private temporary is removed. Published blobs are never rolled back.
             fs::remove_file(&temporary)?;
@@ -185,7 +194,7 @@ impl ManagedAttachments<'_> {
                     if self.store.verify_key(&storage_key, &digest, size)?
                         != AttachmentStatus::Present
                     {
-                        return Err(invalid("concurrent blob differs"));
+                        return Err(StorageError::CorruptBlob);
                     }
                     fs::remove_file(&temporary)?;
                 }

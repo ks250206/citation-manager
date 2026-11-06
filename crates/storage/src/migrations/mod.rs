@@ -68,7 +68,22 @@ pub(crate) fn validate_current(db: &Connection) -> Result<(), StorageError> {
             "portable snapshot requires current schema".into(),
         ));
     }
+    // A matching history is not proof that a restored DB contains only trusted DDL.
+    let mut expected = Connection::open_in_memory()?;
+    run(&mut expected, None)?;
+    if schema_definition(db)? != schema_definition(&expected)? {
+        return Err(StorageError::Migration(
+            "portable snapshot schema differs from registry".into(),
+        ));
+    }
     Ok(())
+}
+
+type SchemaObject = (String, String, String, Option<String>);
+fn schema_definition(db: &Connection) -> Result<Vec<SchemaObject>, StorageError> {
+    Ok(db.prepare("SELECT type, name, tbl_name, sql FROM sqlite_schema ORDER BY type, name, tbl_name, sql")?
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))?
+        .collect::<Result<Vec<_>, _>>()?)
 }
 
 fn run_registry(

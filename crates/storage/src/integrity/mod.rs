@@ -13,6 +13,8 @@ pub struct IntegrityReport {
     pub orphans: Vec<PathBuf>,
     pub partials: Vec<PathBuf>,
     pub unsafe_entries: Vec<PathBuf>,
+    /// Missing, unsafe or corrupt diagnostic baseline. Does not block live-library access.
+    pub backup_issues: Vec<PathBuf>,
 }
 #[derive(Debug)]
 pub struct ReferenceIssue {
@@ -26,6 +28,7 @@ impl IntegrityReport {
             && self.orphans.is_empty()
             && self.partials.is_empty()
             && self.unsafe_entries.is_empty()
+            && self.backup_issues.is_empty()
     }
 }
 impl LibraryDb {
@@ -38,6 +41,11 @@ impl LibraryDb {
         database_check(&self.connection)?;
         let store = ManagedStore::new(directory)?;
         let mut report = IntegrityReport::default();
+        if crate::backup::validate_initial(directory).is_err() {
+            report
+                .backup_issues
+                .push(directory.path().join("backups/initial.sqlite"));
+        }
         let mut referenced = BTreeSet::new();
         let mut statement = self.connection.prepare(
             "SELECT id, relative_path, file_hash, byte_size FROM attachments ORDER BY id",

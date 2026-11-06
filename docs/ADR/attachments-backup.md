@@ -31,7 +31,7 @@ Interruption after commit can leave a successful association with no delivered r
 list references before retrying; transport-level request deduplication is #25's responsibility.
 
 `LibraryDb::check_integrity(&directory)` checks SQLite integrity/FKs and returns
-`IntegrityReport { dangling, corrupt, orphans, partials, unsafe_entries }`, including references
+`IntegrityReport { dangling, corrupt, orphans, partials, unsafe_entries, backup_issues }`, including references
 owned by soft-deleted papers. Quiesce writes during an inventory for a stable report.
 **The scanner never deletes, fixes permissions, follows a symlink, or repairs DB references.**
 A safe interrupted ingest can be retried from the original: matching published bytes are reused.
@@ -49,7 +49,11 @@ annotation/export output belongs in a separate file.
 All disk `LibraryDb::open` / `open_with_backup` calls ensure a real standalone
 `backups/initial.sqlite` after successful schema initialization and before returning to a writer.
 The first successful open of an existing library snapshots its then-current state. Existing
-baselines are validated and never overwritten. In-memory factories do not create files.
+baselines receive private-file safety checks at open and are never overwritten. A corrupt
+baseline does not block a healthy live library: explicit `check_integrity` performs its full
+content validation and lists damaged/missing/unsafe baselines in `backup_issues`. Neither
+header corruption nor deeper corruption is treated as authority over the live DB. Concurrent
+baseline publication accepts the winner and removes only the losing call's private stage. In-memory factories do not create files.
 
 `LibraryDb::open_with_safety_backups(&directory)` also wires the real
 `backup::SqliteMigrationBackup` into #8's `MigrationBackup` hook. Each upgrade publishes a
@@ -115,7 +119,11 @@ rename. It does not overwrite/open/activate the running library or an existing d
 A failed stage is retained with a `.partial` name; existing libraries and unrelated files survive.
 Bundles reject unknown/unsupported versions/fields, duplicate or noncanonical names, absolute
 paths/traversal, missing or extra files/directories, symlinks/hardlinks, unsafe permissions,
-checksum mismatch, WAL-format/nonstandalone DBs, schema history mismatch and DB/file-set mismatch.
+checksum mismatch, WAL-format/nonstandalone DBs, schema history mismatch and DB/file-set mismatch. The entire `sqlite_schema` (object type,
+name, owner table and SQL, including indexes and triggers) must match the current immutable
+migration registry applied to a fresh in-memory database; a rehashed manifest cannot authorize
+extra triggers or altered DDL. Destination containment compares ancestor device/inode identities
+as well as lexical names, so case aliases cannot place output inside the source on macOS.
 A restored library uses the ordinary #8 factory to reopen in WAL mode after validation.
 
 ## Filesystem boundary and evidence
@@ -136,3 +144,8 @@ are covered with temporary libraries only. See [validation](../validation/ISSUE_
 API details checked against official sources through find-docs and pinned Rust source:
 [rusqlite backup](https://docs.rs/rusqlite/0.41.1/rusqlite/backup/index.html),
 [rustix no-replace rename](https://docs.rs/rustix/1.1.6/rustix/fs/fn.renameat_with.html).
+
+Import error mapping: `HashMismatch` means copied/expected digest disagreement; an already
+published corrupt shared blob returns `CorruptBlob` without replacement. A missing selected
+source is `Service(InvalidInput)`, unsafe paths remain `UnsafePath`, and unrelated integrity/IO
+failures are `Unavailable` rather than falsely reporting a caller digest mismatch.

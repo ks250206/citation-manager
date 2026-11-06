@@ -513,6 +513,115 @@ fn baseline_is_real_valid_idempotent_and_never_overwritten() {
 fn _public_contract(_: BackupManifest, _: AttachmentId) {}
 
 #[test]
+fn corrupt_diagnostic_baseline_is_reported_without_blocking_live_library_recovery() {
+    let fixture = Fixture::new();
+    let baseline = fixture.directory.path().join("backups/initial.sqlite");
+    // Exercise both a damaged data page and a damaged header.
+    let good = fs::read(&baseline).unwrap();
+    for offset in [4096, 0] {
+        let mut damaged = good.clone();
+        damaged[offset] = 0xff;
+        fs::write(&baseline, &damaged).unwrap();
+        let reopened = LibraryDb::open_with_safety_backups(&fixture.directory).unwrap();
+        let report = reopened.check_integrity(&fixture.directory).unwrap();
+        assert_eq!(report.backup_issues, vec![baseline.clone()]);
+        assert!(!report.is_clean());
+        let bundle = fixture.root.join(format!("recovery-{offset}"));
+        reopened
+            .backup_library(&fixture.directory, &bundle)
+            .unwrap();
+        let restored =
+            restore_library(&bundle, fixture.root.join(format!("restored-{offset}"))).unwrap();
+        assert!(
+            LibraryDb::open(&restored)
+                .unwrap()
+                .papers()
+                .get(fixture.paper)
+                .is_ok()
+        );
+        assert_eq!(fs::read(&baseline).unwrap(), damaged);
+    }
+    fs::write(&baseline, good).unwrap();
+    assert!(
+        fixture
+            .db
+            .check_integrity(&fixture.directory)
+            .unwrap()
+            .is_clean()
+    );
+    // Unsafe private-file boundaries still fail closed instead of following a link.
+    fs::remove_file(&baseline).unwrap();
+    symlink(&fixture.source, &baseline).unwrap();
+    assert!(LibraryDb::open(&fixture.directory).is_err());
+}
+
+#[test]
+fn bundle_ddl_changes_are_rejected_even_after_rehashing_the_database() {
+    let fixture = Fixture::new();
+    for (index, sql) in [
+        "CREATE TRIGGER evil AFTER INSERT ON tags BEGIN DELETE FROM papers; END",
+        "DROP INDEX papers_visible_id",
+        "ALTER TABLE tags ADD COLUMN untrusted TEXT",
+    ]
+    .iter()
+    .enumerate()
+    {
+        let bundle = fixture.backup(&format!("ddl-{index}"));
+        let connection = Connection::open(bundle.join("library.sqlite")).unwrap();
+        connection.execute_batch(sql).unwrap();
+        drop(connection);
+        refresh_database_manifest(&bundle);
+        let directory = LibraryDirectory::prepare(&bundle).unwrap();
+        assert!(validate_bundle(&directory).is_err());
+        let destination = fixture.root.join(format!("bad-restore-{index}"));
+        assert!(restore_library(&bundle, &destination).is_err());
+        assert!(!destination.exists());
+        assert!(
+            fixture
+                .db
+                .check_integrity(&fixture.directory)
+                .unwrap()
+                .is_clean()
+        );
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn case_aliases_cannot_place_backups_or_restores_inside_their_source() {
+    use std::os::unix::fs::MetadataExt;
+    let fixture = Fixture::new();
+    let alias = fixture.root.join("LIBRARY");
+    if !alias.exists() {
+        return;
+    } // This volume is case-sensitive.
+    assert_eq!(
+        fs::metadata(&alias).unwrap().ino(),
+        fs::metadata(fixture.directory.path()).unwrap().ino()
+    );
+    let destination = alias.join("bundle");
+    assert!(
+        fixture
+            .db
+            .backup_library(&fixture.directory, &destination)
+            .is_err()
+    );
+    assert!(!destination.exists());
+    let bundle = fixture.backup("portable");
+    let alias = fixture.root.join("PORTABLE");
+    let destination = alias.join("restored");
+    assert!(restore_library(&bundle, &destination).is_err());
+    assert!(!destination.exists());
+    assert!(
+        fixture
+            .db
+            .check_integrity(&fixture.directory)
+            .unwrap()
+            .is_clean()
+    );
+}
+
+#[test]
 fn real_pre_migration_hook_snapshots_old_wal_state_before_upgrading() {
     use std::{fs::OpenOptions, os::unix::fs::OpenOptionsExt};
     let temp = tempfile::tempdir().unwrap();

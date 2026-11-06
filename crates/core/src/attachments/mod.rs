@@ -25,6 +25,7 @@ pub enum AttachmentError {
     Service(ServiceError),
     UnsafePath,
     HashMismatch,
+    CorruptBlob,
     Unavailable,
 }
 impl std::fmt::Display for AttachmentError {
@@ -33,6 +34,7 @@ impl std::fmt::Display for AttachmentError {
             Self::Service(e) => e.fmt(f),
             Self::UnsafePath => f.write_str("unsafe attachment path"),
             Self::HashMismatch => f.write_str("attachment digest mismatch"),
+            Self::CorruptBlob => f.write_str("existing shared attachment is corrupt"),
             Self::Unavailable => f.write_str("attachment storage unavailable"),
         }
     }

@@ -1,4 +1,5 @@
 use super::*;
+use cm_core::ServiceError;
 use cm_core::{
     attachments::AttachmentService,
     papers::{NewPaper, PaperLibrary},
@@ -178,11 +179,12 @@ fn corruption_missing_and_expected_hash_errors_preserve_original_and_are_typed()
         AttachmentStatus::Corrupt
     );
     assert_eq!(db.check_integrity(&directory).unwrap().corrupt.len(), 1);
-    assert!(
+    assert_eq!(
         db.managed_attachments(&directory)
             .unwrap()
             .import(request.clone())
-            .is_err()
+            .unwrap_err(),
+        AttachmentError::CorruptBlob
     );
     assert_eq!(fs::read(&path).unwrap(), b"corrupt");
     fs::remove_file(&path).unwrap();
@@ -208,6 +210,11 @@ fn corruption_missing_and_expected_hash_errors_preserve_original_and_are_typed()
         AttachmentStatus::Present
     );
     assert_eq!(digest(&request.source), original);
+    request.source = request.source.with_file_name("missing-source.pdf");
+    assert!(matches!(
+        db.managed_attachments(&directory).unwrap().import(request),
+        Err(AttachmentError::Service(ServiceError::InvalidInput(_)))
+    ));
 }
 
 #[cfg(unix)]

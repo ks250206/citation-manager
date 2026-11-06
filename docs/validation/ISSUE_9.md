@@ -78,3 +78,16 @@ An offline full lockfile regeneration was inspected and rejected because the loc
 selected unrelated transitive upgrades/downgrades. The automatically combined lock retains
 both already-reviewed feature entries without that churn; all checks used `--locked`.
 Optional GPUI and PDFium runtime lanes on this integrated head are remote CI gates.
+
+## Independent review corrections
+
+Opus review of `77e756b` found P2 (diagnostic baseline blocking open) and four P3s.
+Corrections move full baseline validation to the explicit integrity report, preserve healthy
+live access even with damaged baseline header/data pages, reject filesystem-identity containment,
+compare portable schema objects against a fresh registry DB, handle a concurrent baseline
+publication winner, and distinguish corrupt shared blob/missing source from digest mismatch.
+New real-file/SQLite regressions cover corrupt baseline -> reopen -> report -> backup/restore
+without overwriting the damaged baseline, unsafe baseline symlink rejection, case-alias
+backup/restore destinations, rehashed added-trigger/dropped-index/altered-table bundles, and
+a deterministic losing baseline publication. Existing ingestion test now asserts exact errors.
+No immutable SQL or checksum changed. Final checks and independent re-review are PR gates.

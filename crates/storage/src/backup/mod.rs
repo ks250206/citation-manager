@@ -162,17 +162,35 @@ pub(crate) fn ensure_initial(
     let initial = backups.join("initial.sqlite");
     match fs::symlink_metadata(&initial) {
         Ok(_) => {
-            let db = open_snapshot(&initial, false)?;
-            database_check(&db)?;
-            return Ok(());
+            // A diagnostic snapshot must not gate access to a healthy live DB.
+            // Check private-file safety here; content checks belong to recovery inventory.
+            return crate::db::paths::check_file_if_present(&initial);
         }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
         Err(e) => return Err(e.into()),
     }
     let stage = backups.join(format!("initial-{}.partial.sqlite", Uuid::now_v7()));
     online_snapshot(source, &stage)?;
-    publish(&stage, &initial)?;
-    sync_dir(&backups)
+    publish_initial(&stage, &initial, &backups)
+}
+
+fn publish_initial(stage: &Path, initial: &Path, backups: &Path) -> Result<(), StorageError> {
+    match publish(stage, initial) {
+        Ok(()) => {}
+        Err(StorageError::Io(e)) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+            crate::db::paths::check_file_if_present(initial)?;
+            // Only this call's exclusively-created private stage is removed.
+            fs::remove_file(stage)?;
+        }
+        Err(e) => return Err(e),
+    }
+    sync_dir(backups)
+}
+
+pub(crate) fn validate_initial(directory: &LibraryDirectory) -> Result<(), StorageError> {
+    let backups = tree(directory, "backups", false)?;
+    let db = open_snapshot(&backups.join("initial.sqlite"), false)?;
+    database_check(&db)
 }
 
 impl LibraryDb {
@@ -195,6 +213,7 @@ impl LibraryDb {
         self.check_directory(directory)?;
         let destination = destination.as_ref();
         let parent = fresh_destination(destination)?;
+        reject_destination_within(&parent, directory)?;
         if destination.starts_with(directory.path()) || directory.path().starts_with(destination) {
             return Err(StorageError::UnsafePath(destination.into()));
         }
@@ -267,6 +286,7 @@ fn restore_inner(
     let bundle = LibraryDirectory::prepare(bundle)?;
     let manifest = validate_bundle(&bundle)?;
     let parent = fresh_destination(destination)?;
+    reject_destination_within(&parent, &bundle)?;
     if destination.starts_with(bundle.path()) || bundle.path().starts_with(destination) {
         return Err(StorageError::UnsafePath(destination.into()));
     }
@@ -494,6 +514,22 @@ mod tests {
         attachments::{AttachmentLibrary, ImportAttachment},
         papers::{NewPaper, PaperLibrary},
     };
+
+    #[test]
+    fn competing_initial_publication_keeps_winner_and_removes_only_own_stage() {
+        let temp = tempfile::tempdir().unwrap();
+        let library =
+            LibraryDirectory::prepare(temp.path().canonicalize().unwrap().join("library")).unwrap();
+        let db = LibraryDb::open(&library).unwrap();
+        let backups = library.path().join("backups");
+        let initial = backups.join("initial.sqlite");
+        let before = hash(File::open(&initial).unwrap()).unwrap();
+        let stage = backups.join("owned.partial.sqlite");
+        online_snapshot(&db.connection, &stage).unwrap();
+        publish_initial(&stage, &initial, &backups).unwrap();
+        assert!(!stage.exists());
+        assert_eq!(hash(File::open(initial).unwrap()).unwrap(), before);
+    }
 
     #[test]
     fn failure_after_staging_database_never_activates_or_overwrites_a_library() {
