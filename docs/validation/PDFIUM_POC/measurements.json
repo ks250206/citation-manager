@@ -1,14 +1,15 @@
 {
-  "build": "158.0.8125.0",
   "abi": "pdfium-render=0.9.5;pdfium_8125;thread_safe",
+  "build": "158.0.8125.0",
+  "elapsed_ms": 2545.479083,
+  "export_sha256": "cc3c68628f641a0166aae244f069ea4c3e0ab554b13d10b9f827fcac474d7e45",
   "library_sha256": "8d1e46a6dbe32d7cb95279ab3def2e71e557a3d4cc49162453afa3e3b250dc5e",
-  "original_sha256": "1842ec1c966b74fd73d9dd75ec1f8a199e14e9935b002e2c037206a0496f8910",
-  "export_sha256": "67080da732d1ce9f77437e35056e9b371dc68a86f921e706810d985ec3748af3",
+  "limits": "cooperative between native calls; bounded queue/input/output/bitmap/chars; native allocation/time not sandboxed; process-global dylib remains loaded",
   "measurements": [
     {
       "height": 220,
       "marker_centroid_error_px": 0.0,
-      "milliseconds": 103.274583,
+      "milliseconds": 95.115875,
       "page_index": 0,
       "red_pixels": 24,
       "width": 180,
@@ -17,7 +18,7 @@
     {
       "height": 440,
       "marker_centroid_error_px": 0.0,
-      "milliseconds": 1.953583,
+      "milliseconds": 2.003542,
       "page_index": 0,
       "red_pixels": 96,
       "width": 360,
@@ -26,7 +27,7 @@
     {
       "height": 880,
       "marker_centroid_error_px": 0.0,
-      "milliseconds": 7.502708,
+      "milliseconds": 6.108792,
       "page_index": 0,
       "red_pixels": 384,
       "width": 720,
@@ -35,7 +36,7 @@
     {
       "height": 180,
       "marker_centroid_error_px": 0.0,
-      "milliseconds": 2.593334,
+      "milliseconds": 1.613042,
       "page_index": 1,
       "red_pixels": 24,
       "width": 220,
@@ -44,7 +45,7 @@
     {
       "height": 360,
       "marker_centroid_error_px": 0.0,
-      "milliseconds": 3.3197919999999996,
+      "milliseconds": 2.957291,
       "page_index": 1,
       "red_pixels": 96,
       "width": 440,
@@ -53,7 +54,7 @@
     {
       "height": 720,
       "marker_centroid_error_px": 0.0,
-      "milliseconds": 5.78225,
+      "milliseconds": 6.448458,
       "page_index": 1,
       "red_pixels": 384,
       "width": 880,
@@ -62,7 +63,7 @@
     {
       "height": 220,
       "marker_centroid_error_px": 0.0,
-      "milliseconds": 1.506959,
+      "milliseconds": 1.699584,
       "page_index": 2,
       "red_pixels": 24,
       "width": 180,
@@ -71,7 +72,7 @@
     {
       "height": 440,
       "marker_centroid_error_px": 0.0,
-      "milliseconds": 2.052292,
+      "milliseconds": 2.4495419999999997,
       "page_index": 2,
       "red_pixels": 96,
       "width": 360,
@@ -80,7 +81,7 @@
     {
       "height": 880,
       "marker_centroid_error_px": 0.0,
-      "milliseconds": 6.790333,
+      "milliseconds": 6.742583,
       "page_index": 2,
       "red_pixels": 384,
       "width": 720,
@@ -89,7 +90,7 @@
     {
       "height": 180,
       "marker_centroid_error_px": 0.0,
-      "milliseconds": 2.520458,
+      "milliseconds": 1.6484169999999998,
       "page_index": 3,
       "red_pixels": 24,
       "width": 220,
@@ -98,7 +99,7 @@
     {
       "height": 360,
       "marker_centroid_error_px": 0.0,
-      "milliseconds": 3.09775,
+      "milliseconds": 2.610916,
       "page_index": 3,
       "red_pixels": 96,
       "width": 440,
@@ -107,14 +108,14 @@
     {
       "height": 720,
       "marker_centroid_error_px": 0.0,
-      "milliseconds": 7.542917,
+      "milliseconds": 7.544124999999999,
       "page_index": 3,
       "red_pixels": 384,
       "width": 880,
       "zoom": 2.0
     }
   ],
-  "elapsed_ms": 2407.9613329999997,
+  "original_sha256": "1842ec1c966b74fd73d9dd75ec1f8a199e14e9935b002e2c037206a0496f8910",
   "statuses_checked": [
     "image-only",
     "malformed",
@@ -129,7 +130,7 @@
     "outside-quad",
     "20 concurrent caller requests",
     "post-submission cancellation",
-    "oversized-input"
-  ],
-  "limits": "cooperative between native calls; bounded queue/input/output/bitmap/chars; native allocation/time not sandboxed; process-global dylib remains loaded"
+    "oversized-input",
+    "outside-note"
+  ]
 }

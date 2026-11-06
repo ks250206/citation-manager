@@ -33,3 +33,7 @@ required-features = ["runtime"]
 [[test]]
 name = "runtime"
 required-features = ["runtime"]
+
+[[example]]
+name = "inherited_boxes_regression"
+required-features = ["runtime"]

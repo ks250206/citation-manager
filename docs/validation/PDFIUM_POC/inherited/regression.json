@@ -1,0 +1,99 @@
+{
+  "before_adapter_commit": "02802180853f602566c86977583958eb20d59dd3",
+  "probe": "crates/pdf/examples/inherited_boxes_regression.rs",
+  "probe_sha256": "7e9ec0ad9c6cf8a5072d3fa437f48a8e479bab1d424490d9d07dd806a48151cb",
+  "before": {
+    "library_sha256": "8d1e46a6dbe32d7cb95279ab3def2e71e557a3d4cc49162453afa3e3b250dc5e",
+    "original_sha256": "72203ee5e158c09bb93d509b24eb1d169c7bbf0ef8c07ce2f803f2f0fb23c4da",
+    "original_unchanged": true,
+    "pages": [
+      {
+        "inside_export": {
+          "error": "NativeFailure"
+        },
+        "outside_crop_export": {
+          "error": "NativeFailure"
+        },
+        "page": {
+          "error": "NativeFailure"
+        },
+        "page_index": 0
+      },
+      {
+        "inside_export": {
+          "bytes": 11650
+        },
+        "outside_crop_export": {
+          "bytes": 11638
+        },
+        "page": {
+          "bitmap": [
+            500,
+            400
+          ],
+          "crop": {
+            "bottom": 0.0,
+            "left": 0.0,
+            "right": 400.0,
+            "top": 500.0
+          },
+          "rotation": "R90"
+        },
+        "page_index": 1
+      }
+    ],
+    "phase": "before"
+  },
+  "after": {
+    "library_sha256": "8d1e46a6dbe32d7cb95279ab3def2e71e557a3d4cc49162453afa3e3b250dc5e",
+    "original_sha256": "72203ee5e158c09bb93d509b24eb1d169c7bbf0ef8c07ce2f803f2f0fb23c4da",
+    "original_unchanged": true,
+    "pages": [
+      {
+        "inside_export": {
+          "bytes": 11650
+        },
+        "outside_crop_export": {
+          "error": "InvalidGeometry"
+        },
+        "page": {
+          "bitmap": [
+            440,
+            360
+          ],
+          "crop": {
+            "bottom": 30.0,
+            "left": 20.0,
+            "right": 380.0,
+            "top": 470.0
+          },
+          "rotation": "R90"
+        },
+        "page_index": 0
+      },
+      {
+        "inside_export": {
+          "bytes": 11650
+        },
+        "outside_crop_export": {
+          "error": "InvalidGeometry"
+        },
+        "page": {
+          "bitmap": [
+            440,
+            360
+          ],
+          "crop": {
+            "bottom": 30.0,
+            "left": 20.0,
+            "right": 380.0,
+            "top": 470.0
+          },
+          "rotation": "R90"
+        },
+        "page_index": 1
+      }
+    ],
+    "phase": "after"
+  }
+}

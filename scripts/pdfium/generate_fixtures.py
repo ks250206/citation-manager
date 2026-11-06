@@ -72,11 +72,33 @@ def generate(font_path, output):
     with (output/'encrypted.pdf').open('wb') as f:
         encrypted.write(f)
     (output/'malformed.pdf').write_bytes(b'%PDF-1.7\n1 0 obj << /Type /Catalog /Pages 99 0 R >>\n%%EOF\n')
+    # Mutate only writer-owned raw dictionaries AFTER add_page(). Reading reader.pages
+    # or adding a page can flatten inherited attributes; nothing may do that below.
+    inherited = PdfWriter()
+    for page in reader.pages[:2]:
+        inherited.add_page(page)
+    parent = inherited._pages.get_object()
+    parent[NameObject('/MediaBox')] = ArrayObject(map(NumberObject, [0, 0, 400, 500]))
+    parent[NameObject('/CropBox')] = ArrayObject(map(NumberObject, [20, 30, 380, 470]))
+    parent[NameObject('/Rotate')] = NumberObject(90)
+    for i, ref in enumerate(parent['/Kids']):
+        page = ref.get_object()
+        for key in ['/MediaBox', '/CropBox', '/Rotate']:
+            page.pop(key, None)
+        if i == 1:
+            page[NameObject('/MediaBox')] = ArrayObject(map(NumberObject, [0, 0, 400, 500]))
+    with (output/'inherited.pdf').open('wb') as f:
+        inherited.write(f)
+    from inherited_boxes import inspect_structure
+    inspect_structure(output/'inherited.pdf')
     manifest = {
         'license': 'CC0-1.0 for synthetic content; embedded font SIL-OFL-1.1',
         'generator': 'scripts/pdfium/generate_fixtures.py',
         'font_sha256': FONT_SHA,
         'files': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(output.glob('*.pdf'))},
+        'inherited': {'file': 'inherited.pdf', 'rotations': [90, 90],
+                      'direct_entries': [[], ['/MediaBox']], 'render_size_at_zoom_1': [440, 360],
+                      'highlight_rects': [[44, 406, 330, 426], [44, 378, 330, 398]]},
         'crop': [20, 30, 380, 470], 'rotations': [0, 90, 180, 270, 0, 0],
         'marker': [40, 50, 52, 58], 'unicode_line': 'Unicode 日本語 αβ café',
         'second_line': 'second line: coordinate proof', 'image_only_page_index': 4,

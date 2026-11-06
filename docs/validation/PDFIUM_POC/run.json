@@ -1,6 +1,6 @@
 {
-  "utc": "2026-11-06T09:04:40.316493+00:00",
+  "utc": "2026-11-06T09:48:30.755763+00:00",
   "platform": "macOS-27.2-arm64-arm-64bit-Mach-O",
-  "output": "/Users/ryojikanno/.t3/worktrees/citation-manager/t3-8016802f/target/pdfium-validation/final-fixed",
-  "pdfium": "/Users/ryojikanno/.t3/worktrees/citation-manager/t3-8016802f/target/pdfium-poc/lib/libpdfium.dylib"
+  "output": "/Users/ryojikanno/.t3/worktrees/citation-manager/t3-60b8ce36/target/pdfium-validation/inherited-fix-2",
+  "pdfium": "/Users/ryojikanno/.t3/worktrees/citation-manager/t3-60b8ce36/target/pdfium-poc/lib/libpdfium.dylib"
 }

@@ -43,7 +43,7 @@ pub fn inspect_final(library: PathBuf, input: &Path, out: &Path, expected: &Valu
     fs::create_dir_all(out).unwrap();
     let w = PdfWorker::start(library).unwrap();
     let mut results = Vec::new();
-    for i in 0..4 {
+    for i in 0..expected["pages"].as_array().unwrap().len() as u32 {
         let p = support::page(&w, input, i, Some(1.));
         assert_eq!(p.annotations.len(), 2);
         assert!(p.text.contains("日本語"));

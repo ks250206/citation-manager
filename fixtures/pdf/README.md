@@ -7,6 +7,16 @@ an embedded blue image with no text, and a page with text close to both CropBox 
 MediaBox is [0,0,400,500], CropBox [20,30,380,470]. Red marker [40,50,52,58] is a physical reference.
 Labels `iv`/`S12` deliberately differ from the 0-based index and 1-based physical display number.
 
+`inherited.pdf` is a separate two-page original derivative of the Unicode/marker content.
+Its `/Pages` dictionary owns MediaBox [0,0,400,500], CropBox [20,30,380,470], and Rotate 90.
+Page 0 omits all three; page 1 has only a direct MediaBox and inherits CropBox/Rotate.
+Both must render at 440×360 at zoom 1. The generator removes entries only from writer-owned
+raw dictionaries after adding pages; `inherited_boxes.py` checks `/Root/Pages/Kids` without
+accessing `PdfReader.pages`, which could silently flatten inheritance. Negative tests reject
+flattened child dictionaries and a changed parent crop. The inherited export uses fixed 20pt-high
+PDF-space rectangles [44,406,330,426] / [44,378,330,398], independent of extracted glyph geometry.
+All derivative content has the same CC0/OFL permissions as `corpus.pdf`.
+
 `encrypted.pdf` is an original one-page derivative, user password `test-password`, owner
 `owner-password`, RC4-128 solely to exercise the legacy password error/success paths.
 It is not an encryption/security recommendation. `malformed.pdf` is a deliberately incomplete catalog.

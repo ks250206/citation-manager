@@ -98,13 +98,13 @@ fn page_index(index: cm_domain::PageIndex, count: i32) -> Result<i32, PdfError> 
     }
 }
 fn crop(page: &PdfPage<'_>) -> Result<Rect, PdfError> {
-    let media = rect(page.boundaries().media().map_err(native)?.bounds);
-    let crop = page
-        .boundaries()
-        .crop()
-        .map(|b| rect(b.bounds))
-        .unwrap_or(media);
-    crop.intersection(media).ok_or(PdfError::InvalidGeometry)
+    // In 0.9.5 media()/crop() call the non-inheriting FPDFPage_Get*Box getters.
+    // FPDF_GetPageBoundingBox resolves page-tree inheritance and the effective
+    // MediaBox/CropBox intersection used by PDFium rendering (unrotated points).
+    let crop = rect(page.boundaries().bounding().map_err(native)?.bounds);
+    crop.valid()
+        .then_some(crop)
+        .ok_or(PdfError::InvalidGeometry)
 }
 fn check_points(q: Quad, crop: Rect) -> Result<(), PdfError> {
     if q.valid() && q == q.bounds().quad() && q.0.iter().all(|p| crop.contains(*p)) {

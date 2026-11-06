@@ -81,7 +81,6 @@ pub fn run(library: PathBuf, out: &Path) -> Value {
     let corpus = root.join("fixtures/pdf/corpus.pdf");
     fs::create_dir_all(out).unwrap();
     let out = &out.canonicalize().unwrap();
-    let original_hash = format!("{:x}", Sha256::digest(fs::read(&corpus).unwrap()));
     assert!(matches!(
         PdfWorker::start(PathBuf::from("relative.dylib")),
         Err(PdfError::LibraryPath)
@@ -95,22 +94,59 @@ pub fn run(library: PathBuf, out: &Path) -> Value {
         PdfWorker::start(library),
         Err(PdfError::AlreadyStarted)
     ));
+    let report = run_document(&w, &root, &corpus, out, false);
+    let inherited = run_document(
+        &w,
+        &root,
+        &root.join("fixtures/pdf/inherited.pdf"),
+        &out.join("inherited"),
+        true,
+    );
+    fs::write(
+        out.join("inherited/pdfium-report.json"),
+        serde_json::to_vec_pretty(&inherited).unwrap(),
+    )
+    .unwrap();
+    w.shutdown().unwrap();
+    report
+}
+
+fn run_document(w: &PdfWorker, root: &Path, corpus: &Path, out: &Path, inherited: bool) -> Value {
+    fs::create_dir_all(out).unwrap();
+    let original_hash = format!("{:x}", Sha256::digest(fs::read(corpus).unwrap()));
+    let page_count = if inherited { 2 } else { 6 };
+    let annotated_pages = if inherited { 2 } else { 4 };
     let start = Instant::now();
     let mut measurements = Vec::new();
     let mut pages = Vec::new();
     let mut highlights = Vec::new();
     let mut notes = Vec::new();
-    for i in 0..4 {
+    for i in 0..annotated_pages {
         for zoom in [0.5, 1., 2.] {
             let t = Instant::now();
-            let p = page(&w, &corpus, i, Some(zoom));
+            let p = page(w, corpus, i, Some(zoom));
             assert!(p.text.contains("Unicode 日本語 αβ café"), "{:?}", p.text);
             assert!(p.text.contains("second line: coordinate proof"));
             assert_eq!(p.physical_page, i + 1);
-            assert_eq!(p.page_count, 6);
+            assert_eq!(p.page_count, page_count);
+            if !inherited {
+                assert_eq!(
+                    p.page_label.as_deref(),
+                    Some(if i == 0 { "iv" } else { "S12" })
+                );
+            }
             assert_eq!(
-                p.page_label.as_deref(),
-                Some(if i == 0 { "iv" } else { "S12" })
+                p.rotation,
+                if inherited {
+                    cm_pdf::geometry::Rotation::R90
+                } else {
+                    [
+                        cm_pdf::geometry::Rotation::R0,
+                        cm_pdf::geometry::Rotation::R90,
+                        cm_pdf::geometry::Rotation::R180,
+                        cm_pdf::geometry::Rotation::R270,
+                    ][i as usize]
+                }
             );
             assert_eq!(
                 p.crop,
@@ -122,6 +158,30 @@ pub fn run(library: PathBuf, out: &Path) -> Value {
                 }
             );
             let v = Viewport::new(p.crop, p.rotation, zoom, Origin::TopLeft).unwrap();
+            if inherited {
+                assert_eq!(v.size(), (440. * zoom, 360. * zoom));
+                assert_eq!(
+                    v.to_display(Point { x: 46., y: 54. }),
+                    Point {
+                        x: 24. * zoom,
+                        y: 26. * zoom
+                    }
+                );
+                assert_eq!(
+                    v.hit_test(Point {
+                        x: 24. * zoom,
+                        y: 26. * zoom
+                    }),
+                    Some(Point { x: 46., y: 54. })
+                );
+                assert!(
+                    v.hit_test(Point {
+                        x: 441. * zoom,
+                        y: 0.
+                    })
+                    .is_none()
+                );
+            }
             let b = p.bitmap.as_ref().unwrap();
             assert_eq!((b.width, b.height), (v.size().0 as u32, v.size().1 as u32));
             assert_eq!(b.rgba.len(), b.width as usize * b.height as usize * 4);
@@ -156,7 +216,27 @@ pub fn run(library: PathBuf, out: &Path) -> Value {
                 pages.push(serde_json::to_value(&p).unwrap());
                 highlights.push(Highlight {
                     page_index: index(i),
-                    quads: vec![line_quad(&p, 410.), line_quad(&p, 382.)],
+                    quads: if inherited {
+                        // Fixed synthetic PDF-space rectangles, independent of extracted geometry.
+                        vec![
+                            Rect {
+                                left: 44.,
+                                bottom: 406.,
+                                right: 330.,
+                                top: 426.,
+                            }
+                            .quad(),
+                            Rect {
+                                left: 44.,
+                                bottom: 378.,
+                                right: 330.,
+                                top: 398.,
+                            }
+                            .quad(),
+                        ]
+                    } else {
+                        vec![line_quad(&p, 410.), line_quad(&p, 382.)]
+                    },
                     comment: "検証コメント αβ café".into(),
                 });
                 notes.push(Note {
@@ -172,130 +252,131 @@ pub fn run(library: PathBuf, out: &Path) -> Value {
             }
         }
     }
-    let image = page(&w, &corpus, 4, Some(1.));
-    assert_eq!(image.text_status, TextStatus::NoExtractableText);
-    assert!(image.text.is_empty());
-    assert!(page(&w, &corpus, 5, None).text.contains("bottom boundary"));
-    assert!(matches!(
-        call(&w, page_op(&corpus, 6, None)),
-        Err(PdfError::InvalidPage)
-    ));
-    assert!(matches!(
-        call(&w, page_op(&corpus, u32::MAX - 1, None)),
-        Err(PdfError::InvalidPage)
-    ));
-    assert!(matches!(
-        call(&w, page_op(&corpus, 0, Some(1000.))),
-        Err(PdfError::LimitExceeded)
-    ));
-    assert!(matches!(
-        call(&w, page_op(&corpus, 0, Some(f32::NAN))),
-        Err(PdfError::InvalidGeometry)
-    ));
-    let malformed = root.join("fixtures/pdf/malformed.pdf");
-    assert!(matches!(
-        call(&w, page_op(&malformed, 0, None)),
-        Err(PdfError::Malformed)
-    ));
-    let encrypted = root.join("fixtures/pdf/encrypted.pdf");
-    assert!(matches!(
-        call(&w, page_op(&encrypted, 0, None)),
-        Err(PdfError::PasswordRequiredOrIncorrect)
-    ));
-    let mut wrong = source(&encrypted);
-    wrong.password = Some("wrong".into());
-    assert!(matches!(
-        call(
-            &w,
+    if !inherited {
+        let image = page(w, corpus, 4, Some(1.));
+        assert_eq!(image.text_status, TextStatus::NoExtractableText);
+        assert!(image.text.is_empty());
+        assert!(page(w, corpus, 5, None).text.contains("bottom boundary"));
+        assert!(matches!(
+            call(w, page_op(corpus, 6, None)),
+            Err(PdfError::InvalidPage)
+        ));
+        assert!(matches!(
+            call(w, page_op(corpus, u32::MAX - 1, None)),
+            Err(PdfError::InvalidPage)
+        ));
+        assert!(matches!(
+            call(w, page_op(corpus, 0, Some(1000.))),
+            Err(PdfError::LimitExceeded)
+        ));
+        assert!(matches!(
+            call(w, page_op(corpus, 0, Some(f32::NAN))),
+            Err(PdfError::InvalidGeometry)
+        ));
+        let malformed = root.join("fixtures/pdf/malformed.pdf");
+        assert!(matches!(
+            call(w, page_op(&malformed, 0, None)),
+            Err(PdfError::Malformed)
+        ));
+        let encrypted = root.join("fixtures/pdf/encrypted.pdf");
+        assert!(matches!(
+            call(w, page_op(&encrypted, 0, None)),
+            Err(PdfError::PasswordRequiredOrIncorrect)
+        ));
+        let mut wrong = source(&encrypted);
+        wrong.password = Some("wrong".into());
+        assert!(matches!(
+            call(
+                w,
+                Operation::Page {
+                    source: wrong,
+                    page_index: index(0),
+                    zoom: None
+                }
+            ),
+            Err(PdfError::PasswordRequiredOrIncorrect)
+        ));
+        let mut unlocked = source(&encrypted);
+        unlocked.password = Some("test-password".into());
+        let Output::Page(p) = call(
+            w,
             Operation::Page {
-                source: wrong,
+                source: unlocked,
                 page_index: index(0),
-                zoom: None
-            }
-        ),
-        Err(PdfError::PasswordRequiredOrIncorrect)
-    ));
-    let mut unlocked = source(&encrypted);
-    unlocked.password = Some("test-password".into());
-    let Output::Page(p) = call(
-        &w,
-        Operation::Page {
-            source: unlocked,
-            page_index: index(0),
-            zoom: None,
-        },
-    )
-    .unwrap() else {
-        panic!()
-    };
-    assert!(p.text.contains("日本語"));
-    let cancel = Cancellation::default();
-    cancel.cancel();
-    assert!(matches!(
-        w.submit(page_op(&corpus, 0, None), cancel, WAIT)
+                zoom: None,
+            },
+        )
+        .unwrap() else {
+            panic!()
+        };
+        assert!(p.text.contains("日本語"));
+        let cancel = Cancellation::default();
+        cancel.cancel();
+        assert!(matches!(
+            w.submit(page_op(corpus, 0, None), cancel, WAIT)
+                .unwrap()
+                .wait(WAIT),
+            Err(PdfError::Cancelled)
+        ));
+        assert!(matches!(
+            w.submit(
+                page_op(corpus, 0, None),
+                Cancellation::default(),
+                Duration::ZERO
+            )
             .unwrap()
             .wait(WAIT),
-        Err(PdfError::Cancelled)
-    ));
-    assert!(matches!(
-        w.submit(
-            page_op(&corpus, 0, None),
-            Cancellation::default(),
-            Duration::ZERO
-        )
-        .unwrap()
-        .wait(WAIT),
-        Err(PdfError::Deadline)
-    ));
-    // Cancel queued work after submission, not only pre-cancelled tokens. At least one queued
-    // request must observe cancellation; a request already completed is allowed to win the race.
-    let cancel = Cancellation::default();
-    let mut pending = Vec::new();
-    for _ in 0..8 {
-        pending.push(
-            w.submit(page_op(&corpus, 0, Some(2.)), cancel.clone(), WAIT)
-                .unwrap(),
-        );
-    }
-    cancel.cancel();
-    let mut cancelled = 0;
-    for ticket in pending {
-        match ticket.wait(WAIT) {
-            Err(PdfError::Cancelled) => cancelled += 1,
-            Ok(_) => {}
-            Err(e) => panic!("{e:?}"),
+            Err(PdfError::Deadline)
+        ));
+        // Cancel queued work after submission, not only pre-cancelled tokens. At least one queued
+        // request must observe cancellation; a request already completed is allowed to win the race.
+        let cancel = Cancellation::default();
+        let mut pending = Vec::new();
+        for _ in 0..8 {
+            pending.push(
+                w.submit(page_op(corpus, 0, Some(2.)), cancel.clone(), WAIT)
+                    .unwrap(),
+            );
         }
-    }
-    assert!(cancelled > 0);
-    // Oversized input is rejected before parser load, and recovery afterwards remains functional.
-    let oversized = out.join("oversized.pdf");
-    let f = fs::File::create(&oversized).unwrap();
-    f.set_len(MAX_INPUT_BYTES as u64 + 1).unwrap();
-    drop(f);
-    assert!(matches!(
-        call(&w, page_op(&oversized, 0, None)),
-        Err(PdfError::LimitExceeded)
-    ));
-    fs::remove_file(oversized).unwrap();
-    // Distinct requests from multiple callers all return the correct owned result on this one worker.
-    std::thread::scope(|s| {
-        for i in 0..4 {
-            let w = &w;
-            let path = &corpus;
-            s.spawn(move || {
-                for _ in 0..5 {
-                    assert!(page(w, path, i, None).text.contains("日本語"));
-                }
-            });
+        cancel.cancel();
+        let mut cancelled = 0;
+        for ticket in pending {
+            match ticket.wait(WAIT) {
+                Err(PdfError::Cancelled) => cancelled += 1,
+                Ok(_) => {}
+                Err(e) => panic!("{e:?}"),
+            }
         }
-    });
+        assert!(cancelled > 0);
+        // Oversized input is rejected before parser load, and recovery afterwards remains functional.
+        let oversized = out.join("oversized.pdf");
+        let f = fs::File::create(&oversized).unwrap();
+        f.set_len(MAX_INPUT_BYTES as u64 + 1).unwrap();
+        drop(f);
+        assert!(matches!(
+            call(w, page_op(&oversized, 0, None)),
+            Err(PdfError::LimitExceeded)
+        ));
+        fs::remove_file(oversized).unwrap();
+        // Distinct requests from multiple callers all return the correct owned result on this one worker.
+        std::thread::scope(|s| {
+            for i in 0..4 {
+                let path = corpus;
+                s.spawn(move || {
+                    for _ in 0..5 {
+                        assert!(page(w, path, i, None).text.contains("日本語"));
+                    }
+                });
+            }
+        });
+    }
     let invalid = Highlight {
         page_index: index(0),
         quads: vec![
             Rect {
-                left: -1.,
+                left: 5.,
                 bottom: 30.,
-                right: 20.,
+                right: 15.,
                 top: 50.,
             }
             .quad(),
@@ -304,19 +385,39 @@ pub fn run(library: PathBuf, out: &Path) -> Value {
     };
     assert!(matches!(
         call(
-            &w,
+            w,
             Operation::Export {
-                source: source(&corpus),
+                source: source(corpus),
                 highlights: vec![invalid],
                 notes: vec![]
             }
         ),
         Err(PdfError::InvalidGeometry)
     ));
+    assert!(matches!(
+        call(
+            w,
+            Operation::Export {
+                source: source(corpus),
+                highlights: vec![],
+                notes: vec![Note {
+                    page_index: index(0),
+                    bounds: Rect {
+                        left: 5.,
+                        bottom: 40.,
+                        right: 15.,
+                        top: 50.
+                    },
+                    contents: "outside crop".into()
+                }]
+            }
+        ),
+        Err(PdfError::InvalidGeometry)
+    ));
     let Output::Export(export) = call(
-        &w,
+        w,
         Operation::Export {
-            source: source(&corpus),
+            source: source(corpus),
             highlights: highlights.clone(),
             notes: notes.clone(),
         },
@@ -332,8 +433,8 @@ pub fn run(library: PathBuf, out: &Path) -> Value {
     let exported = out.join("pdfium-export.pdf");
     write_new(&exported, &bytes);
     let mut exported_pages = Vec::new();
-    for i in 0..4 {
-        let p = page(&w, &exported, i, Some(1.));
+    for i in 0..annotated_pages {
+        let p = page(w, &exported, i, Some(1.));
         assert_eq!(p.annotations.len(), 2);
         let h = p
             .annotations
@@ -360,14 +461,13 @@ pub fn run(library: PathBuf, out: &Path) -> Value {
     }
     // Repeated failures/successes above release document handles; originals remain untouched.
     assert_eq!(
-        format!("{:x}", Sha256::digest(fs::read(&corpus).unwrap())),
+        format!("{:x}", Sha256::digest(fs::read(corpus).unwrap())),
         original_hash
     );
-    w.shutdown().unwrap();
     json!({"build":PDFIUM_BUILD,"abi":PDFIUM_ABI,"library_sha256":PDFIUM_SHA256,
         "original_sha256":original_hash,"export_sha256":format!("{:x}",Sha256::digest(bytes)),
         "measurements":measurements,"pages":pages,"exported_pages":exported_pages,
         "highlights":highlights,"notes":notes,"elapsed_ms":start.elapsed().as_secs_f64()*1000.,
-        "statuses_checked":["image-only","malformed","password-missing","password-wrong","password-correct","invalid-page","oversized-render","invalid-zoom","cancelled","expired","outside-quad","20 concurrent caller requests", "post-submission cancellation", "oversized-input"],
+        "statuses_checked":if inherited {vec!["outside-quad", "outside-note", "inherited-viewport", "two rotated inherited pages"]} else {vec!["image-only","malformed","password-missing","password-wrong","password-correct","invalid-page","oversized-render","invalid-zoom","cancelled","expired","outside-quad","20 concurrent caller requests", "post-submission cancellation", "oversized-input", "outside-note"]},
         "limits":"cooperative between native calls; bounded queue/input/output/bitmap/chars; native allocation/time not sandboxed; process-global dylib remains loaded"})
 }

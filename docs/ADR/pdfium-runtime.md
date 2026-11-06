@@ -54,7 +54,18 @@ password は Debug/log に出さない。PDF 層は Paper/storage を更新せ�
 ## 座標とページ
 
 保存/adapter 座標は unrotated PDF user space、単位 point、bottom-left。有効表示領域は
-MediaBox ∩ CropBox（CropBox absent なら MediaBox）。display はその CropBox を原点に、
+**継承を解決した MediaBox ∩ CropBox**（有効 CropBox absent なら MediaBox）。
+`page.boundaries().bounding()` → `FPDF_GetPageBoundingBox` を Page/Export 共通の唯一の取得経路とし、
+結果の finite/正面積を検査する。同じ値を bitmap/Viewport/hit test と highlight/note の範囲検査に使う。
+0.9.5 の `media()`/`crop()` は `FPDFPage_GetMediaBox`/`GetCropBox` への直接 getter で、
+[直接辞書を読む固定実装](https://pdfium.googlesource.com/pdfium/+/refs/heads/chromium/8125/fpdfsdk/fpdf_transformpage.cpp#46) で、
+`/Pages` から継承しない。表示域決定や「CropBox absent」の判定には使用しない（使うなら診断専用）。
+wrapper の bounding の説明を ink/content bounds と解釈せず、固定 8125 の
+[FPDF_GetPageBoundingBox](https://pdfium.googlesource.com/pdfium/+/refs/heads/chromium/8125/fpdfsdk/fpdf_view.cpp#527)
+→ `CPDF_Page::GetBBox`、
+[GetPageAttr/GetBox/UpdateDimensions](https://pdfium.googlesource.com/pdfium/+/refs/heads/chromium/8125/core/fpdfapi/page/cpdf_page.cpp#114)
+の親走査・box 交差と実 dylib の動作を確認した。
+`bounding()` は回転前の PDF user space を返す。display はその有効 box を原点に、
 clockwise page rotation 0/90/180/270 を一回適用、zoom は device scale を含む pixels/point。
 TopLeft/BottomLeft display origin を指定し、逆変換は同じ Viewport を使う。
 範囲外 hit は別ページへ丸めず None。DB 0-based PageIndex、physical display 1-based、PDF label は独立。
@@ -68,7 +79,7 @@ character の tight box は ink bounds、quad は axis-aligned loose bounds の 
 ## Export-only 代替の決定
 
 実測: PDFium 8125 + wrapper 0.9.5 で Highlight/複数 quads/Unicode Contents/Text note を作成・保存・
-再読込できた。ただし **8 注釈の全てで `/AP` が欠落**。PDFKit は独自 appearance を合成して表示するが、
+再読込できた。ただし **元 corpus の8件と継承 corpus の4件の全注釈で `/AP` が欠落**。PDFKit は独自 appearance を合成して表示するが、
 それを persistent appearance の成功と呼ばない。Rust の `NativeExport` は
 `AppearanceStatus::RequiresExportCompletion` を明示して intermediate bytes を返す。
 

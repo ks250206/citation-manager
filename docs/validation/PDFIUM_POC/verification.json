@@ -2,6 +2,7 @@
   "status": "passed",
   "independent_renderer": "Apple PDFKit",
   "os": "Version 27.2 (Build 26B123)",
+  "corpus": "corpus.pdf",
   "appearance_forms": 8,
   "original_unchanged": true,
   "checks": [
@@ -71,5 +72,5 @@
     }
   ],
   "observed_native_limit": "PDFium export has no /AP; explicit export-only pypdf completion verified",
-  "portable_sha256": "db2b9f64a4f87d69bac91a5795fbf8c0781e24157dcc1f694661d264f73d28b6"
+  "portable_sha256": "b462e71f64987c8ddbfb5e7a7331b69a9429dbbcbbd1521d3d8286dbc57080ed"
 }
