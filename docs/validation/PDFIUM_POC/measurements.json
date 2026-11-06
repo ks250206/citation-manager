@@ -1,0 +1,135 @@
+{
+  "build": "158.0.8125.0",
+  "abi": "pdfium-render=0.9.5;pdfium_8125;thread_safe",
+  "library_sha256": "8d1e46a6dbe32d7cb95279ab3def2e71e557a3d4cc49162453afa3e3b250dc5e",
+  "original_sha256": "1842ec1c966b74fd73d9dd75ec1f8a199e14e9935b002e2c037206a0496f8910",
+  "export_sha256": "67080da732d1ce9f77437e35056e9b371dc68a86f921e706810d985ec3748af3",
+  "measurements": [
+    {
+      "height": 220,
+      "marker_centroid_error_px": 0.0,
+      "milliseconds": 103.274583,
+      "page_index": 0,
+      "red_pixels": 24,
+      "width": 180,
+      "zoom": 0.5
+    },
+    {
+      "height": 440,
+      "marker_centroid_error_px": 0.0,
+      "milliseconds": 1.953583,
+      "page_index": 0,
+      "red_pixels": 96,
+      "width": 360,
+      "zoom": 1.0
+    },
+    {
+      "height": 880,
+      "marker_centroid_error_px": 0.0,
+      "milliseconds": 7.502708,
+      "page_index": 0,
+      "red_pixels": 384,
+      "width": 720,
+      "zoom": 2.0
+    },
+    {
+      "height": 180,
+      "marker_centroid_error_px": 0.0,
+      "milliseconds": 2.593334,
+      "page_index": 1,
+      "red_pixels": 24,
+      "width": 220,
+      "zoom": 0.5
+    },
+    {
+      "height": 360,
+      "marker_centroid_error_px": 0.0,
+      "milliseconds": 3.3197919999999996,
+      "page_index": 1,
+      "red_pixels": 96,
+      "width": 440,
+      "zoom": 1.0
+    },
+    {
+      "height": 720,
+      "marker_centroid_error_px": 0.0,
+      "milliseconds": 5.78225,
+      "page_index": 1,
+      "red_pixels": 384,
+      "width": 880,
+      "zoom": 2.0
+    },
+    {
+      "height": 220,
+      "marker_centroid_error_px": 0.0,
+      "milliseconds": 1.506959,
+      "page_index": 2,
+      "red_pixels": 24,
+      "width": 180,
+      "zoom": 0.5
+    },
+    {
+      "height": 440,
+      "marker_centroid_error_px": 0.0,
+      "milliseconds": 2.052292,
+      "page_index": 2,
+      "red_pixels": 96,
+      "width": 360,
+      "zoom": 1.0
+    },
+    {
+      "height": 880,
+      "marker_centroid_error_px": 0.0,
+      "milliseconds": 6.790333,
+      "page_index": 2,
+      "red_pixels": 384,
+      "width": 720,
+      "zoom": 2.0
+    },
+    {
+      "height": 180,
+      "marker_centroid_error_px": 0.0,
+      "milliseconds": 2.520458,
+      "page_index": 3,
+      "red_pixels": 24,
+      "width": 220,
+      "zoom": 0.5
+    },
+    {
+      "height": 360,
+      "marker_centroid_error_px": 0.0,
+      "milliseconds": 3.09775,
+      "page_index": 3,
+      "red_pixels": 96,
+      "width": 440,
+      "zoom": 1.0
+    },
+    {
+      "height": 720,
+      "marker_centroid_error_px": 0.0,
+      "milliseconds": 7.542917,
+      "page_index": 3,
+      "red_pixels": 384,
+      "width": 880,
+      "zoom": 2.0
+    }
+  ],
+  "elapsed_ms": 2407.9613329999997,
+  "statuses_checked": [
+    "image-only",
+    "malformed",
+    "password-missing",
+    "password-wrong",
+    "password-correct",
+    "invalid-page",
+    "oversized-render",
+    "invalid-zoom",
+    "cancelled",
+    "expired",
+    "outside-quad",
+    "20 concurrent caller requests",
+    "post-submission cancellation",
+    "oversized-input"
+  ],
+  "limits": "cooperative between native calls; bounded queue/input/output/bitmap/chars; native allocation/time not sandboxed; process-global dylib remains loaded"
+}
