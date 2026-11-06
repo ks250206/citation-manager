@@ -718,6 +718,9 @@ dependencies = [
  "cm-core",
  "cm-domain",
  "pdfium-render",
+ "serde",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]

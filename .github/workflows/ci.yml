@@ -59,3 +59,26 @@ jobs:
       - run: cargo build -p cm-desktop --features native-gpui --locked
       - name: Compile PDF bindings only (no PDFium runtime)
         run: cargo check -p cm-pdf --features bindings-check --locked
+  pdfium-runtime:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.14'
+      - name: Exact toolchain and PDF-only validation tools
+        run: |
+          rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
+          python3 -m venv target/pdfium-tools
+          target/pdfium-tools/bin/python -m pip install -r scripts/pdfium/requirements.txt
+      - name: Lint runtime feature (no GPUI policy change)
+        run: cargo clippy -p cm-pdf --all-targets --features runtime --locked -- -D warnings
+      - name: Pinned dylib runtime and independent PDFKit gate (missing prerequisites fail)
+        run: target/pdfium-tools/bin/python scripts/pdfium/run.py --out target/pdfium-validation/ci
+      - name: Preserve runtime reports and independently rendered exports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pdfium-runtime-evidence
+          path: target/pdfium-validation/ci/
+          if-no-files-found: error

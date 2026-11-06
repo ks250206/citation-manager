@@ -1,0 +1,8 @@
+{
+  "byte_identical": true,
+  "files": {
+    "corpus.pdf": "1842ec1c966b74fd73d9dd75ec1f8a199e14e9935b002e2c037206a0496f8910",
+    "encrypted.pdf": "6fadba4aef6330df278525012a22368e5f2f73c3a5c38cf3bf3256037d1962aa",
+    "malformed.pdf": "a03c195f7aae7ff2e768b338f828c989839567603fc6bdbfd882f427eb11351e"
+  }
+}
