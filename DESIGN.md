@@ -903,3 +903,12 @@ PaperService/SQLite repositoryで手動作成・全書誌情報編集・一覧�
 既存DBのupgradeにはpre-migration backup hookを必須とする。空DBの初期作成に既存データbackupは不要。
 §7の実file store/製品backupは#9、FTSは#18、daemonの単一起動/書込制御は#25が実装する。
 現在のAPI/正確な保証範囲とtemp DBによるruntime証跡はADRと[#8検証](docs/validation/ISSUE_8.md)に記録する。
+
+## 28. #10 macOS desktop vertical slice
+
+[Desktop bootstrap ADR](docs/ADR/desktop-bootstrap.md) defines the temporary optional
+macOS daemon-to-desktop composition edge. The real GPUI executable uses a replaceable
+protocol client and worker-owned #8 PaperService for manual title/detail create/edit/list.
+[Native evidence](docs/validation/ISSUE_10.md) separates actual shutdown/relaunch, loading/error
+checks from headless tests and hosted compile checks. Actual IPC/lifecycle/auth remain #25;
+PDF/view integration remains #15/#17 and signing/distribution remains #31/#34.

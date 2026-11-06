@@ -29,3 +29,8 @@ GUI 内の早期 PoC は許すが、外部クライアント用の無認可 Core
 接続/job 中は存続、idle で終了、bundle 移動後も resource/PDFium/manifest path が解決できること。
 これらと #10 の window は未実施。Developer ID identity は初期環境で 0 件 (#31 blocker)。
 未署名 cargo build を署名/notarization 成功と呼ばない。
+
+#10 now builds and runs the actual optional `citation-manager` native executable from
+the daemon composition root. Its unsigned temporary smoke .app is solely for native
+automation; the product bundle/resource/PDFium/lifecycle guarantees above remain #34.
+See [desktop-bootstrap](desktop-bootstrap.md) and [native evidence](../validation/ISSUE_10.md).

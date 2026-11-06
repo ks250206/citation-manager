@@ -664,11 +664,13 @@ name = "cm-daemon"
 version = "0.1.0"
 dependencies = [
  "cm-core",
+ "cm-desktop",
  "cm-metadata",
  "cm-pdf",
  "cm-protocol",
  "cm-search",
  "cm-storage",
+ "tempfile",
 ]
 
 [[package]]
@@ -678,6 +680,8 @@ dependencies = [
  "cm-protocol",
  "gpui",
  "gpui_platform",
+ "serde_json",
+ "unicode-segmentation",
 ]
 
 [[package]]

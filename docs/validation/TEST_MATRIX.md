@@ -53,7 +53,7 @@ GitHub runner の OS/Xcode 差による失敗は PR 上で実結果を確認す�
 
 | 対象 / Issue | 実行主体 | 現状・blocker・必要な証跡 |
 |---|---|---|
-| GPUI window / 保存→再起動→閲覧 #10 | implementing agent が自動検証、UI操作可能な agent が実機検証。利用不可なら Ryoji Kanno (ks250206) | **未実施**。window と storage 未実装。表示・入力・再起動後の保存データ、画面/ログを残す |
+| GPUI window / 保存→再起動→閲覧 #10 | implementing agent が自動検証、UI操作可能な agent が実機検証。利用不可なら Ryoji Kanno (ks250206) | #10で実 window と#8保存を検証済み。[手順・画面・結果](ISSUE_10.md)。日本語IME候補選択は未検証。#7当時の未実施記録は上記の履歴 |
 | PDFium runtime/ABI/文字位置/注釈 roundtrip #11 | implementing agent が fixture 自動検証、UI可能 agent。fallback Ryoji Kanno | **未実施**。dylib 未選択/未同梱。ABI/load path、corpus、Unicode/回転/複数行、出力再読込を証拠化 |
 | .app resource配置/遅延起動/寿命 #34 | implementing agent + macOS実機操作可能 agent。fallback Ryoji Kanno | **未実施**。.app 未作成。bundle移動/GUIなし/同時起動/idleとjob中の寿命/PDFium pathを記録 |
 | 認可境界 #25/#26 | implementing agent が自動セキュリティ回帰、ユーザー同意UIは実機可能 agent / Ryoji Kanno | **未実施**。IPC/credential/grant/authorizer未実装。ADR列挙の拒否・失効・偽装・MCP別write許可を検証 |

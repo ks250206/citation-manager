@@ -6,7 +6,9 @@ Created in [T3 Code](https://t3.codes).
 
 Rust + GPUI のローカル文献管理アプリを実装中です。#7 の 12-crate workspace と最小契約に、
 #8 の SQLite library / 文献 CRUD を追加しました（[利用API・保存境界](docs/ADR/sqlite-library.md)、
-[実DB検証](docs/validation/ISSUE_8.md)）。GUI window、daemon/CLI、PDFium runtime、MCP tools はまだ利用できません。
+[実DB検証](docs/validation/ISSUE_8.md)）。
+#10 では macOS の実 GPUI window と手動登録/編集/一覧/詳細を追加しました
+（[起動・実機検証](docs/validation/ISSUE_10.md)）。daemon/IPC/CLI、PDFium runtime、MCP tools はまだ利用できません。
 `cm_mcp::run_stdio()` は #29 未実装を明示するエラーを返し、MCP stdout を出力しません。
 
 設計は [DESIGN.md](DESIGN.md)、依存方向と信頼境界は [ADR](docs/ADR/boundaries.md) /
@@ -45,3 +47,17 @@ cargo check -p cm-pdf --features bindings-check --locked
 この lane は macOS backend/Metal shader と Rust bindings のコンパイル確認です。
 ウィンドウ表示・PDFium dylib のロード/ABI・コード署名の成功は意味しません。
 実行結果、実機担当と未実施 blocker は [TEST_MATRIX](docs/validation/TEST_MATRIX.md) に記録します。
+
+#10 の実行ファイル（macOS、未署名のローカル開発用）:
+
+```sh
+cargo build -p cm-daemon --bin citation-manager --features desktop-bootstrap --locked
+# 専用絶対パスを明示する。検証では helper が作った temp library のみを使用。
+python3 scripts/prepare_native_smoke.py --deny-network
+# 表示された open コマンドを実行。再起動も同じコマンド/同じ library を使う。
+```
+
+⌘N で新規、タイトル/詳細を入力し ⌘S または Save locally、Tab で入力欄を移動。
+一覧をクリックまたは ⌘↑/⌘↓ で選択して編集できます。⌘Q で完全終了し、同じ library で再起動します。
+既定の実ライブラリは自動接続しません。HTTP/IPC listener はありません。
+全書誌情報の編集、複数行/Undo/redo、未保存変更の移動確認、PDF/DOI/import は後続範囲です。

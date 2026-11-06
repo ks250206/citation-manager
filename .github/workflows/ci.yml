@@ -57,5 +57,10 @@ jobs:
       - run: cargo check -p cm-desktop --features native-gpui --locked
       - run: cargo clippy -p cm-desktop --all-targets --features native-gpui --locked -- -D warnings
       - run: cargo build -p cm-desktop --features native-gpui --locked
+      - name: Check actual desktop bootstrap executable (no GUI launch on runner)
+        run: cargo check -p cm-daemon --bin citation-manager --features desktop-bootstrap --locked
+      - run: cargo clippy -p cm-daemon --all-targets --features desktop-bootstrap --locked -- -D warnings
+      - run: cargo test -p cm-daemon -p cm-desktop --features cm-daemon/desktop-bootstrap --locked
+      - run: cargo build -p cm-daemon --bin citation-manager --features desktop-bootstrap --locked
       - name: Compile PDF bindings only (no PDFium runtime)
         run: cargo check -p cm-pdf --features bindings-check --locked
