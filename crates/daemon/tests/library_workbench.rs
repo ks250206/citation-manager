@@ -3,19 +3,52 @@ use cm_daemon::desktop_worker::InProcessLibraryClient;
 use cm_protocol::{
     attachments::*, exchange::*, import::*, library::*, library_query::*, organization::*,
 };
-use std::{sync::mpsc, time::Duration};
+use std::{
+    sync::mpsc,
+    time::{Duration, Instant},
+};
 fn call<T: Send + 'static>(
+    submit: impl FnOnce(Reply<T>) -> Result<(), ServiceError>,
+) -> Result<T, ServiceError> {
+    call_with_watchdog("worker request", Duration::from_secs(30), submit)
+}
+fn call_with_watchdog<T: Send + 'static>(
+    operation: &str,
+    watchdog: Duration,
     submit: impl FnOnce(Reply<T>) -> Result<(), ServiceError>,
 ) -> Result<T, ServiceError> {
     let (tx, rx) = mpsc::channel();
     submit(Box::new(move |r| {
         let _ = tx.send(r);
     }))?;
-    rx.recv_timeout(Duration::from_secs(30))
-        .expect("worker callback")
+    rx.recv_timeout(watchdog).unwrap_or_else(|error| {
+        panic!("{operation}: worker callback {error:?} after watchdog {watchdog:?}")
+    })
 }
 fn imp(c: &InProcessLibraryClient, request: ImportRequestUi) -> ImportReply {
     call(|done| c.import(request, done)).unwrap()
+}
+// These 100-row preview/commit requests scan an increasing real inventory in
+// unoptimized test builds. This finite CI watchdog is not a product latency SLO.
+// Keep ordinary requests on 30 seconds and retain all 1000 rows/ten approvals.
+fn thousand_batch(
+    c: &InProcessLibraryClient,
+    start: usize,
+    stage: &str,
+    request: ImportRequestUi,
+) -> ImportReply {
+    let operation = format!(
+        "1000-record batch {} ({start}..{}) {stage}",
+        start / 100 + 1,
+        start + 100
+    );
+    let started = Instant::now();
+    eprintln!("Starting {operation}");
+    let result = call_with_watchdog(&operation, Duration::from_secs(120), |done| {
+        c.import(request, done)
+    });
+    eprintln!("Finished {operation} in {:?}", started.elapsed());
+    result.unwrap()
 }
 fn preview(reply: ImportReply) -> ImportPreview {
     let ImportReply::Preview(p) = reply else {
@@ -82,8 +115,10 @@ fn thousand_file_ten_reviewed_batches_classification_query_export_and_reopen() {
     };
     let mut ids = Vec::new();
     for start in (0..1000).step_by(100) {
-        let p = preview(imp(
+        let p = preview(thousand_batch(
             &client,
+            start,
+            "preview",
             ImportRequestUi::PreviewFile {
                 start,
                 count: 100,
@@ -103,7 +138,8 @@ fn thousand_file_ten_reviewed_batches_classification_query_export_and_reopen() {
         })
         .unwrap();
         assert_eq!(before.papers.len(), start.min(500));
-        let ImportReply::Committed(outcome) = imp(&client, ImportRequestUi::Commit(create(p)))
+        let ImportReply::Committed(outcome) =
+            thousand_batch(&client, start, "commit", ImportRequestUi::Commit(create(p)))
         else {
             panic!()
         };

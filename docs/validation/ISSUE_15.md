@@ -139,6 +139,29 @@ baseline/follow-up observation failures remain the blocker, not a new observatio
 Workspace tests, native-feature tests and PDF runtime tests are separate lanes. CI and
 independent different-model review belong to root and are not implied by local success.
 
+## CI watchdog follow-up
+
+At `3ad121e`, contracts and PDFium runtime passed, but native-dependencies failed in
+the unoptimized 1000-record worker test: the test's 30-second callback watchdog expired
+([failed job](https://github.com/ks250206/citation-manager/actions/runs/42286082857/job/128127300646)).
+The old helper did not identify the operation or batch; it does not prove whether that
+callback would eventually arrive. The worker test had run for 236.65 seconds, while the
+separate BibTeX/RIS 1000-record round-trip tests had already passed in 246.01 seconds.
+
+The test-only follow-up keeps ordinary requests on 30 seconds and gives just this large
+test's 100-row preview/commit requests a finite 120-second watchdog. It logs batch/stage
+and elapsed time, and distinguishes Timeout from Disconnected on failure. All 1000
+records, ten explicit previews/commits, no-write assertions and classification/query/
+export/reopen checks are retained. No product timeout, preview TTL, batch/resource cap,
+workflow lane, dependency or fixture is changed. This is functional debug-build coverage;
+it makes no release-build latency or native responsiveness claim. #30 performance work
+and the independent native GUI gate remain outstanding. The final head must pass CI.
+The feature-enabled `library_workbench` binary then passed all five tests locally in
+121.74 seconds, including all ten reviewed 100-row batches; maximum observed preview
+and commit waits were 15.37 and 7.93 seconds in this unoptimized local run. These local
+measurements do not establish CI runner timing or release performance. Formatting and
+all-target native daemon Clippy passed. [Exact stage timings and failure context](issue-15/ci-watchdog-checks.json).
+
 ## Native acceptance still unrun
 
 | Required path | Current result |
