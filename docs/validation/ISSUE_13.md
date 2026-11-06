@@ -21,7 +21,7 @@ git diff --check
 git diff --exit-code 427f130e0ba56d40327451bd5ef28b963dffefb6 -- crates/storage/migrations
 ```
 
-Passed: fmt, warnings-as-errors workspace clippy, **156 Rust tests including doctests**,
+Full-suite run at `17b0d3f`: fmt, warnings-as-errors workspace clippy, **156 Rust tests including doctests**,
 locked workspace build, architecture (12 crates), migration validator (**2 immutable
 migrations**, explicit base preserved), **18 Python tests**, whitespace and unchanged
 migration-tree comparison. The real-DB adapter tests run in the workspace suite; the
@@ -210,6 +210,22 @@ workspace:156 Rust tests including both1,000-record SQLite round-trips and the c
 doctest,18 Python tests, fmt, locked clippy/build, architecture, immutable migrations against
 427f130 and whitespace all passed. Exact-head re-review/CI remain pending. No actual TeX
 rendering or user library was used.
+
+### Diagnostic-only overlap correction
+
+The `17b0d3f` independent recheck confirmed the P2 tie bug resolved, but found one P3:
+an existing tie warning suppressed the case-protection warning on the same field. Both
+serializers now deduplicate by field **and message**. A new real-DB regression checks
+`{DNA} at 50~nm`, before and after shared import, and duplicate protection evidence: each
+serializer returns exactly one warning of each kind.
+
+For this warning-only follow-up root reran fmt, locked workspace clippy/build,155 Rust
+tests including the new regression/doctest,18 Python tests, architecture, immutable
+migrations and whitespace. The two named1,000-record tests were deliberately not repeated
+locally after their successful full156-test run: serialized fields, parser and DB writes
+are unchanged. Exact-head CI still runs the unfiltered suite (157 expected tests), and a
+fresh independent check remains required before merge. This is not a current-head claim
+that the two filtered local tests ran again.
 
 - BibTeX/RIS transfer bibliography only. PDFs, attachments, annotations, collection/tag
   relationships and internal IDs need separate migration. Source provenance is reported,

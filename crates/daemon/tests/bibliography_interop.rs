@@ -35,6 +35,59 @@ fn public(text: &str) -> String {
         .collect()
 }
 #[test]
+fn same_field_reports_both_tie_and_protection_loss_exactly_once() {
+    let parsed = bibtex::parse(b"@article{a,title={{DNA} at 50~nm}}\n").unwrap();
+    let check = |p: &Paper| {
+        for serializer in [
+            &BibtexSerializer as &dyn BibliographySerializer,
+            &RisSerializer,
+        ] {
+            let encoded = serializer.encode(p).unwrap();
+            assert_eq!(
+                encoded
+                    .diagnostics
+                    .iter()
+                    .filter(|d| d.field == "title" && d.message.contains("case protection"))
+                    .count(),
+                1
+            );
+            assert_eq!(
+                encoded
+                    .diagnostics
+                    .iter()
+                    .filter(|d| d.field == "title" && d.message.contains("nonbreaking"))
+                    .count(),
+                1
+            );
+        }
+    };
+    let mut duplicate = paper(&parsed.candidates[0]);
+    duplicate.bibliography.extra_json.as_mut().unwrap()["bibtex"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!(["protection:title", "{DNA} at 50~nm"]));
+    check(&duplicate);
+    let mut db = LibraryDb::in_memory().unwrap();
+    let outcome = {
+        let mut service = ImportCoordinator::new(db.imports());
+        let preview = service
+            .preview(parsed.batch(0, 1, Default::default()).unwrap())
+            .unwrap();
+        service
+            .commit(ImportCommit {
+                preview_id: preview.id,
+                decisions: vec![ImportDecision {
+                    candidate_index: 0,
+                    action: ImportAction::Create,
+                }],
+            })
+            .unwrap()
+    };
+    let saved = db.papers().get(outcome.created[0]).unwrap().unwrap();
+    assert_eq!(saved.title, "DNA at 50 nm");
+    check(&saved);
+}
+#[test]
 fn bibtex_nonbreaking_ties_are_not_literal_tilde_glyphs() {
     let parsed = bibtex::parse(include_bytes!("../../../fixtures/bibtex/ties.bib")).unwrap();
     assert_eq!(parsed.candidates.len(), 2);

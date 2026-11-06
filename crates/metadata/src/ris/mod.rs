@@ -476,10 +476,16 @@ impl BibliographySerializer for RisSerializer {
                 .iter()
                 .filter_map(|v| v.get(0)?.as_str()?.strip_prefix("protection:"))
             {
-                if !encoded.diagnostics.iter().any(|d| d.field == field) {
+                let message = "Public RIS field cannot carry BibTeX case protection; raw syntax is retained only in cm-v1/extra_json";
+                if !encoded
+                    .diagnostics
+                    .iter()
+                    .any(|d| d.field == field && d.message == message)
+                {
                     encoded.diagnostics.push(cm_core::export::ExportDiagnostic {
-                        paper: Some(p.id), field: field.into(),
-                        message: "Public RIS field cannot carry BibTeX case protection; raw syntax is retained only in cm-v1/extra_json".into(),
+                        paper: Some(p.id),
+                        field: field.into(),
+                        message: message.into(),
                     });
                 }
             }
