@@ -19,6 +19,13 @@ Read-only Query/Organization/Membership/Attachments/settings/export requests ret
 live lookup. DOI and PDF tokens remain separate. No test/fault API or network policy
 change was added.
 
+Retained-review preservation here applies to navigation into Import review. If the user
+stays on Library and lets a DOI lookup finish before committing, its new manual preview
+may release the prior PDF preview and decisions, just as an explicit manual preview
+does. No commit is running then; this is safe replacement, not a promise to retain every
+review across all completed lookups. Save/ownership transitions may cancel a lookup
+without a separate cancellation status message (cosmetic limitation).
+
 ## Executable and scope
 
 Every screenshot01–18 in this run uses source `12a20771e19d98982e45300d9a6762bf8c6e20e6`
@@ -68,8 +75,11 @@ synthetic PDFs were used. No real user library or prior QA data was opened for w
 [Commands and output hashes](doi-guard-checks.json): locked workspace tests **227**,
 native desktop tests **43**, Python **28**, fmt, workspace and native Clippy with warnings
 denied, workspace/native builds, architecture and immutable migration checks all passed.
-The three new request-policy tests exercise the production dispatch helper and ticket
-filter predicate, using real independent cancellation tokens: Editor/Import/Pdf rejects
+The three new request-policy tests call the production dispatch helper and locally use
+the same ticket-filter predicate as native receive, with real independent cancellation
+tokens. They do not invoke native receive, its token-cancellation glue, reply-handler
+locked guards or the tab handler; that wiring was checked by code review, with the
+observed tab/commit path also exercised natively. In the tested state model, Editor/Import/Pdf rejects
 an already-queued DOI reply without cancelling PDF; unrelated reads retain it; review
 navigation invalidates the old ticket but permits a later fresh lookup. Existing
 separate-token and retained-review/worker tests also remain in the full suite.
@@ -96,3 +106,13 @@ actual network-disabled GUI test. Offline **DOI** fallback and a real failed-pag
 remain unverified additional robustness checks in the native checklist. No global
 network setting or synthetic production fault switch was introduced. #34 remains HELD;
 #23/#25 gates remain closed (the issues remain open).
+
+## Independent review of the ownership fix
+
+Opus 5.5/medium reviewed exact `83f3e8c`, traced all PDF operations and reverse-order
+guards, independently ran all three policy tests and three mutations (each detected),
+and found no P0–P2. The review also verified the clean automatic main merge, preserved
+pins/migrations, all evidence hashes and the three key screenshots. It did not run the
+GUI or full checks. Its two P3 evidence-clarity notes are addressed above; silent lookup
+cancellation on Save remains a documented cosmetic limitation. The subsequent change
+to this report is documentation-only, with no new runtime, test, binary or GUI claim.
