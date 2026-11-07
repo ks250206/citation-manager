@@ -1,0 +1,33 @@
+{
+  "base": "9e7e66e3e284a047096eae0707b823233206fe8c",
+  "locked_package_count": 636,
+  "protected_files": [
+    {
+      "path": "Cargo.toml",
+      "sha256": "5748e9644678d8de47474e38a19f496710faeb35c9735c0af5e08df898f17d71",
+      "base_equal": true
+    },
+    {
+      "path": "Cargo.lock",
+      "sha256": "7349aaa20b3c77266ce9df81fc85b2d59747be1491f3c620c2e1c286101270a9",
+      "base_equal": true
+    },
+    {
+      "path": "crates/storage/migrations/manifest.json",
+      "sha256": "321775b8518c47570ada5eb75c66abcf997b32109881120aacf3e98e6751f467",
+      "base_equal": true
+    },
+    {
+      "path": "crates/storage/migrations/20261106T090000Z_issue-8_001_papers.sql",
+      "sha256": "b0c824cfd8123b9d13b52eace3d577342a4031bfd06dce6657f474aac3b7367f",
+      "base_equal": true
+    },
+    {
+      "path": "crates/storage/migrations/20261106T090000Z_issue-8_002_relations.sql",
+      "sha256": "54f446f55adc0602c24d2489075b3e6ad6092907aaa31fc60863701d1b29cd9c",
+      "base_equal": true
+    }
+  ],
+  "measurement_source_hashes_verified": true,
+  "summary_json_and_csv_recomputed_exactly": true
+}

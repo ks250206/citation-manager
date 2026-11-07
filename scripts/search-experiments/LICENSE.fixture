@@ -1,0 +1,9 @@
+SPDX-License-Identifier: CC0-1.0
+
+The original synthetic corpus strings in fixture.json and hand-enumerated
+expectations in expected.json were authored for citation-manager issue #53.
+To the extent possible under law, the authors waive all copyright and related
+or neighboring rights to these synthetic fixtures under CC0 1.0 Universal.
+No third-party publication or user-library data is included.
+
+CC0 legal code: https://creativecommons.org/publicdomain/zero/1.0/legalcode
