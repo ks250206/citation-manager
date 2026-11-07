@@ -1,0 +1,214 @@
+{
+  "attach_phase": {
+    "method": "mode=ro; PRAGMA query_only=ON",
+    "phase": "human repeated drop into Attach; root clicked explicit Attach ready inspected files",
+    "source_head": "12a20771e19d98982e45300d9a6762bf8c6e20e6",
+    "executable_sha256": "4e7bcf996fc2089cb0454bba0da6731c1ff30391bf9f484694c3e5b0e377e423",
+    "papers": [
+      [
+        "01a1b358-fe4c-747f-b427-aadca331267d",
+        "XMP suggested synthetic title",
+        "10.1234/embedded"
+      ]
+    ],
+    "attachments": [
+      {
+        "paper": "01a1b358-fe4c-747f-b427-aadca331267d",
+        "name": "info.pdf",
+        "relative_path": "attachments/d5/ed/d5eda83d38476cfe08b58598b75001495efedbd11593548255a927856303bc92.pdf",
+        "sha256": "d5eda83d38476cfe08b58598b75001495efedbd11593548255a927856303bc92",
+        "bytes": 751
+      },
+      {
+        "paper": "01a1b358-fe4c-747f-b427-aadca331267d",
+        "name": "metadata.pdf",
+        "relative_path": "attachments/4f/2c/4f2c060f12cc17906795afd46d97611ee2e3fff598650a405c2569b56c69d38a.pdf",
+        "sha256": "4f2c060f12cc17906795afd46d97611ee2e3fff598650a405c2569b56c69d38a",
+        "bytes": 1387
+      }
+    ],
+    "integrity": [
+      [
+        "ok"
+      ]
+    ],
+    "foreign_key_check": [],
+    "screenshots": {
+      "01-human-info-drop-received-as-new.jpg": "5aabe5ad6148fbb5bb8b373abdf6854b4f90df998a4bdde4cc2443bbf41cda99",
+      "02-human-info-repeat-result.jpg": "afb65e9140e980cfed11e17f70b55d8d5a7011386fc0e486088846bb9cc33812",
+      "03-dropped-info-attachment-saved.jpg": "ea0f6f9d4bb662f0ff1add374550dedeb6dbedcebb8a0e1fe99aa5b40c29a97f"
+    }
+  },
+  "before_new_commit": {
+    "provenance": {
+      "method": "mode=ro; PRAGMA query_only=ON",
+      "note": "historical counts-only check; no per-row snapshot was captured at this phase",
+      "recorded_later": true
+    },
+    "observation": {
+      "phase": "scanned.pdf human drop inspected; before preview/Create/Commit",
+      "papers": 1,
+      "attachments": 2
+    }
+  },
+  "after_new_commit": {
+    "method": "mode=ro; PRAGMA query_only=ON; after actual Cmd+Q",
+    "source_head": "12a20771e19d98982e45300d9a6762bf8c6e20e6",
+    "executable_sha256": "4e7bcf996fc2089cb0454bba0da6731c1ff30391bf9f484694c3e5b0e377e423",
+    "papers": [
+      [
+        "01a1b358-fe4c-747f-b427-aadca331267d",
+        "XMP suggested synthetic title",
+        "10.1234/embedded"
+      ],
+      [
+        "01a1b385-009c-7651-83fb-37149139c430",
+        "scanned",
+        null
+      ]
+    ],
+    "attachments": [
+      {
+        "paper": "01a1b358-fe4c-747f-b427-aadca331267d",
+        "name": "info.pdf",
+        "relative_path": "attachments/d5/ed/d5eda83d38476cfe08b58598b75001495efedbd11593548255a927856303bc92.pdf",
+        "sha256": "d5eda83d38476cfe08b58598b75001495efedbd11593548255a927856303bc92",
+        "bytes": 751
+      },
+      {
+        "paper": "01a1b358-fe4c-747f-b427-aadca331267d",
+        "name": "metadata.pdf",
+        "relative_path": "attachments/4f/2c/4f2c060f12cc17906795afd46d97611ee2e3fff598650a405c2569b56c69d38a.pdf",
+        "sha256": "4f2c060f12cc17906795afd46d97611ee2e3fff598650a405c2569b56c69d38a",
+        "bytes": 1387
+      },
+      {
+        "paper": "01a1b385-009c-7651-83fb-37149139c430",
+        "name": "scanned.pdf",
+        "relative_path": "attachments/dc/a8/dca8e8e5f9dc8843cb4ffd546b33f3d458689221b4848436367d5063433d56c7.pdf",
+        "sha256": "dca8e8e5f9dc8843cb4ffd546b33f3d458689221b4848436367d5063433d56c7",
+        "bytes": 769
+      }
+    ],
+    "integrity": [
+      [
+        "ok"
+      ]
+    ],
+    "foreign_key_check": [],
+    "screenshots": {
+      "01-human-info-drop-received-as-new.jpg": "5aabe5ad6148fbb5bb8b373abdf6854b4f90df998a4bdde4cc2443bbf41cda99",
+      "02-human-info-repeat-result.jpg": "afb65e9140e980cfed11e17f70b55d8d5a7011386fc0e486088846bb9cc33812",
+      "03-dropped-info-attachment-saved.jpg": "ea0f6f9d4bb662f0ff1add374550dedeb6dbedcebb8a0e1fe99aa5b40c29a97f",
+      "04-human-scanned-new-drop.jpg": "a30d4cd1e40e4b0f7f3c93f014e0a0cd5f8086f26c14c2f4db978b25e62af6c4",
+      "05-scanned-preview-awaiting-decision.jpg": "1ee64e1928409cf85dcdff973503f51eaeaf3470b2c027915747be65ead55f4c",
+      "06-scanned-create-explicitly-chosen.jpg": "f4d6312f68bc2f5631a37fa5f45356f1ebc5782eb6f4bc781f809a6d857531f6",
+      "07-scanned-registration-committed.jpg": "86788bf8ae1115e93226e179c6ff9d7dd5f723c598d0224fba1c0a00c382de08",
+      "08-library-two-papers.jpg": "18cbb3f3e60f50ee7886eaec53fefde6932b2c11403ded3be623b07cdd89e74f"
+    }
+  },
+  "after_relaunch_correction": {
+    "method": "mode=ro; PRAGMA query_only=ON; after second actual Cmd+Q",
+    "papers": [
+      {
+        "id": "01a1b358-fe4c-747f-b427-aadca331267d",
+        "type": "journal-article",
+        "title": "XMP suggested synthetic title",
+        "abstract": null,
+        "year": null,
+        "publication_date": null,
+        "journal": null,
+        "volume": null,
+        "issue": null,
+        "pages": null,
+        "doi_normalized": "10.1234/embedded",
+        "url": null,
+        "language": null,
+        "citation_key": "SyntheticFirstXMP",
+        "extra_json": "{}",
+        "created_at": "2026-11-07T00:11:56.364Z",
+        "updated_at": "2026-11-07T00:11:56.364Z",
+        "deleted_at": null
+      },
+      {
+        "id": "01a1b385-009c-7651-83fb-37149139c430",
+        "type": "journal-article",
+        "title": "scanned — corrected after relaunch",
+        "abstract": null,
+        "year": null,
+        "publication_date": null,
+        "journal": null,
+        "volume": null,
+        "issue": null,
+        "pages": null,
+        "doi_normalized": null,
+        "url": null,
+        "language": null,
+        "citation_key": "Anonscanned",
+        "extra_json": "{}",
+        "created_at": "2026-11-07T01:00:00.540Z",
+        "updated_at": "2026-11-07T01:02:46.455Z",
+        "deleted_at": null
+      }
+    ],
+    "attachments": [
+      {
+        "paper": "01a1b358-fe4c-747f-b427-aadca331267d",
+        "name": "info.pdf",
+        "relative_path": "attachments/d5/ed/d5eda83d38476cfe08b58598b75001495efedbd11593548255a927856303bc92.pdf",
+        "sha256": "d5eda83d38476cfe08b58598b75001495efedbd11593548255a927856303bc92",
+        "bytes": 751
+      },
+      {
+        "paper": "01a1b358-fe4c-747f-b427-aadca331267d",
+        "name": "metadata.pdf",
+        "relative_path": "attachments/4f/2c/4f2c060f12cc17906795afd46d97611ee2e3fff598650a405c2569b56c69d38a.pdf",
+        "sha256": "4f2c060f12cc17906795afd46d97611ee2e3fff598650a405c2569b56c69d38a",
+        "bytes": 1387
+      },
+      {
+        "paper": "01a1b385-009c-7651-83fb-37149139c430",
+        "name": "scanned.pdf",
+        "relative_path": "attachments/dc/a8/dca8e8e5f9dc8843cb4ffd546b33f3d458689221b4848436367d5063433d56c7.pdf",
+        "sha256": "dca8e8e5f9dc8843cb4ffd546b33f3d458689221b4848436367d5063433d56c7",
+        "bytes": 769
+      }
+    ],
+    "integrity": [
+      [
+        "ok"
+      ]
+    ],
+    "foreign_key_check": []
+  },
+  "first_attempt": {
+    "provenance": {
+      "method": "original root read-only SQLite observation (mode=ro; PRAGMA query_only=ON)",
+      "recorded_later": true,
+      "raw_file": "dnd-first-observation.json",
+      "note": "method metadata added after review; counts/IDs/hashes below are the original retained observation"
+    },
+    "observation": {
+      "phase": "human reported info.pdf drop; CUA observed RegisterNew inspection, not AttachExisting",
+      "papers": [
+        [
+          "01a1b358-fe4c-747f-b427-aadca331267d",
+          "XMP suggested synthetic title",
+          "10.1234/embedded"
+        ]
+      ],
+      "attachments": [
+        [
+          "metadata.pdf",
+          "4F2C060F12CC17906795AFD46D97611EE2E3FFF598650A405C2569B56C69D38A",
+          1387
+        ]
+      ],
+      "integrity": [
+        [
+          "ok"
+        ]
+      ]
+    }
+  }
+}

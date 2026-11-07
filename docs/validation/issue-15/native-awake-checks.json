@@ -1,0 +1,158 @@
+[
+  {
+    "label": "fmt",
+    "command": [
+      "cargo",
+      "fmt",
+      "--all",
+      "--",
+      "--check"
+    ],
+    "exit_code": 0,
+    "seconds": 0.5092204159591347
+  },
+  {
+    "label": "clippy",
+    "command": [
+      "cargo",
+      "clippy",
+      "--workspace",
+      "--all-targets",
+      "--locked",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "exit_code": 0,
+    "seconds": 1.4490059999516234
+  },
+  {
+    "label": "native-clippy",
+    "command": [
+      "cargo",
+      "clippy",
+      "--workspace",
+      "--all-targets",
+      "--features",
+      "cm-daemon/desktop-bootstrap",
+      "--locked",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "exit_code": 0,
+    "seconds": 2.65645308396779
+  },
+  {
+    "label": "workspace-tests",
+    "command": [
+      "cargo",
+      "test",
+      "--workspace",
+      "--locked"
+    ],
+    "exit_code": 0,
+    "seconds": 278.93925420905
+  },
+  {
+    "label": "native-desktop-tests",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "cm-desktop",
+      "--features",
+      "native-gpui",
+      "--locked"
+    ],
+    "exit_code": 0,
+    "seconds": 12.61792437499389
+  },
+  {
+    "label": "workspace-build",
+    "command": [
+      "cargo",
+      "build",
+      "--workspace",
+      "--locked"
+    ],
+    "exit_code": 0,
+    "seconds": 0.7412699999986216
+  },
+  {
+    "label": "architecture",
+    "command": [
+      "python3",
+      "scripts/check_architecture.py"
+    ],
+    "exit_code": 0,
+    "seconds": 0.08165841607842594
+  },
+  {
+    "label": "migrations",
+    "command": [
+      "python3",
+      "scripts/check_migrations.py",
+      "--base",
+      "origin/main"
+    ],
+    "exit_code": 0,
+    "seconds": 0.1394453749526292
+  },
+  {
+    "label": "python",
+    "command": [
+      "python3",
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      "scripts",
+      "-p",
+      "test_*.py",
+      "-v"
+    ],
+    "exit_code": 0,
+    "seconds": 0.2182237079832703
+  },
+  {
+    "label": "diff",
+    "command": [
+      "git",
+      "diff",
+      "--check"
+    ],
+    "exit_code": 0,
+    "seconds": 0.032334125018678606
+  },
+  {
+    "label": "native-build",
+    "command": [
+      "cargo",
+      "build",
+      "-p",
+      "cm-daemon",
+      "--features",
+      "desktop-bootstrap",
+      "--locked"
+    ],
+    "exit_code": 0,
+    "log": "/private/tmp/cm-pr45-native-425-rz9fto1b/evidence/final-native-build.txt"
+  },
+  {
+    "label": "pdf-runtime-unchanged-source",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "cm-pdf",
+      "--features",
+      "runtime",
+      "--locked"
+    ],
+    "exit_code": 0,
+    "tests": 8,
+    "log": "/private/tmp/cm-pr45-native-425-rz9fto1b/evidence/pdf-runtime-tests.txt",
+    "runtime": "/private/tmp/cm-pr45-native-425-rz9fto1b/Citation Manager Native Acceptance.app/Contents/Frameworks/libpdfium.dylib"
+  }
+]

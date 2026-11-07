@@ -1,0 +1,3 @@
+    Checking cm-desktop v0.1.0 (/Users/ryojikanno/.t3/worktrees/citation-manager/t3-425df78a/crates/desktop)
+    Checking cm-daemon v0.1.0 (/Users/ryojikanno/.t3/worktrees/citation-manager/t3-425df78a/crates/daemon)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.47s

@@ -1,0 +1,228 @@
+{
+  "tested_runtime_source_head": "9ea22dd2d343cfa921ba12377cd24ba62500adbf",
+  "main": "5f0fb1dfa139afc567a492a309c1f5f4728ffbed",
+  "changes": "Continuation adds evidence/docs only; normally merged main5f0fb1d pure command/keymap registrations, no native wiring; all636 pins and SQL preserved.",
+  "checks": [
+    {
+      "name": "native-build",
+      "command": "cargo build --locked -p cm-daemon --features desktop-bootstrap --bin citation-manager",
+      "exit_code": 0,
+      "log": "/private/tmp/cm-pr45-348-build.log",
+      "sha256": "6e0e55ddd0c257c47279915a270f12a377e2e11f49d44af9cb8ef0451ed3944e"
+    },
+    {
+      "name": "fmt",
+      "command": "cargo fmt --all -- --check",
+      "exit_code": 0,
+      "log": "/private/tmp/cm-pr45-348-fmt.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "architecture",
+      "command": "python3 scripts/check_architecture.py",
+      "exit_code": 0,
+      "log": "/private/tmp/cm-pr45-348-architecture.log",
+      "sha256": "7a5f780819b4ec02a7b577aa8979ef8a6a64326d56e33c0d753e8a988f989109"
+    },
+    {
+      "name": "migrations",
+      "command": "python3 scripts/check_migrations.py --base origin/main",
+      "exit_code": 0,
+      "log": "/private/tmp/cm-pr45-348-migrations.log",
+      "sha256": "92423d36fa24dfbf57562970b44f53b1abee88b95621c71f456abcbca257409a"
+    },
+    {
+      "name": "python",
+      "command": "python3 -m unittest discover -s scripts -p test_*.py -v",
+      "exit_code": 0,
+      "log": "/private/tmp/cm-pr45-348-python.log",
+      "sha256": "96e452646f7feaf7d5b42afe80b74b5eeefdb1bee1c945de19959680589285ef"
+    }
+  ],
+  "artifact_integrity": {
+    "retained_CUA_JPEGs": 60,
+    "published_originals": 12,
+    "all_screenshot_hashes_match": true,
+    "all_inputs_unchanged": true,
+    "managed_attachment_source_blob_pairs_equal": true,
+    "runtime_sources_match_prelaunch_snapshot": true,
+    "executable_matches_prelaunch_sha256": true,
+    "lock_packages": 636,
+    "all_package_identities_checksums_unchanged": true,
+    "both_SQL_and_manifest_unchanged": true,
+    "both_phase_runtime_snapshots_verified": true,
+    "all636_match_starting_head_and_integrated_main": true
+  },
+  "normal_owned_app_exit_code": 0,
+  "remaining_native_gates": [
+    "external_drag_drop",
+    "offline_doi",
+    "simultaneous_cancellation",
+    "failed_page_retry"
+  ],
+  "initial_phase_main": "9e7e66e3e284a047096eae0707b823233206fe8c",
+  "integrated_runtime_source_head": "a5a6f3194a6077758e778e099c9d6007af39dc95",
+  "integrated_checks": [
+    {
+      "name": "fmt",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.59,
+      "log": "/private/var/folders/y1/84n75pz56qg1b36t882r8n900000gn/T/cm-pr45-native-348-v4ut62vv/evidence/integrated-fmt.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--workspace",
+        "--all-targets",
+        "--locked",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 15.83,
+      "log": "/private/var/folders/y1/84n75pz56qg1b36t882r8n900000gn/T/cm-pr45-native-348-v4ut62vv/evidence/integrated-clippy.log",
+      "sha256": "3588ee673e345dc33d9fb18dc24f286bf0de2321888e0970e2f49c6b688743c2"
+    },
+    {
+      "name": "native-clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--workspace",
+        "--all-targets",
+        "--features",
+        "cm-daemon/desktop-bootstrap",
+        "--locked",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 15.59,
+      "log": "/private/var/folders/y1/84n75pz56qg1b36t882r8n900000gn/T/cm-pr45-native-348-v4ut62vv/evidence/integrated-native-clippy.log",
+      "sha256": "1ce87c30ed6bbb756d8cba32ad5aec5d481199435e84c0152582ca8f0a03a59e"
+    },
+    {
+      "name": "workspace-tests",
+      "command": [
+        "cargo",
+        "test",
+        "--workspace",
+        "--locked"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 318.73,
+      "log": "/private/var/folders/y1/84n75pz56qg1b36t882r8n900000gn/T/cm-pr45-native-348-v4ut62vv/evidence/integrated-workspace-tests.log",
+      "sha256": "3528dc43c7207672185dea0b8ad0c96111eb8a040c0b4fe6f7110aa39b724802"
+    },
+    {
+      "name": "native-desktop-tests",
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "cm-desktop",
+        "--features",
+        "native-gpui",
+        "--locked"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 26.8,
+      "log": "/private/var/folders/y1/84n75pz56qg1b36t882r8n900000gn/T/cm-pr45-native-348-v4ut62vv/evidence/integrated-native-desktop-tests.log",
+      "sha256": "fea3e5df2a871b6dd4be812795f5850c1a809578970e583ff8b536e3d84931ae"
+    },
+    {
+      "name": "workspace-build",
+      "command": [
+        "cargo",
+        "build",
+        "--workspace",
+        "--locked"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 1.0,
+      "log": "/private/var/folders/y1/84n75pz56qg1b36t882r8n900000gn/T/cm-pr45-native-348-v4ut62vv/evidence/integrated-workspace-build.log",
+      "sha256": "b295cfeaaf8e1f948fdce11e8289d785a1983d9f746c60c322cdc557e46121d1"
+    },
+    {
+      "name": "architecture",
+      "command": [
+        "python3",
+        "scripts/check_architecture.py"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.08,
+      "log": "/private/var/folders/y1/84n75pz56qg1b36t882r8n900000gn/T/cm-pr45-native-348-v4ut62vv/evidence/integrated-architecture.log",
+      "sha256": "7a5f780819b4ec02a7b577aa8979ef8a6a64326d56e33c0d753e8a988f989109"
+    },
+    {
+      "name": "migrations",
+      "command": [
+        "python3",
+        "scripts/check_migrations.py",
+        "--base",
+        "origin/main"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.14,
+      "log": "/private/var/folders/y1/84n75pz56qg1b36t882r8n900000gn/T/cm-pr45-native-348-v4ut62vv/evidence/integrated-migrations.log",
+      "sha256": "92423d36fa24dfbf57562970b44f53b1abee88b95621c71f456abcbca257409a"
+    },
+    {
+      "name": "python",
+      "command": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts",
+        "-p",
+        "test_*.py",
+        "-v"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.27,
+      "log": "/private/var/folders/y1/84n75pz56qg1b36t882r8n900000gn/T/cm-pr45-native-348-v4ut62vv/evidence/integrated-python.log",
+      "sha256": "aaac8b44e9c1ae35a0f9c696ee54d5a303e8cf4f3eb3dbf24e49ef14cf67f4f1"
+    },
+    {
+      "name": "native-build",
+      "command": "cargo build --locked -p cm-daemon --features desktop-bootstrap --bin citation-manager",
+      "exit_code": 0,
+      "log": "/private/tmp/cm-pr45-348-integrated-build.log",
+      "sha256": "5380e4506774f8fce1f748d8d1b8ac2116b5a522e54dfe96e5c4bf0fe9d481f9"
+    },
+    {
+      "name": "locked-workspace-update",
+      "command": "cargo update --workspace --locked --offline",
+      "exit_code": 0,
+      "log": "/private/tmp/cm-pr45-348-integrated-workspace-lock.log",
+      "sha256": "6058561fa3ea5a2739970493924c7c53001ddc2e70d74421b01066a5db496b87"
+    }
+  ],
+  "normal_owned_app_exit_codes": [
+    0,
+    0
+  ],
+  "not_rerun": "Earlier ten-batch1000 import not repeated. Four native gates remain unproven. Final-head CI and independent review are separate.",
+  "lock_regeneration": {
+    "command": "cargo generate-lockfile --offline",
+    "exit_code": 0,
+    "preserved_pins": false,
+    "proposed_changes": 9,
+    "result_discarded_exact_previous_bytes_restored": true,
+    "audit": "native-continuation-lock-regeneration-audit.json"
+  }
+}

@@ -1,0 +1,365 @@
+{
+  "checked_at_utc": "2026-11-06T19:47:19.412891+00:00",
+  "base": "fd50af1fe385c30b8581f06c90247630f27caf55",
+  "published_parent": "0afdee454b8cc33d0f310bdf3b48f5f2820aac76",
+  "workspace": "/Users/ryojikanno/.t3/worktrees/citation-manager/t3-6bedd541",
+  "platform": "macOS-27.2-arm64-arm-64bit-Mach-O",
+  "artifact_root": "/private/tmp/cm-pr45-baseline-compare-d0w783e3",
+  "baseline_comparison": {
+    "root": "/private/tmp/cm-pr45-baseline-compare-d0w783e3",
+    "baseline": {
+      "source_head": "fd50af1fe385c30b8581f06c90247630f27caf55",
+      "bundle": "/private/tmp/cm-pr45-baseline-compare-d0w783e3/Baseline.app",
+      "library": "/private/tmp/cm-pr45-baseline-compare-d0w783e3/baseline-library",
+      "settings": "/private/tmp/cm-pr45-baseline-compare-d0w783e3/baseline-library/ui-settings.json",
+      "sha256": "4aa2f64ab129ca9c309051cd1d3aa1355ce6b01fd711cb778c8f581bacbcdf56",
+      "owned_pids": [
+        47037
+      ],
+      "cua": {
+        "app_path": "Computer Use server error -10005: cgWindowNotFound",
+        "bundle_id": "Computer Use server error -10005: cgWindowNotFound",
+        "listApps_isRunning": true,
+        "GUI_verified": false
+      },
+      "process_stopped": true
+    },
+    "observations": [],
+    "pdfium_sha256": "8d1e46a6dbe32d7cb95279ab3def2e71e557a3d4cc49162453afa3e3b250dc5e",
+    "current": {
+      "source_head": "0afdee454b8cc33d0f310bdf3b48f5f2820aac76",
+      "bundle": "/private/tmp/cm-pr45-baseline-compare-d0w783e3/Current.app",
+      "library": "/private/tmp/cm-pr45-baseline-compare-d0w783e3/current-library",
+      "settings": "/private/tmp/cm-pr45-baseline-compare-d0w783e3/current-library/ui-settings.json",
+      "sha256": "f7d3d75444ce0b31562db4e2afc858dc216f78f349ca948bd904155ea058e6ab",
+      "owned_pids": [
+        47685
+      ],
+      "cua": {
+        "app_path": "Computer Use server error -10005: cgWindowNotFound",
+        "bundle_id": "Computer Use server error -10005: cgWindowNotFound",
+        "listApps_isRunning": true,
+        "GUI_verified": false
+      },
+      "process_stopped": true
+    },
+    "diagnostic": {
+      "instrumented": true,
+      "not_GUI_acceptance": true,
+      "bundle": "/private/tmp/cm-pr45-baseline-compare-d0w783e3/Diagnostic.app",
+      "sha256": "483737460caebca199a5a7acdc98c663305065a566eaaad4f98ecc999db7a205",
+      "owned_pids": [
+        49744
+      ],
+      "stderr": [
+        "qa-diagnostic: entering application",
+        "qa-diagnostic: launch callback",
+        "qa-diagnostic: render=0 pending=3 rows=0",
+        "qa-diagnostic: open_window returned",
+        "qa-diagnostic: activate returned",
+        "qa-diagnostic: next-frame callback",
+        "qa-diagnostic: render=1 pending=3 rows=0",
+        "qa-diagnostic: receive ticket=1 pending=3",
+        "qa-diagnostic: receive ticket=2 pending=2",
+        "qa-diagnostic: receive ticket=3 pending=2",
+        "qa-diagnostic: receive ticket=4 pending=1",
+        "qa-diagnostic: receive ticket=5 pending=1"
+      ],
+      "process_stopped": true
+    },
+    "pre_fix_rebuilt_binary_sha256": "ce0c1a4bca250ad0b2ddd02b0c0427e6c1a09ae5f29223c3490a1dd1abcc4717",
+    "instrumentation_removed": true,
+    "owned_test_processes_remaining": [],
+    "post_fix": {
+      "source_parent": "0afdee454b8cc33d0f310bdf3b48f5f2820aac76",
+      "source_hashes": {
+        "crates/desktop/src/attachments.rs": "d49238f1ce6cafe48255e40ae026643caaea90093abf6ddb7f227d4bffb7dd60",
+        "crates/desktop/src/import_dialogs.rs": "cf607c034fc08033bdb183354ed478509852707d91ac9e87742e652778ea5736",
+        "crates/desktop/src/native/import_ui.rs": "6c58fb0ba7c8e13b0816a5170ed3d0140b7cac47a0b847bdd3a27f6db93e17f6",
+        "crates/desktop/src/native/library_ui.rs": "e3c2fac74f942eb7325c05e2a34d1383f520ba7ec784ed6867b7fb99d9ff2ebc",
+        "crates/desktop/src/native/mod.rs": "402d83669c9fecf371254d059abe72603b4e9f9e5b8f53d177193adcdb2ab163",
+        "crates/desktop/src/native/pdf_ui.rs": "6cf277c2d7206000bde6dbd291f4b69ebda2b7b1bd74c7f1132164f0f5ac6777",
+        "crates/desktop/tests/import_flow_state.rs": "590e1cc7119181389c661e69cb13c25d740e9598de0d03bb7a5596fb618db038",
+        "crates/daemon/tests/mixed_import_review.rs": "4a2543a679b5b10b37f7bf63e89f6348c184482420d5ee1d713d692a11ea7db3"
+      },
+      "bundle": "/private/tmp/cm-pr45-baseline-compare-d0w783e3/Final.app",
+      "library": "/private/tmp/cm-pr45-baseline-compare-d0w783e3/final-library",
+      "settings": "/private/tmp/cm-pr45-baseline-compare-d0w783e3/final-library/ui-settings.json",
+      "sha256": "064508b847355abc412ffa68b5ce518f82dfc4d87bda12bda3536d982f388966",
+      "pdfium_sha256": "8d1e46a6dbe32d7cb95279ab3def2e71e557a3d4cc49162453afa3e3b250dc5e",
+      "instrumentation_removed": true,
+      "owned_pids": [
+        69662
+      ],
+      "cua": {
+        "app_path": "Computer Use server error -10005: cgWindowNotFound",
+        "bundle_id": "Computer Use server error -10005: cgWindowNotFound",
+        "listApps_isRunning": true,
+        "GUI_verified": false,
+        "screenshots_obtained": false
+      },
+      "process_stopped": true
+    }
+  },
+  "checks": [
+    {
+      "name": "fmt",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.53,
+      "log": "fix-fmt.log",
+      "passed_test_count": null
+    },
+    {
+      "name": "workspace-clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--workspace",
+        "--all-targets",
+        "--locked",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 4.14,
+      "log": "fix-workspace-clippy.log",
+      "passed_test_count": null
+    },
+    {
+      "name": "workspace-tests",
+      "command": [
+        "cargo",
+        "test",
+        "--workspace",
+        "--locked"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 304.35,
+      "log": "fix-workspace-tests.log",
+      "passed_test_count": 169
+    },
+    {
+      "name": "workspace-build",
+      "command": [
+        "cargo",
+        "build",
+        "--workspace",
+        "--locked"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.94,
+      "log": "fix-workspace-build.log",
+      "passed_test_count": null
+    },
+    {
+      "name": "native-check",
+      "command": [
+        "cargo",
+        "check",
+        "-p",
+        "cm-desktop",
+        "--features",
+        "native-gpui",
+        "--locked"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 7.65,
+      "log": "fix-native-check.log",
+      "passed_test_count": null
+    },
+    {
+      "name": "fmt",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.52,
+      "log": "fix-fmt.log",
+      "passed_test_count": null
+    },
+    {
+      "name": "native-clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "-p",
+        "cm-daemon",
+        "-p",
+        "cm-desktop",
+        "--all-targets",
+        "--features",
+        "cm-daemon/desktop-bootstrap",
+        "--locked",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 2.2,
+      "log": "fix-native-clippy.log",
+      "passed_test_count": null
+    },
+    {
+      "name": "native-tests",
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "cm-daemon",
+        "-p",
+        "cm-desktop",
+        "--features",
+        "cm-daemon/desktop-bootstrap",
+        "--locked"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 280.44,
+      "log": "fix-native-tests.log",
+      "passed_test_count": 58
+    },
+    {
+      "name": "native-build",
+      "command": [
+        "cargo",
+        "build",
+        "-p",
+        "cm-daemon",
+        "--bin",
+        "citation-manager",
+        "--features",
+        "desktop-bootstrap",
+        "--locked"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 1.9,
+      "log": "fix-native-build.log",
+      "passed_test_count": null
+    },
+    {
+      "name": "bindings-check",
+      "command": [
+        "cargo",
+        "check",
+        "-p",
+        "cm-pdf",
+        "--features",
+        "bindings-check",
+        "--locked"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 3.99,
+      "log": "fix-bindings-check.log",
+      "passed_test_count": null
+    },
+    {
+      "name": "pdf-clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "-p",
+        "cm-pdf",
+        "--all-targets",
+        "--features",
+        "runtime",
+        "--locked",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 1.56,
+      "log": "fix-pdf-clippy.log",
+      "passed_test_count": null
+    },
+    {
+      "name": "pdf-tests",
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "cm-pdf",
+        "--features",
+        "runtime",
+        "--locked"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 23.05,
+      "log": "fix-pdf-tests.log",
+      "passed_test_count": 8
+    },
+    {
+      "name": "architecture",
+      "command": [
+        "python3",
+        "scripts/check_architecture.py"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.12,
+      "log": "fix-architecture.log",
+      "passed_test_count": null
+    },
+    {
+      "name": "migrations",
+      "command": [
+        "python3",
+        "scripts/check_migrations.py",
+        "--base",
+        "fd50af1fe385c30b8581f06c90247630f27caf55"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.25,
+      "log": "fix-migrations.log",
+      "passed_test_count": null
+    },
+    {
+      "name": "python-tests",
+      "command": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts",
+        "-p",
+        "test_*.py",
+        "-v"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.23,
+      "log": "fix-python-tests.log",
+      "passed_test_count": 19
+    }
+  ],
+  "unchanged_dependency_identities_and_checksums": 636,
+  "reserved_files_unchanged": [
+    "crates/desktop/src/library.rs",
+    "crates/desktop/tests/workbench_state.rs",
+    "Cargo.lock",
+    "crates/storage/migrations"
+  ],
+  "native_GUI_acceptance": "BLOCKED: baseline, published head and final corrected binary all return native CUA cgWindowNotFound; no GUI action/AX/screenshot evidence",
+  "independent_review": "Original 0af: P0/P1 none, P2 x3 addressed in this follow-up; updated-source independent review pending",
+  "remaining_root_work": [
+    "P3 unsaved draft navigation",
+    "P3 export default directory",
+    "P3 paging model/failure hook (root-owned files untouched)"
+  ],
+  "CI": "One delivery inspection after push, reported separately; no watch/merge",
+  "notes": [
+    "Native tests include all existing thousand-record tests and the new mixed-flow worker test; these remain headless evidence.",
+    "Temporary diagnostic on_next_frame explicitly scheduled a frame; its callback/render logs are not visible-window proof.",
+    "Workspace clippy/tests/build were followed by native-only callback formatting and the feature-gated worker test extension; final native check/clippy/tests/build cover these. No production source changed after the final native checks."
+  ]
+}

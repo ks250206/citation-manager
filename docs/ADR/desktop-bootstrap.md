@@ -67,3 +67,12 @@ Saving. The UI does not claim a completed save until Saved locally appears. Clos
 leaves the outcome unknown (SQLite commits atomically); reopen and inspect the record before
 retrying. The worker only drains on last-client drop while its process remains alive; app quit
 does not join it. A future quit-confirmation UI belongs with the full editor, not this bootstrap.
+
+## #15 additive transition
+
+The bootstrap view hosts are now replaced by the [library workbench](library-workbench.md).
+The same off-by-default macOS composition edge also enables `pdf-metadata` on the daemon,
+which enables the existing PDF runtime only there. The architecture validator still checks
+exact wiring and rejects default-enabled/reverse/driver leakage. UI uses real #12 query and
+feature-local owned requests; retained #33 state and all IO remain on workers. The #15 native
+CUA blocker is not covered by earlier #10 screenshots or by a successful final build.

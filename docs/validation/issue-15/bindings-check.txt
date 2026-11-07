@@ -1,0 +1,4 @@
+    Checking cm-domain v0.1.0 (/Users/ryojikanno/.t3/worktrees/citation-manager/t3-6fa2df7e/crates/domain)
+    Checking cm-core v0.1.0 (/Users/ryojikanno/.t3/worktrees/citation-manager/t3-6fa2df7e/crates/core)
+    Checking cm-pdf v0.1.0 (/Users/ryojikanno/.t3/worktrees/citation-manager/t3-6fa2df7e/crates/pdf)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.30s

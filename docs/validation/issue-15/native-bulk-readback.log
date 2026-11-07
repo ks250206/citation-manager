@@ -1,0 +1,10 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.94s
+     Running tests/zz_native_readback.rs (target/debug/deps/zz_native_readback-9aa9e41493f67ffa)
+
+running 1 test
+all.ris: 1000 unique records, normalized title/bibliography/external IDs equal, no error diagnostics
+selected.ris: 1 unique records, normalized title/bibliography/external IDs equal, no error diagnostics
+collection.ris: 1 unique records, normalized title/bibliography/external IDs equal, no error diagnostics
+test actual_native_exports_match_the_imported_fixture ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.93s
