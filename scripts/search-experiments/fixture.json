@@ -1,0 +1,157 @@
+{
+  "license": "CC0-1.0",
+  "provenance": "Original synthetic strings authored for issue #53; no papers, PDFs, user data or imported records. Fixed enumeration, no random generator. IDs and bucket labels are experiment-only. Review correction separates width/kana/accent variants into different documents so changes in normalization affect hit sets.",
+  "literal_rule": "ASCII A-Z fold only, then exact UTF-8 substring; no Unicode case folding, NFC, NFKC, accent or width normalization. Query length is Unicode scalar count, not bytes or graphemes.",
+  "documents": [
+    {
+      "id": 1,
+      "bucket": "materials",
+      "text": "固体電解質リチウム"
+    },
+    {
+      "id": 2,
+      "bucket": "materials",
+      "text": "固体 電解質 リチウム"
+    },
+    {
+      "id": 3,
+      "bucket": "materials",
+      "text": "全固体電池 Li-ion conductivity"
+    },
+    {
+      "id": 4,
+      "bucket": "materials",
+      "text": "Lithium ion battery"
+    },
+    {
+      "id": 5,
+      "bucket": "materials",
+      "text": "LITHIUM-ion battery"
+    },
+    {
+      "id": 6,
+      "bucket": "language",
+      "text": "Café"
+    },
+    {
+      "id": 7,
+      "bucket": "language",
+      "text": "ＡＢＣ"
+    },
+    {
+      "id": 8,
+      "bucket": "language",
+      "text": "ｶﾞﾗｽ"
+    },
+    {
+      "id": 9,
+      "bucket": "materials",
+      "text": "電 池 電池"
+    },
+    {
+      "id": 10,
+      "bucket": "materials",
+      "text": "界面電池性能"
+    },
+    {
+      "id": 11,
+      "bucket": "language",
+      "text": "alpha beta gamma"
+    },
+    {
+      "id": 12,
+      "bucket": "language",
+      "text": "alpha, beta gamma"
+    },
+    {
+      "id": 13,
+      "bucket": "language",
+      "text": "beta alpha gamma"
+    },
+    {
+      "id": 14,
+      "bucket": "language",
+      "text": "x_y 10.1234/Ab-C \"quoted\" 100% literal_"
+    },
+    {
+      "id": 15,
+      "bucket": "language",
+      "text": "Straße STRASSE Ω ω"
+    },
+    {
+      "id": 16,
+      "bucket": "materials",
+      "text": "電池界面 固体電解質"
+    },
+    {
+      "id": 17,
+      "bucket": "outside",
+      "text": "電池 lithium ion battery"
+    },
+    {
+      "id": 18,
+      "bucket": "materials",
+      "text": "a ab abc"
+    },
+    {
+      "id": 19,
+      "bucket": "outside",
+      "text": "Nothing matches here."
+    },
+    {
+      "id": 20,
+      "bucket": "language",
+      "text": "é"
+    },
+    {
+      "id": 21,
+      "bucket": "language",
+      "text": "İ I i ı"
+    },
+    {
+      "id": 22,
+      "bucket": "materials",
+      "text": "電池"
+    },
+    {
+      "id": 23,
+      "bucket": "language",
+      "text": "Ω CAFÉ Straße"
+    },
+    {
+      "id": 24,
+      "bucket": "language",
+      "text": "ABC"
+    },
+    {
+      "id": 25,
+      "bucket": "language",
+      "text": "abc"
+    },
+    {
+      "id": 26,
+      "bucket": "language",
+      "text": "ガラス"
+    },
+    {
+      "id": 27,
+      "bucket": "language",
+      "text": "ガラス"
+    },
+    {
+      "id": 28,
+      "bucket": "language",
+      "text": "カ ラス"
+    },
+    {
+      "id": 29,
+      "bucket": "language",
+      "text": "é"
+    },
+    {
+      "id": 30,
+      "bucket": "language",
+      "text": "café"
+    }
+  ]
+}

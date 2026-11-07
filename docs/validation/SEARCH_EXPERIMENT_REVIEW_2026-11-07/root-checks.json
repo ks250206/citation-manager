@@ -1,0 +1,106 @@
+{
+  "measured_source": "ca1df7662982f9e877144695344075efe6ce2803",
+  "note": "After the clean-source measurement, only report/evidence files changed. Full workspace count includes the compile-fail doctest and three SQLite example tests.",
+  "workspace_tests_passed": 189,
+  "python_tests_passed": 27,
+  "commands": [
+    {
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--check"
+      ],
+      "exit": 0,
+      "seconds": 0.509,
+      "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "cargo",
+        "clippy",
+        "--workspace",
+        "--all-targets",
+        "--locked",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit": 0,
+      "seconds": 2.795,
+      "output_sha256": "28e3cff276b84b1031daf45bb2abd1b5fe160dc6e6e46e20ebcabb1de9aacddf"
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "--workspace",
+        "--locked"
+      ],
+      "exit": 0,
+      "seconds": 149.35,
+      "output_sha256": "658f9da533b6c5ecb4a7a081523bc98e703366b461bec9c7230fe36b972c3697"
+    },
+    {
+      "command": [
+        "cargo",
+        "build",
+        "--workspace",
+        "--locked"
+      ],
+      "exit": 0,
+      "seconds": 0.992,
+      "output_sha256": "d3d730c8dc6554928e724e0acba95ac6cadae178e7d9f20b90b6abb197de6d7a"
+    },
+    {
+      "command": [
+        "python3",
+        "scripts/check_architecture.py"
+      ],
+      "exit": 0,
+      "seconds": 0.075,
+      "output_sha256": "7a5f780819b4ec02a7b577aa8979ef8a6a64326d56e33c0d753e8a988f989109"
+    },
+    {
+      "command": [
+        "python3",
+        "scripts/check_migrations.py",
+        "--base",
+        "9e7e66e3e284a047096eae0707b823233206fe8c"
+      ],
+      "exit": 0,
+      "seconds": 0.133,
+      "output_sha256": "92423d36fa24dfbf57562970b44f53b1abee88b95621c71f456abcbca257409a"
+    },
+    {
+      "command": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts",
+        "-p",
+        "test_*.py"
+      ],
+      "exit": 0,
+      "seconds": 0.193,
+      "output_sha256": "c81ddf83e695aa392de8695b40c4e5ad2df9705f48361478d38914021df7b9a2"
+    },
+    {
+      "command": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "exit": 0,
+      "seconds": 0.031,
+      "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "summary_csv_regenerated_exactly": true,
+  "source_environment_fixture_hashes_verified": true,
+  "timed_calls": 2139,
+  "pins_preserved": 636,
+  "production_src_and_migrations_unchanged": true
+}
