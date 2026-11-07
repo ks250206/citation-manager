@@ -183,7 +183,7 @@ all-target native daemon Clippy passed. [Exact stage timings and failure context
 | Classification, combined filters, multiselect, paging, loading/empty/error, trash/restore | Observed; Title/Year/ID/created/updated sorting observed; continuation observed collection rename/move/delete and child promotion; failed-query paging/retry remains unverified |
 | Manual preview/Create, exact duplicate selected-title Merge, error-row Skip | Observed; invalid candidate could not Create |
 | DOI lookup/cancel | Actual loading/cancel and public provider response into uncommitted review observed; no DOI paper saved; offline fallback remains unverified |
-| Native Open/Save pickers, exports/readback | PDF Attach/New pickers, All RIS 1000 / selected BibTeX 2 / direct collection RIS 1 passed; real D&D remains unverified |
+| Native Open/Save pickers, exports/readback | PDF Attach/New pickers, All RIS 1000 / selected BibTeX 2 / direct collection RIS 1 passed; subsequent assisted native Finder D&D passed for both Attach and NEW, with explicit save/approval, restart and later metadata correction (see follow-up) |
 | PDF folder/metadata/fallback/progress/cancel/retry/partial success | Recursive5/nonrecursive 4, digest duplicate, symlink/non-PDF, malformed/encrypted fallback forms; cancel20/500 then retry500; attach cancel retained 9, explicit resume completed 500; retained-new-paper failure/retry observed; continuation observed 33MiB parser fallback and257MiB exclusion |
 | Layout/settings and attached-paper correction | Actual quit/relaunch, tabs/reading/columns/panes, invalidJSON warning/reset and later metadata correction observed;502 managed blobs match original source hashes |
 | Review regressions | PDF form/Library/New/CmdS, bibliography pause/resume/fresh decisions, dirty guards, failure-survives-Get, HOME Save picker observed; continuation retained screenshots of dirty selection/Trash guards, dirty/non-PDF preview plus unrelated Attach/Get, and six manual-preview/Resume cycles with fresh decisions; simultaneous cancellation remains unverified |
@@ -221,3 +221,18 @@ desktop43 and Python28 checks passed after normal integration of main `1304028` 
 earlier incomplete guard explanation, not its historical screenshots/results. D&D for
 both intents remains unverified; offline DOI and real failed-page retry remain additional
 robustness checks. #15 stays open, PR45 Draft; #34 HELD, #23/#25 gates closed.
+
+## Assisted native D&D follow-up
+
+[Exact executable, user gesture / CUA observation split and screenshots](issue-15/native-dnd.md)
+now supply both missing D&D intents. The first ambiguous info.pdf attempt produced only
+a new-paper inspection and saved nothing; a repeated blue-centre drop fixed the original
+paper as Attach destination, then explicit Attach saved it. Green scanned.pdf drop did
+not write until Preview → Create → Commit. After quit/relaunch, its provisional title
+was corrected and saved, and all three attachment host entries were Present. Read-only
+DB/file checks found two papers/three attachments, correct associations, all original
+hashes unchanged and clean integrity. No runtime source changed. Earlier “D&D unverified”
+statements describe earlier runs and are superseded only for this path. Offline DOI,
+real failed-page retry and native queued-late-arrival proof remain unverified; prior
+state/guard evidence remains separate. PR45 stays Draft / #15 open pending final
+acceptance review and current-head CI. #34 and #23/#25 gates are unchanged.

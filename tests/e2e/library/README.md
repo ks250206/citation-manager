@@ -66,3 +66,9 @@ observation or freely overlapping operations. Separate-token tests remain automa
 Offline PDF filename/manual registration is local-only; offline DOI and real failed-page
 retry are additional robustness checks and remain unverified. Both D&D intents remain
 literal #15 requirements, so this checklist and issue are not complete.
+
+Assisted native D&D follow-up: [both explicit intents and subsequent persistence/edit
+checks](../../../docs/validation/issue-15/native-dnd.md) now passed using the user's
+actual Finder gestures and root CUA observation/review/save/relaunch. Earlier D&D-open
+notes are historical. This is not a CUA drag API success claim or a complete pass of
+the additional offline DOI/failed-page/native-late-arrival checklist.

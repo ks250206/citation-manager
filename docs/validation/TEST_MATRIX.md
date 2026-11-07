@@ -98,3 +98,11 @@ automated state evidence; native late-arrival/simultaneous-operation proof is no
 Final integrated local checks: workspace227, native desktop43, Python28; #53 main
 integration preserves all 636 pins and migrations. D&D/offline DOI/failed-page retry
 remain incomplete; Draft/#15 and held #34 gates are unchanged.
+
+[Assisted native Finder D&D](issue-15/native-dnd.md) subsequently passed both explicit
+Attach and NEW intents: user gestures, root CUA review/save/relaunch/title correction,
+and read-only DB/hash checks are separately identified. Two papers/three attachments
+remain correct with original bytes intact. This supersedes D&D's earlier unverified
+status only. Offline DOI / real failed-page / native queued-late-arrival evidence remains
+unverified. No runtime changes or full-suite rerun; final acceptance review/CI pending,
+PR45 Draft and #15 open, #34 HELD and #23/#25 gates unchanged.
