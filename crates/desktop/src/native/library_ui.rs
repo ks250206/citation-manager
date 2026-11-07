@@ -60,8 +60,17 @@ impl LibraryView {
                         if this.locked() {
                             return;
                         }
+                        let cancelled = this.invalidate_doi();
                         this.screen = Screen::Import;
-                        cx.notify();
+                        if cancelled {
+                            this.status(
+                                "DOI lookup cancelled; retained import review is unchanged",
+                                false,
+                                cx,
+                            );
+                        } else {
+                            cx.notify();
+                        }
                     },
                 )),
             )

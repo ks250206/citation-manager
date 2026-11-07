@@ -70,6 +70,9 @@ impl LibraryView {
         );
     }
     pub(super) fn start_manual_preview(&mut self, draft: PaperDraft, cx: &mut Context<Self>) {
+        if self.locked() {
+            return;
+        }
         self.invalidate_doi();
         if !self.pause_file_review() {
             cx.notify();
@@ -226,6 +229,12 @@ impl LibraryView {
         result: Result<MetadataResolution, ServiceError>,
         cx: &mut Context<Self>,
     ) {
+        // Never replace forms or release a preview owned by an in-flight commit.
+        // Normal request submission invalidates this ticket; keep this guard too.
+        if self.locked() {
+            self.invalidate_doi();
+            return;
+        }
         match result {
             Ok(resolution) => {
                 if !self.can_replace_editor(cx) {

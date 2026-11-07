@@ -9,6 +9,7 @@ use crate::{
     attachments::{AttachmentHost, OperationCancels, PdfForm},
     import_dialogs::ReviewSessions,
     library::Library,
+    request_policy::{Lane, begin_request, invalidate_lookup},
 };
 use cm_protocol::{
     attachments::*, domain::*, exchange::*, import::*, library::*, library_query::*,
@@ -24,20 +25,6 @@ actions!(
     library,
     [New, Save, Refresh, Find, NextField, PreviousField, Quit]
 );
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-enum Lane {
-    Query,
-    Editor,
-    Organization,
-    Membership,
-    Import,
-    Doi,
-    Pdf,
-    Attachments,
-    LoadSettings,
-    SaveSettings,
-    Export,
-}
 enum Event {
     Query(Result<LibraryPage, ServiceError>),
     Editor(Result<LibraryReply, ServiceError>),
@@ -247,9 +234,10 @@ impl LibraryView {
         wrap: fn(Result<T, ServiceError>) -> Event,
         submit: impl FnOnce(Arc<dyn LibraryClient>, Reply<T>) -> Result<(), ServiceError>,
     ) {
-        self.sequence += 1;
-        let ticket = self.sequence;
-        self.pending.insert(lane, ticket);
+        let (ticket, cancel_lookup) = begin_request(&mut self.pending, &mut self.sequence, lane);
+        if cancel_lookup {
+            self.cancels.cancel_doi();
+        }
         let lost_sender = self.sender.clone();
         let mut lost = LostReply(Some(Box::new(move || {
             let _ = lost_sender.send(Message {
@@ -454,10 +442,12 @@ impl LibraryView {
             });
         }
     }
-    fn invalidate_doi(&mut self) {
-        if self.pending.remove(&Lane::Doi).is_some() {
+    fn invalidate_doi(&mut self) -> bool {
+        let invalidated = invalidate_lookup(&mut self.pending);
+        if invalidated {
             self.cancels.cancel_doi();
         }
+        invalidated
     }
     fn can_replace_editor(&mut self, cx: &mut Context<Self>) -> bool {
         if self.dirty {

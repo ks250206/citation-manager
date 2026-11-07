@@ -1,6 +1,8 @@
 //! Desktop views depend only on the replaceable protocol client.
 pub mod commands;
 pub mod keymap;
+#[cfg(any(test, all(feature = "native-gpui", target_os = "macos")))]
+mod request_policy;
 pub mod service_client;
 #[cfg(all(feature = "native-gpui", not(target_os = "macos")))]
 compile_error!("native-gpui currently requires macOS; use the default contract lane elsewhere");
