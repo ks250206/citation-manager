@@ -499,7 +499,8 @@
     "45-batch-09-ready": "still preparing, filename is not proof of readiness",
     "46-batch-09-create": "clicked while disabled; no choice accepted",
     "47-batch-09-commit-request": "clicked while disabled; no commit submitted; actual approval/commit at 49/50",
-    "39-library-scroll-during-batch-08-preview": "shows Preparing status with rows 21 onward after native scroll; evidence of UI response, not timed performance"
+    "39-library-scroll-during-batch-08-preview": "shows Preparing status with rows 21 onward after native scroll; evidence of UI response, not timed performance",
+    "10-batch-02-create": "The raw choice screenshot exists and its hash is retained, but it was saved directly without an actions.json entry. There are 72 screenshot hashes and 71 action entries; no missing timestamp or action entry has been reconstructed."
   },
   "runtime_source_sha256": {
     "Cargo.lock": "277503009501695ce50914151969021f276ea682d054dbd113dddf803b80bcd2",

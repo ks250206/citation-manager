@@ -42,7 +42,8 @@
   "before_new_commit": {
     "provenance": {
       "method": "mode=ro; PRAGMA query_only=ON",
-      "note": "historical counts-only check; no per-row snapshot was captured at this phase"
+      "note": "historical counts-only check; no per-row snapshot was captured at this phase",
+      "recorded_later": true
     },
     "observation": {
       "phase": "scanned.pdf human drop inspected; before preview/Create/Commit",
