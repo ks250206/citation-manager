@@ -1,6 +1,9 @@
 # Native Finder D&D acceptance follow-up (2026-11-07)
 
-Both explicit PDF drop intents were exercised with real Finder gestures by the user.
+Both explicit PDF drop intents on the PDF files / folder screen were exercised with
+real Finder gestures by the user.
+The gestures used the two zones on the **PDF files / folder screen**. The duplicate
+Attach/NEW zones in the Library details/PDF pane were only displayed, not drop-tested.
 Root CUA observed the actual app results and performed the subsequent explicit review,
 save, quit/relaunch, metadata correction and attachment-host checks. This is assisted
 native evidence, not an automated cross-window gesture claim. PR45 remains Draft and
@@ -99,3 +102,12 @@ code plus observed filename fallback, not an actual network-disabled GUI experim
 Native timing proof of an already-queued DOI completion is not claimed; deterministic
 state tests and the reviewed ownership guards remain separate evidence. #34 stays HELD,
 #23/#25 gates remain closed (issues open). No browser/VM/native-host/signing work occurred.
+
+## D&D evidence review clarification
+
+Independent review of `c9c4859` found no P0–P2. The first ambiguous attempt's retained
+DB observation is now committed with retrospective method provenance explicitly marked.
+The pre-commit observation remains labelled as counts-only (no missing IDs invented).
+Application exit codes belong to the artifact session receipt, not SQLite results.
+Duplicate Details/PDF-pane drop zones remain untested; the literal Attach/NEW intent
+requirements were exercised on the dedicated PDF files / folder surface.

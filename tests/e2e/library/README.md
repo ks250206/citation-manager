@@ -1,13 +1,16 @@
 # Native acceptance checklist (not an automated mock/browser test)
 
-Required operator: native CUA against a freshly linked actual GPUI executable, using
+Required operator: native CUA, with an explicitly identified human operator for
+cross-window gestures the automation cannot reliably deliver, against the actual GPUI executable, using
 only a fresh private temp library/settings. No preseeded UI data. #34 remains held.
 The awake run obtained the actual native window and exercised many paths below.
 See [current per-path results and incomplete gates](../../../docs/validation/issue-15/native-awake.md).
 The [isolated continuation](../../../docs/validation/issue-15/native-continuation.md)
 adds collection/oversize/dirty-guard/Attach-Get/repeated-Resume proof, with all new action
-and screenshot ranges mapped to their exact initial/integrated executables. D&D/offline/simultaneous-cancel/
-failed-page gates remain open; this checklist is not fully passed.
+and screenshot ranges mapped to their exact initial/integrated executables. The assisted
+D&D follow-up below covers both intents on the PDF files / folder screen; the duplicate
+Details/PDF-pane zones remain untested. Offline DOI and failed-page robustness remain
+unverified; this checklist is not fully passed.
 This is still an acceptance checklist, not a claim that all paths passed. Headless
 service tests do not substitute for native actions.
 
@@ -26,7 +29,8 @@ service tests do not substitute for native actions.
 5. Manually preview/create, DOI lookup/cancel/offline fallback, duplicate merge with
    selected fields, explicit error-row Skip, rejected-file diagnostics, interrupted
    later batch and export All/selected/direct collection in BibTeX/RIS. Reparse output.
-6. Use actual pickers and drag/drop into each explicit Attach/New zone. Test generated
+6. Use actual pickers and drag/drop for both explicit Attach/New intents. Record the
+   surface tested; duplicate zones in the Details/PDF pane require separate coverage. Test generated
    fixtures/library PDFs plus licensed fixtures/pdf encrypted/malformed and copies for
    duplicate hashes. Exercise explicit recursive/nonrecursive folder selection,
    non-PDF/symlink/oversize exclusions, progress, cancellation, partial paper success
@@ -64,11 +68,20 @@ DOI. Native pending-lookup navigation preserved and committed the PDF review; PD
 Library view disabled DOI controls. This does not claim actual queued late-arrival
 observation or freely overlapping operations. Separate-token tests remain automated.
 Offline PDF filename/manual registration is local-only; offline DOI and real failed-page
-retry are additional robustness checks and remain unverified. Both D&D intents remain
-literal #15 requirements, so this checklist and issue are not complete.
+retry are additional robustness checks and remain unverified. Both D&D intents are literal #15 requirements; the later assisted run below now
+covers them on the dedicated PDF files / folder screen. Other pending checks remain.
 
 Assisted native D&D follow-up: [both explicit intents and subsequent persistence/edit
 checks](../../../docs/validation/issue-15/native-dnd.md) now passed using the user's
 actual Finder gestures and root CUA observation/review/save/relaunch. Earlier D&D-open
 notes are historical. This is not a CUA drag API success claim or a complete pass of
 the additional offline DOI/failed-page/native-late-arrival checklist.
+
+
+Latest-runtime bulk follow-up: [fresh native 1000-record workflow](../../../docs/validation/issue-15/native-bulk.md)
+repeats the complete import → classify → metadata search → re-export sequence on the
+final unchanged runtime, with interaction observed while previews run. It supersedes
+only the earlier-binary gap for that sequence. The final report explicitly accepts the
+local PDF offline path by code plus observed fallback/editing, without claiming a
+network-disabled GUI experiment. Additional robustness and duplicate-zone coverage
+above remain unverified. Final acceptance review and exact-head CI remain due.

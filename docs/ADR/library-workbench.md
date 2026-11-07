@@ -149,6 +149,8 @@ counts its own candidates; paused bibliography counters retain their separate to
 
 The [awake native evidence](../validation/issue-15/native-awake.md) records real GUI
 imports, pickers, private settings, partial attachment failures/cancellation and source
-hashes. It supersedes the historical inability to observe a window, while explicitly
-leaving D&D, offline/concurrency and failed-query acceptance incomplete. PR45 remains
+hashes. It supersedes the historical inability to observe a window. D&D was
+subsequently exercised for both intents on the dedicated PDF files / folder
+screen (human gestures plus CUA outcomes; duplicate Details/PDF drop zones untested).
+Offline DOI, concurrency and failed-query robustness remain unverified. PR45 remains
 Draft; #34 stays HELD. No command registry/keymap or search experiment is added here.

@@ -1,0 +1,47 @@
+{
+  "scope": "Documentation/evidence-only follow-up to c9c4859; no whole workspace/native/Python suite rerun",
+  "observed_utc": "2026-11-07T01:32:37.068370+00:00",
+  "checks": [
+    {
+      "name": "actual native GUI workflow",
+      "result": "ten separately approved 100-row batches, 1000 committed; collection/tag, metadata query, three native exports; app normal exit 0"
+    },
+    {
+      "name": "production-parser readback",
+      "result": "pass, final retained run: 1 test; 1000/1/1 normalized records match input; uses cm-v1",
+      "log": "native-bulk-readback.log",
+      "log_sha256": "182b0827e76c7b72e59ab541d3a769c1d0c0c3d7d39cef9936b0ca3a51802670"
+    },
+    {
+      "name": "read-only DB corroboration",
+      "result": "1000 active unique fixture DOI papers; one collection and tag member; integrity ok; no FK violations"
+    },
+    {
+      "name": "relative Markdown links in changed docs",
+      "result": "pass"
+    },
+    {
+      "name": "artifact JSON and published screenshot hashes",
+      "result": "pass, 12/12 unchanged JPEGs"
+    },
+    {
+      "name": "runtime/source comparison",
+      "result": "139 files byte-identical to frozen runtime source 12a20771; no Cargo/pin/SQL changes"
+    },
+    {
+      "name": "git diff --check",
+      "result": "pass after removing terminal blank line from published readback log; raw hash retained separately"
+    }
+  ],
+  "not_run": [
+    "full workspace suite",
+    "native desktop tests",
+    "Python suite",
+    "Clippy/fmt/build",
+    "PDFium runtime suite",
+    "release timing/RSS",
+    "network-disabled GUI",
+    "native failed-page retry",
+    "freely overlapping DOI/PDF pair or queued-late-arrival GUI"
+  ]
+}

@@ -86,8 +86,9 @@ quit/relaunch and attachment host actions. That report distinguishes earlier-bin
 from affected-control retests. The [fresh continuation](issue-15/native-continuation.md)
 adds exact-executable evidence for collection rename/move/delete, both oversize limits,
 dirty selection/Trash guards, unrelated Attach/Get preservation and six preview/Resume
-cycles. After normally merging main `5f0fb1d`, a fresh binary retested dirty guards, attachment reopening, PDF metadata preview and cancellation; exact phase hashes and integration checks are retained. No command/keymap native handlers were connected. Genuine D&D, offline DOI, simultaneous DOI/PDF cancellation and failed page-query
-retry remain unverified. Keep PR45 Draft and #15 open. #34 remains HELD; #23/#25 gates remain
+cycles. After normally merging main `5f0fb1d`, a fresh binary retested dirty guards, attachment reopening, PDF metadata preview and cancellation; exact phase hashes and integration checks are retained. No command/keymap native handlers were connected. D&D on the PDF files / folder screen subsequently passed both intents in the assisted
+run below; duplicate Details/PDF zones remain untested. Offline DOI, simultaneous DOI/PDF
+cancellation and failed page-query retry remain unverified. Keep PR45 Draft and #15 open. #34 remains HELD; #23/#25 gates remain
 closed. Root owns independent final review, CI and any merge.
 
 The [DOI/PDF ownership follow-up](issue-15/doi-pdf-ownership.md) supersedes the previous
@@ -96,7 +97,7 @@ with actual pending-lookup cancellation/retained-PDF commit and disabled DOI con
 during PDF inspection observed. Already-queued reply rejection/token isolation is
 automated state evidence; native late-arrival/simultaneous-operation proof is not claimed.
 Final integrated local checks: workspace227, native desktop43, Python28; #53 main
-integration preserves all 636 pins and migrations. D&D/offline DOI/failed-page retry
+integration preserves all 636 pins and migrations. D&D was subsequently exercised on the dedicated PDF screen; offline DOI/failed-page retry
 remain incomplete; Draft/#15 and held #34 gates are unchanged.
 
 [Assisted native Finder D&D](issue-15/native-dnd.md) subsequently passed both explicit
@@ -106,3 +107,15 @@ remain correct with original bytes intact. This supersedes D&D's earlier unverif
 status only. Offline DOI / real failed-page / native queued-late-arrival evidence remains
 unverified. No runtime changes or full-suite rerun; final acceptance review/CI pending,
 PR45 Draft and #15 open, #34 HELD and #23/#25 gates unchanged.
+
+
+[Latest-runtime bulk retest](issue-15/native-bulk.md) now covers the native 1000-record
+import/classify/search/re-export sequence on the final unchanged runtime in a fresh
+private library. Ten explicit 100-row approvals committed all 1000 records; native
+navigation/scrolling responded during preview work. All/selected/collection RIS outputs
+reparsed to 1000/1/1 exact normalized records. This is debug-build functional evidence,
+not release latency/p95/RSS proof. Root accepts the offline PDF filename/edit criterion
+by the documented network-free path plus actual fallback/editing; a network-disabled
+GUI experiment, offline DOI, failed-page retry and native queued-late-arrival remain
+unverified. PR45 stays Draft and #15 open pending independent acceptance review/current
+CI. No #34 or #23/#25 gate is opened by this evidence.

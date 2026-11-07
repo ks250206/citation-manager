@@ -40,9 +40,15 @@
     }
   },
   "before_new_commit": {
-    "phase": "scanned.pdf human drop inspected; before preview/Create/Commit",
-    "papers": 1,
-    "attachments": 2
+    "provenance": {
+      "method": "mode=ro; PRAGMA query_only=ON",
+      "note": "historical counts-only check; no per-row snapshot was captured at this phase"
+    },
+    "observation": {
+      "phase": "scanned.pdf human drop inspected; before preview/Create/Commit",
+      "papers": 1,
+      "attachments": 2
+    }
   },
   "after_new_commit": {
     "method": "mode=ro; PRAGMA query_only=ON; after actual Cmd+Q",
@@ -98,8 +104,7 @@
       "06-scanned-create-explicitly-chosen.jpg": "f4d6312f68bc2f5631a37fa5f45356f1ebc5782eb6f4bc781f809a6d857531f6",
       "07-scanned-registration-committed.jpg": "86788bf8ae1115e93226e179c6ff9d7dd5f723c598d0224fba1c0a00c382de08",
       "08-library-two-papers.jpg": "18cbb3f3e60f50ee7886eaec53fefde6932b2c11403ded3be623b07cdd89e74f"
-    },
-    "exit_code": 0
+    }
   },
   "after_relaunch_correction": {
     "method": "mode=ro; PRAGMA query_only=ON; after second actual Cmd+Q",
@@ -173,10 +178,36 @@
         "ok"
       ]
     ],
-    "foreign_key_check": [],
-    "owned_app_exit_codes": [
-      0,
-      0
-    ]
+    "foreign_key_check": []
+  },
+  "first_attempt": {
+    "provenance": {
+      "method": "original root read-only SQLite observation (mode=ro; PRAGMA query_only=ON)",
+      "recorded_later": true,
+      "raw_file": "dnd-first-observation.json",
+      "note": "method metadata added after review; counts/IDs/hashes below are the original retained observation"
+    },
+    "observation": {
+      "phase": "human reported info.pdf drop; CUA observed RegisterNew inspection, not AttachExisting",
+      "papers": [
+        [
+          "01a1b358-fe4c-747f-b427-aadca331267d",
+          "XMP suggested synthetic title",
+          "10.1234/embedded"
+        ]
+      ],
+      "attachments": [
+        [
+          "metadata.pdf",
+          "4F2C060F12CC17906795AFD46D97611EE2E3FFF598650A405C2569B56C69D38A",
+          1387
+        ]
+      ],
+      "integrity": [
+        [
+          "ok"
+        ]
+      ]
+    }
   }
 }

@@ -179,7 +179,7 @@ all-target native daemon Clippy passed. [Exact stage timings and failure context
 
 | Required path | Observed result after wake |
 |---|---|
-| Actual 1000-record import, ten separate approvals | Passed in actual GUI on an earlier corrected binary; not rerun on the final binary. Exactly 1000 synthetic DOIs corroborated read-only |
+| Actual 1000-record import, ten separate approvals | Passed again on the final unchanged runtime in a fresh private library: ten approvals, 1000 committed, classification/search, RIS all/selected/collection export and exact 1000/1/1 readback; interaction during preview observed ([latest run](issue-15/native-bulk.md)) |
 | Classification, combined filters, multiselect, paging, loading/empty/error, trash/restore | Observed; Title/Year/ID/created/updated sorting observed; continuation observed collection rename/move/delete and child promotion; failed-query paging/retry remains unverified |
 | Manual preview/Create, exact duplicate selected-title Merge, error-row Skip | Observed; invalid candidate could not Create |
 | DOI lookup/cancel | Actual loading/cancel and public provider response into uncommitted review observed; no DOI paper saved; offline fallback remains unverified |
@@ -192,7 +192,7 @@ The [native run log](issue-15/native-awake.md) distinguishes earlier observation
 final-binary retests and retains the incomplete gates. It does not map every phase or
 screenshot to an executable hash. The [fresh continuation](issue-15/native-continuation.md)
 maps its screenshot/action ranges separately to the initial and integrated-main executables and retains the
-outstanding D&D, offline, simultaneous-cancellation and failed-page constraints.
+historical D&D limits and still-unverified offline DOI, simultaneous-cancellation and failed-page checks. Later reports below supersede only their named paths.
 Main `5f0fb1d` (#52/PR55) was normally integrated before final freeze, preserving additive pure command/keymap modules, serde edges and both branches' lib/Cargo registrations. No command/keymap GUI handlers were connected. A fresh integrated native build retested dirty guards, attachment reopening, PDF metadata preview and cancellation; the broader local checks were rerun. #53/PR54 was unmerged at integration. Earlier headless results above remain headless results. No viewer, annotations/note editor or saved advanced search is claimed; #52/#53 implementation remains outside #15. The checklist remains at
 [tests/e2e/library](../../tests/e2e/library/README.md).
 
@@ -219,7 +219,7 @@ queued-late-reply arrival or simultaneous pair was claimed. Workspace227, native
 desktop43 and Python28 checks passed after normal integration of main `1304028` (#53);
 636 pins and immutable SQL are preserved. The current ownership report supersedes the
 earlier incomplete guard explanation, not its historical screenshots/results. D&D for
-both intents remains unverified; offline DOI and real failed-page retry remain additional
+both intents was unverified at that phase and is covered by the later assisted run; offline DOI and real failed-page retry remain additional
 robustness checks. #15 stays open, PR45 Draft; #34 HELD, #23/#25 gates closed.
 
 ## Assisted native D&D follow-up
@@ -236,3 +236,25 @@ statements describe earlier runs and are superseded only for this path. Offline 
 real failed-page retry and native queued-late-arrival proof remain unverified; prior
 state/guard evidence remains separate. PR45 stays Draft / #15 open pending final
 acceptance review and current-head CI. #34 and #23/#25 gates are unchanged.
+
+
+## Latest-runtime bulk workflow and final evidence clarification
+
+The [fresh native bulk run](issue-15/native-bulk.md) repeated ten separately reviewed
+100-row commits on the final unchanged runtime, then actual collection/tag classification,
+metadata search and All/selected/direct-collection RIS exports. The production-parser
+readback matched normalized title, bibliography and external IDs for 1000/1/1 unique
+records. Read-only SQLite corroborated all 1000 fixture DOIs and both memberships.
+Library switching and scrolling were observed while a preview was still preparing;
+this is native interaction evidence, not a release latency or percentile measurement.
+The owned app exited normally with code 0 and disappeared from CUA inventory.
+
+Root accepts the local-only PDF filename-registration/later-edit path for the literal
+#15 offline PDF criterion based on its network-free implementation plus observed local
+fallback and post-restart editing. No network-disabled GUI test is claimed, and offline
+DOI fallback is still unverified. Native failed-page retry and late-reply/free-overlap
+robustness remain open. Dedicated PDF-screen D&D covers both intents; duplicate
+Details/PDF-pane drop surfaces are explicitly untested. The D&D evidence now separates
+app-session exit codes from DB results and commits the original first-attempt snapshot
+with retrospectively labelled method metadata. PR45 stays Draft / #15 open pending
+independent acceptance review and current-head CI; #34 and #23/#25 gates are unchanged.
