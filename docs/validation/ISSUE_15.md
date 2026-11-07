@@ -206,3 +206,18 @@ outcomes, post-process-loss attachment retry/replay and cross-process writer own
 retain the existing limits. #34 remains **HELD**, with its gates closed and no app-layout/browser runner,
 VM, signing, native-host or system-profile work. #23/#25 were not started. No agents or
 CLI reviewers were created; root owns Opus review, CI monitoring and any future merge.
+
+## DOI/PDF ownership race and main #53 integration follow-up
+
+The independent review of `ca29e58` found a reachable pending-DOI → retained-PDF-review
+commit race. It was fixed in the actual dispatcher and navigation/reply handlers;
+[the exact-source native run and deterministic regression tests](issue-15/doi-pdf-ownership.md)
+separate observations from automated proof. Native lookup-in-flight → Import review
+cancellation retained the explicit PDF decision and committed one attachment without
+DOI replacement. PDF-working → Library showed both DOI controls disabled. No native
+queued-late-reply arrival or simultaneous pair was claimed. Workspace227, native
+desktop43 and Python28 checks passed after normal integration of main `1304028` (#53);
+636 pins and immutable SQL are preserved. The current ownership report supersedes the
+earlier incomplete guard explanation, not its historical screenshots/results. D&D for
+both intents remains unverified; offline DOI and real failed-page retry remain additional
+robustness checks. #15 stays open, PR45 Draft; #34 HELD, #23/#25 gates closed.

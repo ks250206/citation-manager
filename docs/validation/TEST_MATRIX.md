@@ -87,5 +87,14 @@ from affected-control retests. The [fresh continuation](issue-15/native-continua
 adds exact-executable evidence for collection rename/move/delete, both oversize limits,
 dirty selection/Trash guards, unrelated Attach/Get preservation and six preview/Resume
 cycles. After normally merging main `5f0fb1d`, a fresh binary retested dirty guards, attachment reopening, PDF metadata preview and cancellation; exact phase hashes and integration checks are retained. No command/keymap native handlers were connected. Genuine D&D, offline DOI, simultaneous DOI/PDF cancellation and failed page-query
-retry remain unverified. Keep PR45 Draft and #15 open. #34 remains HELD; #23/#25 stay
+retry remain unverified. Keep PR45 Draft and #15 open. #34 remains HELD; #23/#25 gates remain
 closed. Root owns independent final review, CI and any merge.
+
+The [DOI/PDF ownership follow-up](issue-15/doi-pdf-ownership.md) supersedes the previous
+incomplete concurrency guard explanation: the reachable review-tab race was fixed,
+with actual pending-lookup cancellation/retained-PDF commit and disabled DOI controls
+during PDF inspection observed. Already-queued reply rejection/token isolation is
+automated state evidence; native late-arrival/simultaneous-operation proof is not claimed.
+Final integrated local checks: workspace227, native desktop43, Python28; #53 main
+integration preserves all 636 pins and migrations. D&D/offline DOI/failed-page retry
+remain incomplete; Draft/#15 and held #34 gates are unchanged.

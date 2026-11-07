@@ -112,7 +112,7 @@ unchanged; the complete private screenshot manifest is retained.
 ## Subsequent isolated continuation
 
 [The fresh continuation](native-continuation.md) at source head `9ea22dd` used its own
-private app/library/settings and maps every new screenshot/action range to executable
+private app/library/settings and maps screenshots01–52 (except27) to executable
 `0eaaec984e238371415d264a244529ce357bae175119313335f036826c70c682`.
 It observed collection rename/move/delete, oversize limits, screenshot-backed dirty
 selection/Trash guards, unrelated Attach/Get preservation and six manual-preview/Resume

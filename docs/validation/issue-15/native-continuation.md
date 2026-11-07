@@ -82,7 +82,7 @@ not saved. A second read-only query after the integrated app quit matched these 
 
 No continuation changes to commands/keymap/search/daemon; the ordinary main merge preserves the upstream pure modules and both branches' lib/Cargo additions. Dependency pins, SQL and migration manifest are preserved.
 All 636 locked dependency identities/checksums and both SQL migrations/manifest match main.
-#34 stays **HELD**, #23/#25 stay closed. No browser/VM/account/native-host registration,
+#34 stays **HELD**, #23/#25 gates remain closed. No browser/VM/account/native-host registration,
 signing, review agents, watch or PR merge was performed. Root retains independent final review.
 Both owned normal app phases exited0 after actual Cmd+Q; CUA inventory then contained no owned
 Citation Manager app. No prior QA library, settings or evidence was edited.
@@ -107,3 +107,12 @@ Selected original CUA images:
 - [Integrated settled metadata](native-continuation-screenshots/58-integrated-pdf-metadata-settled.jpg)
 - [Integrated uncommitted preview](native-continuation-screenshots/60-integrated-pdf-preview.jpg)
 - [Integrated cancellation retained three records](native-continuation-screenshots/61-integrated-cancelled-three-records.jpg)
+
+## Subsequent ownership-race review
+
+The independent review of `ca29e58` found that the guard description above omitted
+Library → pending DOI → Import review → PDF Commit. That path was reachable; this
+historical run did not prove it safe. The [ownership follow-up](doi-pdf-ownership.md)
+records the runtime fix, deterministic queued-reply tests and actual native guard/commit
+observations on a fresh corrected executable. It also separates local PDF fallback
+from the still-unverified offline DOI and failed-page robustness checks.

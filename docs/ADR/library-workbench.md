@@ -32,8 +32,12 @@ failure replay. Quit during a write can still leave an unknown result: inspect t
 before retrying, and wait for confirmation before quitting.
 
 DOI and PDF cancellation tokens are separate. Idle PDF Cancel has no effect. Navigating
-to PDF invalidates a pending DOI lookup generation; later responses cannot replace the
-PDF review. Read-only Get completions do not claim a save or clear a PDF failure summary.
+to PDF or Import review invalidates a pending DOI lookup generation. Every Editor,
+Import or PDF ownership request invalidates that ticket and cancels only the DOI token
+before submission; the receive ticket filter rejects already-queued replies as well.
+DOI reply/manual-preview handlers also reject replacement while locked. Unrelated reads
+retain the lookup. These guards keep late provider replies from replacing or releasing
+a PDF preview during commit. Read-only Get completions do not claim a save or clear a PDF failure summary.
 
 Library pages use #12's real combined filters and cursor identity, at most 100 full
 papers per UI page, with uniform_list virtualization. Filter/sort/membership/metadata/

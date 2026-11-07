@@ -56,3 +56,13 @@ original form values without deleting saved records. Confirm that the unsaved ba
 survives unrelated operation messages, and the export Save picker starts at HOME.
 The current run log distinguishes observed guards/HOME picker from outstanding native
 failed-page and simultaneous-operation cases.
+
+Ownership follow-up: [actual corrected native run and queued-ticket regressions](../../../docs/validation/issue-15/doi-pdf-ownership.md).
+The original Import-review-tab overlap was reachable and is now fixed: beginning an
+Editor/Import/PDF ownership request or navigating to Import review invalidates pending
+DOI. Native pending-lookup navigation preserved and committed the PDF review; PDF-working
+Library view disabled DOI controls. This does not claim actual queued late-arrival
+observation or freely overlapping operations. Separate-token tests remain automated.
+Offline PDF filename/manual registration is local-only; offline DOI and real failed-page
+retry are additional robustness checks and remain unverified. Both D&D intents remain
+literal #15 requirements, so this checklist and issue are not complete.
