@@ -20,6 +20,13 @@ use std::{
 };
 use uuid::Uuid;
 
+/// Embedded migrations in the manifest; later issues add more, so tests never hard-code it.
+fn migration_count() -> u32 {
+    let manifest: serde_json::Map<String, serde_json::Value> =
+        serde_json::from_str(include_str!("../migrations/manifest.json")).unwrap();
+    manifest.len() as u32
+}
+
 struct Fixture {
     _temp: tempfile::TempDir,
     root: PathBuf,
@@ -493,7 +500,7 @@ fn baseline_is_real_valid_idempotent_and_never_overwritten() {
         db.query_row("SELECT count(*) FROM schema_migrations", [], |r| r
             .get::<_, u32>(0))
             .unwrap(),
-        2
+        migration_count()
     );
     assert_eq!(
         db.query_row("SELECT count(*) FROM papers", [], |r| r.get::<_, u32>(0))
@@ -696,7 +703,7 @@ fn real_pre_migration_hook_snapshots_old_wal_state_before_upgrading() {
         raw.query_row("SELECT count(*) FROM schema_migrations", [], |r| r
             .get::<_, u32>(0))
             .unwrap(),
-        2
+        migration_count()
     );
     assert!(raw.prepare("SELECT * FROM attachments").is_ok());
 }
@@ -717,7 +724,7 @@ fn refused_migration_snapshot_never_changes_existing_data_or_history() {
         raw.query_row("SELECT count(*) FROM schema_migrations", [], |r| r
             .get::<_, u32>(0))
             .unwrap(),
-        2
+        migration_count()
     );
     assert_eq!(
         raw.query_row("SELECT title FROM papers", [], |r| r.get::<_, String>(0))

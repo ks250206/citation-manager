@@ -323,7 +323,10 @@ mod tests {
         let mut upgraded = LibraryDb::open_with_backup(&directory, &mut backup).unwrap();
         assert_eq!(backup.calls, 1);
         assert_eq!(history(&backup.copy).unwrap().len(), 1);
-        assert_eq!(history(&upgraded.connection).unwrap().len(), migrations.len());
+        assert_eq!(
+            history(&upgraded.connection).unwrap().len(),
+            migrations.len()
+        );
         assert_eq!(
             upgraded.papers().get(paper.id).unwrap(),
             Some(paper.clone())
