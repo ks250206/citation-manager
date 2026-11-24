@@ -1,5 +1,6 @@
 //! Application contracts independent of UI, storage drivers and transports.
 pub mod attachments;
+pub mod capture;
 pub mod collections;
 pub mod export;
 pub mod import;

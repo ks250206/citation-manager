@@ -9,7 +9,20 @@ use cm_protocol::{
 use cm_storage::{LibraryDb, LibraryDirectory};
 use std::{collections::HashMap, path::PathBuf, sync::mpsc, thread};
 type Work = Box<dyn for<'a> FnOnce(Result<&mut Worker<'a>, ServiceError>) + Send>;
-type ResolveWork = (String, Cancellation, Reply<MetadataResolution>);
+type Resolver = cm_core::metadata_resolve::MetadataResolveService<cm_metadata::doi::HttpProviders>;
+/// Work for the network worker: DOI resolution and (#22) capture extraction + complement.
+/// The provider service (and its runtime) is created lazily on this thread and only when
+/// a lookup is actually needed.
+type ResolveWork = Box<dyn FnOnce(&mut Option<Resolver>) + Send>;
+fn resolver_slot(slot: &mut Option<Resolver>) -> Result<&mut Resolver, ServiceError> {
+    if slot.is_none() {
+        let provider = cm_metadata::doi::HttpProviders::new(Default::default())?;
+        *slot = Some(cm_core::metadata_resolve::MetadataResolveService::new(
+            provider,
+        ));
+    }
+    Ok(slot.as_mut().expect("constructed"))
+}
 pub(super) struct Worker<'a> {
     db: LibraryDb,
     directory: LibraryDirectory,
@@ -57,6 +70,12 @@ impl Worker<'_> {
         }
     }
 }
+/// Result of a capture preview: the common #33 preview plus the capture resolution.
+pub type CapturePreviewed = (
+    cm_protocol::import::ImportPreview,
+    cm_protocol::capture::CaptureResolution,
+);
+
 /// In-process engine. The GUI no longer embeds it (#25): `papersd` owns it behind IPC,
 /// one `for_session` handle per authenticated connection.
 #[derive(Clone)]
@@ -120,27 +139,8 @@ impl InProcessLibraryClient {
             .name("doi-worker".into())
             .spawn(move || {
                 let mut service = None;
-                while let Ok((doi, cancel, complete)) = lookups.recv() {
-                    if service.is_none() {
-                        match cm_metadata::doi::HttpProviders::new(Default::default()) {
-                            Ok(provider) => {
-                                service =
-                                    Some(cm_core::metadata_resolve::MetadataResolveService::new(
-                                        provider,
-                                    ))
-                            }
-                            Err(e) => {
-                                complete(Err(e));
-                                continue;
-                            }
-                        }
-                    }
-                    complete(
-                        service
-                            .as_mut()
-                            .expect("constructed")
-                            .resolve(&doi, &cancel),
-                    );
+                while let Ok(work) = lookups.recv() {
+                    work(&mut service);
                 }
             })?;
         Ok(Self {
@@ -148,6 +148,55 @@ impl InProcessLibraryClient {
             resolver,
             session: 0,
         })
+    }
+    /// #22 capture preview: extraction and the DOI complement run on the network worker,
+    /// then the draft enters the SAME common #33 coordinator as every other import (no
+    /// write). `complete` runs exactly once.
+    pub fn capture_preview(
+        &self,
+        request: cm_protocol::capture::CaptureRequest,
+        policy: cm_metadata::fetch_policy::FetchPolicy,
+        cancel: Cancellation,
+        complete: Reply<CapturePreviewed>,
+    ) -> Result<(), ServiceError> {
+        let client = self.clone();
+        let once = std::sync::Arc::new(std::sync::Mutex::new(Some(complete)));
+        let finish = move |once: &std::sync::Mutex<Option<Reply<CapturePreviewed>>>,
+                           result: Result<CapturePreviewed, ServiceError>| {
+            if let Some(complete) = once.lock().unwrap_or_else(|e| e.into_inner()).take() {
+                complete(result);
+            }
+        };
+        let work_once = once.clone();
+        let sent = self.resolver.try_send(Box::new(move |slot| {
+            let mut lookup = |doi: &str, cancel: &Cancellation| {
+                resolver_slot(slot).and_then(|s| s.resolve(doi, cancel))
+            };
+            let resolution =
+                cm_metadata::capture::resolve_with(&request, &policy, Some(&mut lookup), &cancel);
+            let resolution = match resolution {
+                Ok(r) if !cancel.is_cancelled() => r,
+                Ok(_) => {
+                    return finish(
+                        &work_once,
+                        Err(ServiceError::InvalidInput("cancelled".into())),
+                    );
+                }
+                Err(e) => return finish(&work_once, Err(e)),
+            };
+            let preview_once = work_once.clone();
+            let enqueued = client.enqueue(Box::new(move |r| finish(&preview_once, r)), move |w| {
+                let request = resolution.request(request.destination.clone());
+                w.imports.preview(request).map(|p| (p, resolution))
+            });
+            if let Err(e) = enqueued {
+                finish(&work_once, Err(e));
+            }
+        }));
+        if sent.is_err() {
+            finish(&once, Err(ServiceError::Unavailable));
+        }
+        Ok(())
     }
     /// Same worker and database, separate retained parse/PDF state.
     pub fn for_session(&self, session: u64) -> Self {
@@ -294,7 +343,9 @@ impl LibraryClient for InProcessLibraryClient {
         complete: Reply<MetadataResolution>,
     ) -> Result<(), ServiceError> {
         self.resolver
-            .try_send((doi, cancel, complete))
+            .try_send(Box::new(move |slot| {
+                complete(resolver_slot(slot).and_then(|s| s.resolve(&doi, &cancel)))
+            }))
             .map_err(|_| ServiceError::Unavailable)
     }
     fn export(

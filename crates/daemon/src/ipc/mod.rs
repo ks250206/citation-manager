@@ -7,10 +7,11 @@
 //! Per connection: OS peer check, a bounded/timed Hello, credential -> stored grant, then
 //! every request is authorized against the *current* grant (default deny).
 pub mod auth;
+mod capture;
 
 use crate::{
     desktop_worker::InProcessLibraryClient,
-    jobs::{JobEngine, JobHandler, JobPolicy, default_handlers},
+    jobs::{CapturePdfFetchHandler, JobEngine, JobHandler, JobPolicy, default_handlers},
     lifecycle::{self, Activity, DaemonPaths, LibraryLock},
 };
 use auth::{Authenticator, IssueError, now_ms};
@@ -19,6 +20,7 @@ use cm_core::{
     metadata_resolve::Cancellation,
     policy::{self, Capability, CapabilitySet, Denial, GrantId, Operation},
 };
+use cm_metadata::fetch_policy::{FetchPolicy, HostResolver, PdfFetcher, SystemResolver};
 use cm_protocol::{
     attachments::PdfReply,
     exchange::{ImportReply, ImportRequestUi},
@@ -61,7 +63,24 @@ pub struct DaemonConfig {
     /// Exit after this long with no connection and no active job.
     pub idle_timeout: Duration,
     pub jobs: JobPolicy,
+    /// Extra/overriding job handlers (registered after the built-in capture handler).
     pub handlers: Vec<Arc<dyn JobHandler>>,
+    /// #22 capture PDF fetch policy and name resolution.
+    pub capture: CaptureConfig,
+}
+/// #22: how capture previews filter PDF candidates and how `capture.pdf_fetch` downloads.
+#[derive(Clone)]
+pub struct CaptureConfig {
+    pub fetch: FetchPolicy,
+    pub resolver: Arc<dyn HostResolver>,
+}
+impl Default for CaptureConfig {
+    fn default() -> Self {
+        Self {
+            fetch: FetchPolicy::default(),
+            resolver: Arc::new(SystemResolver),
+        }
+    }
 }
 impl DaemonConfig {
     pub fn new(library: PathBuf) -> Self {
@@ -72,6 +91,7 @@ impl DaemonConfig {
             idle_timeout: Duration::from_secs(30),
             jobs: JobPolicy::default(),
             handlers: default_handlers(),
+            capture: CaptureConfig::default(),
         }
     }
 }
@@ -112,6 +132,9 @@ struct Shared {
     previews: Mutex<HashMap<PreviewId, GrantId>>,
     /// Live authenticated connections, closed on explicit shutdown.
     streams: Mutex<HashMap<u64, UnixStream>>,
+    /// #22 capture preview -> creating grant and offered PDF candidates.
+    captures: Mutex<capture::Bindings>,
+    capture: CaptureConfig,
 }
 
 /// A started daemon. `wait` blocks until idle exit or `shutdown`.
@@ -158,10 +181,17 @@ pub fn start(config: DaemonConfig) -> Result<RunningDaemon, StartError> {
     let engine =
         InProcessLibraryClient::start_with_settings(paths.library.clone(), config.settings)?;
     // The live grant registry decides whether a job's owner may still run it.
+    let mut handlers: Vec<Arc<dyn JobHandler>> = vec![Arc::new(CapturePdfFetchHandler::new(
+        PdfFetcher::with_resolver(
+            config.capture.fetch.clone(),
+            config.capture.resolver.clone(),
+        ),
+    ))];
+    handlers.extend(config.handlers);
     let jobs = JobEngine::start_with_owners(
         directory,
         control,
-        config.handlers,
+        handlers,
         config.jobs,
         activity.clone(),
         auth.clone(),
@@ -181,6 +211,8 @@ pub fn start(config: DaemonConfig) -> Result<RunningDaemon, StartError> {
         sessions: AtomicU64::new(0),
         previews: Mutex::new(HashMap::new()),
         streams: Mutex::new(HashMap::new()),
+        captures: Mutex::new(capture::Bindings::default()),
+        capture: config.capture,
     });
     let stop = Arc::new(AtomicBool::new(false));
     let accept_stop = stop.clone();
@@ -654,6 +686,7 @@ impl Session {
                 done(result.map(Reply::Grants));
                 Ok(())
             }
+            Command::Capture(command) => self.capture(id, command, held, done),
             _ => {
                 done(Err(WireError::Service(ServiceError::InvalidInput(
                     "unsupported command".into(),

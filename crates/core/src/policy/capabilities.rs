@@ -20,6 +20,9 @@ pub enum Capability {
     DestinationRead,
     /// Non-persisting import preview of caller-supplied drafts (browser capture).
     CapturePreview,
+    /// Commit a capture preview this grant created: Create/Skip only (merging needs
+    /// LibraryWrite), plus the optional preview-bound public PDF fetch job (#22).
+    CaptureCommit,
     /// Read a caller-named local path (BibTeX/RIS/PDF selection, attachment jobs).
     LocalFileRead,
     /// Create a caller-named local file (bibliography export).
@@ -36,12 +39,13 @@ pub enum Capability {
     GrantAdmin,
 }
 impl Capability {
-    pub const ALL: [Capability; 12] = [
+    pub const ALL: [Capability; 13] = [
         Self::LibraryRead,
         Self::LibraryWrite,
         Self::LibraryDelete,
         Self::DestinationRead,
         Self::CapturePreview,
+        Self::CaptureCommit,
         Self::LocalFileRead,
         Self::LocalFileWrite,
         Self::NetworkLookup,
@@ -61,10 +65,13 @@ pub mod presets {
     pub fn desktop() -> CapabilitySet {
         super::Capability::ALL.into_iter().collect()
     }
-    /// Browser native host: capture preview plus destination names/IDs. No paper reads,
-    /// deletes, exports, commits or local paths. Capture commit is a later, preview-bound op.
+    /// Browser native host: capture preview, the preview-bound capture commit (#22) and
+    /// destination names/IDs. No paper reads, deletes, exports, general import commits,
+    /// merges, network lookups outside a capture, job control or local paths.
     pub fn native_host() -> CapabilitySet {
-        [CapturePreview, DestinationRead].into_iter().collect()
+        [CapturePreview, CaptureCommit, DestinationRead]
+            .into_iter()
+            .collect()
     }
     /// MCP default: read-only library access. Writes need a separately approved grant.
     pub fn mcp_read_only() -> CapabilitySet {
@@ -96,6 +103,14 @@ pub enum Operation {
     ImportCommit,
     ImportCancel,
     MetadataResolve,
+    /// #22: extract page metadata, complement via the fixed DOI providers, common preview.
+    CaptureSubmit,
+    /// #22: commit an own capture preview (Create/Skip; Merge additionally needs LibraryWrite).
+    CaptureSave,
+    CaptureCancel,
+    /// #22: status / explicit retry of an own `capture.pdf_fetch` job.
+    CapturePdfStatus,
+    CapturePdfRetry,
     Export,
     PdfInspect,
     PdfAttach,
@@ -150,6 +165,11 @@ impl Operation {
             PdfPreviewNew => All(&[LibraryWrite, LocalFileRead]),
             PdfAttach | PdfCommitNew | PdfRetryAttachment => All(&[LibraryWrite, LocalFileRead]),
             MetadataResolve => All(&[NetworkLookup]),
+            // The provider lookup inside a capture is bound to the saved page's identifier and
+            // the fixed #14 endpoints; it is not a general NetworkLookup.
+            CaptureSubmit => All(&[CapturePreview]),
+            CaptureSave | CapturePdfStatus | CapturePdfRetry => All(&[Capability::CaptureCommit]),
+            CaptureCancel => Any(&[CapturePreview, Capability::CaptureCommit]),
             Export => All(&[LibraryRead, LocalFileWrite]),
             JobSubmit | JobCancel | JobRetry => All(&[JobsControl]),
             JobRead => All(&[JobsRead]),

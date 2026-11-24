@@ -87,7 +87,8 @@ impl ClientTimeouts {
             | Command::Lifecycle { .. }
             | Command::LoadSettings
             | Command::SaveSettings(_)
-            | Command::Resolve { .. } => self.interactive,
+            | Command::Resolve { .. }
+            | Command::Capture(_) => self.interactive,
             Command::Import(_) | Command::Export(_) | Command::Pdf(_) => self.long,
         }
     }

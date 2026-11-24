@@ -985,3 +985,17 @@ GUI は `IpcLibraryClient` で同じ `LibraryClient` を使い、接続中は da
 無ければ idle 終了、次の要求で遅延起動する。`JobStatus` と jobs table は lease/世代 fencing、backoff、
 試行上限 failed、明示 retry/cancel、restart 後の lease 回収、idempotency key と commit 済み検知を持ち、
 exactly-once ではなく at-least-once + 冪等効果と明記する。macOS .app 配置/起動は #34 で検証する。
+
+## 33. #22 Browser/URL 取り込みと安全な PDF 取得
+
+[browser capture ADR](docs/ADR/browser-capture.md) が §8.2/§12.3/§17–18 の実装上の明確化となる。
+Browser/MCP 共通の `CaptureRequest`（URL、title、上限付き HTML snapshot、meta、JSON-LD、明示 PDF、
+保存先）を daemon が検証し、識別子（DOI/arXiv/PMID）→ `citation_*` → JSON-LD → Dublin Core/PRISM →
+#14 provider 補完（不足時のみ、固定 endpoint）→ 題名/URL 仮登録の順で解決して、#33 の共通
+preview/commit（重複 merge/cancel・保存先/タグ）に渡す。ページ由来の値はデータとしてのみ扱い、
+ページ URL は取得しない。native host は capture preview と preview 束縛の Create/Skip commit のみで、
+Merge・一般 commit・job 投入は不可。公開 PDF は commit 後に別の永続 job（`capture.pdf_fetch`）が
+HTTPS・全 DNS 応答/redirect の公開 IP 検査・接続先 pin・cookie/認証なし・サイズ/時間/MIME/`%PDF-`
+検査付きで取得し、SHA-256 で重複排除して添付する。失敗しても文献は巻き戻さず、一時的失敗は
+上限付き自動再試行、それ以外は理由付き failed と明示 retry。認証が必要な PDF は迂回せず、
+ブラウザでのダウンロード後の明示取り込みを案内する。

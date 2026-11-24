@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Only JSON-LD metadata</title>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {"@type": "WebPage", "name": "Landing page wrapper"},
+    {
+      "@type": ["ScholarlyArticle"],
+      "headline": "Graph-Shaped Metadata Without Meta Tags",
+      "author": [
+        {"@type": "Person", "givenName": "Ana", "familyName": "Silva", "@id": "https://orcid.org/0000-0002-1825-0097"},
+        {"@type": "Organization", "name": "Synthetic Lab"},
+        "Plain String Author"
+      ],
+      "datePublished": "2022-11-30T09:00:00Z",
+      "isPartOf": {
+        "@type": "PublicationIssue", "issueNumber": "4",
+        "isPartOf": {"@type": "PublicationVolume", "volumeNumber": "7",
+          "isPartOf": {"@type": "Periodical", "name": "Bulletin of Example Studies"}}
+      },
+      "pagination": "e1001",
+      "identifier": [{"@type": "PropertyValue", "propertyID": "DOI", "value": "10.9999/bes.7.4.e1001"}],
+      "inLanguage": "pt",
+      "encoding": {"@type": "MediaObject", "encodingFormat": "application/pdf", "contentUrl": "https://files.example.org/bes/e1001.pdf"}
+    }
+  ]
+}
+</script>
+<script type="application/ld+json">{ this is not valid json </script>
+</head>
+<body></body>
+</html>

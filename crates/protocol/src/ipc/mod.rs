@@ -12,6 +12,7 @@ pub use pdf::PdfCommand;
 
 use crate::{
     attachments::PdfReply,
+    capture::{CaptureCommand, CaptureReply},
     exchange::{ExportRequest, Exported, ImportReply, ImportRequestUi, MetadataResolution},
     jobs::{JobCommand, JobReply},
     library::{LibraryReply, LibraryRequest, ServiceError},
@@ -124,6 +125,8 @@ pub enum Command {
     Pdf(PdfCommand),
     Jobs(JobCommand),
     Grants(GrantCommand),
+    /// #22 browser/MCP capture (preview, preview-bound commit, PDF job status/retry).
+    Capture(CaptureCommand),
 }
 impl Command {
     pub fn operation(&self) -> Operation {
@@ -177,6 +180,7 @@ impl Command {
                 GrantCommand::List => O::GrantList,
                 GrantCommand::Revoke(_) => O::GrantRevoke,
             },
+            Self::Capture(c) => c.operation(),
         }
     }
 }
@@ -197,6 +201,7 @@ pub enum Reply {
     Pdf(PdfReply),
     Jobs(JobReply),
     Grants(GrantReply),
+    Capture(CaptureReply),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

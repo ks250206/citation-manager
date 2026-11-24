@@ -22,7 +22,9 @@
 //! - A running attempt stops (cooperatively, at its next progress report or heartbeat) and
 //!   fails when the job's `deadline_at_ms` passes or it exceeds the kind's
 //!   `JobHandler::max_run`.
+mod capture;
 mod handlers;
+pub use capture::CapturePdfFetchHandler;
 pub use handlers::{AttachmentImportHandler, DiagnosticWaitHandler};
 
 use crate::{ipc::auth::now_ms, lifecycle::Activity};
@@ -123,6 +125,12 @@ pub trait JobHandler: Send + Sync + 'static {
     /// through `JobContext::progress`/`cancel`. Exceeding it fails the job (no retry).
     fn max_run(&self) -> Duration {
         DEFAULT_MAX_RUN
+    }
+    /// Whether clients may create this kind through `JobCommand::Submit`. Kinds whose
+    /// payload must come from a daemon-validated operation (e.g. #22 capture PDF fetch,
+    /// bound to a reviewed preview) return false and are created via `submit_internal`.
+    fn ipc_submittable(&self) -> bool {
+        true
     }
 }
 
@@ -272,17 +280,40 @@ impl JobEngine {
     fn db(&self) -> std::sync::MutexGuard<'_, LibraryDb> {
         self.control.lock().unwrap_or_else(|e| e.into_inner())
     }
-    /// `owner`: submitting grant. `held`: its effective capabilities.
+    /// `owner`: submitting grant. `held`: its effective capabilities. Client path
+    /// (`JobCommand::Submit`): kinds that are not `ipc_submittable` are refused.
     pub fn submit(
         &self,
         owner: GrantId,
         held: &CapabilitySet,
         submit: JobSubmit,
     ) -> Result<JobStatus, WireError> {
+        self.submit_as(owner, held, submit, false)
+    }
+    /// Daemon-internal submission for a payload the daemon itself derived from an
+    /// authorized operation (same capability, idempotency and validation rules).
+    pub fn submit_internal(
+        &self,
+        owner: GrantId,
+        held: &CapabilitySet,
+        submit: JobSubmit,
+    ) -> Result<JobStatus, WireError> {
+        self.submit_as(owner, held, submit, true)
+    }
+    fn submit_as(
+        &self,
+        owner: GrantId,
+        held: &CapabilitySet,
+        submit: JobSubmit,
+        internal: bool,
+    ) -> Result<JobStatus, WireError> {
         let handler = self
             .handlers
             .get(submit.kind.as_str())
             .ok_or_else(|| invalid("unknown job kind"))?;
+        if !internal && !handler.ipc_submittable() {
+            return Err(WireError::Denied(Denial::Forbidden(Operation::JobSubmit)));
+        }
         if !handler.required().iter().all(|c| held.contains(c)) {
             return Err(WireError::Denied(Denial::Forbidden(Operation::JobSubmit)));
         }

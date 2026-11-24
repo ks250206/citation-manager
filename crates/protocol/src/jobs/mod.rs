@@ -132,6 +132,17 @@ pub mod kinds {
         pub original_name: Option<String>,
         pub media_type: Option<String>,
     }
+    /// #22: download one public PDF chosen from a committed capture preview and attach it
+    /// to the saved paper. Submitted only by the daemon's capture commit (not through
+    /// `JobCommand::Submit`). Idempotent on (paper, sha256): a rerun detects the attachment.
+    pub const CAPTURE_PDF_FETCH: &str = "capture.pdf_fetch";
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct CapturePdfFetch {
+        pub paper: PaperId,
+        /// A candidate URL the preview offered; re-validated by the fetch policy every run.
+        pub url: String,
+    }
     /// Diagnostic job without library effects: waits (cancellable, with progress) and can
     /// fail its first attempts on purpose. Used to exercise lifecycle/retry/lease recovery.
     pub const DIAGNOSTIC_WAIT: &str = "diagnostic.wait";

@@ -14,6 +14,7 @@ pub mod ipc;
 pub mod jobs;
 
 pub mod attachments;
+pub mod capture;
 pub mod exchange;
 pub mod organization;
 pub mod settings;
