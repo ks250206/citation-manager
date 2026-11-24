@@ -173,6 +173,18 @@ impl HostContext {
     }
 }
 
+/// Firefox passes the manifest it used; it must be one `register` wrote (compared after
+/// resolving symlinks, since Firefox may spell the home directory differently).
+pub fn registered_firefox_manifest(config: &HostConfig, manifest: &std::path::Path) -> bool {
+    let canonical = |p: &std::path::Path| p.canonicalize().unwrap_or_else(|_| p.to_owned());
+    let given = canonical(manifest);
+    config
+        .manifests
+        .iter()
+        .filter(|r| r.browser.is_firefox())
+        .any(|r| r.path == manifest || canonical(&r.path) == given)
+}
+
 /// Entry point when a browser starts the host. Returns the process exit code.
 pub fn main(args: &[OsString]) -> u8 {
     let Some(caller) = caller::parse(args) else {
@@ -203,6 +215,18 @@ pub fn main(args: &[OsString]) -> u8 {
             "{} extension {id} is not allowed",
             caller.browser()
         ));
+        return exit::CALLER_REJECTED;
+    }
+    if config.unregistered {
+        diag(
+            "unregistered (pending grant revocation or kept grant); run `papers-native-host register`",
+        );
+        return exit::CALLER_REJECTED;
+    }
+    if let Caller::Firefox { manifest, .. } = &caller
+        && !registered_firefox_manifest(&config, manifest)
+    {
+        diag("Firefox started the host from a manifest that is not registered");
         return exit::CALLER_REJECTED;
     }
     let exe = match std::env::current_exe() {

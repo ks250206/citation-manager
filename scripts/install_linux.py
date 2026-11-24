@@ -85,9 +85,12 @@ def register_browsers(prefix, library, development=False, pair=False, browsers=(
     ids = json.loads(EXTENSION_IDS.read_text())
     command = native_host_command(host, library, ids, development, pair, browsers)
     if command is None:
-        print('No released browser extension ID yet (#24); browser capture is not registered. '
-              'Use --development-extensions for the smoke-test extension.')
-        return None
+        # No IDs to (re)register with: still re-point an existing registration at this
+        # install (a no-op when the host was never registered), so a moved or reinstalled
+        # prefix never leaves browsers with stale manifests.
+        command = [str(host), 'refresh']
+        print('No released browser extension ID yet (#24); existing browser registration (if any) '
+              'is refreshed. Use --development-extensions for the smoke-test extension.')
     run(command, check=True)
     return command
 

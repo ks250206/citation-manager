@@ -20,7 +20,9 @@ sibling of `papersd`: `<prefix>/bin/` on Linux (`scripts/install_linux.py`),
   executable (`current_exe`), never a PATH search, in its own process group with closed stdio.
   The daemon therefore outlives the host, the browser and the GUI, and finishes its durable
   jobs (e.g. `capture.pdf_fetch`) before idling out.
-- Requests to the daemon are bounded (15 s start, 10 s handshake, 300 s per reply).
+- Daemon I/O is bounded per operation: 15 s to start `papersd`, 10 s for each handshake
+  read/write, and 300 s for each later socket read or write (a reply is one read; there is no
+  separate total deadline per request).
 - stdout carries only protocol frames. stderr carries one diagnostic line per message
   (`papers-native-host: capture.preview: ok (1130 bytes in)`, error codes, framing problems,
   rejected caller IDs). Page content, URLs, titles, previews and credentials are never written.
@@ -43,6 +45,26 @@ stores the secret 0600. Re-pairing with a still valid credential is a no-op; a r
 is revoked; `unregister` revokes it. A settings UI with consent and listing replaces this CLI
 step in #26.
 
+No grant id is ever forgotten while the grant may still be live:
+
+- `pair` records a newly issued grant in `config.json` (`revoke_pending`) *before* storing its
+  secret. If storing the secret or the config fails, the new grant is revoked again (or stays
+  recorded as pending); the previous pairing is untouched. A replaced grant goes to
+  `revoke_pending` and is revoked; a failed revocation stays pending and is retried by the
+  next `pair` or `unregister` (the command exits 1 and says so).
+- `unregister` removes the manifests first, then revokes. If the daemon cannot be opened or a
+  revocation fails, the config is kept, marked `unregistered` (the host then refuses every
+  browser launch), with the ids in `revoke_pending`; only the no-longer-needed secret is
+  deleted. It exits 1 and asks to run `unregister` again; a successful run deletes everything.
+- `unregister --keep-grant` removes only the manifests and marks the config `unregistered`,
+  keeping config and credential and contacting no daemon; `register` restores browser access
+  with the same grant, a plain `unregister` revokes it.
+- Native-host grants have no expiry. The grant is capture-only, and an expiry would silently
+  stop browser saving with no renewal flow until the #26 consent/rotation UI; instead it ends
+  by explicit revocation (`unregister`, re-pairing, or a GrantAdmin), and failed revocations
+  are tracked as above. Registering another library while a grant is held is refused until
+  `unregister` revoked it in its own library.
+
 Browser messages map to a closed set of commands (`message::Request` -> `daemon::command`):
 `Organization(List)` and `Capture(Preview | Commit | Cancel | PdfJob | RetryPdf)`. There is no
 pass-through of `Command` JSON; anything else is `unknown_type` and never reaches the daemon.
@@ -56,9 +78,10 @@ The browser only starts hosts whose manifest allows the extension. The host chec
 | Browser | argv | Accepted when |
 |---|---|---|
 | Chrome/Chromium | `chrome-extension://<id>/` (+ `--parent-window=<n>` on Windows) | `<id>` is 32 × `a`–`p` and in the Chrome allowlist |
-| Firefox | `<absolute manifest path>.json <extension id>` | gecko ID (`name@domain` or `{GUID}`, ≤ 80 bytes) in the Firefox allowlist |
+| Firefox | `<absolute manifest path>.json <extension id>` | gecko ID (`name@domain` or `{GUID}`, ≤ 80 bytes) in the Firefox allowlist, and the manifest path is one `register` wrote (compared after resolving symlinks) |
 
-Anything else exits 2/3 without reading stdin. IDs of one browser never match the other's list.
+Anything else exits 2/3 without reading stdin, as does any launch while the config is marked
+`unregistered`. IDs of one browser never match the other's list.
 
 ## Registration
 
@@ -85,16 +108,23 @@ Host name `dev.citation_manager.native_host`. Manifest locations (per user):
   running executable. It refuses an executable inside a source checkout's `target/` directory
   (unless `--allow-development-build`), one that is not a regular executable, or one (or its
   directory) that is group/other-writable or not owned by the user/root, and requires an
-  executable `papersd` sibling. Without `--browser` it registers the browsers whose profile
-  directory exists. Re-running keeps earlier manifests, IDs and pairing; changing the library
-  drops the stored credential (pair again).
-- `refresh` re-points every recorded manifest when the executable moved or was replaced; it
-  is a no-op when unregistered or already current and never contacts the daemon, so the app
-  (#34: on every `.app` launch) and installers can call it unconditionally. Re-running
-  `scripts/install_linux.py` does the same on Linux.
-- `unregister [--keep-grant]` removes our manifests (only files carrying our host name) and the
-  config/credential and revokes the grant. `status` prints JSON and exits 1 when a manifest is
-  missing or stale. `manifest --browser NAME [--host-path ABS]` prints one document for
+  executable `papersd` sibling, and a valid UTF-8 path (JSON manifests cannot carry anything
+  else). Without `--browser` it registers the browsers whose profile directory exists.
+  Re-running keeps earlier manifests, IDs and pairing. A browser family without any allowed ID
+  gets no manifest (an empty `allowed_origins` is useless; a stale one of ours is removed).
+- A `config.json` that exists but is unreadable, unsafe (not 0600/0700) or corrupt is an error
+  for every subcommand; it is never treated as "not registered" (which would overwrite it or
+  lose the grant id inside). Only a missing config means unregistered.
+- `refresh` re-points every recorded manifest when the executable moved or was replaced. It
+  skips records whose browser profile root (the manifest directory's parent) no longer exists
+  and never recreates it, is a no-op when unregistered or already current, and never contacts
+  the daemon, so the app (#34: on every `.app` launch) and installers can call it
+  unconditionally. `scripts/install_linux.py` runs `register` when it has extension IDs and
+  otherwise `refresh`, so re-running it after moving or reinstalling the prefix always
+  re-points an existing registration.
+- `unregister [--keep-grant]`: see above; it only removes files carrying our host name.
+  `status` prints JSON and exits 1 when a manifest is missing or stale, the config is marked
+  `unregistered`, or revocations are pending. `manifest --browser NAME [--host-path ABS]` prints one document for
   packaging.
 
 ### Extension IDs
@@ -104,9 +134,13 @@ The development extension (`dev-extension/`, used only by the smoke test) has th
 `baapgkfjfjjagdkpkmocjhfopmaohcdc`, derived from the public `key` in its manifest (the private
 key was discarded, so the ID cannot be published), and the gecko ID
 `citation-manager-dev@citation-manager.invalid`. They are allowed only with
-`--development-extensions`. #24 adds the store IDs under `release`; the installer passes them
+`--development-extensions`, and `register` prints a warning when they are: these IDs are
+**claimable** by anyone who loads an unpacked (Chrome developer mode, using the committed
+public key) or temporary (Firefox) extension, so they must never be registered on a machine
+used for real captures. They only stop a store-published extension from using them. #24 adds the store IDs under `release`; the installer passes them
 as `--chrome-extension-id`/`--firefox-extension-id`. Until then the Linux installer registers
-nothing unless `--development-extensions` is given.
+nothing new unless `--development-extensions` is given (it still refreshes an existing
+registration).
 
 ## Message contract (version 1)
 

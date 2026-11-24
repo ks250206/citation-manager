@@ -46,7 +46,10 @@ Browsers start this program themselves. Setup subcommands:
       Re-point recorded manifests at this executable after the app was moved or updated.
       Does nothing when not registered. Never contacts the daemon.
   unregister [--keep-grant]
-      Remove manifests and configuration and revoke the grant.
+      Remove the manifests, revoke the grant and delete the configuration. If revocation
+      fails, the configuration keeps the grant id (marked unregistered) and exits 1: run it
+      again. --keep-grant only removes the manifests and keeps configuration and credential
+      without contacting the daemon (`register` restores access).
   status
       Print the registration as JSON; exit 1 when a manifest is missing or stale.
   manifest --browser NAME [--host-path ABS] [--chrome-extension-id ID]... [--firefox-extension-id ID]...
@@ -220,6 +223,12 @@ fn publishable_exe(allow_development_build: bool) -> Result<PathBuf, String> {
             exe.display()
         ));
     }
+    if exe.to_str().is_none() {
+        return Err(format!(
+            "{} is not valid UTF-8; browsers cannot start it from a JSON manifest",
+            exe.display()
+        ));
+    }
     manifest::check_executable(&exe, euid())?;
     let papersd = daemon::sibling_papersd(&exe);
     manifest::check_executable(&papersd, euid())
@@ -234,26 +243,60 @@ fn home() -> Result<PathBuf, String> {
         .ok_or_else(|| "HOME must be an absolute path".into())
 }
 
-fn write_manifests(config: &HostConfig) -> Result<(), String> {
+fn allowed_ids<'a>(config: &'a HostConfig, record: &ManifestRecord) -> &'a BTreeSet<String> {
+    if record.browser.is_firefox() {
+        &config.allowed.firefox
+    } else {
+        &config.allowed.chrome
+    }
+}
+
+/// The browser profile root (the manifest directory's parent) still exists.
+fn profile_exists(record: &ManifestRecord) -> bool {
+    record
+        .path
+        .parent()
+        .and_then(Path::parent)
+        .is_some_and(Path::is_dir)
+}
+
+/// Whether `refresh` keeps `record` current: its browser has allowed IDs and its profile
+/// was not deleted.
+fn refreshable(config: &HostConfig, record: &ManifestRecord) -> bool {
+    !allowed_ids(config, record).is_empty() && profile_exists(record)
+}
+
+/// Writes the manifests. A browser without allowed IDs gets none (an empty
+/// `allowed_origins` is useless; a stale one of ours is removed). `refresh` never recreates
+/// a browser profile that was deleted.
+fn write_manifests(config: &HostConfig, refreshing: bool) -> Result<(), String> {
     for record in &config.manifests {
-        let ids = if record.browser.is_firefox() {
-            &config.allowed.firefox
-        } else {
-            &config.allowed.chrome
-        };
+        let ids = allowed_ids(config, record);
+        if ids.is_empty() {
+            if !refreshing {
+                let removed = manifest::remove(&record.path).unwrap_or(false);
+                eprintln!(
+                    "papers-native-host: warning: no {} extension ID allowed; {} {}",
+                    record.browser.name(),
+                    record.path.display(),
+                    if removed { "removed" } else { "not written" }
+                );
+            }
+            continue;
+        }
+        if refreshing && !profile_exists(record) {
+            eprintln!(
+                "papers-native-host: skipping {}: browser profile no longer exists",
+                record.path.display()
+            );
+            continue;
+        }
         let dir = record
             .path
             .parent()
             .ok_or("manifest path has no directory")?;
-        let written = manifest::write(dir, record.browser, &config.host_path, ids)
+        manifest::write(dir, record.browser, &config.host_path, ids)
             .map_err(|e| format!("{}: {e}", record.path.display()))?;
-        if ids.is_empty() {
-            eprintln!(
-                "papers-native-host: warning: no {} extension ID allowed; {} accepts no caller",
-                record.browser.name(),
-                written.display()
-            );
-        }
     }
     Ok(())
 }
@@ -261,7 +304,7 @@ fn write_manifests(config: &HostConfig) -> Result<(), String> {
 fn register(o: Options) -> u8 {
     let run = || -> Result<u8, String> {
         let store = Store::default_location().map_err(|e| e.to_string())?;
-        let previous = store.load().ok();
+        let previous = store.load_optional()?;
         let host_path = publishable_exe(o.allow_development_build)?;
         let library = o
             .library
@@ -279,6 +322,11 @@ fn register(o: Options) -> u8 {
         if o.development_extensions {
             allowed.chrome.insert(DEV_CHROME_EXTENSION_ID.into());
             allowed.firefox.insert(DEV_FIREFOX_EXTENSION_ID.into());
+            eprintln!(
+                "papers-native-host: warning: allowing the development smoke-test extension IDs \
+                 ({DEV_CHROME_EXTENSION_ID}, {DEV_FIREFOX_EXTENSION_ID}). Anyone can load an \
+                 unpacked/temporary extension with these IDs; use them only for testing."
+            );
         }
         if allowed.chrome.is_empty() && allowed.firefox.is_empty() {
             allowed = previous.as_ref().map(|p| p.allowed.clone()).ok_or(
@@ -307,7 +355,17 @@ fn register(o: Options) -> u8 {
                 records.push(ManifestRecord { browser, path });
             }
         }
-        let library_changed = previous.as_ref().is_some_and(|p| p.library != library);
+        if let Some(p) = &previous
+            && p.library != library
+            && (p.grant.is_some() || !p.revoke_pending.is_empty())
+        {
+            // The grant lives in the previous library's daemon: revoke it there first.
+            return Err(format!(
+                "registered for {} with a grant; run `unregister` first (revokes it), \
+                 then register the new library",
+                p.library.display()
+            ));
+        }
         let mut config = HostConfig {
             version: CONFIG_VERSION,
             library,
@@ -316,14 +374,13 @@ fn register(o: Options) -> u8 {
             allowed,
             manifests: records,
             grant: previous.as_ref().and_then(|p| p.grant),
+            revoke_pending: previous
+                .as_ref()
+                .map(|p| p.revoke_pending.clone())
+                .unwrap_or_default(),
+            unregistered: false,
         };
-        if library_changed {
-            // The stored grant belongs to the previous library's daemon.
-            let _ = std::fs::remove_file(store.credential_path());
-            config.grant = None;
-            eprintln!("papers-native-host: library changed; pair again");
-        }
-        write_manifests(&config)?;
+        write_manifests(&config, false)?;
         store.save(&config).map_err(|e| e.to_string())?;
         if config.manifests.is_empty() {
             eprintln!(
@@ -364,29 +421,38 @@ fn pair(o: &Options) -> u8 {
     let Ok(store) = Store::default_location() else {
         return fail("HOME is not set");
     };
-    match store.load() {
-        Ok(mut config) => pair_with(&store, &mut config, o.force),
-        Err(e) => fail(format!("not registered ({e}); run register first")),
+    match store.load_optional() {
+        Ok(Some(mut config)) => pair_with(&store, &mut config, o.force),
+        Ok(None) => fail("not registered; run register first"),
+        Err(e) => fail(e),
     }
 }
 
+/// Native-host grants have no expiry: the capture-only grant would otherwise stop browser
+/// saving with no renewal flow (consent/rotation UI is #26). Instead every grant id is always
+/// recorded somewhere (`grant` or `revoke_pending`) until a revocation succeeded.
 fn pair_with(store: &Store, config: &mut HostConfig, force: bool) -> u8 {
     let mut run = || -> Result<u8, String> {
         let exe = current_exe()?;
         let paths = DaemonPaths::new(&config.library, config.runtime_dir.as_deref(), euid())
             .map_err(|e| e.to_string())?;
+        let connector = desktop_connector(config, &exe)?;
         if !force && let Ok(credential) = store.credential() {
-            let connector = HostConnector::capture(paths.clone(), euid(), credential, &exe);
-            match Session::open(&connector) {
+            let capture = HostConnector::capture(paths.clone(), euid(), credential, &exe);
+            match Session::open(&capture) {
                 Ok(session) if Some(session.welcome.grant) == config.grant => {
                     println!("already paired (grant {})", session.welcome.grant);
+                    if !config.revoke_pending.is_empty() {
+                        let mut admin = Session::open(&connector)
+                            .map_err(|e| format!("cannot open the library as its owner: {e}"))?;
+                        revoke_pending(&mut admin, store, config)?;
+                    }
                     return Ok(0);
                 }
                 Ok(_) | Err(ClientError::Rejected(HandshakeRejection::Unauthenticated)) => {}
                 Err(e) => return Err(format!("cannot reach the library daemon: {e}")),
             }
         }
-        let connector = desktop_connector(config, &exe)?;
         let mut admin = Session::open(&connector)
             .map_err(|e| format!("cannot open the library as its owner: {e}"))?;
         let issued = admin
@@ -400,15 +466,39 @@ fn pair_with(store: &Store, config: &mut HostConfig, force: bool) -> u8 {
         let Reply::Grants(GrantReply::Issued { grant, credential }) = issued else {
             return Err("unexpected daemon reply".into());
         };
-        store
-            .save_credential(&credential)
-            .map_err(|e| e.to_string())?;
-        let previous = config.grant.replace(grant.id);
-        store.save(config).map_err(|e| e.to_string())?;
-        if let Some(old) = previous.filter(|old| *old != grant.id) {
-            revoke(&mut admin, old);
+        // The new grant exists now. Record it as pending revocation before its secret is
+        // stored, so a failure at any later step cannot leave it live and unrecorded.
+        let mut recorded = config.clone();
+        recorded.revoke_pending.push(grant.id);
+        if let Err(e) = store.save(&recorded) {
+            let revoked = revoke(&mut admin, grant.id);
+            return Err(format!(
+                "cannot record the new grant ({e}); {}",
+                if revoked {
+                    "it was revoked again".to_owned()
+                } else {
+                    format!("revoke grant {} from the app", grant.id)
+                }
+            ));
         }
+        *config = recorded;
+        if let Err(e) = store.save_credential(&credential) {
+            let _ = revoke_pending(&mut admin, store, config);
+            return Err(format!(
+                "cannot store the credential ({e}); the new grant was not kept"
+            ));
+        }
+        config.revoke_pending.retain(|id| *id != grant.id);
+        if let Some(old) = config
+            .grant
+            .replace(grant.id)
+            .filter(|old| *old != grant.id)
+        {
+            config.revoke_pending.push(old);
+        }
+        store.save(config).map_err(|e| e.to_string())?;
         println!("paired: grant {} ({:?})", grant.id, grant.capabilities);
+        revoke_pending(&mut admin, store, config)?;
         Ok(0)
     };
     run().unwrap_or_else(fail)
@@ -424,23 +514,54 @@ fn revoke(admin: &mut Session, grant: GrantId) -> bool {
     }
 }
 
+/// Revokes `config.revoke_pending`, keeping (and saving) the ids that failed.
+fn revoke_pending(
+    admin: &mut Session,
+    store: &Store,
+    config: &mut HostConfig,
+) -> Result<(), String> {
+    let before = config.revoke_pending.len();
+    let pending = std::mem::take(&mut config.revoke_pending);
+    for id in pending {
+        if revoke(admin, id) {
+            println!("revoked grant {id}");
+        } else {
+            config.revoke_pending.push(id);
+        }
+    }
+    if config.revoke_pending.len() != before {
+        store.save(config).map_err(|e| e.to_string())?;
+    }
+    if config.revoke_pending.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "grant(s) {:?} still need revocation; run the command again",
+            config.revoke_pending
+        ))
+    }
+}
+
 fn refresh(o: &Options) -> u8 {
     let run = || -> Result<u8, String> {
         let store = Store::default_location().map_err(|e| e.to_string())?;
-        let Ok(mut config) = store.load() else {
+        let Some(mut config) = store.load_optional()? else {
             return Ok(0);
         };
+        if config.unregistered {
+            return Ok(0);
+        }
         let exe = publishable_exe(o.allow_development_build)?;
         let stale = config.host_path != exe
-            || config
-                .manifests
-                .iter()
-                .any(|r| manifest::recorded_host_path(&r.path).as_deref() != Some(exe.as_path()));
+            || config.manifests.iter().any(|r| {
+                refreshable(&config, r)
+                    && manifest::recorded_host_path(&r.path).as_deref() != Some(exe.as_path())
+            });
         if !stale {
             return Ok(0);
         }
         config.host_path = exe;
-        write_manifests(&config)?;
+        write_manifests(&config, true)?;
         store.save(&config).map_err(|e| e.to_string())?;
         println!("re-registered host at {}", config.host_path.display());
         Ok(0)
@@ -448,10 +569,15 @@ fn refresh(o: &Options) -> u8 {
     run().unwrap_or_else(fail)
 }
 
+/// Removes the manifests first (browsers can no longer start the host), then revokes the
+/// grant. Without revocation the configuration is kept, marked unregistered, holding the
+/// grant id(s) to revoke, so nothing is left live and forgotten; run it again to retry.
+/// `--keep-grant`: remove the manifests only and keep config + credential (no daemon
+/// contact); a later `register` restores browser access with the same grant.
 fn unregister(o: &Options) -> u8 {
     let run = || -> Result<u8, String> {
         let store = Store::default_location().map_err(|e| e.to_string())?;
-        let config = store.load().ok();
+        let config = store.load_optional()?;
         let home = home()?;
         let mut paths: BTreeSet<PathBuf> = Browser::ALL
             .into_iter()
@@ -465,26 +591,47 @@ fn unregister(o: &Options) -> u8 {
                 println!("removed {}", path.display());
             }
         }
-        let mut code = 0;
-        if let Some(config) = &config
-            && let Some(grant) = config.grant
-            && !o.keep_grant
-        {
-            let revoked = current_exe()
-                .and_then(|exe| desktop_connector(config, &exe))
-                .and_then(|c| Session::open(&c).map_err(|e| e.to_string()))
-                .map(|mut admin| revoke(&mut admin, grant));
-            match revoked {
-                Ok(true) => println!("revoked grant {grant}"),
-                Ok(false) => code = 1,
-                Err(e) => {
-                    eprintln!("papers-native-host: warning: grant {grant} not revoked: {e}");
-                    code = 1;
+        let Some(mut config) = config else {
+            store.remove().map_err(|e| e.to_string())?;
+            return Ok(0);
+        };
+        if o.keep_grant {
+            config.unregistered = true;
+            store.save(&config).map_err(|e| e.to_string())?;
+            println!(
+                "kept the configuration and grant; `register` restores browser access, \
+                 `unregister` revokes the grant"
+            );
+            return Ok(0);
+        }
+        config.revoke_pending.extend(config.grant.take());
+        if !config.revoke_pending.is_empty() {
+            let admin = current_exe()
+                .and_then(|exe| desktop_connector(&config, &exe))
+                .and_then(|c| Session::open(&c).map_err(|e| e.to_string()));
+            let result = match admin {
+                Ok(mut admin) => {
+                    config.unregistered = true;
+                    revoke_pending(&mut admin, &store, &mut config)
                 }
+                Err(e) => Err(format!("cannot open the library as its owner: {e}")),
+            };
+            if let Err(e) = result {
+                // The secret is no longer needed to revoke; the ids are what must survive.
+                config.unregistered = true;
+                store.save(&config).map_err(|e| e.to_string())?;
+                store.remove_credential().map_err(|e| e.to_string())?;
+                eprintln!(
+                    "papers-native-host: grant(s) {:?} not revoked: {e}. {} keeps their ids; \
+                     run `papers-native-host unregister` again when the library can be opened",
+                    config.revoke_pending,
+                    store.config_path().display()
+                );
+                return Ok(1);
             }
         }
         store.remove().map_err(|e| e.to_string())?;
-        Ok(code)
+        Ok(0)
     };
     run().unwrap_or_else(fail)
 }
@@ -493,7 +640,7 @@ fn status() -> u8 {
     let run = || -> Result<u8, String> {
         let store = Store::default_location().map_err(|e| e.to_string())?;
         let exe = current_exe()?;
-        let Ok(config) = store.load() else {
+        let Some(config) = store.load_optional()? else {
             println!("{}", json!({ "registered": false, "executable": exe }));
             return Ok(1);
         };
@@ -511,6 +658,8 @@ fn status() -> u8 {
             })
             .collect();
         let healthy = config.host_path == exe
+            && !config.unregistered
+            && config.revoke_pending.is_empty()
             && manifests
                 .iter()
                 .all(|m| m["points_to_this_executable"] == json!(true));
@@ -523,6 +672,8 @@ fn status() -> u8 {
             "manifests": manifests,
             "paired": store.credential().is_ok(),
             "grant": config.grant,
+            "revoke_pending": config.revoke_pending,
+            "unregistered": config.unregistered,
             "healthy": healthy,
         });
         println!(
@@ -543,6 +694,9 @@ fn print_manifest(o: Options) -> u8 {
             Some(path) => path,
             None => current_exe()?,
         };
+        if host.to_str().is_none() {
+            return Err("the host path must be valid UTF-8".into());
+        }
         let ids = if browser.is_firefox() {
             &o.firefox
         } else {

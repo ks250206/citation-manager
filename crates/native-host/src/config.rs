@@ -48,15 +48,28 @@ pub struct HostConfig {
     pub manifests: Vec<ManifestRecord>,
     /// The daemon grant whose secret is in `credential` (for re-pairing/revocation).
     pub grant: Option<GrantId>,
+    /// Grants whose secret is gone but whose revocation has not succeeded yet (a failed
+    /// `unregister`, a replaced or half-stored pairing). Retried by `pair` and `unregister`
+    /// so no native-host grant is left live and forgotten.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub revoke_pending: Vec<GrantId>,
+    /// Manifests were removed by `unregister`; the host refuses browser launches until the
+    /// next `register`. Kept only while a grant is retained or a revocation is pending.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub unregistered: bool,
 }
 
 /// Directory containing `native-host/`, from the user's environment only.
 pub fn base_dir() -> io::Result<PathBuf> {
-    base_dir_from(
+    base_dir_for(
         std::env::var_os("HOME"),
         std::env::var_os("XDG_CONFIG_HOME"),
-        cfg!(target_os = "macos"),
     )
+}
+/// `base_dir` for an explicit environment, resolved for the platform this binary runs on
+/// (tests use it to find the directory the host executable will read).
+pub fn base_dir_for(home: Option<OsString>, xdg: Option<OsString>) -> io::Result<PathBuf> {
+    base_dir_from(home, xdg, cfg!(target_os = "macos"))
 }
 fn base_dir_from(
     home: Option<OsString>,
@@ -129,6 +142,24 @@ impl Store {
             ));
         }
         Ok(config)
+    }
+    /// `Ok(None)` only when nothing is registered (no directory or no config.json). A config
+    /// that exists but is unreadable, unsafe or corrupt is an error, never "unregistered".
+    pub fn load_optional(&self) -> Result<Option<HostConfig>, String> {
+        match self.load() {
+            Ok(config) => Ok(Some(config)),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(format!(
+                "{} cannot be used ({e}); fix or remove it",
+                self.config_path().display()
+            )),
+        }
+    }
+    pub fn remove_credential(&self) -> io::Result<()> {
+        match fs::remove_file(self.credential_path()) {
+            Err(e) if e.kind() != io::ErrorKind::NotFound => Err(e),
+            _ => Ok(()),
+        }
     }
     pub fn save(&self, config: &HostConfig) -> io::Result<()> {
         self.prepare()?;
@@ -237,6 +268,8 @@ mod tests {
                 path: "/m/dev.citation_manager.native_host.json".into(),
             }],
             grant: None,
+            revoke_pending: Vec::new(),
+            unregistered: false,
         };
         store.save(&config).unwrap();
         store.save_credential(&Credential("secret".into())).unwrap();
@@ -258,5 +291,14 @@ mod tests {
         store.remove().unwrap();
         assert!(!store.dir.exists());
         assert!(store.load().is_err());
+        assert_eq!(store.load_optional(), Ok(None));
+        // Corrupt (or unsafe) is not the same as unregistered.
+        store.prepare().unwrap();
+        assert_eq!(store.load_optional(), Ok(None));
+        write_atomic(&store.config_path(), b"{not json", 0o600).unwrap();
+        assert!(store.load_optional().unwrap_err().contains("fix or remove"));
+        let body = serde_json::to_vec(&config).unwrap();
+        write_atomic(&store.config_path(), &body, 0o644).unwrap();
+        assert!(store.load_optional().is_err());
     }
 }

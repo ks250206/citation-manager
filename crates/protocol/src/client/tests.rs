@@ -263,3 +263,42 @@ fn per_command_deadlines_are_generous_for_long_operations() {
     assert_eq!(t.backoff(2), Some(Duration::from_millis(250)));
     assert_eq!(t.backoff(40), Some(Duration::from_secs(10)));
 }
+
+/// A stream whose peer is already gone, reporting it the way macOS does: setting socket
+/// options fails with EINVAL before any frame is written.
+struct ClosedPeerQuirk;
+impl io::Read for ClosedPeerQuirk {
+    fn read(&mut self, _: &mut [u8]) -> io::Result<usize> {
+        Ok(0)
+    }
+}
+impl io::Write for ClosedPeerQuirk {
+    fn write(&mut self, _: &[u8]) -> io::Result<usize> {
+        Err(io::ErrorKind::BrokenPipe.into())
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+impl Stream for ClosedPeerQuirk {
+    fn try_clone_stream(&self) -> io::Result<Box<dyn Stream>> {
+        Ok(Box::new(ClosedPeerQuirk))
+    }
+    fn shutdown_stream(&self) {}
+    fn set_io_timeouts(&self, _: Option<Duration>, _: Option<Duration>) -> io::Result<()> {
+        Err(io::Error::from_raw_os_error(22))
+    }
+}
+
+#[test]
+fn a_peer_closed_before_socket_options_is_a_handshake_close_on_macos() {
+    let err =
+        handshake_within(&mut ClosedPeerQuirk, hello(), Duration::from_millis(100)).unwrap_err();
+    // On macOS this is the daemon-closed case and is retried; elsewhere EINVAL stays an
+    // ordinary I/O error (Linux never reports a closed peer this way).
+    assert_eq!(
+        err.closed_during_handshake(),
+        cfg!(target_os = "macos"),
+        "{err:?}"
+    );
+}
