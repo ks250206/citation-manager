@@ -77,7 +77,9 @@ fn load_keymap(path: &Path) -> Result<Option<Vec<u8>>, ServiceError> {
         Err(e) => return Err(invalid(e.to_string())),
         Ok(_) => (),
     }
-    private(path)?;
+    private(path).map_err(|_| {
+        invalid("keymap.json must be a regular file you own with mode 0600 (chmod 600 keymap.json)")
+    })?;
     let mut bytes = Vec::new();
     File::open(path)
         .map_err(|e| invalid(e.to_string()))?

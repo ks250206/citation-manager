@@ -477,6 +477,8 @@ impl LibraryView {
                         );
                     } else if self.keymap_custom {
                         self.status("Custom keymap loaded", false, cx);
+                    } else if self.message.starts_with("Reloading") {
+                        self.status("Settings reloaded; using the built-in keymap", false, cx);
                     }
                 }
                 Err(e) => self.status(format!("Using default layout: {e}"), true, cx),
@@ -572,7 +574,16 @@ impl LibraryView {
         }
     }
     fn discard_edits(&mut self, cx: &mut Context<Self>) {
-        if self.locked() || !self.dirty {
+        if !self.dirty {
+            self.status("No unsaved metadata edits to discard", false, cx);
+            return;
+        }
+        if self.locked() {
+            self.status(
+                "Wait for the current operation before discarding edits",
+                true,
+                cx,
+            );
             return;
         }
         self.set_editor(self.editor.clone(), Some(self.draft.clone()), cx);
@@ -1026,14 +1037,12 @@ impl Render for LibraryView {
             };
             window.defer(cx, move |window, cx| target.focus(window, cx));
         }
-        div()
+        // The palette is a sibling of the "Library" key context, so while it has focus no
+        // workbench shortcut (⌘N/⌘S/⌘1, Tab, Esc→Back…) fires behind it.
+        let workbench = div()
             .size_full()
             .flex()
             .flex_col()
-            .bg(rgb(CANVAS))
-            .text_color(rgb(TEXT))
-            .font_family(".SystemUIFont")
-            .text_size(px(13.))
             .track_focus(&self.focus)
             .key_context("Library")
             .on_action(cx.listener(Self::new_paper))
@@ -1046,7 +1055,6 @@ impl Render for LibraryView {
             .on_action(cx.listener(|this, _: &OpenPalette, window, cx| {
                 this.run_command(crate::commands::ids::PALETTE, window, cx)
             }))
-            .relative()
             .on_action(
                 cx.listener(|this, _: &ShowLibrary, w, cx| this.show(Screen::Library, w, cx)),
             )
@@ -1075,7 +1083,15 @@ impl Render for LibraryView {
                     .children(self.diagnostics.iter().cloned().map(line))
                     .into_any_element(),
             })
-            .child(self.status_bar(cx))
+            .child(self.status_bar(cx));
+        div()
+            .size_full()
+            .relative()
+            .bg(rgb(CANVAS))
+            .text_color(rgb(TEXT))
+            .font_family(".SystemUIFont")
+            .text_size(px(13.))
+            .child(workbench)
             .when(self.palette_open, |el| el.child(self.palette_overlay(cx)))
     }
 }

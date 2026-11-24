@@ -63,6 +63,8 @@ pub(super) fn display_keys(keys: &str) -> String {
         .map(|token| {
             let (mods, key) = match token.rfind('+') {
                 Some(i) if i + 1 < token.len() => (&token[..=i], &token[i + 1..]),
+                // `Cmd++`: the bound key is "+" itself.
+                Some(i) if i > 0 && token.ends_with("++") => (&token[..i], "+"),
                 _ => ("", token),
             };
             let key = match key {
@@ -348,6 +350,12 @@ impl LibraryView {
             return;
         }
         let m = &event.keystroke.modifiers;
+        // Super/Windows (and Fn) are not part of the keymap vocabulary off macOS; never
+        // let Super+j act as a bare j.
+        if m.function || (!cfg!(target_os = "macos") && m.platform) {
+            self.resolver.reset();
+            return;
+        }
         let (primary, control) = if cfg!(target_os = "macos") {
             (m.platform, m.control)
         } else {
@@ -396,6 +404,7 @@ impl LibraryView {
             .bg(rgba(0x0f172a40))
             .flex()
             .justify_center()
+            .items_start()
             .occlude()
             .on_mouse_down(
                 MouseButton::Left,
