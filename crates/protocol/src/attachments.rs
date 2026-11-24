@@ -115,6 +115,8 @@ pub enum RenderFailure {
     /// Requested bitmap exceeds the pixel budget; choose a lower zoom.
     TooLarge,
     Cancelled,
+    /// The PDF worker queue was full or the page took too long; worth retrying shortly.
+    Busy,
     /// No PDF runtime in this build/bundle, or the worker stopped.
     RuntimeUnavailable(String),
     Other(String),
@@ -128,6 +130,7 @@ impl std::fmt::Display for RenderFailure {
             Self::PageOutOfRange => "Page out of range",
             Self::TooLarge => "Page too large at this zoom; zoom out",
             Self::Cancelled => "Rendering cancelled",
+            Self::Busy => "The PDF renderer is busy; retrying",
             Self::RuntimeUnavailable(reason) | Self::Other(reason) => reason,
         })
     }

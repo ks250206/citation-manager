@@ -143,24 +143,55 @@ fn cache_is_lru_bounded_by_bytes_and_entries() {
     let a = attachment(1);
     let b = attachment(2);
     let mut cache: RenderCache<&str> = RenderCache::new(100, 3);
-    assert!(cache.insert(RenderKey::new(a, 0, 1.0), "p0", 40));
-    assert!(cache.insert(RenderKey::new(a, 1, 1.0), "p1", 40));
+    assert!(cache.insert(RenderKey::new(a, 0, 1.0), "p0", 40).is_empty());
+    assert!(cache.insert(RenderKey::new(a, 1, 1.0), "p1", 40).is_empty());
     assert_eq!(cache.get(&RenderKey::new(a, 0, 1.0)), Some(&"p0"));
-    // Over budget: the least recently used (page 1) goes, page 0 was just touched.
-    assert!(cache.insert(RenderKey::new(a, 2, 1.0), "p2", 40));
+    // Over budget: the least recently used (page 1) goes and is handed back.
+    assert_eq!(
+        cache.insert(RenderKey::new(a, 2, 1.0), "p2", 40),
+        vec!["p1"]
+    );
     assert!(!cache.contains(&RenderKey::new(a, 1, 1.0)));
     assert!(cache.contains(&RenderKey::new(a, 0, 1.0)));
     assert_eq!(cache.bytes(), 80);
+    // Re-inserting a key returns the replaced value.
+    assert_eq!(
+        cache.insert(RenderKey::new(a, 2, 1.0), "p2b", 40),
+        vec!["p2"]
+    );
     // Different zoom is a different entry.
     assert!(!cache.contains(&RenderKey::new(a, 0, 2.0)));
-    assert!(!cache.insert(RenderKey::new(a, 9, 1.0), "huge", 101));
-    cache.insert(RenderKey::new(b, 0, 1.0), "b0", 10);
+    assert_eq!(
+        cache.insert(RenderKey::new(a, 9, 1.0), "huge", 101),
+        vec!["huge"]
+    );
+    assert!(cache.insert(RenderKey::new(b, 0, 1.0), "b0", 10).is_empty());
     assert_eq!(cache.len(), 3);
-    cache.clear_except(Some(b));
+    let mut dropped = cache.clear_except(Some(b));
+    dropped.sort();
+    assert_eq!(dropped, vec!["p0", "p2b"]);
     assert_eq!(cache.len(), 1);
     assert_eq!(cache.bytes(), 10);
-    cache.clear_except(None);
-    assert!(cache.is_empty());
+    assert_eq!(cache.drain(), vec!["b0"]);
+    assert!(cache.is_empty() && cache.bytes() == 0);
+}
+
+#[test]
+fn render_zoom_is_capped_to_the_worker_bitmap_limits() {
+    use cm_protocol::geometry::{MAX_RENDER_PIXELS, MAX_RENDER_SIDE};
+    let letter = (612.0, 792.0);
+    // 2x display, Fit Width on a wide pane: would be ~5 MP uncapped.
+    let zoom = capped_zoom(3.3, letter);
+    assert!(zoom < 3.3);
+    let (w, h) = ((letter.0 * zoom).ceil(), (letter.1 * zoom).ceil());
+    assert!(w * h <= MAX_RENDER_PIXELS as f32);
+    // Very tall/narrow pages are bounded by side length.
+    let strip = (100.0, 20_000.0);
+    let zoom = capped_zoom(2.0, strip);
+    assert!((strip.1 * zoom).ceil() <= MAX_RENDER_SIDE);
+    // Small zooms are untouched; degenerate sizes pass through.
+    assert_eq!(capped_zoom(1.0, letter), 1.0);
+    assert_eq!(capped_zoom(1.5, (0.0, 0.0)), 1.5);
 }
 
 #[test]

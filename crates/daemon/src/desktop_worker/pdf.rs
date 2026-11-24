@@ -673,6 +673,7 @@ fn render_failure(e: cm_pdf::worker::PdfError) -> RenderFailure {
         InvalidPage => RenderFailure::PageOutOfRange,
         LimitExceeded => RenderFailure::TooLarge,
         Cancelled => RenderFailure::Cancelled,
+        QueueFull | Deadline => RenderFailure::Busy,
         LibraryPath | LibraryChecksum | LibraryLoad | AlreadyStarted | WorkerClosed => {
             RenderFailure::RuntimeUnavailable(format!("PDF runtime unavailable ({e})"))
         }

@@ -2,9 +2,9 @@
 //! bounded render cache with cancellation, and character-based text selection.
 use super::*;
 use crate::pdf_viewer::{
-    self, RenderCache, RenderKey, TextPos, ZoomMode, hit_char, page_offsets, page_range,
-    render_zoom, rotate, rotate_rgba, rotated_points, scale_for, selected_text, step_zoom,
-    visible_pages, wanted_pages,
+    self, RenderCache, RenderKey, TextPos, ZoomMode, capped_zoom, hit_char, page_offsets,
+    page_range, render_zoom, rotate, rotate_rgba, rotated_points, scale_for, selected_text,
+    step_zoom, visible_pages, wanted_pages,
 };
 use std::collections::BTreeMap;
 
@@ -23,7 +23,10 @@ pub(super) struct Viewer {
     mode: ZoomMode,
     turns: u8,
     cache: RenderCache<Arc<RenderImage>>,
-    in_flight: HashMap<RenderKey, Cancellation>,
+    /// Request serial + cancellation per key; a reply applies only if its serial matches,
+    /// so a late reply for a cancelled request cannot consume a newer request's slot.
+    in_flight: HashMap<RenderKey, (u64, Cancellation)>,
+    serial: u64,
     scroll: ScrollHandle,
     anchor: Option<TextPos>,
     head: Option<TextPos>,
@@ -50,6 +53,7 @@ impl Viewer {
             turns: 0,
             cache: RenderCache::default(),
             in_flight: HashMap::new(),
+            serial: 0,
             scroll: ScrollHandle::new(),
             anchor: None,
             head: None,
@@ -60,9 +64,14 @@ impl Viewer {
         }
     }
     fn cancel_all(&mut self) {
-        for (_, cancel) in self.in_flight.drain() {
+        for (_, (_, cancel)) in self.in_flight.drain() {
             cancel.cancel();
         }
+    }
+    /// Zoom/rotation/fit changed: earlier per-page failures (e.g. too large) may now succeed.
+    fn reset_attempts(&mut self) {
+        self.cancel_all();
+        self.failures.clear();
     }
     /// Size of a page in points after its own and the user's rotation.
     fn page_points(&self, page: u32) -> Option<(f32, f32)> {
@@ -147,24 +156,21 @@ fn to_render_image(width: u32, height: u32, mut bgra: Vec<u8>) -> Option<Arc<Ren
 
 impl LibraryView {
     /// Keep the viewer in step with the attachment chosen in the PDF host.
-    fn sync_viewer(&mut self) {
+    fn sync_viewer(&mut self, cx: &mut Context<Self>) {
         let wanted = self
             .host
             .selected
             .filter(|_| self.editor.is_some() && self.settings.details_tab == "PDF");
         match (&mut self.viewer, wanted) {
             (Some(v), Some(id)) if v.attachment == id => {}
-            (viewer, Some(id)) => {
-                if let Some(old) = viewer.as_mut() {
+            (viewer, wanted) => {
+                if let Some(mut old) = viewer.take() {
                     old.cancel_all();
+                    for image in old.cache.drain() {
+                        cx.drop_image(image, None);
+                    }
                 }
-                *viewer = Some(Viewer::new(id));
-            }
-            (viewer, None) => {
-                if let Some(old) = viewer.as_mut() {
-                    old.cancel_all();
-                }
-                *viewer = None;
+                *viewer = wanted.map(Viewer::new);
             }
         }
     }
@@ -185,15 +191,18 @@ impl LibraryView {
         if let Some(page) = reference.filter(|_| pane_w > 1.0) {
             v.scale = scale_for(v.mode, page, (pane_w, pane_h));
         }
-        let zoom = render_zoom(v.scale, v.device_scale);
+        let base_zoom = render_zoom(v.scale, v.device_scale);
         let top = -f32::from(v.scroll.offset().y);
         let visible = visible_pages(&v.layout(), top, pane_h.max(1.0));
         let wanted: Vec<RenderKey> = wanted_pages(visible, count)
             .into_iter()
             .filter(|p| !v.failures.contains_key(p))
-            .map(|p| RenderKey::new(v.attachment, p, zoom))
+            .map(|p| {
+                let size = v.page_points(p).unwrap_or((612.0, 792.0));
+                RenderKey::new(v.attachment, p, capped_zoom(base_zoom, size))
+            })
             .collect();
-        v.in_flight.retain(|key, cancel| {
+        v.in_flight.retain(|key, (_, cancel)| {
             let keep = wanted.contains(key);
             if !keep {
                 cancel.cancel();
@@ -209,10 +218,12 @@ impl LibraryView {
             }
             let cancel = Cancellation::default();
             let sender = self.sender.clone();
+            v.serial += 1;
+            let serial = v.serial;
             let request = RenderRequest {
                 attachment: key.attachment,
                 page: key.page,
-                zoom,
+                zoom: key.zoom_milli as f32 / 1000.0,
                 cancel: cancel.clone(),
             };
             let sent = self.client.pdf(
@@ -222,18 +233,19 @@ impl LibraryView {
                     let _ = sender.send(Message {
                         lane: Lane::Pdf,
                         ticket: 0,
-                        event: Event::Render(key, result),
+                        event: Event::Render(key, serial, result),
                     });
                 }),
             );
             if sent.is_ok() {
-                v.in_flight.insert(key, cancel);
+                v.in_flight.insert(key, (serial, cancel));
             }
         }
     }
     pub(super) fn render_reply(
         &mut self,
         key: RenderKey,
+        serial: u64,
         result: Result<PdfReply, ServiceError>,
         cx: &mut Context<Self>,
     ) {
@@ -241,9 +253,11 @@ impl LibraryView {
             return;
         };
         // Replies for another document, or renders cancelled since, are dropped.
-        if v.attachment != key.attachment || v.in_flight.remove(&key).is_none() {
+        if v.attachment != key.attachment || v.in_flight.get(&key).map(|(s, _)| *s) != Some(serial)
+        {
             return;
         }
+        v.in_flight.remove(&key);
         match result {
             Ok(PdfReply::Page(Ok(page))) => {
                 v.page_count = Some(page.page_count.max(1));
@@ -252,21 +266,42 @@ impl LibraryView {
                 v.chars.insert(page.page, page.chars);
                 v.failures.remove(&page.page);
                 let (w, h, rgba) = rotate_rgba(page.width, page.height, &page.rgba, v.turns);
-                if let Some(image) = to_render_image(w, h, rgba) {
-                    let bytes = (w * h * 4) as usize;
-                    v.cache.insert(key, image, bytes);
+                let bytes = rgba.len();
+                match to_render_image(w, h, rgba) {
+                    Some(image) => {
+                        for old in v.cache.insert(key, image, bytes) {
+                            cx.drop_image(old, None);
+                        }
+                    }
+                    None => {
+                        v.failures.insert(
+                            key.page,
+                            RenderFailure::Other("Could not decode page".into()),
+                        );
+                    }
                 }
             }
             Ok(PdfReply::Page(Err(RenderFailure::Cancelled))) => {}
+            Ok(PdfReply::Page(Err(RenderFailure::Busy))) => {
+                // Transient: try again shortly instead of recording a failure.
+                cx.spawn(async move |view, cx| {
+                    cx.background_executor()
+                        .timer(Duration::from_millis(300))
+                        .await;
+                    let _ = view.update(cx, |_, cx| cx.notify());
+                })
+                .detach();
+            }
             Ok(PdfReply::Page(Err(failure))) => {
-                let whole_document = v.page_count.is_none()
-                    || matches!(
-                        failure,
-                        RenderFailure::Encrypted
-                            | RenderFailure::Damaged
-                            | RenderFailure::MissingOrCorrupt
-                            | RenderFailure::RuntimeUnavailable(_)
-                    );
+                // Only document-level problems replace the page column; size or page errors
+                // stay on their page and are retried after zoom/rotation changes.
+                let whole_document = matches!(
+                    failure,
+                    RenderFailure::Encrypted
+                        | RenderFailure::Damaged
+                        | RenderFailure::MissingOrCorrupt
+                        | RenderFailure::RuntimeUnavailable(_)
+                );
                 if whole_document {
                     v.document_failure = Some(failure);
                 } else {
@@ -287,7 +322,7 @@ impl LibraryView {
         if let Some(v) = &mut self.viewer {
             let page = v.current_page();
             v.mode = mode;
-            v.cancel_all();
+            v.reset_attempts();
             if let Some(reference) = v.page_points(0) {
                 v.scale = scale_for(mode, reference, v.pane());
             }
@@ -299,9 +334,11 @@ impl LibraryView {
         if let Some(v) = &mut self.viewer {
             let page = v.current_page();
             v.turns = (v.turns + 1) % 4;
-            v.cancel_all();
+            v.reset_attempts();
             // Bitmaps are rotated client-side; drop them so pages re-render rotated.
-            v.cache.clear_except(None);
+            for image in v.cache.drain() {
+                cx.drop_image(image, None);
+            }
             v.scroll_to_page(page);
         }
         cx.notify();
@@ -347,7 +384,7 @@ impl LibraryView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        self.sync_viewer();
+        self.sync_viewer(cx);
         if let Some(v) = &mut self.viewer {
             v.device_scale = window.scale_factor();
             let pane = v.pane();
@@ -462,7 +499,7 @@ impl LibraryView {
                 let width = size.0 * scale;
                 let image = v
                     .cache
-                    .get(&RenderKey::new(v.attachment, page, zoom))
+                    .get(&RenderKey::new(v.attachment, page, capped_zoom(zoom, size)))
                     .cloned();
                 let failure = v.failures.get(&page).map(ToString::to_string);
                 let image_only = v.has_text.get(&page) == Some(&false);
@@ -584,6 +621,14 @@ impl LibraryView {
                             cx.notify();
                         }
                     }))
+                    .on_mouse_up_out(
+                        MouseButton::Left,
+                        cx.listener(|this, _: &MouseUpEvent, _, _| {
+                            if let Some(v) = &mut this.viewer {
+                                v.dragging = false;
+                            }
+                        }),
+                    )
                     .on_mouse_up(
                         MouseButton::Left,
                         cx.listener(|this, _: &MouseUpEvent, _, cx| {

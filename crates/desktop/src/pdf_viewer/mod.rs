@@ -81,6 +81,24 @@ pub fn render_zoom(scale: f32, device_scale: f32) -> f32 {
     (zoom * 20.0).round() / 20.0
 }
 
+/// Largest render zoom (device px per point) that keeps a page within the worker's bitmap
+/// limits, bucketed downwards so the result never exceeds them.
+pub fn capped_zoom(zoom: f32, page_points: (f32, f32)) -> f32 {
+    use cm_protocol::geometry::{MAX_RENDER_PIXELS, MAX_RENDER_SIDE};
+    let (w, h) = page_points;
+    if !(w.is_finite() && h.is_finite() && w > 0.0 && h > 0.0) {
+        return zoom;
+    }
+    let by_area = (MAX_RENDER_PIXELS as f32 / (w * h)).sqrt();
+    let by_side = MAX_RENDER_SIDE / w.max(h);
+    let cap = by_area.min(by_side) * 0.98; // ceil() + rounding headroom
+    if zoom <= cap {
+        zoom
+    } else {
+        ((cap * 20.0).floor() / 20.0).max(0.1)
+    }
+}
+
 /// Vertical layout of a continuous page column: top offset of each page.
 /// Unknown page sizes use the last known size (or US Letter) as an estimate.
 pub fn page_offsets(count: u32, sizes: &HashMap<u32, (f32, f32)>, scale: f32) -> Vec<(f32, f32)> {
@@ -216,14 +234,17 @@ impl<V> RenderCache<V> {
         }
         self.order.push_back(*key);
     }
-    /// Inserts and evicts least-recently-used entries over budget. An entry larger than the
-    /// whole budget is not stored.
-    pub fn insert(&mut self, key: RenderKey, value: V, bytes: usize) -> bool {
+    /// Inserts and evicts least-recently-used entries over budget, returning everything that
+    /// left the cache (so GPU textures can be released). An entry larger than the whole budget
+    /// is not stored and is returned as well.
+    pub fn insert(&mut self, key: RenderKey, value: V, bytes: usize) -> Vec<V> {
         if bytes > self.budget {
-            return false;
+            return vec![value];
         }
-        if let Some((_, old)) = self.entries.remove(&key) {
-            self.bytes -= old;
+        let mut evicted = Vec::new();
+        if let Some((old, size)) = self.entries.remove(&key) {
+            self.bytes -= size;
+            evicted.push(old);
         }
         self.entries.insert(key, (value, bytes));
         self.bytes += bytes;
@@ -232,26 +253,36 @@ impl<V> RenderCache<V> {
             let Some(oldest) = self.order.pop_front() else {
                 break;
             };
-            if let Some((_, size)) = self.entries.remove(&oldest) {
+            if let Some((old, size)) = self.entries.remove(&oldest) {
                 self.bytes -= size;
+                evicted.push(old);
             }
         }
-        true
+        evicted
     }
-    /// Drops everything for another document (or all, with `None`).
-    pub fn clear_except(&mut self, keep: Option<AttachmentId>) {
+    /// Drops everything for other documents (or all, with `None`) and returns it.
+    pub fn clear_except(&mut self, keep: Option<AttachmentId>) -> Vec<V> {
         let drop: Vec<RenderKey> = self
             .order
             .iter()
             .copied()
             .filter(|k| Some(k.attachment) != keep)
             .collect();
+        let mut evicted = Vec::new();
         for key in drop {
-            if let Some((_, size)) = self.entries.remove(&key) {
+            if let Some((old, size)) = self.entries.remove(&key) {
                 self.bytes -= size;
+                evicted.push(old);
             }
         }
         self.order.retain(|k| self.entries.contains_key(k));
+        evicted
+    }
+    /// Empties the cache, returning all values.
+    pub fn drain(&mut self) -> Vec<V> {
+        self.order.clear();
+        self.bytes = 0;
+        self.entries.drain().map(|(_, (v, _))| v).collect()
     }
     pub fn bytes(&self) -> usize {
         self.bytes

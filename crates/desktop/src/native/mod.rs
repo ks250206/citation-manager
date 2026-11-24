@@ -76,7 +76,11 @@ enum Event {
     Export(Result<Exported, ServiceError>),
     Progress(PdfReport),
     /// Page render replies bypass the single-ticket lanes; the viewer tracks them by key.
-    Render(crate::pdf_viewer::RenderKey, Result<PdfReply, ServiceError>),
+    Render(
+        crate::pdf_viewer::RenderKey,
+        u64,
+        Result<PdfReply, ServiceError>,
+    ),
 }
 struct Message {
     lane: Lane,
@@ -390,8 +394,8 @@ impl LibraryView {
         cx.notify();
     }
     fn receive(&mut self, message: Message, cx: &mut Context<Self>) {
-        if let Event::Render(key, result) = message.event {
-            self.render_reply(key, result, cx);
+        if let Event::Render(key, serial, result) = message.event {
+            self.render_reply(key, serial, result, cx);
             return;
         }
         if let Event::Progress(report) = message.event {
