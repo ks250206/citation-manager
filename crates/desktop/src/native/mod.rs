@@ -15,6 +15,7 @@ macro_rules! primary {
 mod details_ui;
 mod import_ui;
 mod library_ui;
+mod palette_ui;
 mod pdf_ui;
 mod settings_ui;
 mod text_input;
@@ -52,6 +53,10 @@ actions!(
         ShowLibrary,
         ShowImportReview,
         ShowOrganize,
+        OpenPalette,
+        PaletteNext,
+        PalettePrevious,
+        PaletteClose,
     ]
 );
 enum Event {
@@ -138,6 +143,17 @@ struct LibraryView {
     editing_tag: Option<TagId>,
     parent: Option<CollectionId>,
     picker_generation: u64,
+    registry: crate::commands::CommandRegistry,
+    keymap: crate::keymap::Keymap,
+    keymap_custom: bool,
+    keymap_diagnostics: Vec<String>,
+    keymap_path: Option<String>,
+    resolver: crate::keymap::KeyResolver,
+    started: std::time::Instant,
+    palette_open: bool,
+    palette_index: usize,
+    palette_query: Entity<TextInput>,
+    palette_scroll: ScrollHandle,
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Screen {
@@ -148,7 +164,7 @@ enum Screen {
     Report,
 }
 impl LibraryView {
-    fn new(client: Arc<dyn LibraryClient>, cx: &mut Context<Self>) -> Self {
+    fn new(client: Arc<dyn LibraryClient>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let (sender, receiver) = mpsc::channel();
         let fields = crate::details::FIELDS
             .iter()
@@ -208,7 +224,37 @@ impl LibraryView {
             editing_tag: None,
             parent: None,
             picker_generation: 0,
+            registry: crate::commands::CommandRegistry::m1(),
+            keymap: crate::keymap::Keymap::defaults(&crate::commands::CommandRegistry::m1())
+                .expect("built-in keymap is valid"),
+            keymap_custom: false,
+            keymap_diagnostics: vec![],
+            keymap_path: None,
+            resolver: crate::keymap::KeyResolver::new(
+                crate::keymap::Keymap::defaults(&crate::commands::CommandRegistry::m1())
+                    .expect("built-in keymap is valid"),
+            ),
+            started: std::time::Instant::now(),
+            palette_open: false,
+            palette_index: 0,
+            palette_query: cx.new(|cx| TextInput::new("Type a command…", cx)),
+            palette_scroll: ScrollHandle::new(),
         };
+        cx.subscribe(
+            &view.palette_query,
+            |this, _, _: &text_input::Edited, cx| {
+                this.palette_index = 0;
+                this.palette_scroll.scroll_to_item(0);
+                cx.notify();
+            },
+        )
+        .detach();
+        cx.subscribe_in(
+            &view.palette_query,
+            window,
+            |this, _, _: &text_input::Submitted, window, cx| this.palette_confirm(window, cx),
+        )
+        .detach();
         for field in &view.fields {
             cx.subscribe(field, |this, _, _: &text_input::Edited, cx| {
                 this.dirty = true;
@@ -414,17 +460,30 @@ impl LibraryView {
             },
             Event::LoadSettings(result) => match result {
                 Ok(loaded) => {
+                    self.apply_keymap(loaded.keymap.as_deref(), loaded.keymap_path.as_deref());
                     self.settings = loaded.settings;
                     self.library.query.sort = self.settings.sort;
                     self.reload(cx);
                     if let Some(warning) = loaded.warning {
                         self.status(warning, true, cx);
+                    } else if !self.keymap_diagnostics.is_empty() {
+                        self.status(
+                            format!(
+                                "keymap.json ignored ({} problem(s)); using built-in keys. Details: Organize & export › Keyboard",
+                                self.keymap_diagnostics.len()
+                            ),
+                            true,
+                            cx,
+                        );
+                    } else if self.keymap_custom {
+                        self.status("Custom keymap loaded", false, cx);
                     }
                 }
                 Err(e) => self.status(format!("Using default layout: {e}"), true, cx),
             },
             Event::SaveSettings(result) => match result {
-                Ok(()) => self.status("Layout saved", false, cx),
+                // Saves are frequent (layout, history); only failures need attention.
+                Ok(()) => (),
                 Err(e) => self.status(format!("Layout changed but not saved: {e}"), true, cx),
             },
             Event::Import(result) => self.import_reply(result, cx),
@@ -941,7 +1000,8 @@ impl LibraryView {
                         .text_color(rgb(MUTED))
                         .whitespace_nowrap()
                         .child(format!(
-                            "{} new · {} search · ↑↓ select · ↩ edit · {} save · esc back",
+                            "{} commands · {} new · {} search · ↑↓ select · ↩ edit · {} save",
+                            shortcut("K"),
                             shortcut("N"),
                             shortcut("F"),
                             shortcut("S")
@@ -983,6 +1043,10 @@ impl Render for LibraryView {
             .on_action(cx.listener(Self::next_field))
             .on_action(cx.listener(Self::previous_field))
             .on_action(cx.listener(Self::back))
+            .on_action(cx.listener(|this, _: &OpenPalette, window, cx| {
+                this.run_command(crate::commands::ids::PALETTE, window, cx)
+            }))
+            .relative()
             .on_action(
                 cx.listener(|this, _: &ShowLibrary, w, cx| this.show(Screen::Library, w, cx)),
             )
@@ -1012,6 +1076,7 @@ impl Render for LibraryView {
                     .into_any_element(),
             })
             .child(self.status_bar(cx))
+            .when(self.palette_open, |el| el.child(self.palette_overlay(cx)))
     }
 }
 pub fn run(client: Arc<dyn LibraryClient>) {
@@ -1035,6 +1100,10 @@ fn key_bindings() -> Vec<KeyBinding> {
         KeyBinding::new(primary!("s"), Save, Some("Library")),
         KeyBinding::new(primary!("r"), Refresh, Some("Library")),
         KeyBinding::new(primary!("f"), Find, Some("Library")),
+        KeyBinding::new(primary!("k"), OpenPalette, Some("Library")),
+        KeyBinding::new("down", PaletteNext, Some("Palette")),
+        KeyBinding::new("up", PalettePrevious, Some("Palette")),
+        KeyBinding::new("escape", PaletteClose, Some("Palette")),
         KeyBinding::new("tab", NextField, Some("Library")),
         KeyBinding::new("shift-tab", PreviousField, Some("Library")),
         KeyBinding::new(primary!("q"), Quit, None),
@@ -1059,7 +1128,7 @@ fn open_main_window(client: Arc<dyn LibraryClient>, bounds: Bounds<Pixels>, cx: 
                 }),
                 ..Default::default()
             },
-            |_, cx| cx.new(|cx| LibraryView::new(client, cx)),
+            |window, cx| cx.new(|cx| LibraryView::new(client, window, cx)),
         )
         .expect("open native window");
     window

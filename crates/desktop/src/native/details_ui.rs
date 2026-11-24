@@ -110,7 +110,6 @@ impl LibraryView {
                 ))
             })
             .when_some(self.editor.as_ref(), |el, p| {
-                let id = p.id;
                 let deleted = p.deleted_at.is_some();
                 el.child(
                     div()
@@ -137,21 +136,7 @@ impl LibraryView {
                             .when(!deleted && enabled, |b| {
                                 b.text_color(rgb(0xb42318)).border_color(rgb(0xf1c4bf))
                             })
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                if this.locked() || !this.can_replace_editor(cx) {
-                                    return;
-                                }
-                                this.call(Lane::Editor, Event::Editor, |c, done| {
-                                    c.lifecycle(
-                                        id,
-                                        !deleted,
-                                        Box::new(move |result| {
-                                            done(result.map(|p| LibraryReply::Paper(Box::new(p))))
-                                        }),
-                                    )
-                                });
-                                cx.notify();
-                            })),
+                            .on_click(cx.listener(|this, _, _, cx| this.toggle_trash(cx))),
                         ),
                 )
             })
@@ -200,6 +185,24 @@ impl LibraryView {
                         ))
                     }),
             )
+    }
+    /// Move the open paper to Trash, or restore it when it is already there.
+    pub(super) fn toggle_trash(&mut self, cx: &mut Context<Self>) {
+        let Some(paper) = &self.editor else {
+            return;
+        };
+        let (id, deleted) = (paper.id, paper.deleted_at.is_some());
+        if self.locked() || !self.can_replace_editor(cx) {
+            return;
+        }
+        self.call(Lane::Editor, Event::Editor, |c, done| {
+            c.lifecycle(
+                id,
+                !deleted,
+                Box::new(move |result| done(result.map(|p| LibraryReply::Paper(Box::new(p))))),
+            )
+        });
+        cx.notify();
     }
     fn memberships(&self, cx: &mut Context<Self>) -> Div {
         let Some(p) = &self.editor else {
