@@ -269,7 +269,7 @@ mod tests {
         let mut blank = Connection::open_in_memory().unwrap();
         blank.execute_batch("CREATE TABLE schema_migrations(version TEXT PRIMARY KEY NOT NULL, checksum TEXT NOT NULL, applied_at TEXT NOT NULL)").unwrap();
         run_registry(&mut blank, &registry().unwrap(), None).unwrap();
-        assert_eq!(history(&blank).unwrap().len(), 2);
+        assert_eq!(history(&blank).unwrap().len(), registry().unwrap().len());
     }
 
     #[test]
@@ -277,7 +277,7 @@ mod tests {
         let mut db = Connection::open_in_memory().unwrap();
         let mut migrations = registry().unwrap();
         run_registry(&mut db, &migrations, None).unwrap();
-        assert_eq!(history(&db).unwrap().len(), 2);
+        assert_eq!(history(&db).unwrap().len(), migrations.len());
         let original = schema(&db);
         run_registry(&mut db, &migrations, None).unwrap();
         assert_eq!(schema(&db), original);
@@ -323,7 +323,7 @@ mod tests {
         let mut upgraded = LibraryDb::open_with_backup(&directory, &mut backup).unwrap();
         assert_eq!(backup.calls, 1);
         assert_eq!(history(&backup.copy).unwrap().len(), 1);
-        assert_eq!(history(&upgraded.connection).unwrap().len(), 2);
+        assert_eq!(history(&upgraded.connection).unwrap().len(), migrations.len());
         assert_eq!(
             upgraded.papers().get(paper.id).unwrap(),
             Some(paper.clone())
