@@ -1,44 +1,61 @@
 //! #19 highlights, comments and notes: requests, undo/redo history and the Notes tab.
 use super::*;
+use crate::annotations::{PaperHistory, Step, StepOutcome};
 use cm_protocol::annotations::{
     Anchor, Annotation, AnnotationId, AnnotationKind, AnnotationPatch, AnnotationReply,
-    AnnotationRequest, COLORS, Edit, History, NewAnnotation, Proposal, Source,
+    AnnotationRequest, COLORS, Edit, NewAnnotation, Proposal, Source, pending_carry_over,
 };
+use cm_protocol::attachments::Cancellation;
 
 /// What to do with a reply; replies bypass the single-ticket lanes like page renders.
+/// Every op names the paper it was sent for: a reply that arrives after the person switched
+/// papers must not touch the new paper's history, selection or proposal.
 pub(super) enum AnnOp {
     List(PaperId),
     /// A new user edit: record it for undo, then refresh.
-    Record,
-    RecordMany,
-    Undo(Box<Edit>),
-    Redo(Box<Edit>),
-    Propose(AnnotationId),
+    Record(PaperId),
+    RecordMany(PaperId),
+    Undo(PaperId, Box<Edit>),
+    Redo(PaperId, Box<Edit>),
+    /// Serial of the search, so a cancelled search's late reply is ignored.
+    Propose(PaperId, AnnotationId, u64),
 }
 
 pub(super) struct AnnotationState {
     pub(super) list: Vec<Annotation>,
-    pub(super) paper: Option<PaperId>,
-    pub(super) history: History,
+    /// Open paper and its undo/redo history (one step in flight at a time).
+    pub(super) history: PaperHistory,
     pub(super) selected: Option<AnnotationId>,
     pub(super) color: &'static str,
     pub(super) comment: Entity<TextInput>,
     pub(super) note: Entity<TextInput>,
     pub(super) note_open: bool,
     pub(super) proposal: Option<(AnnotationId, Option<Proposal>)>,
+    /// The running position search (serial, cancellation).
+    pub(super) search: Option<(u64, Cancellation)>,
+    search_serial: u64,
+    /// After an undo/redo, the next list refresh also refreshes the comment box.
+    refresh_comment: bool,
 }
 impl AnnotationState {
     pub(super) fn new(cx: &mut Context<LibraryView>) -> Self {
         Self {
             list: vec![],
-            paper: None,
-            history: History::default(),
+            history: PaperHistory::default(),
             selected: None,
             color: "yellow",
             comment: cx.new(|cx| TextInput::new("Comment", cx)),
             note: cx.new(|cx| TextInput::new("Note text", cx)),
             note_open: false,
             proposal: None,
+            search: None,
+            search_serial: 0,
+            refresh_comment: false,
+        }
+    }
+    fn cancel_search(&mut self) {
+        if let Some((_, cancel)) = self.search.take() {
+            cancel.cancel();
         }
     }
     pub(super) fn for_attachment(&self, id: AttachmentId) -> impl Iterator<Item = &Annotation> {
@@ -58,7 +75,8 @@ pub(super) fn page_of(a: &Annotation) -> Option<u32> {
 }
 
 impl LibraryView {
-    pub(super) fn ann_send(&mut self, request: AnnotationRequest, op: AnnOp) {
+    /// Returns false when the request could not be queued (its reply will never arrive).
+    pub(super) fn ann_send(&mut self, request: AnnotationRequest, op: AnnOp) -> bool {
         let sender = self.sender.clone();
         let sent = self.client.annotations(
             request,
@@ -74,23 +92,24 @@ impl LibraryView {
             self.message = "Annotation service unavailable".into();
             self.error = true;
         }
+        sent.is_ok()
     }
     /// Called whenever the open paper changes.
     pub(super) fn reset_annotations(&mut self) {
         let paper = self.editor.as_ref().map(|p| p.id);
-        if self.ann.paper != paper {
-            self.ann.history.clear();
+        if self.ann.history.open(paper) {
+            self.ann.refresh_comment = false;
             self.ann.selected = None;
             self.ann.proposal = None;
+            self.ann.cancel_search();
             self.ann.list.clear();
         }
-        self.ann.paper = paper;
         if let Some(id) = paper {
             self.ann_send(AnnotationRequest::ForPaper(id), AnnOp::List(id));
         }
     }
     fn reload_annotations(&mut self) {
-        if let Some(id) = self.ann.paper {
+        if let Some(id) = self.ann.history.paper() {
             self.ann_send(AnnotationRequest::ForPaper(id), AnnOp::List(id));
         }
     }
@@ -100,56 +119,72 @@ impl LibraryView {
         result: Result<AnnotationReply, ServiceError>,
         cx: &mut Context<Self>,
     ) {
+        let current = self.ann.history.paper();
+        let mine = |paper: PaperId| current == Some(paper);
         match (op, result) {
             (AnnOp::List(paper), Ok(AnnotationReply::List(list))) => {
-                if self.ann.paper == Some(paper) {
+                if mine(paper) {
                     self.ann.list = list;
                     if self.ann.selected().is_none() {
                         self.ann.selected = None;
                     }
+                    if std::mem::take(&mut self.ann.refresh_comment) {
+                        let text = self
+                            .ann
+                            .selected()
+                            .and_then(|a| a.comment.clone())
+                            .unwrap_or_default();
+                        self.ann.comment.update(cx, |f, cx| f.set_text(text, cx));
+                    }
                 }
             }
-            (AnnOp::Record, Ok(AnnotationReply::Edit(edit))) => {
+            // Late replies for another paper: the change is stored, but it is not part of
+            // this paper's history.
+            (AnnOp::Record(paper) | AnnOp::RecordMany(paper) | AnnOp::Propose(paper, ..), _)
+                if !mine(paper) => {}
+            (AnnOp::Record(paper), Ok(AnnotationReply::Edit(edit))) => {
                 if let Edit::Created(a) = edit.as_ref() {
                     self.ann.selected = Some(a.id);
                     let text = a.comment.clone().unwrap_or_default();
                     self.ann.comment.update(cx, |f, cx| f.set_text(text, cx));
                 }
-                self.ann.history.record(*edit);
+                self.ann.history.record(paper, *edit);
                 self.reload_annotations();
             }
-            (AnnOp::RecordMany, Ok(AnnotationReply::Edits(edits))) => {
+            (AnnOp::RecordMany(paper), Ok(AnnotationReply::Edits(edits))) => {
                 let count = edits.len();
                 for edit in edits {
-                    self.ann.history.record(edit);
+                    self.ann.history.record(paper, edit);
                 }
                 self.status(
-                    format!("Copied {count} annotation(s) as unresolved; place each from Notes"),
+                    if count == 0 {
+                        "Nothing left to copy: those annotations are already on this PDF".into()
+                    } else {
+                        format!("Copied {count} annotation(s) as unresolved; place each from Notes")
+                    },
                     false,
                     cx,
                 );
                 self.reload_annotations();
             }
-            (AnnOp::Undo(edit), Ok(_)) => {
-                self.ann.history.undone(*edit);
-                self.status("Undone", false, cx);
-                self.reload_annotations();
+            (AnnOp::Undo(paper, edit), result) => {
+                self.history_reply(Step::Undo, paper, *edit, result.map(|_| ()), cx)
             }
-            (AnnOp::Redo(edit), Ok(_)) => {
-                self.ann.history.redone(*edit);
-                self.status("Redone", false, cx);
-                self.reload_annotations();
+            (AnnOp::Redo(paper, edit), result) => {
+                self.history_reply(Step::Redo, paper, *edit, result.map(|_| ()), cx)
             }
-            (AnnOp::Undo(_) | AnnOp::Redo(_), Err(ServiceError::Conflict)) => {
-                self.status(
-                    "This annotation changed since; undo history skipped that step",
-                    true,
-                    cx,
-                );
-                self.reload_annotations();
-            }
-            (AnnOp::Propose(id), Ok(AnnotationReply::Proposal(proposal))) => {
-                self.ann.proposal = Some((id, proposal));
+            (AnnOp::Propose(_, id, serial), result) => {
+                if self.ann.search.as_ref().is_some_and(|(s, _)| *s == serial) {
+                    self.ann.search = None;
+                    match result {
+                        Ok(AnnotationReply::Proposal(proposal)) => {
+                            self.ann.proposal = Some((id, proposal));
+                            self.status("Search finished", false, cx);
+                        }
+                        Ok(_) => {}
+                        Err(e) => self.status(format!("Search failed: {e}"), true, cx),
+                    }
+                }
             }
             (_, Err(e)) => {
                 self.status(format!("Annotation change failed: {e}"), true, cx);
@@ -159,38 +194,115 @@ impl LibraryView {
         }
         cx.notify();
     }
+    fn history_reply(
+        &mut self,
+        step: Step,
+        paper: PaperId,
+        edit: Edit,
+        result: Result<(), ServiceError>,
+        cx: &mut Context<Self>,
+    ) {
+        let error = result.as_ref().err().map(ToString::to_string);
+        let (done, verb) = match step {
+            Step::Undo => ("Undone", "undo"),
+            Step::Redo => ("Redone", "redo"),
+        };
+        match self.ann.history.finish(step, paper, edit, result) {
+            StepOutcome::Ignored => return,
+            StepOutcome::Applied => {
+                self.ann.refresh_comment = true;
+                self.status(done, false, cx);
+            }
+            StepOutcome::Skipped => self.status(
+                format!("This annotation changed since; {verb} history skipped that step"),
+                true,
+                cx,
+            ),
+            StepOutcome::Retained => self.status(
+                format!(
+                    "Could not {verb} ({}); the step is kept, try again",
+                    error.unwrap_or_default()
+                ),
+                true,
+                cx,
+            ),
+        }
+        self.reload_annotations();
+    }
+    /// An edit to record in the open paper's history (no paper open: nothing to edit).
+    pub(super) fn ann_record(&mut self, request: AnnotationRequest) {
+        if let Some(paper) = self.ann.history.paper() {
+            self.ann_send(request, AnnOp::Record(paper));
+        }
+    }
     pub(super) fn ann_create(&mut self, input: NewAnnotation) {
-        self.ann_send(AnnotationRequest::Create(Box::new(input)), AnnOp::Record);
+        self.ann_record(AnnotationRequest::Create(Box::new(input)));
     }
     pub(super) fn ann_update(&mut self, id: AnnotationId, patch: AnnotationPatch) {
-        self.ann_send(AnnotationRequest::Update(id, patch), AnnOp::Record);
+        self.ann_record(AnnotationRequest::Update(id, patch));
     }
     pub(super) fn ann_delete(&mut self, id: AnnotationId) {
         if self.ann.selected == Some(id) {
             self.ann.selected = None;
         }
-        self.ann_send(AnnotationRequest::Delete(id), AnnOp::Record);
+        self.ann_record(AnnotationRequest::Delete(id));
+    }
+    pub(super) fn ann_can_undo(&self) -> bool {
+        self.ann.history.can_undo()
+    }
+    pub(super) fn ann_can_redo(&self) -> bool {
+        self.ann.history.can_redo()
     }
     pub(super) fn ann_undo(&mut self, cx: &mut Context<Self>) {
-        match self.ann.history.take_undo() {
-            Some(edit) => {
-                self.ann_send(
-                    AnnotationRequest::Undo(Box::new(edit.clone())),
-                    AnnOp::Undo(Box::new(edit)),
-                );
-            }
-            None => self.status("Nothing to undo", false, cx),
-        }
+        self.ann_step(Step::Undo, cx)
     }
     pub(super) fn ann_redo(&mut self, cx: &mut Context<Self>) {
-        match self.ann.history.take_redo() {
-            Some(edit) => {
-                self.ann_send(
-                    AnnotationRequest::Redo(Box::new(edit.clone())),
-                    AnnOp::Redo(Box::new(edit)),
-                );
-            }
-            None => self.status("Nothing to redo", false, cx),
+        self.ann_step(Step::Redo, cx)
+    }
+    fn ann_step(&mut self, step: Step, cx: &mut Context<Self>) {
+        if self.ann.history.busy() {
+            return self.status("Waiting for the previous undo/redo", false, cx);
+        }
+        let Some((paper, edit)) = self.ann.history.begin(step) else {
+            let nothing = match step {
+                Step::Undo => "Nothing to undo",
+                Step::Redo => "Nothing to redo",
+            };
+            return self.status(nothing, false, cx);
+        };
+        let (request, op) = match step {
+            Step::Undo => (
+                AnnotationRequest::Undo(Box::new(edit.clone())),
+                AnnOp::Undo(paper, Box::new(edit.clone())),
+            ),
+            Step::Redo => (
+                AnnotationRequest::Redo(Box::new(edit.clone())),
+                AnnOp::Redo(paper, Box::new(edit.clone())),
+            ),
+        };
+        if !self.ann_send(request, op) {
+            self.ann.history.unsent(step, edit);
+        }
+        cx.notify();
+    }
+    /// Search the annotation's PDF; a newer search or a paper switch cancels this one.
+    fn ann_propose(&mut self, id: AnnotationId, cx: &mut Context<Self>) {
+        let Some(paper) = self.ann.history.paper() else {
+            return;
+        };
+        self.ann.cancel_search();
+        self.ann.proposal = None;
+        self.ann.search_serial += 1;
+        let serial = self.ann.search_serial;
+        let cancel = Cancellation::default();
+        self.ann.search = Some((serial, cancel.clone()));
+        if self.ann_send(
+            AnnotationRequest::Propose { id, cancel },
+            AnnOp::Propose(paper, id, serial),
+        ) {
+            self.status("Searching the PDF for the quoted text…", false, cx);
+        } else {
+            self.ann.search = None;
         }
     }
     pub(super) fn ann_select(&mut self, id: Option<AnnotationId>, cx: &mut Context<Self>) {
@@ -204,12 +316,19 @@ impl LibraryView {
         cx.notify();
     }
     pub(super) fn ann_save_comment(&mut self, cx: &mut Context<Self>) {
-        let Some(id) = self.ann.selected else { return };
+        let Some(current) = self.ann.selected() else {
+            return;
+        };
+        let id = current.id;
         let text = self.ann.comment.read(cx).content.to_string();
+        let comment = (!text.trim().is_empty()).then_some(text);
+        if current.comment == comment {
+            return; // nothing changed: no history step
+        }
         self.ann_update(
             id,
             AnnotationPatch {
-                comment: Some((!text.trim().is_empty()).then_some(text)),
+                comment: Some(comment),
                 color: None,
             },
         );
@@ -286,11 +405,11 @@ impl LibraryView {
                 .gap_2()
                 .child(div().flex_1().child(section("ANNOTATIONS")))
                 .child(
-                    button("ann-undo", "↶ Undo", self.ann.history.can_undo())
+                    button("ann-undo", "↶ Undo", self.ann_can_undo())
                         .on_click(cx.listener(|this, _, _, cx| this.ann_undo(cx))),
                 )
                 .child(
-                    button("ann-redo", "↷ Redo", self.ann.history.can_redo())
+                    button("ann-redo", "↷ Redo", self.ann_can_redo())
                         .on_click(cx.listener(|this, _, _, cx| this.ann_redo(cx))),
                 ),
         );
@@ -304,25 +423,36 @@ impl LibraryView {
         }
         // PDF replaced: copy annotations from another attachment as unresolved.
         if let Some(target) = self.host.selected {
-            let sources: Vec<(AttachmentId, String)> = self
+            // Only sources with something not yet on this PDF (same rule as the service).
+            let sources: Vec<(AttachmentId, String, usize)> = self
                 .host
                 .attachments
                 .iter()
-                .filter(|(a, _)| a.id != target && self.ann.for_attachment(a.id).next().is_some())
-                .map(|(a, _)| (a.id, a.original_name.clone()))
+                .filter(|(a, _)| a.id != target)
+                .map(|(a, _)| {
+                    let pending = pending_carry_over(
+                        self.ann.for_attachment(a.id),
+                        self.ann.for_attachment(target),
+                    )
+                    .len();
+                    (a.id, a.original_name.clone(), pending)
+                })
+                .filter(|(_, _, pending)| *pending > 0)
                 .collect();
-            for (i, (from, name)) in sources.into_iter().enumerate() {
+            for (i, (from, name, pending)) in sources.into_iter().enumerate() {
                 panel = panel.child(
                     button(
                         ("ann-carry", i),
-                        format!("Copy annotations from {name} (unresolved)"),
+                        format!("Copy {pending} annotation(s) from {name} (unresolved)"),
                         true,
                     )
                     .on_click(cx.listener(move |this, _, _, _| {
-                        this.ann_send(
-                            AnnotationRequest::CarryOver { from, to: target },
-                            AnnOp::RecordMany,
-                        )
+                        if let Some(paper) = this.ann.history.paper() {
+                            this.ann_send(
+                                AnnotationRequest::CarryOver { from, to: target },
+                                AnnOp::RecordMany(paper),
+                            );
+                        }
                     })),
                 );
             }
@@ -417,7 +547,7 @@ impl LibraryView {
                         .child(
                             button(("ann-ai-ok", i), "Confirm", true).on_click(cx.listener(
                                 move |this, _, _, _| {
-                                    this.ann_send(AnnotationRequest::ConfirmAi(id), AnnOp::Record)
+                                    this.ann_record(AnnotationRequest::ConfirmAi(id))
                                 },
                             )),
                         )
@@ -437,11 +567,7 @@ impl LibraryView {
                 row = row.child(match proposal {
                     None => div().child(
                         button(("ann-find", i), "Find position in this PDF", true).on_click(
-                            cx.listener(move |this, _, _, cx| {
-                                this.ann.proposal = None;
-                                this.ann_send(AnnotationRequest::Propose(id), AnnOp::Propose(id));
-                                this.status("Searching the PDF for the quoted text…", false, cx);
-                            }),
+                            cx.listener(move |this, _, _, cx| this.ann_propose(id, cx)),
                         ),
                     ),
                     Some(None) => div().child(hint(
@@ -463,15 +589,12 @@ impl LibraryView {
                                 primary_button(("ann-place", i), "Place here", true).on_click(
                                     cx.listener(move |this, _, _, _| {
                                         this.ann.proposal = None;
-                                        this.ann_send(
-                                            AnnotationRequest::Resolve {
-                                                id,
-                                                page_index: place.page_index,
-                                                page_label: place.page_label.clone(),
-                                                quads: place.quads.clone(),
-                                            },
-                                            AnnOp::Record,
-                                        )
+                                        this.ann_record(AnnotationRequest::Resolve {
+                                            id,
+                                            page_index: place.page_index,
+                                            page_label: place.page_label.clone(),
+                                            quads: place.quads.clone(),
+                                        })
                                     }),
                                 ),
                             )

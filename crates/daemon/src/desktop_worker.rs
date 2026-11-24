@@ -22,6 +22,11 @@ pub(super) struct Worker<'a> {
     pdf_preview: Option<(usize, cm_protocol::import::PreviewId)>,
     /// Retained parse/PDF state of sessions other than the one currently executing.
     sessions: HashMap<u64, Retained>,
+    /// Confirmation ledger for annotation undo/redo (#19), kept for the worker's lifetime.
+    confirmations: cm_core::annotations::Confirmations,
+    /// Tests replace the PDF page source of `Propose`.
+    #[cfg(test)]
+    test_pages: Option<Box<dyn FnMut() -> Box<dyn annotations::PageReader> + Send>>,
 }
 /// Per-session retained parse/PDF-inspection state (#25): one IPC session can never
 /// preview or commit from another session's selected files.
@@ -106,6 +111,9 @@ impl InProcessLibraryClient {
                         partial_pdfs: Vec::new(),
                         pdf_preview: None,
                         sessions: HashMap::new(),
+                        confirmations: Default::default(),
+                        #[cfg(test)]
+                        test_pages: None,
                     };
                     first(Ok(&mut worker));
                     while let Ok(work) = receiver.recv() {
@@ -278,6 +286,30 @@ impl LibraryClient for InProcessLibraryClient {
         request: cm_protocol::annotations::AnnotationRequest,
         complete: Reply<cm_protocol::annotations::AnnotationReply>,
     ) -> Result<(), ServiceError> {
+        use cm_protocol::annotations::{AnnotationReply, AnnotationRequest};
+        if let AnnotationRequest::Propose { id, cancel } = request {
+            // Rows are looked up on the library worker; the PDF is verified and searched on a
+            // helper thread (as page renders are), so library requests keep flowing.
+            return self
+                .sender
+                .try_send(Box::new(move |worker| {
+                    match worker.and_then(|w| w.begin_propose(id, cancel)) {
+                        Err(e) => complete(Err(e)),
+                        Ok(pending) => {
+                            let spawned = thread::Builder::new()
+                                .name("annotation-propose".into())
+                                .spawn(move || {
+                                    complete(pending.finish().map(AnnotationReply::Proposal))
+                                });
+                            if spawned.is_err() {
+                                // `complete` moved into the closure; the caller's lost-reply
+                                // guard reports Unavailable when it is dropped.
+                            }
+                        }
+                    }
+                }))
+                .map_err(|_| ServiceError::Unavailable);
+        }
         self.enqueue(complete, move |w| w.annotations(request))
     }
     fn load_settings(&self, complete: Reply<SettingsLoaded>) -> Result<(), ServiceError> {

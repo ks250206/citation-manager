@@ -2,16 +2,21 @@
 //! bounded render cache with cancellation, and character-based text selection.
 use super::annotations_ui::page_of;
 use super::*;
+use crate::annotations::{MARKER_H, MARKER_W, is_marker, marker_origin, quads_of};
 use crate::pdf_viewer::{
     self, RenderCache, RenderKey, TextPos, ZoomMode, capped_zoom, hit_char, page_offsets,
     page_range, render_zoom, rotate, rotate_rgba, rotated_points, scale_for, selected_text,
     step_zoom, visible_pages, wanted_pages,
 };
-use cm_protocol::annotations::{Anchor, AnnotationKind, AnnotationPatch, NewAnnotation};
+use cm_protocol::annotations::{
+    Annotation, AnnotationId, AnnotationKind, AnnotationPatch, NewAnnotation,
+};
 use std::collections::BTreeMap;
 
 /// Concurrent page renders; the PDF worker itself is serial, so more only queues.
 const MAX_IN_FLIGHT: usize = 3;
+/// Pointer travel (px) above which a press is a drag, not a click.
+const CLICK_SLOP: f32 = 3.0;
 
 pub(super) struct Viewer {
     attachment: AttachmentId,
@@ -34,6 +39,10 @@ pub(super) struct Viewer {
     anchor: Option<TextPos>,
     head: Option<TextPos>,
     dragging: bool,
+    /// Where the left button went down, and whether the pointer has since moved beyond the
+    /// click slop: a press without a drag is a click (selects an annotation on mouse-up).
+    press: Option<Point<Pixels>>,
+    dragged: bool,
     /// Last computed layout inputs, used by event handlers between renders.
     scale: f32,
     device_scale: f32,
@@ -62,6 +71,8 @@ impl Viewer {
             anchor: None,
             head: None,
             dragging: false,
+            press: None,
+            dragged: false,
             scale: 1.0,
             device_scale: 1.0,
             measured: (0.0, 0.0),
@@ -148,12 +159,18 @@ impl Viewer {
             })
             .collect()
     }
-    /// PDF-space point under a window position.
-    fn pdf_point(&self, position: Point<Pixels>) -> Option<(u32, pdf_viewer::Point)> {
-        let (page, p) = self.locate(position)?;
+    /// Topmost annotation under a window position: note markers (drawn last) first, then
+    /// highlights in reverse drawing order.
+    fn annotation_at<'a>(
+        &self,
+        annotations: impl Iterator<Item = &'a Annotation>,
+        position: Point<Pixels>,
+    ) -> Option<AnnotationId> {
+        let (page, display) = self.locate(position)?;
         let (crop, r) = *self.geometry.get(&page)?;
         let vp = pdf_viewer::viewport(crop, rotate(r, self.turns), self.scale)?;
-        Some((page, vp.hit_test(p)?))
+        let on_page: Vec<&Annotation> = annotations.filter(|a| page_of(a) == Some(page)).collect();
+        crate::annotations::annotation_at(vp, &on_page, display)
     }
     fn selection_text(&self) -> Option<String> {
         let (a, b) = (self.anchor?, self.head?);
@@ -612,74 +629,76 @@ impl LibraryView {
                     }
                     _ => vec![],
                 };
-                let marks: Vec<Div> = match (
-                    v.geometry.get(&page),
-                    pdf_viewer::viewport(
-                        v.geometry.get(&page).map(|g| g.0).unwrap_or(Rect {
-                            left: 0.0,
-                            bottom: 0.0,
-                            right: 1.0,
-                            top: 1.0,
-                        }),
-                        v.geometry
-                            .get(&page)
-                            .map(|g| rotate(g.1, v.turns))
-                            .unwrap_or(Rotation::R0),
-                        scale,
-                    ),
-                ) {
-                    (Some(_), Some(vp)) => marks_src
-                        .iter()
-                        .filter(|a| page_of(a) == Some(page))
-                        .flat_map(|a| {
-                            let color = crate::annotations::rgb(a.color.as_deref());
-                            let chosen = selected_ann == Some(a.id);
-                            let quads = match &a.anchor {
-                                Anchor::Resolved { quads, .. } => quads.clone(),
-                                Anchor::Unresolved { .. } => vec![],
-                            };
-                            if a.kind == AnnotationKind::Note || quads.is_empty() {
-                                let (x, y) = quads
-                                    .first()
-                                    .map(|q| {
-                                        let b = vp.quad_to_display(*q).bounds();
-                                        (b.left, b.bottom.min(b.top))
-                                    })
-                                    .unwrap_or((6.0, 6.0));
-                                return vec![
+                let marks: Vec<Div> =
+                    match (
+                        v.geometry.get(&page),
+                        pdf_viewer::viewport(
+                            v.geometry.get(&page).map(|g| g.0).unwrap_or(Rect {
+                                left: 0.0,
+                                bottom: 0.0,
+                                right: 1.0,
+                                top: 1.0,
+                            }),
+                            v.geometry
+                                .get(&page)
+                                .map(|g| rotate(g.1, v.turns))
+                                .unwrap_or(Rotation::R0),
+                            scale,
+                        ),
+                    ) {
+                        (Some(_), Some(vp)) => {
+                            let on_page: Vec<&cm_protocol::annotations::Annotation> = marks_src
+                                .iter()
+                                .filter(|a| page_of(a) == Some(page))
+                                .collect();
+                            // Highlights first, then note markers on top (hit-testing mirrors it).
+                            let highlights =
+                                on_page.iter().filter(|a| !is_marker(a)).flat_map(|a| {
+                                    let color = crate::annotations::rgb(a.color.as_deref());
+                                    let chosen = selected_ann == Some(a.id);
+                                    quads_of(a)
+                                        .iter()
+                                        .map(|q| {
+                                            let b = vp.quad_to_display(*q).bounds();
+                                            div()
+                                                .absolute()
+                                                .left(px(b.left))
+                                                .top(px(b.bottom.min(b.top)))
+                                                .w(px(b.width().abs()))
+                                                .h(px(b.height().abs()))
+                                                .bg(rgba((color << 8) | 0x66))
+                                                .when(chosen, |el| {
+                                                    el.border_b_2().border_color(rgb(ACCENT))
+                                                })
+                                        })
+                                        .collect::<Vec<_>>()
+                                });
+                            let markers = on_page.iter().filter(|a| is_marker(a)).enumerate().map(
+                                |(i, a)| {
+                                    let chosen = selected_ann == Some(a.id);
+                                    let (x, y) = marker_origin(vp, a, i);
                                     div()
                                         .absolute()
                                         .left(px(x))
                                         .top(px(y))
-                                        .px_1()
+                                        .w(px(MARKER_W))
+                                        .h(px(MARKER_H))
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
                                         .rounded_md()
                                         .bg(rgb(0xfff4d6))
                                         .border_1()
                                         .border_color(rgb(if chosen { ACCENT } else { 0xf0d58a }))
                                         .text_size(px(11.))
-                                        .child("📝"),
-                                ];
-                            }
-                            quads
-                                .iter()
-                                .map(|q| {
-                                    let b = vp.quad_to_display(*q).bounds();
-                                    div()
-                                        .absolute()
-                                        .left(px(b.left))
-                                        .top(px(b.bottom.min(b.top)))
-                                        .w(px(b.width().abs()))
-                                        .h(px(b.height().abs()))
-                                        .bg(rgba((color << 8) | 0x66))
-                                        .when(chosen, |el| {
-                                            el.border_b_2().border_color(rgb(ACCENT))
-                                        })
-                                })
-                                .collect::<Vec<_>>()
-                        })
-                        .collect(),
-                    _ => vec![],
-                };
+                                        .cursor_pointer()
+                                        .child("📝")
+                                },
+                            );
+                            highlights.chain(markers).collect()
+                        }
+                        _ => vec![],
+                    };
                 let overlays: Vec<Div> =
                     match (selection, v.geometry.get(&page), v.chars.get(&page)) {
                         (Some((a, b)), Some((crop, r)), Some(chars)) => {
@@ -785,40 +804,33 @@ impl LibraryView {
                         MouseButton::Left,
                         cx.listener(|this, event: &MouseDownEvent, window, cx| {
                             this.viewer_focus.focus(window, cx);
-                            // Clicking an existing highlight/note selects it for editing.
-                            let hit = this.viewer.as_ref().and_then(|v| {
-                                let (page, p) = v.pdf_point(event.position)?;
-                                this.ann
-                                    .for_attachment(v.attachment)
-                                    .filter(|a| page_of(a) == Some(page))
-                                    .find(|a| match &a.anchor {
-                                        Anchor::Resolved { quads, .. } => quads.iter().any(|q| {
-                                            let b = q.bounds();
-                                            p.x >= b.left
-                                                && p.x <= b.right
-                                                && p.y >= b.bottom
-                                                && p.y <= b.top
-                                        }),
-                                        Anchor::Unresolved { .. } => false,
-                                    })
-                                    .map(|a| a.id)
-                            });
-                            if hit.is_some() && !event.modifiers.shift {
-                                this.ann_select(hit, cx);
-                                return;
-                            }
+                            // Text selection always starts here; whether this was a click on
+                            // a highlight/note is decided on mouse-up.
                             if let Some(v) = &mut this.viewer {
                                 let caret = v.caret_at(event.position);
                                 v.anchor = caret;
                                 v.head = caret;
                                 v.dragging = caret.is_some();
+                                v.press = Some(event.position);
+                                v.dragged = false;
                             }
                             cx.notify();
                         }),
                     )
                     .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
-                        if let Some(v) = &mut this.viewer
-                            && v.dragging
+                        let Some(v) = &mut this.viewer else { return };
+                        if let Some(press) = v.press
+                            && event.dragging()
+                        {
+                            let (dx, dy) = (
+                                f32::from(event.position.x - press.x),
+                                f32::from(event.position.y - press.y),
+                            );
+                            if dx.abs() > CLICK_SLOP || dy.abs() > CLICK_SLOP {
+                                v.dragged = true;
+                            }
+                        }
+                        if v.dragging
                             && event.dragging()
                             && let Some(caret) = v.caret_at(event.position)
                             && v.head != Some(caret)
@@ -832,19 +844,35 @@ impl LibraryView {
                         cx.listener(|this, _: &MouseUpEvent, _, _| {
                             if let Some(v) = &mut this.viewer {
                                 v.dragging = false;
+                                v.press = None;
                             }
                         }),
                     )
                     .on_mouse_up(
                         MouseButton::Left,
-                        cx.listener(|this, _: &MouseUpEvent, _, cx| {
+                        cx.listener(|this, event: &MouseUpEvent, _, cx| {
+                            let mut clicked = None;
                             if let Some(v) = &mut this.viewer {
                                 v.dragging = false;
-                                if v.anchor.is_some() && v.anchor == v.head {
-                                    // A click without a drag clears the selection.
+                                let press = v.press.take();
+                                let click = !v.dragged && v.anchor == v.head;
+                                if click {
+                                    // A click without a drag clears the text selection...
                                     v.anchor = None;
                                     v.head = None;
+                                    // ...and selects the topmost highlight/note under it.
+                                    if !event.modifiers.shift {
+                                        clicked = press.and_then(|p| {
+                                            v.annotation_at(
+                                                this.ann.for_attachment(v.attachment),
+                                                p,
+                                            )
+                                        });
+                                    }
                                 }
+                            }
+                            if clicked.is_some() {
+                                this.ann_select(clicked, cx);
                             }
                             cx.notify();
                         }),
@@ -916,11 +944,11 @@ impl LibraryView {
                 )))
                 .child(div().flex_1())
                 .child(
-                    button("pdf-undo", "↶", self.ann.history.can_undo())
+                    button("pdf-undo", "↶", self.ann_can_undo())
                         .on_click(cx.listener(|this, _, _, cx| this.ann_undo(cx))),
                 )
                 .child(
-                    button("pdf-redo", "↷", self.ann.history.can_redo())
+                    button("pdf-redo", "↷", self.ann_can_redo())
                         .on_click(cx.listener(|this, _, _, cx| this.ann_redo(cx))),
                 ),
         ];
@@ -968,7 +996,13 @@ impl LibraryView {
                             a.color.as_deref(),
                             cx,
                             |this, c, _| {
-                                if let Some(id) = this.ann.selected {
+                                // Re-picking the current colour is not an edit.
+                                if let Some(id) = this
+                                    .ann
+                                    .selected()
+                                    .filter(|a| a.color.as_deref() != Some(c))
+                                    .map(|a| a.id)
+                                {
                                     this.ann_update(
                                         id,
                                         AnnotationPatch {

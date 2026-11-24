@@ -7,7 +7,10 @@
 //! commit is one write transaction (it invalidates open #33 import previews, like any
 //! committed library write); batches are therefore large (`COMMIT_PAGES`/`COMMIT_TEXT_BYTES`).
 //! A document that cannot be read (encrypted, damaged, image-only, too large) gets an
-//! explicit per-attachment state and the job continues with the next attachment.
+//! explicit per-attachment state and the job continues with the next attachment. A
+//! transient failure (batch time budget, read error) keeps the attachment pending with an
+//! attempt count; later runs retry it and it becomes `Failed` after
+//! `MAX_TRANSIENT_ATTEMPTS` consecutive transient failures without progress.
 use crate::{ServiceError, metadata_resolve::Cancellation};
 use cm_domain::{AttachmentId, PaperId};
 use serde::{Deserialize, Serialize};
@@ -17,8 +20,11 @@ use std::path::{Path, PathBuf};
 pub const MAX_PAGES_PER_DOCUMENT: u32 = 5_000;
 /// Unicode scalars kept per page; longer page text is cut and counted as truncated.
 pub const MAX_CHARS_PER_PAGE: u32 = 100_000;
-/// Pages requested from the extractor per call (one PDF load).
-pub const PAGES_PER_CALL: u32 = 16;
+/// Pages requested from the extractor per call (one PDF load and hash of the whole file, so
+/// calls are as large as the PDF worker allows).
+pub const PAGES_PER_CALL: u32 = 64;
+/// Consecutive transient failures of one attachment before it is marked `Failed`.
+pub const MAX_TRANSIENT_ATTEMPTS: u32 = 3;
 /// A batch is committed after this many pages or text bytes, or at the document end.
 pub const COMMIT_PAGES: usize = 64;
 pub const COMMIT_TEXT_BYTES: usize = 4 << 20;
@@ -150,6 +156,10 @@ pub enum ExtractError {
     Cancelled,
     /// Transient: worker busy/closed or runtime not loaded yet. The job is retried.
     Busy(String),
+    /// This attachment's attempt failed for a reason that may pass (batch time budget,
+    /// read error). Retried by a later run, at most `MAX_TRANSIENT_ATTEMPTS` times in a row.
+    /// The reason is a fixed, non-content diagnostic.
+    Transient(String),
     /// Permanent for this attachment.
     Failed(String),
 }
@@ -193,6 +203,10 @@ pub trait FulltextStore {
         state: ExtractionState,
         detail: &str,
     ) -> Result<(), ServiceError>;
+    /// Records a transient failure: the attachment stays unfinished (resumable at its
+    /// committed `next_page`) and its consecutive failure count grows; a committed batch
+    /// resets the count. Returns the new count.
+    fn defer(&mut self, target: &ExtractTarget, detail: &str) -> Result<u32, ServiceError>;
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -205,6 +219,9 @@ pub struct ExtractionSummary {
     pub unreadable: u32,
     /// More targets than `MAX_ATTACHMENTS_PER_RUN` were pending.
     pub more_pending: bool,
+    /// Attachments left unfinished after a transient failure; a later run retries them.
+    #[serde(default)]
+    pub deferred: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -298,6 +315,34 @@ pub fn run_with_budget(
                 Ok(batch) => batch,
                 Err(ExtractError::Cancelled) => return Err(RunError::Cancelled),
                 Err(ExtractError::Busy(reason)) => return Err(RunError::Retryable(reason)),
+                Err(ExtractError::Transient(reason)) => {
+                    // Keep what this run already extracted for the attachment.
+                    if !buffer.is_empty() {
+                        summary.pages += buffer.len() as u32;
+                        store
+                            .store(StoreBatch {
+                                target,
+                                page_count,
+                                pages: &buffer,
+                                next_page: next,
+                                finish: None,
+                            })
+                            .map_err(storage)?;
+                        buffer.clear();
+                    }
+                    let attempts = store.defer(target, &reason).map_err(storage)?;
+                    if attempts < MAX_TRANSIENT_ATTEMPTS {
+                        break ExtractionState::Pending;
+                    }
+                    store
+                        .fail(
+                            target,
+                            ExtractionState::Failed,
+                            "text extraction failed repeatedly (time budget or read error)",
+                        )
+                        .map_err(storage)?;
+                    break ExtractionState::Failed;
+                }
                 Err(e) => {
                     let (state, detail) = match e {
                         ExtractError::Encrypted => (
@@ -387,6 +432,10 @@ pub fn run_with_budget(
                 break ExtractionState::Failed;
             }
         };
+        if state == ExtractionState::Pending {
+            summary.deferred += 1;
+            continue;
+        }
         summary.attachments += 1;
         match state {
             ExtractionState::Complete => summary.complete += 1,

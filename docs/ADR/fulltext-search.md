@@ -11,8 +11,9 @@ nothing here assumes behaviour that was not measured on the pinned bundled SQLit
   with text, `'unavailable'` for pages without a text layer.
 - `fulltext_extractions`: one row per PDF attachment with state
   `extracting|complete|partial|no_text|encrypted|malformed|too_large|failed`, `page_count`,
-  `next_page` (resume point), `pages_with_text`, `truncated_pages`, a fixed `detail` text
-  (never document text or passwords). No row = `pending`.
+  `next_page` (resume point), `pages_with_text`, `truncated_pages`, `attempts`
+  (consecutive transient failures without progress), a fixed `detail` text (never document
+  text or passwords). No row = `pending`.
 - `search_documents`: the **single index projection**, one row per paper (title,
   contributor display names, abstract, journal, tag names, identifiers = DOI/URL/citation
   key), per annotation (quote + comment; highlights and notes) and per extracted page with
@@ -33,28 +34,48 @@ nothing here assumes behaviour that was not measured on the pinned bundled SQLit
 ## Rebuild and damage
 
 `SqliteSearch::verify` runs FTS5 `integrity-check` (rank 1: index vs content) on both
-tables and compares the projection with the projection views (both directions plus count).
+tables and compares the projection with the projection views (both directions plus count,
+in one statement and therefore one read snapshot, so a concurrent commit cannot look like
+drift). Only SQLITE_CORRUPT* (or an FTS5 "malformed" report) counts as damage; the
+integrity-check is an INSERT and needs the write lock, so BUSY/LOCKED (or an interrupt) is
+returned as an error without a verdict, never as `fts_ok = false`.
 `SqliteSearch::rebuild` (job `search.rebuild`) sets `suspended`, clears and refills the
 projection from the views, runs FTS5 `rebuild` on both tables and bumps `generation`, all in
 one IMMEDIATE transaction. Source tables are only read. Tests show the trigger-maintained
 projection equals a rebuild after every kind of source change, and that a corrupted FTS
 shadow table is detected and rebuilt with unchanged source rows and identical results.
-papersd verifies the index when a search fails with a storage error; damage schedules one
-ownerless `search.rebuild` job (`auto-rebuild:<generation>`) and the search returns
-`InvalidInput("search index is damaged; rebuild job … scheduled")`.
+Storage classifies every SQLite failure (`cm_storage::SqlFault`: `Busy` for
+BUSY/LOCKED, `Interrupted`, `Corrupt`, `Other`; `SqliteSearch::fault`). papersd verifies the
+index only when a search failed with `Corrupt`; confirmed damage schedules one ownerless
+`search.rebuild` job (`auto-rebuild:<generation>`) and the search returns
+`InvalidInput("search index is damaged; rebuild job … scheduled")`. Lock contention, during
+the search or the verification, returns `WireError::Busy` (retry later) and never schedules
+a rebuild.
+
+The rebuild is one transaction: searches see the old or the new index, never a half-built
+one. It is not split into batches (a batched rebuild would expose a partial index or need a
+second index generation); on a 20k-page library it is a single long write, which is
+acceptable for a damage-recovery path (#30 measures it).
+
+**Cursor stability.** A rebuild renumbers `search_documents.id`. `SearchCursor` positions
+(`scan_after` window bound and `offset` within a window) refer to those ids, so a cursor
+taken before a rebuild can skip or repeat hits afterwards; clients restart from no cursor
+after a rebuild (the `search.rebuild` job result reports the new `generation`). Ordinary
+writes between pages can likewise shift ranked results (no cross-call snapshot).
 
 ## Extraction job `fulltext.extract`
 
 Payload `{"scope": {"kind": "pending"} | {"kind": "attachment", "id": …} |
 {"kind": "paper", "id": …}, "force": bool}`; requires `JobsControl` + `LibraryWrite`.
 `cm_core::search::extraction::run` drives a `PageTextExtractor` (PDFium:
-`cm_pdf::worker::Operation::Text`, 16 pages per call, one load, text only) and a
+`cm_pdf::worker::Operation::Text`, 64 pages per call — the worker maximum, since every
+call loads and hashes the whole file — text only) and a
 `FulltextStore` (storage):
 
 - Bounds: 100,000 Unicode scalars per page (longer → truncated, state `partial`), 5,000
   pages per document (rest skipped, `partial`), 500 attachments and 20 minutes per run
   (the run commits what it has and succeeds with `more_pending`; papersd resubmits), PDF
-  worker limits (32 MiB input, 30 s per batch). `max_run` of the kind is 30 minutes, so
+  worker limits (32 MiB input, 60 s per batch). `max_run` of the kind is 30 minutes, so
   the #25 per-attempt limit is only reached if a single batch hangs past its budget.
 - Durability: pages are committed with `next_page` in batches of 64 pages or 4 MiB of
   text, or at document end. A crash, lost lease or cancel resumes at `next_page`; the
@@ -62,17 +83,22 @@ Payload `{"scope": {"kind": "pending"} | {"kind": "attachment", "id": …} |
 - Cancel: checked before every batch (JobStatus cancel → `Cancelled`; committed pages
   stay searchable, state stays `extracting`). Explicit `Retry` resumes.
 - Errors: encrypted/password → `encrypted`, damaged → `malformed`, over size → `too_large`,
-  time budget/IO/native → `failed`, stored bytes ≠ recorded SHA-256 → `failed`, no text on
-  any page → `no_text` (image-only; OCR out of scope). The job continues with the next
-  attachment and succeeds. Worker busy / runtime missing → retryable job error.
+  native error → `failed`, stored bytes ≠ recorded SHA-256 → `failed`, a stored path that
+  is not a safe managed path → `failed` (only that attachment), no text on any page →
+  `no_text` (image-only; OCR out of scope). The job continues with the next attachment.
+  A batch time budget or read error is **transient**: pages extracted so far are
+  committed, the attachment stays `extracting` with `attempts + 1` (a committed batch
+  resets it), the run continues with the next attachment and then ends as a retryable job
+  error (runner backoff). After 3 consecutive transient failures the attachment becomes
+  `failed`. Worker busy / queue full / runtime missing → retryable job error.
 - Automatic submission: papersd submits one ownerless `{scope: pending}` job at start,
-  after `attachment.import` jobs, after PDF attach/commit commands and after a run that
-  ended with `more_pending`, when unfinished attachments exist and no extraction job is
-  active. A cancelled or failed extraction job is not resubmitted by the runner (it is
-  picked up again at the next daemon start or attachment import). The idempotency key
-  `auto:<first pending attachment>:<count>:<committed pages>` changes whenever work was
-  done and prevents loops for a set that makes no progress; explicit retry stays
-  available. Ownerless jobs run with daemon authority (#25 `owner_denial`) and are
+  after `attachment.import` jobs, after PDF attach/commit commands and whenever an
+  extraction job ends (except when it was cancelled), when unfinished attachments exist
+  and no extraction job is active. PDFs attached while a run is active (the attach hook is
+  a no-op then) are therefore extracted when that run ends. The idempotency key
+  `auto:<first pending attachment>:<count>:<committed pages>:<transient attempts>` changes
+  whenever the set changed or work was done or attempted, and prevents loops for a set
+  that makes no progress; explicit retry stays available. Ownerless jobs run with daemon authority (#25 `owner_denial`) and are
   visible to GrantAdmin sessions only.
 - The extractor is registered only when the daemon has a PDF runtime
   (`pdf-metadata` feature and the bundled pinned library next to `papersd`). Otherwise no
@@ -106,7 +132,8 @@ hits with `coverage.unresolved`, never a silent broadening. Additional request s
 - Terms with 1–2 scalars: unicode61 token match plus a **bounded literal scan**
   (`instr(lower(…))`, ASCII case-insensitive, other text exact) over at most
   `candidate_limit` (1..20000, default 2000) documents in id order, checked against
-  `timeout_ms` between 256-row chunks. Scope `bounded` (default) scans bibliographic and
+  `timeout_ms` between 256-row chunks and inside SQLite (an interrupted chunk ends the
+  window early). Scope `bounded` (default) scans bibliographic and
   annotation documents always and PDF pages only after an explicit narrowing filter
   (doi/tag/collection/year/`collection`/`papers`); otherwise `unsearched` contains
   `pdf_pages_for_short_terms` — missing page hits are unknown, not zero. Scope `all_pages`
@@ -120,7 +147,19 @@ hits with `coverage.unresolved`, never a silent broadening. Additional request s
   `paper_title`, `doi`, `deleted`, `source`, `attachment_id`, `annotation_id`,
   `page_index` (0-based physical), `page_label` (PDF label), `matched_fields`,
   `snippet` (32..1000 scalars, default 160, control characters → spaces, ellipses when cut),
-  `highlights` (UTF-8 byte ranges), `snippet_truncated`, `score`.
+  `highlights` (UTF-8 byte ranges), `snippet_truncated`, `score`. `matched_fields`, the
+  snippet position and highlights compare like the unicode61 index: case-insensitive,
+  Latin diacritics folded (precomposed and combining) and any whitespace/line-break run as
+  one space, mapped back to exact original offsets — a phrase across a PDF line break or
+  `muller` → `Müller` gets a centred snippet and highlight.
+- Time budget: `timeout_ms` (1..10000, default 2000) bounds the whole request and is
+  enforced inside SQLite (progress handler → interrupt on the search read connection).
+  An interrupted FTS lookup returns an empty page with `coverage.timed_out` and
+  `complete = false`; the final fetch of the returned hits gets 500 ms extra.
+- Concurrency: papersd serves searches and full-text status/page reads from a pool of up
+  to 4 dedicated read connections (WAL readers block neither each other nor the writer),
+  each request in one read snapshot. A request that finds the pool exhausted waits until
+  its own deadline and then gets `WireError::Busy`.
 - Coverage: `complete` is false when FTS candidates were truncated (5000 per clause and
   tokenizer), the scan timed out or was partial, pages were unsearched for short terms or
   PDFs are still pending extraction. `no_extractable_text` lists image-only/encrypted/

@@ -64,7 +64,13 @@ fn prepare(path: &Path) -> Result<(), StorageError> {
         let metadata = match fs::symlink_metadata(&current) {
             Ok(m) => m,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                fs::DirBuilder::new().mode(0o700).create(&current)?;
+                // A concurrent first start (e.g. two papersd racing for the lock) may create
+                // the same directory between our stat and mkdir; the checks below still apply.
+                match fs::DirBuilder::new().mode(0o700).create(&current) {
+                    Ok(()) => {}
+                    Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+                    Err(e) => return Err(e.into()),
+                }
                 fs::symlink_metadata(&current)?
             }
             Err(e) => return Err(e.into()),

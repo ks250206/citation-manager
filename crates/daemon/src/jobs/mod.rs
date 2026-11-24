@@ -185,18 +185,15 @@ pub fn default_handlers() -> Vec<Arc<dyn JobHandler>> {
 
 /// #18: submit one ownerless `fulltext.extract {scope: pending}` job when PDF attachments
 /// await extraction and no extraction job is active. The idempotency key names the pending
-/// set, so a set that already failed is not resubmitted in a loop (explicit retry remains).
+/// set and the work done/attempted on it (`Unfinished::key`), so a set whose job failed
+/// without progress is not resubmitted in a loop (explicit retry remains).
 fn ensure_extraction(control: &Mutex<LibraryDb>, handlers: &Handlers) -> Option<JobRow> {
     use cm_protocol::jobs::kinds::FULLTEXT_EXTRACT;
     if !handlers.contains_key(FULLTEXT_EXTRACT) {
         return None;
     }
     let mut db = control.lock().unwrap_or_else(|e| e.into_inner());
-    let (count, first, committed) = db.fulltext_reader().unfinished().ok()?;
-    let first = first?;
-    if count == 0 {
-        return None;
-    }
+    let key = db.fulltext_reader().unfinished().ok()?.key()?;
     let mut jobs = db.daemon_jobs();
     if jobs
         .list(None, true)
@@ -206,7 +203,6 @@ fn ensure_extraction(control: &Mutex<LibraryDb>, handlers: &Handlers) -> Option<
     {
         return None;
     }
-    let key = format!("auto:{}:{count}:{committed}", first.0);
     jobs.submit(&NewJob {
         kind: FULLTEXT_EXTRACT,
         idempotency_key: &key,
@@ -548,21 +544,21 @@ impl Runner {
                 Ok(Some(row)) => {
                     let (id, kind) = (row.id, row.kind.clone());
                     self.execute(row);
-                    // New attachments, or an extraction run that ended on its budget, leave
-                    // pending work. A cancelled/failed extraction is not resubmitted here.
-                    let resume =
-                        kind == cm_protocol::jobs::kinds::ATTACHMENT_IMPORT
-                            || (kind == cm_protocol::jobs::kinds::FULLTEXT_EXTRACT
-                                && self.db().daemon_jobs().get(id).ok().flatten().is_some_and(
-                                    |j| {
-                                        j.state == "succeeded"
-                                            && j.result_json.as_deref().is_some_and(|r| {
-                                                serde_json::from_str::<Value>(r).is_ok_and(|v| {
-                                                    v["more_pending"] == Value::Bool(true)
-                                                })
-                                            })
-                                    },
-                                ));
+                    // New attachments leave pending work. So does an extraction run that
+                    // ended on its budget, deferred an attachment, or ran while further PDFs
+                    // were attached (`ensure_extraction` is a no-op while it is active): when
+                    // it ends, the still-unfinished set gets a job. The idempotency key makes
+                    // this a no-op when the run made no progress; a cancelled run is not
+                    // resubmitted (the user stopped it).
+                    let resume = kind == cm_protocol::jobs::kinds::ATTACHMENT_IMPORT
+                        || (kind == cm_protocol::jobs::kinds::FULLTEXT_EXTRACT
+                            && self
+                                .db()
+                                .daemon_jobs()
+                                .get(id)
+                                .ok()
+                                .flatten()
+                                .is_some_and(|j| j.state != "cancelled"));
                     if resume {
                         ensure_extraction(&self.control, &self.handlers);
                     }
