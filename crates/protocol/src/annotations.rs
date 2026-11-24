@@ -2,9 +2,10 @@
 use crate::domain::{AttachmentId, PaperId};
 pub use cm_core::annotations::{
     Anchor, Annotation, AnnotationId, AnnotationKind, AnnotationPatch, COLORS, Edit, History,
-    MAX_CONTEXT_CHARS, NewAnnotation, Proposal, Source, rgb, valid_color,
+    MAX_CONTEXT_CHARS, MAX_PROPOSAL_MATCHES, NewAnnotation, Proposal, Source, merge_line_quads,
+    pending_carry_over, rgb, valid_color,
 };
-use cm_core::geometry::Quad;
+use cm_core::{geometry::Quad, metadata_resolve::Cancellation};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum AnnotationRequest {
@@ -23,7 +24,17 @@ pub enum AnnotationRequest {
         to: AttachmentId,
     },
     /// Search the annotation's PDF for its quote/context. Never applied automatically.
-    Propose(AnnotationId),
+    /// Runs off the library worker under an overall deadline; `cancel` stops it early
+    /// (e.g. the paper was switched).
+    ///
+    /// Over IPC (#25) `cancel` is local to each side and never serialized: the client
+    /// watches it and sends `ClientFrame::Cancel` for the request id, and papersd installs
+    /// its own per-request token (cancelled by that frame or by the client disconnecting).
+    Propose {
+        id: AnnotationId,
+        #[serde(skip)]
+        cancel: Cancellation,
+    },
     Resolve {
         id: AnnotationId,
         page_index: u32,
@@ -45,8 +56,33 @@ impl AnnotationRequest {
     pub fn operation(&self) -> cm_core::policy::Operation {
         use cm_core::policy::Operation as O;
         match self {
-            Self::List(_) | Self::ForPaper(_) | Self::Propose(_) => O::AnnotationRead,
+            Self::List(_) | Self::ForPaper(_) | Self::Propose { .. } => O::AnnotationRead,
             _ => O::AnnotationWrite,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The cancellation token is process-local: it never goes on the wire and a decoded
+    /// Propose starts with a fresh, uncancelled token (papersd then installs its own).
+    #[test]
+    fn propose_crosses_ipc_without_its_cancellation_token() {
+        let id = AnnotationId(uuid::Uuid::from_u128(7));
+        let cancel = Cancellation::default();
+        cancel.cancel();
+        let json = serde_json::to_string(&AnnotationRequest::Propose { id, cancel }).unwrap();
+        assert!(!json.contains("cancel"), "{json}");
+        let AnnotationRequest::Propose {
+            id: decoded,
+            cancel,
+        } = serde_json::from_str(&json).unwrap()
+        else {
+            panic!("{json}")
+        };
+        assert_eq!(decoded, id);
+        assert!(!cancel.is_cancelled());
     }
 }

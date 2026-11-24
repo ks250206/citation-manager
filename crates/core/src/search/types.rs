@@ -161,7 +161,9 @@ pub enum ShortTermScope {
 
 /// Continuation/page position. `scan_after` is the last document id the previous short-term
 /// window examined (0 = start); `offset` pages through that window's ranked results.
-/// Separate calls do not share a snapshot: concurrent edits can shift results.
+/// Separate calls do not share a snapshot: concurrent edits can shift results, and a
+/// `search.rebuild` renumbers documents, so a cursor taken before a rebuild may skip or
+/// repeat hits (restart from no cursor after a rebuild; see docs/ADR/fulltext-search.md).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SearchCursor {
@@ -212,8 +214,11 @@ pub struct SearchRequest {
     /// Overrides of `SearchField::default_weight` (at most one per field).
     #[serde(default)]
     pub weights: Vec<FieldWeight>,
-    /// Time budget for the short-term scan: 1..=10000 ms. FTS lookups are bounded by
-    /// `MAX_FTS_CANDIDATES` rows instead.
+    /// Time budget for the whole request: 1..=10000 ms, enforced inside the database. A
+    /// short-term scan that reaches it ends its window early (`ScanStatus::Partial` with a
+    /// continuation); an FTS lookup it interrupts yields an empty page with
+    /// `coverage.timed_out` and `complete == false` (retry with a larger budget or a narrower
+    /// query). Fetching the returned hits may take up to `service::RESULT_GRACE` longer.
     #[serde(default = "default_timeout")]
     pub timeout_ms: u32,
 }
@@ -331,8 +336,10 @@ pub struct SearchHit {
     pub page_index: Option<u32>,
     /// PDF page label (may differ from the physical number, e.g. "iv").
     pub page_label: Option<String>,
-    /// Fields where a query term occurs literally (ASCII case-insensitive). May be empty
-    /// for a unicode61-only match (e.g. diacritic folding) or a filter-only query.
+    /// Fields where a query term occurs, compared like the unicode61 index: case-insensitive,
+    /// Latin diacritics folded and any whitespace/line-break run equal to one space. May be
+    /// empty for another tokenizer-only match (e.g. a phrase whose words are separated by
+    /// punctuation) or a filter-only query.
     pub matched_fields: Vec<SearchField>,
     pub snippet_field: Option<SearchField>,
     pub snippet: String,

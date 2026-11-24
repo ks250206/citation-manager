@@ -4,11 +4,13 @@
 mod extraction;
 #[cfg(test)]
 mod measure;
+mod reader;
 mod rebuild;
 mod search;
 #[cfg(test)]
 mod tests;
-pub use extraction::SqliteFulltext;
+pub use extraction::{FulltextReader, SqliteFulltext, Unfinished};
+pub use reader::{SearchReader, SearchSnapshot};
 pub use rebuild::IndexHealth;
 pub use search::SqliteSearch;
 
@@ -17,9 +19,7 @@ use crate::{LibraryDb, LibraryDirectory, StorageError};
 impl LibraryDb {
     /// Read-side search port (`cm_core::search::SearchIndex`), rebuild and verification.
     pub fn search_index(&self) -> SqliteSearch<'_> {
-        SqliteSearch {
-            connection: &self.connection,
-        }
+        SqliteSearch::new(&self.connection, None)
     }
     /// Extraction store. Rejects pairing a DB with another library's file root.
     pub fn fulltext(
@@ -33,7 +33,7 @@ impl LibraryDb {
         })
     }
     /// Read-only extraction status/page access (no file root needed).
-    pub fn fulltext_reader(&self) -> extraction::FulltextReader<'_> {
+    pub fn fulltext_reader(&self) -> FulltextReader<'_> {
         extraction::FulltextReader {
             connection: &self.connection,
         }

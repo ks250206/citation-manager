@@ -1,6 +1,6 @@
 //! `SearchIndex` over SQLite. Every value is bound; FTS input is one quoted phrase.
-use super::PDF_ATTACHMENT;
-use crate::error::service_error;
+use super::{PDF_ATTACHMENT, reader::Deadline};
+use crate::error::{SqlFault, service_error, sql_fault};
 use cm_core::{
     ServiceError,
     papers::PaperVisibility,
@@ -14,11 +14,34 @@ use cm_core::{
 };
 use cm_domain::{AttachmentId, CollectionId, PaperId, TagId, TagKey};
 use rusqlite::{Connection, OptionalExtension, Row, params_from_iter, types::Value};
-use std::time::Instant;
+use std::{cell::Cell, time::Instant};
 use uuid::Uuid;
 
 pub struct SqliteSearch<'a> {
     pub(crate) connection: &'a Connection,
+    /// Interrupt deadline of a `SearchReader` connection (`None`: not interruptible).
+    pub(crate) deadline: Option<&'a Deadline>,
+    /// Classification of the last SQLite error (damage vs. contention vs. interrupt).
+    pub(crate) fault: Cell<Option<SqlFault>>,
+}
+impl<'a> SqliteSearch<'a> {
+    pub(crate) fn new(connection: &'a Connection, deadline: Option<&'a Deadline>) -> Self {
+        Self {
+            connection,
+            deadline,
+            fault: Cell::new(None),
+        }
+    }
+    /// What the last failing SQLite call reported. Callers use it to tell real index damage
+    /// (`Corrupt`, worth a verify/rebuild) from transient lock contention (`Busy`) and the
+    /// request deadline (`Interrupted`); the port itself only returns `ServiceError`.
+    pub fn fault(&self) -> Option<SqlFault> {
+        self.fault.get()
+    }
+    pub(crate) fn err(&self, e: rusqlite::Error) -> ServiceError {
+        self.fault.set(Some(sql_fault(&e)));
+        service_error(e)
+    }
 }
 
 /// Rows examined per scan statement; the deadline is checked between chunks.
@@ -132,7 +155,7 @@ impl SqliteSearch<'_> {
     fn candidates(&self, b: &Sql) -> Result<Vec<Candidate>, ServiceError> {
         self.connection
             .prepare(&b.sql)
-            .map_err(service_error)?
+            .map_err(|e| self.err(e))?
             .query_map(params_from_iter(b.values.iter()), |row| {
                 Ok(Candidate {
                     id: row.get(0)?,
@@ -141,13 +164,21 @@ impl SqliteSearch<'_> {
                     score: row.get(3)?,
                 })
             })
-            .map_err(service_error)?
+            .map_err(|e| self.err(e))?
             .collect::<rusqlite::Result<Vec<_>>>()
-            .map_err(service_error)
+            .map_err(|e| self.err(e))
     }
 }
 
 impl SearchIndex for SqliteSearch<'_> {
+    fn set_deadline(&self, deadline: Option<Instant>) {
+        if let Some(cell) = self.deadline {
+            cell.set(deadline);
+        }
+    }
+    fn interrupted(&self) -> bool {
+        self.fault.get() == Some(SqlFault::Interrupted)
+    }
     fn resolve_tag(&self, key: &TagKey) -> Result<Option<TagId>, ServiceError> {
         self.connection
             .query_row(
@@ -157,16 +188,16 @@ impl SearchIndex for SqliteSearch<'_> {
             )
             .optional()
             .map(|id| id.map(TagId))
-            .map_err(service_error)
+            .map_err(|e| self.err(e))
     }
     fn resolve_collection(&self, name: &str) -> Result<Vec<CollectionId>, ServiceError> {
         self.connection
             .prepare("SELECT id FROM collections WHERE name=?1 ORDER BY id LIMIT 16")
-            .map_err(service_error)?
+            .map_err(|e| self.err(e))?
             .query_map([name], |r| uuid(r, 0).map(CollectionId))
-            .map_err(service_error)?
+            .map_err(|e| self.err(e))?
             .collect::<rusqlite::Result<Vec<_>>>()
-            .map_err(service_error)
+            .map_err(|e| self.err(e))
     }
     fn fts(
         &self,
@@ -262,24 +293,31 @@ impl SearchIndex for SqliteSearch<'_> {
             filter(&mut b, f);
             let limit = b.bind(i64::from(chunk));
             b.sql.push_str(&format!(" ORDER BY d.id LIMIT {limit}"));
-            let rows = self
-                .connection
-                .prepare(&b.sql)
-                .map_err(service_error)?
-                .query_map(params_from_iter(b.values.iter()), |row| {
-                    let masks = (0..needles.len())
-                        .map(|i| row.get::<_, i64>(3 + i).map(|m| m as u8))
-                        .collect::<rusqlite::Result<Vec<u8>>>()?;
-                    Ok(ScanRow {
-                        id: row.get(0)?,
-                        paper_id: PaperId(uuid(row, 1)?),
-                        source: parse_source(&row.get::<_, String>(2)?)?,
-                        masks,
-                    })
-                })
-                .map_err(service_error)?
-                .collect::<rusqlite::Result<Vec<_>>>()
-                .map_err(service_error)?;
+            let rows = self.connection.prepare(&b.sql).and_then(|mut statement| {
+                statement
+                    .query_map(params_from_iter(b.values.iter()), |row| {
+                        let masks = (0..needles.len())
+                            .map(|i| row.get::<_, i64>(3 + i).map(|m| m as u8))
+                            .collect::<rusqlite::Result<Vec<u8>>>()?;
+                        Ok(ScanRow {
+                            id: row.get(0)?,
+                            paper_id: PaperId(uuid(row, 1)?),
+                            source: parse_source(&row.get::<_, String>(2)?)?,
+                            masks,
+                        })
+                    })?
+                    .collect::<rusqlite::Result<Vec<_>>>()
+            });
+            let rows = match rows {
+                Ok(rows) => rows,
+                // The request deadline interrupted this chunk: the window ends after the
+                // last fully examined chunk and is reported as timed out (continuation).
+                Err(e) if sql_fault(&e) == SqlFault::Interrupted => {
+                    window.timed_out = true;
+                    return Ok(window);
+                }
+                Err(e) => return Err(self.err(e)),
+            };
             let count = rows.len() as u32;
             window.examined += count;
             if let Some(row) = rows.last() {
@@ -310,10 +348,18 @@ impl SearchIndex for SqliteSearch<'_> {
         sources(&mut b, source_set);
         filter(&mut b, f);
         b.sql.push(')');
-        let more: bool = self
-            .connection
-            .query_row(&b.sql, params_from_iter(b.values.iter()), |r| r.get(0))
-            .map_err(service_error)?;
+        let more: bool =
+            match self
+                .connection
+                .query_row(&b.sql, params_from_iter(b.values.iter()), |r| r.get(0))
+            {
+                Ok(more) => more,
+                Err(e) if sql_fault(&e) == SqlFault::Interrupted => {
+                    window.timed_out = true;
+                    return Ok(window);
+                }
+                Err(e) => return Err(self.err(e)),
+            };
         window.exhausted = !more;
         if window.exhausted {
             window.timed_out = false;
@@ -338,7 +384,7 @@ impl SearchIndex for SqliteSearch<'_> {
         );
         self.connection
             .prepare(&b.sql)
-            .map_err(service_error)?
+            .map_err(|e| self.err(e))?
             .query_map(params_from_iter(b.values.iter()), |row| {
                 let attachment: Option<String> = row.get(4)?;
                 let mut fields: [Option<String>; 8] = Default::default();
@@ -365,9 +411,9 @@ impl SearchIndex for SqliteSearch<'_> {
                     fields,
                 })
             })
-            .map_err(service_error)?
+            .map_err(|e| self.err(e))?
             .collect::<rusqlite::Result<Vec<_>>>()
-            .map_err(service_error)
+            .map_err(|e| self.err(e))
     }
     fn extraction_gaps(&self, f: &ResolvedFilter) -> Result<ExtractionGaps, ServiceError> {
         let mut b = Sql {
@@ -388,6 +434,6 @@ impl SearchIndex for SqliteSearch<'_> {
                     without_text: r.get::<_, i64>(1)? as u32,
                 })
             })
-            .map_err(service_error)
+            .map_err(|e| self.err(e))
     }
 }

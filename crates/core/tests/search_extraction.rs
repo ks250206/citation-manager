@@ -22,6 +22,7 @@ struct Store {
     stored: Vec<(AttachmentId, Vec<u32>, u32, Option<bool>)>,
     failed: Vec<(AttachmentId, ExtractionState)>,
     resets: Vec<AttachmentId>,
+    attempts: std::collections::HashMap<AttachmentId, u32>,
 }
 impl FulltextStore for Store {
     fn targets(
@@ -37,6 +38,7 @@ impl FulltextStore for Store {
         Ok(())
     }
     fn store(&mut self, batch: StoreBatch<'_>) -> Result<ExtractionState, ServiceError> {
+        self.attempts.remove(&batch.target.attachment_id);
         self.stored.push((
             batch.target.attachment_id,
             batch.pages.iter().map(|p| p.page_index).collect(),
@@ -58,9 +60,15 @@ impl FulltextStore for Store {
         self.failed.push((target.attachment_id, state));
         Ok(())
     }
+    fn defer(&mut self, target: &ExtractTarget, _: &str) -> Result<u32, ServiceError> {
+        let attempts = self.attempts.entry(target.attachment_id).or_insert(0);
+        *attempts += 1;
+        Ok(*attempts)
+    }
 }
 
-/// Path name selects behaviour: "pages-N", "locked", "busy", "stuck", "hash".
+/// Path name selects behaviour: "pages-N", "locked", "busy", "stuck", "hash", "slow"
+/// (transient time-budget failure), "late-timeout" (100 pages, transient from page 64).
 struct Fake(Mutex<Vec<(String, u32)>>);
 impl PageTextExtractor for Fake {
     fn extract(
@@ -79,6 +87,11 @@ impl PageTextExtractor for Fake {
         let count: u32 = match name.as_str() {
             "locked" => return Err(ExtractError::Encrypted),
             "busy" => return Err(ExtractError::Busy("worker busy".into())),
+            "slow" => return Err(ExtractError::Transient("time budget".into())),
+            "late-timeout" if first >= 64 => {
+                return Err(ExtractError::Transient("time budget".into()));
+            }
+            "late-timeout" => 100,
             "stuck" => {
                 return Ok(PageBatch {
                     page_count: 10,
@@ -175,7 +188,7 @@ fn cancellation_and_transient_errors_stop_without_marking_attachments() {
         &Cancellation::default(),
         &mut |_| {
             calls += 1;
-            calls < 6
+            calls < 2
         },
     );
     assert_eq!(result, Err(RunError::Cancelled));
@@ -197,6 +210,62 @@ fn cancellation_and_transient_errors_stop_without_marking_attachments() {
         Err(RunError::Retryable(_))
     ));
     assert!(store.failed.is_empty());
+}
+
+/// P2-4 regression: a batch time-budget or read error is not a permanent `Failed` state.
+/// The attachment stays unfinished, other attachments continue, later runs retry it and
+/// only `MAX_TRANSIENT_ATTEMPTS` consecutive transient failures mark it failed.
+#[test]
+fn transient_failures_are_retried_with_bounded_attempts() {
+    let slow = target("slow", 0);
+    let mut store = Store {
+        targets: vec![slow.clone(), target("pages-3", 0)],
+        ..Default::default()
+    };
+    let fake = Fake(Mutex::new(Vec::new()));
+    let run_once = |store: &mut Store| {
+        run(
+            store,
+            &fake,
+            ExtractScope::Pending,
+            false,
+            &Cancellation::default(),
+            &mut |_| true,
+        )
+        .unwrap()
+    };
+    let first = run_once(&mut store);
+    assert_eq!(
+        (first.deferred, first.attachments, first.complete),
+        (1, 1, 1)
+    );
+    assert!(
+        store.failed.is_empty(),
+        "not marked failed on the first timeout"
+    );
+    store.targets.truncate(1);
+    for attempt in 2..MAX_TRANSIENT_ATTEMPTS {
+        let again = run_once(&mut store);
+        assert_eq!(again.deferred, 1, "attempt {attempt} is deferred again");
+        assert!(store.failed.is_empty());
+    }
+    let last = run_once(&mut store);
+    assert_eq!((last.deferred, last.unreadable), (0, 1));
+    assert_eq!(
+        store.failed,
+        vec![(slow.attachment_id, ExtractionState::Failed)]
+    );
+    assert_eq!(store.attempts[&slow.attachment_id], MAX_TRANSIENT_ATTEMPTS);
+    // A transient failure mid-document first commits the pages extracted before it.
+    let late = target("late-timeout", 0);
+    let mut store = Store {
+        targets: vec![late.clone()],
+        ..Default::default()
+    };
+    let summary = run_once(&mut store);
+    assert_eq!((summary.deferred, summary.pages), (1, 64));
+    assert_eq!(store.stored.last().unwrap().2, 64, "resume point committed");
+    assert_eq!(store.attempts[&late.attachment_id], 1);
 }
 
 #[test]
@@ -273,6 +342,32 @@ fn snippets_are_bounded_and_highlight_every_occurrence() {
     let (s, h, truncated) = snippet("全固体電池の研究", &["電池".to_string()], 160);
     assert!(!truncated);
     assert_eq!(&s[h[0].start..h[0].end], "電池");
+}
+
+/// P2-5 regression: the FTS phrase "solid electrolyte" matches across a PDF line break and
+/// "muller" matches "Müller" (unicode61 folding); the excerpt is centred on that match and
+/// highlights the original text, with offsets valid in the (control-free) snippet.
+#[test]
+fn snippets_find_phrases_across_line_breaks_and_folded_diacritics() {
+    let text = format!(
+        "{} the solid\r\nelectrolyte by Müller {}",
+        "x".repeat(400),
+        "y".repeat(400)
+    );
+    let (s, h, truncated) = snippet(
+        &text,
+        &["solid electrolyte".to_string(), "muller".to_string()],
+        80,
+    );
+    assert!(truncated);
+    assert_eq!(h.len(), 2, "{s:?} {h:?}");
+    assert_eq!(&s[h[0].start..h[0].end], "solid  electrolyte");
+    assert_eq!(&s[h[1].start..h[1].end], "Müller");
+    // A combining diacritic and C1 control characters keep offsets consistent.
+    let text = "Mu\u{0308}ller\u{0085}and\u{0085}Solid\u{0085}State";
+    let (s, h, _) = snippet(text, &["müller".into(), "solid state".into()], 160);
+    let marked: Vec<&str> = h.iter().map(|r| &s[r.start..r.end]).collect();
+    assert_eq!(marked, vec!["Mu\u{0308}ller", "Solid State"]);
 }
 
 #[test]
