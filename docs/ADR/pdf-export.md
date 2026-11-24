@@ -33,9 +33,10 @@ DESIGN §9.3 / §21.2. Evidence: [ISSUE_20](../validation/ISSUE_20.md).
    QuadPoints/Rect within 0.01 pt, and an appearance whose first filled path has the planned colour
    (±1) and opacity (±2/255); nothing else added. The temp file's bytes/page count must equal the
    export; the original's SHA-256 is recomputed and must equal the stored attachment digest.
-5. **Persist**: `persist_noclobber` (never replaces), or — only when the person confirmed replacing
-   that file in the native save dialog (`replace_existing`) — an atomic rename over an existing
-   *ordinary* file (no symlink/hard link/directory). Then the directory is fsynced.
+5. **Persist**: `persist_noclobber` (never replaces), or — only for `replace_existing`, which is
+   authorized separately (below) — an atomic rename over an existing *ordinary* `.pdf` file (no
+   symlink/hard link/directory, extension re-checked right before the rename). Then the
+   directory is fsynced.
 
 Every failure returns `PdfExportFailure` and leaves nothing at the destination (the temp file is
 deleted on drop): `MissingOrCorrupt` (stored hash mismatch), `Encrypted`, `Damaged`,
@@ -46,8 +47,19 @@ the copy is written and the report lists the omissions (`PdfExportReport::comple
 which the GUI shows as **INCOMPLETE** in error styling — never as a plain success.
 
 Destinations: absolute, parent an existing directory reached without symlinks (`files::safe`),
-never inside the library directory (so a stored original can never be a destination), and an
-existing file is refused unless `replace_existing`.
+never inside the library directory or its attachment store — compared by filesystem identity
+(device, inode) of the parent and every ancestor, not by path prefix, so another spelling on a
+case-insensitive volume or a bind mount of the library is refused too — and an existing file is
+refused unless `replace_existing`.
+
+Replacing (review fix): `replace_existing` is not trusted from the client. A request with it is
+`Operation::PdfExportReplace`, which needs the new `Capability::LocalFileReplace` in addition to
+`LibraryRead + LocalFileWrite`. Only the desktop preset holds it (all capabilities); an approved
+MCP or other `LocalFileWrite` grant can create new files but never replace one — the daemon
+refuses before any work. Even with the authority only `.pdf` files (case-insensitive) are
+replaced, so a grant can never overwrite `~/.profile` or a config. The GUI does not rely on the
+platform dialog's own replace prompt: when the chosen path exists it asks itself ("Replace
+Existing PDF" / ✕ to keep the file) and refuses non-PDF names outright.
 
 ## Appearance streams in Rust (replaces the M0 pypdf completion)
 
@@ -92,7 +104,8 @@ It was not run for this change (no macOS runner here); see ISSUE_20.
 - `PdfRequest::Export(PdfExportRequest)` → wire `PdfCommand::Export { attachment, destination,
   replace_existing, allow_omissions }`; the cancellation token stays client-side (`ClientFrame::Cancel`)
   like `Render`. Policy `Operation::PdfExport` = `LibraryRead + LocalFileWrite` (MCP read-only and
-  the native host are denied). Reply `PdfReply::Exported(Result<Box<PdfExportReport>, PdfExportFailure>)`.
+  the native host are denied); with `replace_existing` it is `Operation::PdfExportReplace`, which
+  also needs the desktop-only `LocalFileReplace`. Reply `PdfReply::Exported(Result<Box<PdfExportReport>, PdfExportFailure>)`.
 - The library thread validates, resolves the hash-verified stored file and plans; PDFium, temp
   file, verification and persist run on a `pdf-export` helper thread with a cancellation bridge
   (one fresh worker token per PDF operation, because a finished ticket cancels its own token).
@@ -101,6 +114,12 @@ It was not run for this change (no macOS runner here); see ISSUE_20.
   `cx.prompt_for_new_path` chooses the file (suggested `<title> (annotated).pdf`); a second press
   while saving cancels; status bar shows progress and the outcome. On `Unexportable` the button
   becomes "Save without N unplaced…" for the same PDF and destination — an explicit second choice.
+  An existing destination becomes "Replace Existing PDF" (in-app confirmation); ✕ dismisses either
+  pending confirmation.
+
+`unsafe` confinement is enforced by `scripts/check_architecture.py`: any `unsafe` block/fn/impl or
+`allow(unsafe_code)` outside `crates/pdf/src/appearance.rs`, a crate not inheriting the workspace
+lints (other than cm-pdf's `deny`), or a workspace without `forbid` fails the check.
 
 ## Limits / not covered
 

@@ -204,7 +204,14 @@ fn export_requests_fail_closed_before_any_file_is_written() {
         destination_error(go(hard.clone(), true, true), "ordinary file");
         std::fs::remove_file(hard).unwrap();
     }
-    destination_error(go(out.clone(), true, true), "ordinary file");
+    let folder = out.join("folder.pdf");
+    std::fs::create_dir(&folder).unwrap();
+    destination_error(go(folder, true, true), "ordinary file");
+    // Even a confirmed replacement only ever replaces a .pdf.
+    let config = out.join("settings.toml");
+    std::fs::write(&config, b"keep = true").unwrap();
+    destination_error(go(config.clone(), true, true), ".pdf");
+    assert_eq!(std::fs::read(&config).unwrap(), b"keep = true");
 
     // An unresolved annotation is never silently dropped: nothing is written unless the
     // person explicitly accepts an incomplete copy.
@@ -263,10 +270,15 @@ fn export_requests_fail_closed_before_any_file_is_written() {
         PdfExportFailure::MissingOrCorrupt
     );
     // Nothing besides the person's own files was ever created.
-    let mut expected = vec!["existing.pdf".to_owned()];
+    let mut expected = vec![
+        "existing.pdf".to_owned(),
+        "folder.pdf".to_owned(),
+        "settings.toml".to_owned(),
+    ];
     if cfg!(unix) {
         expected.push("link.pdf".to_owned());
     }
+    expected.sort();
     assert_eq!(entries(&out), expected);
     let LibraryReply::Paper(again) =
         call(|done| client.submit(LibraryRequest::Get(paper.id), done))
@@ -287,4 +299,73 @@ fn walk(dir: &Path) -> Vec<PathBuf> {
         }
     }
     out
+}
+
+/// The library refusal compares directory identity, so another path to the same directory
+/// (here a bind mount, like a case-insensitive spelling or a mount alias) is refused too.
+/// Needs permission to bind-mount (root in a container); elsewhere it reports the skip.
+#[cfg(target_os = "linux")]
+#[test]
+fn an_alias_path_to_the_library_is_still_refused() {
+    struct Unmount(PathBuf);
+    impl Drop for Unmount {
+        fn drop(&mut self) {
+            let _ = std::process::Command::new("umount").arg(&self.0).status();
+        }
+    }
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    let library = root.join("library");
+    let client = InProcessLibraryClient::start(library.clone()).unwrap();
+    let LibraryReply::Paper(paper) = call(|done| {
+        client.submit(
+            LibraryRequest::Create(Box::new(NewPaper::titled("Alias"))),
+            done,
+        )
+    }) else {
+        panic!()
+    };
+    let corpus = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/pdf/corpus.pdf")
+        .canonicalize()
+        .unwrap();
+    let attachment = attach(&client, paper.id, &corpus);
+    let alias = root.join("alias");
+    std::fs::create_dir(&alias).unwrap();
+    let mounted = std::process::Command::new("mount")
+        .arg("--bind")
+        .arg(&library)
+        .arg(&alias)
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success());
+    if !mounted {
+        eprintln!("SKIPPED: bind mount not permitted here; identity helper is unit-tested");
+        return;
+    }
+    let _guard = Unmount(alias.clone());
+    assert!(!alias.starts_with(&library), "no lexical prefix to catch");
+    let export = |path: PathBuf| {
+        export(
+            &client,
+            attachment,
+            path,
+            true,
+            true,
+            Cancellation::default(),
+        )
+    };
+    destination_error(export(alias.join("copy.pdf")), "outside the library");
+    let store = std::fs::read_dir(alias.join("attachments"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    destination_error(export(store.join("copy.pdf")), "outside the library");
+    assert_eq!(
+        walk(&library.join("attachments")).len(),
+        1,
+        "nothing written into the store"
+    );
 }

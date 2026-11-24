@@ -9,7 +9,7 @@ use cm_desktop::{
     },
     keymap::{Context, InputState, KeyResolver, KeyStroke, Keymap, Mode, Resolution},
     palette::rank,
-    pdf_export::{ExportState, suggested_name},
+    pdf_export::{ExportState, Picked, suggested_name},
 };
 use cm_protocol::{
     annotations::{AnnotationId, AnnotationKind, COLORS},
@@ -152,12 +152,29 @@ fn export_requests_are_ipc_commands_needing_read_and_local_write() {
         "cancellation stays client-side like Render"
     );
     assert!(matches!(command, PdfCommand::Export { .. }));
-    assert_eq!(command.operation(), Operation::PdfExport);
+    // Replacing is its own operation; LocalFileWrite alone (e.g. an MCP write grant) is not
+    // enough. Only the desktop preset holds LocalFileReplace.
+    assert_eq!(command.operation(), Operation::PdfExportReplace);
+    let write: cm_protocol::ipc::CapabilitySet =
+        [Capability::LibraryRead, Capability::LocalFileWrite].into();
     assert!(
-        Operation::PdfExport
+        !Operation::PdfExportReplace
             .requirement()
-            .satisfied_by(&[Capability::LibraryRead, Capability::LocalFileWrite].into())
+            .satisfied_by(&write)
     );
+    assert!(
+        Operation::PdfExportReplace
+            .requirement()
+            .satisfied_by(&cm_core_presets_desktop())
+    );
+    let (fresh, _) = PdfCommand::from_request(ExportState::default().begin(
+        attachment(),
+        destination.clone(),
+        false,
+        false,
+    ));
+    assert_eq!(fresh.operation(), Operation::PdfExport);
+    assert!(Operation::PdfExport.requirement().satisfied_by(&write));
     assert!(
         !Operation::PdfExport
             .requirement()
@@ -166,6 +183,57 @@ fn export_requests_are_ipc_commands_needing_read_and_local_write() {
     assert!(state.cancel());
     assert!(token.is_cancelled());
     assert!(!state.cancel());
+}
+
+fn cm_core_presets_desktop() -> cm_protocol::ipc::CapabilitySet {
+    Capability::ALL.into_iter().collect()
+}
+
+#[test]
+fn an_existing_destination_needs_an_in_app_confirmation_and_must_be_a_pdf() {
+    let mut state = ExportState::default();
+    // New file: exported at once, never with replace authority.
+    let Picked::Export(PdfRequest::Export(r)) =
+        state.picked(attachment(), "/home/me/new.pdf".into(), false)
+    else {
+        panic!()
+    };
+    assert!(!r.replace_existing);
+    state.running = None;
+    // Existing non-PDF (e.g. a config file): refused here, nothing to confirm.
+    let Picked::Status(text, true) = state.picked(attachment(), "/home/me/.profile".into(), true)
+    else {
+        panic!()
+    };
+    assert!(text.contains("not a PDF"), "{text}");
+    assert!(state.replace.is_none());
+    // Existing PDF: the dialog's own prompt is not trusted; ask here first.
+    let existing = PathBuf::from("/home/me/Paper.PDF");
+    let Picked::Status(text, false) = state.picked(attachment(), existing.clone(), true) else {
+        panic!()
+    };
+    assert!(text.contains("already exists"), "{text}");
+    assert!(state.running.is_none(), "nothing sent before confirmation");
+    assert_eq!(
+        state.button_label(Some(attachment())),
+        "Replace Existing PDF"
+    );
+    assert!(state.pending_for(Some(attachment())));
+    let other = AttachmentId("00000000-0000-7000-8000-000000000009".parse().unwrap());
+    assert!(state.take_replace(other).is_none(), "only for the same PDF");
+    // ✕ keeps the file: the confirmation is gone and nothing is sent.
+    let _ = state.picked(attachment(), existing.clone(), true);
+    state.dismiss();
+    assert!(!state.pending_for(Some(attachment())));
+    assert!(state.take_replace(attachment()).is_none());
+    // Confirmed: only now a replacing request.
+    let _ = state.picked(attachment(), existing.clone(), true);
+    let Some(PdfRequest::Export(r)) = state.take_replace(attachment()) else {
+        panic!()
+    };
+    assert!(r.replace_existing && !r.allow_omissions);
+    assert_eq!(r.destination, existing);
+    assert!(state.replace.is_none() && state.running.is_some());
 }
 
 #[test]

@@ -26,12 +26,13 @@ fn denied(result: Result<Result<Reply, WireError>, ClientError>, op: Operation) 
         WireError::Denied(Denial::Forbidden(op))
     );
 }
-/// #20 annotated PDF export writes a caller-named file: LibraryRead + LocalFileWrite.
-fn pdf_export(path: std::path::PathBuf) -> Command {
+/// #20 annotated PDF export writes a caller-named file: LibraryRead + LocalFileWrite;
+/// replacing an existing one additionally needs the desktop-only LocalFileReplace.
+fn pdf_export(path: std::path::PathBuf, replace_existing: bool) -> Command {
     Command::Pdf(PdfCommand::Export {
         attachment: cm_protocol::domain::AttachmentId(uuid::Uuid::now_v7()),
         destination: path,
-        replace_existing: true,
+        replace_existing,
         allow_omissions: true,
     })
 }
@@ -112,7 +113,7 @@ fn native_host_grant_is_minimal_even_when_claiming_desktop_and_all_scopes() {
         Operation::GrantList,
     );
     denied(
-        spoof.call(pdf_export(env.temp.path().join("leak.pdf"))),
+        spoof.call(pdf_export(env.temp.path().join("leak.pdf"), false)),
         Operation::PdfExport,
     );
     assert!(!env.temp.path().join("leak.bib").exists());
@@ -159,7 +160,7 @@ fn mcp_is_read_only_until_a_separate_write_grant_is_approved() {
     ));
     // Reading the library is not enough to write an annotated PDF to a local path.
     denied(
-        mcp.call(pdf_export(env.temp.path().join("mcp.pdf"))),
+        mcp.call(pdf_export(env.temp.path().join("mcp.pdf"), false)),
         Operation::PdfExport,
     );
     denied(
@@ -209,6 +210,67 @@ fn mcp_is_read_only_until_a_separate_write_grant_is_approved() {
         })),
         Operation::GrantIssue,
     );
+}
+
+#[test]
+fn local_file_write_grant_cannot_replace_existing_files_with_pdf_export() {
+    use cm_protocol::attachments::{PdfExportFailure, PdfReply};
+    let env = Env::new();
+    let _daemon = start(env.config()).unwrap();
+    let mut desktop = env.desktop();
+    // An approved MCP write grant that may also create local files (e.g. exports).
+    let write = issue(
+        &mut desktop,
+        "mcp write + files (approved)",
+        set(&[
+            Capability::LibraryRead,
+            Capability::LibraryWrite,
+            Capability::LocalFileRead,
+            Capability::LocalFileWrite,
+        ]),
+    );
+    let mut mcp = env.session("mcp", write);
+    let victims = [
+        (
+            env.temp.path().join("victim.pdf"),
+            b"%PDF user's own".to_vec(),
+        ),
+        (
+            env.temp.path().join(".profile"),
+            b"export PATH=...".to_vec(),
+        ),
+    ];
+    for (path, bytes) in &victims {
+        std::fs::write(path, bytes).unwrap();
+        // Replacing is a separate, desktop-only authority: refused before any work.
+        denied(
+            mcp.call(pdf_export(path.clone(), true)),
+            Operation::PdfExportReplace,
+        );
+        // Without replace, an existing file is refused by the daemon, never overwritten.
+        match ok(mcp.call(pdf_export(path.clone(), false))) {
+            Reply::Pdf(PdfReply::Exported(Err(PdfExportFailure::Destination(reason)))) => {
+                assert!(reason.contains("already exists"), "{reason}")
+            }
+            other => panic!("{other:?}"),
+        }
+        assert_eq!(&std::fs::read(path).unwrap(), bytes);
+    }
+    // The desktop grant holds the replace authority, but only for .pdf files.
+    match ok(desktop.call(pdf_export(victims[1].0.clone(), true))) {
+        Reply::Pdf(PdfReply::Exported(Err(PdfExportFailure::Destination(reason)))) => {
+            assert!(reason.contains(".pdf"), "{reason}")
+        }
+        other => panic!("{other:?}"),
+    }
+    match ok(desktop.call(pdf_export(victims[0].0.clone(), true))) {
+        // Authorized and destination accepted; the (unknown) attachment then fails.
+        Reply::Pdf(PdfReply::Exported(Err(PdfExportFailure::MissingOrCorrupt))) => {}
+        other => panic!("{other:?}"),
+    }
+    for (path, bytes) in &victims {
+        assert_eq!(&std::fs::read(path).unwrap(), bytes);
+    }
 }
 
 #[test]

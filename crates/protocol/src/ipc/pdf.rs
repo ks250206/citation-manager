@@ -162,6 +162,11 @@ impl PdfCommand {
             Self::RetryAttachment { .. } => Operation::PdfRetryAttachment,
             Self::List(_) => Operation::AttachmentList,
             Self::Render { .. } => Operation::PdfRender,
+            // Replacing an existing file is a separate, desktop-only authority (#20 review).
+            Self::Export {
+                replace_existing: true,
+                ..
+            } => Operation::PdfExportReplace,
             Self::Export { .. } => Operation::PdfExport,
         }
     }

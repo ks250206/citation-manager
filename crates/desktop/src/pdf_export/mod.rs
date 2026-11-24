@@ -45,22 +45,92 @@ pub struct Confirmation {
     pub omitted: usize,
 }
 
+/// A chosen destination that already exists, waiting for the person to confirm replacing it
+/// in this app (the platform dialog's own prompt is not relied on).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReplaceConfirmation {
+    pub attachment: AttachmentId,
+    pub destination: PathBuf,
+}
+
+/// What to do with the path the save dialog returned.
+#[derive(Debug)]
+pub enum Picked {
+    /// New file: export now.
+    Export(PdfRequest),
+    /// Status text and whether it is an error; nothing is sent.
+    Status(String, bool),
+}
+
 /// Per-window export state: at most one export runs at a time.
 #[derive(Debug, Default)]
 pub struct ExportState {
     pub running: Option<Cancellation>,
     pub confirm: Option<Confirmation>,
+    pub replace: Option<ReplaceConfirmation>,
 }
 impl ExportState {
     /// Toolbar label for the current state.
     pub fn button_label(&self, attachment: Option<AttachmentId>) -> String {
-        match (&self.running, &self.confirm) {
-            (Some(_), _) => "Cancel Save".into(),
-            (None, Some(c)) if Some(c.attachment) == attachment => {
+        if self.running.is_some() {
+            return "Cancel Save".into();
+        }
+        match (&self.replace, &self.confirm) {
+            (Some(r), _) if Some(r.attachment) == attachment => "Replace Existing PDF".into(),
+            (_, Some(c)) if Some(c.attachment) == attachment => {
                 format!("Save without {} unplaced…", c.omitted)
             }
             _ => "Save PDF…".into(),
         }
+    }
+    /// A confirmation is waiting for this attachment (the host shows a dismiss control).
+    pub fn pending_for(&self, attachment: Option<AttachmentId>) -> bool {
+        attachment.is_some()
+            && (self.replace.as_ref().map(|r| r.attachment) == attachment
+                || self.confirm.as_ref().map(|c| c.attachment) == attachment)
+    }
+    /// Drop any waiting confirmation; nothing is written.
+    pub fn dismiss(&mut self) {
+        self.replace = None;
+        self.confirm = None;
+    }
+    /// The save dialog returned `destination`. An existing file is never replaced on the
+    /// dialog's say-so: only `.pdf` files can be replaced, and only after the person confirms
+    /// here (`take_replace`). `exists` is whether anything is at that path now.
+    pub fn picked(
+        &mut self,
+        attachment: AttachmentId,
+        destination: PathBuf,
+        exists: bool,
+    ) -> Picked {
+        if !exists {
+            return Picked::Export(self.begin(attachment, destination, false, false));
+        }
+        let name = destination
+            .file_name()
+            .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+        if !(name.len() > 4 && name.to_ascii_lowercase().ends_with(".pdf")) {
+            return Picked::Status(
+                format!("“{name}” exists and is not a PDF; nothing written. Choose a new name"),
+                true,
+            );
+        }
+        self.confirm = None;
+        self.replace = Some(ReplaceConfirmation {
+            attachment,
+            destination,
+        });
+        Picked::Status(
+            format!(
+                "“{name}” already exists. Choose “Replace Existing PDF” to overwrite it, or ✕ to keep it"
+            ),
+            false,
+        )
+    }
+    /// The person confirmed replacing: the request to send, if a confirmation was waiting.
+    pub fn take_replace(&mut self, attachment: AttachmentId) -> Option<PdfRequest> {
+        let pending = self.replace.take().filter(|r| r.attachment == attachment)?;
+        Some(self.begin(attachment, pending.destination, true, false))
     }
     /// Start an export; `allow_omissions` only after the person saw what will be left out.
     pub fn begin(
@@ -73,6 +143,7 @@ impl ExportState {
         let cancel = Cancellation::default();
         self.running = Some(cancel.clone());
         self.confirm = None;
+        self.replace = None;
         PdfRequest::Export(PdfExportRequest {
             attachment,
             destination,

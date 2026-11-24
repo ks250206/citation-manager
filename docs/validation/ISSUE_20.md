@@ -96,6 +96,37 @@ Observed difference: poppler draws Text icons upright (NoRotate) pinned at the r
 upper-left corner; PDFium rotates them with the page (see ADR). The same script also passed with
 the system pypdf 6.17.0.
 
+## Review fixes (P2)
+
+1. `replace_existing` is no longer trusted from the client: it maps to
+   `Operation::PdfExportReplace` (needs the desktop-only `Capability::LocalFileReplace`), only
+   `.pdf` files are ever replaced, and the GUI asks for replacement itself.
+2. The library refusal compares directory identity (device, inode) of the parent and its
+   ancestors with the library and attachment store, instead of a path prefix.
+3. `scripts/check_architecture.py` fails on `unsafe` outside `crates/pdf/src/appearance.rs`.
+
+Re-run after the fixes (`CARGO_INCREMENTAL=0`, debuginfo 0):
+
+| Command | Result |
+|---|---|
+| fmt / clippy workspace / clippy desktop-bootstrap / clippy pdf runtime / clippy pdfium-runtime-tests | all passed |
+| `cargo test --workspace --locked --no-fail-fast` | 323 passed, 0 failed (65 binaries) |
+| `cargo test -p cm-daemon -p cm-desktop --features cm-daemon/desktop-bootstrap --locked --no-fail-fast` | 141 passed, 0 failed (30 binaries) |
+| `check_architecture.py` (now also unsafe confinement) / `check_migrations.py` / scripts unittest | passed / passed / 33 passed |
+| real PDFium: cm-pdf 4 runtime tests, daemon `fulltext_runtime` + `pdf_export_runtime` | 4/4, 2/2 passed |
+| `validate_export.py` (system pypdf 6.17.0, poppler 24.02.0) | passed |
+
+New regression tests: `daemon_auth::local_file_write_grant_cannot_replace_existing_files_with_pdf_export`
+(an approved MCP grant with `LocalFileWrite` is denied `PdfExportReplace` for `victim.pdf` and
+`.profile`, cannot overwrite them without replace either, and both stay byte-identical; the desktop
+grant may replace only the `.pdf`); `pdf_export::an_alias_path_to_the_library_is_still_refused`
+(a real `mount --bind` of the library — run as root here, it reports a skip where mounting is not
+permitted — refused for the alias and for the store under it); unit tests
+`library_containment_compares_directory_identity_not_spelling` and `only_pdf_files_are_replaceable`;
+`cm-desktop` `an_existing_destination_needs_an_in_app_confirmation_and_must_be_a_pdf`; the
+fail-closed daemon test now also refuses a confirmed replacement of `settings.toml`; scripts
+`test_unsafe_is_confined_to_the_pdfium_appearance_module`.
+
 ## Not verified here
 
 - macOS PDFKit gate (`scripts/pdfium/run.py` / `verify.py`, updated to inspect the Rust export

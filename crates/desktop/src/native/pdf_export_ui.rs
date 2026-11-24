@@ -28,6 +28,11 @@ impl LibraryView {
             );
             return;
         };
+        if let Some(request) = self.pdf_export.take_replace(attachment) {
+            // The person confirmed replacing the existing PDF in this app.
+            self.send_request(request, cx);
+            return;
+        }
         if let Some(confirm) = self
             .pdf_export
             .confirm
@@ -61,9 +66,17 @@ impl LibraryView {
             let result = picker.await;
             let _ = view.update(cx, |this, cx| match result {
                 Ok(Ok(Some(path))) => {
-                    // The native dialog already asked before choosing an existing file.
-                    let replace = std::fs::symlink_metadata(&path).is_ok();
-                    this.send_pdf_export(attachment, path, replace, false, cx);
+                    // Not relying on the platform dialog's replace prompt: an existing file
+                    // needs a confirmation here first (and must be a .pdf).
+                    let exists = std::fs::symlink_metadata(&path).is_ok();
+                    match this.pdf_export.picked(attachment, path, exists) {
+                        crate::pdf_export::Picked::Export(request) => {
+                            this.send_request(request, cx)
+                        }
+                        crate::pdf_export::Picked::Status(text, error) => {
+                            this.status(text, error, cx)
+                        }
+                    }
                 }
                 Ok(Ok(None)) => this.status("Save cancelled; nothing written", false, cx),
                 _ => this.status("The save dialog failed; nothing written", true, cx),
@@ -79,13 +92,16 @@ impl LibraryView {
         allow_omissions: bool,
         cx: &mut Context<Self>,
     ) {
-        let request = self.pdf_export.begin(
-            attachment,
-            destination.clone(),
-            replace_existing,
-            allow_omissions,
-        );
-        let target = (attachment, destination, replace_existing);
+        let request =
+            self.pdf_export
+                .begin(attachment, destination, replace_existing, allow_omissions);
+        self.send_request(request, cx);
+    }
+    fn send_request(&mut self, request: PdfRequest, cx: &mut Context<Self>) {
+        let PdfRequest::Export(r) = &request else {
+            return;
+        };
+        let target = (r.attachment, r.destination.clone(), r.replace_existing);
         let lost_sender = self.sender.clone();
         let lost_target = target.clone();
         let mut lost = LostReply(Some(Box::new(move || {
@@ -140,13 +156,24 @@ pub(super) fn save_pdf_button(
     state: &PdfExportState,
     attachment: Option<AttachmentId>,
     cx: &mut Context<LibraryView>,
-) -> Stateful<Div> {
-    button(
+) -> Div {
+    let save = button(
         "pdf-save",
         state.button_label(attachment),
         attachment.is_some(),
     )
-    .on_click(cx.listener(|this, _, _, cx| this.save_current_pdf(cx)))
+    .on_click(cx.listener(|this, _, _, cx| this.save_current_pdf(cx)));
+    let row = div().flex().items_center().gap_1().child(save);
+    if state.pending_for(attachment) {
+        row.child(
+            button("pdf-save-dismiss", "✕", true).on_click(cx.listener(|this, _, _, cx| {
+                this.pdf_export.dismiss();
+                this.status("Nothing written; the existing file was kept", false, cx);
+            })),
+        )
+    } else {
+        row
+    }
 }
 
 #[cfg(test)]

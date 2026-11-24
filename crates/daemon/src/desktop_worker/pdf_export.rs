@@ -16,9 +16,65 @@ fn destination_error(reason: impl Into<String>) -> Failure {
     Failure::Destination(reason.into())
 }
 
+/// Filesystem identity (device, inode) of a directory. The same directory has the same
+/// identity under every spelling: other letter case on a case-insensitive volume, a bind
+/// mount, `..`-free aliases. Lexical prefix checks miss those.
+pub(crate) type DirIdentity = (u64, u64);
+
+#[cfg(unix)]
+pub(crate) fn identity(path: &Path) -> std::io::Result<DirIdentity> {
+    use std::os::unix::fs::MetadataExt;
+    let m = std::fs::metadata(path)?;
+    Ok((m.dev(), m.ino()))
+}
+
+/// True when `dir` or any of its ancestors *is* one of the `protected` directories.
+#[cfg(unix)]
+pub(crate) fn within_any(dir: &Path, protected: &[DirIdentity]) -> std::io::Result<bool> {
+    for ancestor in dir.ancestors().filter(|a| !a.as_os_str().is_empty()) {
+        if protected.contains(&identity(ancestor)?) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// The library directory and its managed attachment store: never export destinations.
+#[cfg(unix)]
+fn protected_roots(library: &Path) -> Result<Vec<DirIdentity>, Failure> {
+    let mut roots = vec![
+        identity(library)
+            .map_err(|e| destination_error(format!("Cannot inspect the library folder: {e}")))?,
+    ];
+    if let Ok(store) = identity(&library.join("attachments")) {
+        roots.push(store);
+    }
+    Ok(roots)
+}
+
+#[cfg(unix)]
+fn inside_library(parent: &Path, library: &Path) -> Result<bool, Failure> {
+    within_any(parent, &protected_roots(library)?)
+        .map_err(|e| destination_error(format!("Cannot inspect destination folder: {e}")))
+}
+#[cfg(not(unix))]
+fn inside_library(parent: &Path, library: &Path) -> Result<bool, Failure> {
+    let library = library
+        .canonicalize()
+        .map_err(|e| destination_error(format!("Cannot inspect the library folder: {e}")))?;
+    Ok(parent.starts_with(library))
+}
+
+/// Only PDFs are ever replaced (case-insensitive `.pdf`), never configs or other files.
+fn replaceable_name(name: &str) -> bool {
+    name.len() > 4 && name.to_ascii_lowercase().ends_with(".pdf")
+}
+
 /// Lexical and filesystem checks of the chosen destination. The parent must be an existing
 /// directory reached without symlinks; the library directory (and so every stored original)
-/// is never a destination; an existing file is only replaced when the person confirmed it.
+/// is never a destination, compared by filesystem identity; an existing file is only replaced
+/// when the request carries `replace_existing` — authorized separately as
+/// `Operation::PdfExportReplace`, which only the desktop preset holds — and is a `.pdf`.
 pub(super) fn check_destination(
     destination: &Path,
     library: &Path,
@@ -35,11 +91,7 @@ pub(super) fn check_destination(
         .parent()
         .ok_or_else(|| destination_error("Choose a destination folder"))?;
     files::safe(parent, false).map_err(|e| destination_error(e.to_string()))?;
-    let library = library
-        .canonicalize()
-        .map_err(|e| destination_error(format!("Cannot inspect the library folder: {e}")))?;
-    // `safe` refused symlink components, so the parent is already canonical.
-    if parent.starts_with(&library) {
+    if inside_library(parent, library)? {
         return Err(destination_error(
             "Choose a folder outside the library; stored PDFs are never overwritten",
         ));
@@ -51,6 +103,9 @@ pub(super) fn check_destination(
         ))),
         Ok(_) if !replace_existing => Err(destination_error(
             "A file with this name already exists; choose a new name",
+        )),
+        Ok(_) if !replaceable_name(name) => Err(destination_error(
+            "Only an existing .pdf file can be replaced; choose a new name",
         )),
         Ok(_) => files::safe(destination, true).map_err(|_| {
             destination_error("Only an ordinary file (not a link or folder) can be replaced")
@@ -371,6 +426,12 @@ mod runtime {
                     )));
                 }
                 Ok(_) => {
+                    let name = request.destination.file_name().and_then(|n| n.to_str());
+                    if !name.is_some_and(replaceable_name) {
+                        return Err(destination_error(
+                            "Only an existing .pdf file can be replaced; choose a new name",
+                        ));
+                    }
                     files::safe(&request.destination, true).map_err(|_| {
                         destination_error(
                             "Only an ordinary file (not a link or folder) can be replaced",
@@ -405,5 +466,54 @@ mod runtime {
             max_position_error: verified.max_position_error,
             replaced,
         })
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn library_containment_compares_directory_identity_not_spelling() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        let library = root.join("library");
+        std::fs::create_dir_all(library.join("attachments/ab")).unwrap();
+        std::fs::create_dir_all(root.join("out/deeper")).unwrap();
+        let protected = protected_roots(&library).unwrap();
+        assert_eq!(protected.len(), 2);
+        for inside in [
+            library.clone(),
+            library.join("attachments"),
+            library.join("attachments/ab"),
+        ] {
+            assert!(within_any(&inside, &protected).unwrap(), "{inside:?}");
+        }
+        assert!(!within_any(&root.join("out/deeper"), &protected).unwrap());
+        assert!(!within_any(&root, &protected).unwrap());
+        // An alias of the library (another spelling / mount of the same directory) has the
+        // library's identity, so anything below it is refused although no prefix matches.
+        let alias = vec![identity(&library).unwrap()];
+        assert!(within_any(&library.join("attachments/ab"), &alias).unwrap());
+        assert!(!root.join("out").starts_with(&library));
+        // Missing components are an error, not "outside".
+        assert!(within_any(&root.join("missing/dir"), &protected).is_err());
+    }
+
+    #[test]
+    fn only_pdf_files_are_replaceable() {
+        for ok in ["a.pdf", "Paper (annotated).PDF", "x.Pdf"] {
+            assert!(replaceable_name(ok), "{ok}");
+        }
+        for refused in [
+            ".pdf",
+            ".profile",
+            "config.toml",
+            "a.pdf.bak",
+            "pdf",
+            "notes.pdfx",
+        ] {
+            assert!(!replaceable_name(refused), "{refused}");
+        }
     }
 }
