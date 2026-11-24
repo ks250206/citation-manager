@@ -19,6 +19,7 @@ class InstallLinux(unittest.TestCase):
             executable.parent.mkdir()
             executable.write_bytes(b'binary')
             (root / 'build/papersd').write_bytes(b'daemon')
+            (root / 'build/papers-native-host').write_bytes(b'host')
             pdfium = root / 'pdfium'
             (pdfium / 'lib').mkdir(parents=True)
             (pdfium / 'licenses').mkdir()
@@ -34,6 +35,9 @@ class InstallLinux(unittest.TestCase):
             # The GUI starts the sibling daemon by absolute path.
             self.assertEqual((prefix / 'bin/papersd').read_bytes(), b'daemon')
             self.assertTrue((prefix / 'bin/papersd').stat().st_mode & 0o111)
+            # The browser host is installed as papersd's sibling (#23).
+            self.assertEqual((prefix / 'bin/papers-native-host').read_bytes(), b'host')
+            self.assertTrue((prefix / 'bin/papers-native-host').stat().st_mode & 0o111)
             # Must agree with cm_pdf::worker::linux_bundled_library.
             self.assertEqual((prefix / 'lib/citation-manager/libpdfium.so').read_bytes(), b'so')
             self.assertTrue((prefix / 'share/doc/citation-manager/pdfium-licenses/pdfium.txt').is_file())
@@ -41,6 +45,33 @@ class InstallLinux(unittest.TestCase):
             self.assertFalse(library.exists())
             entry = (prefix / 'share/applications/citation-manager.desktop').read_text()
             self.assertIn(f'Exec="{target}" --library {library} --settings {settings}', entry)
+
+    def test_browser_registration_uses_the_installed_host_and_explicit_ids(self):
+        ids = {'development': {'chrome': ['d' * 32], 'firefox': ['dev@x.invalid']},
+               'release': {'chrome': [], 'firefox': []}}
+        host = Path('/opt/cm/bin/papers-native-host')
+        # No released extension yet and no explicit development opt-in: nothing is registered.
+        self.assertIsNone(installer.native_host_command(host, Path('/l'), ids))
+        self.assertEqual(
+            installer.native_host_command(host, Path('/l'), ids, development=True, pair=True,
+                                          browsers=['firefox']),
+            [str(host), 'register', '--library', '/l', '--development-extensions',
+             '--browser', 'firefox', '--pair'])
+        ids['release'] = {'chrome': ['r' * 32], 'firefox': ['cm@example.org']}
+        self.assertEqual(
+            installer.native_host_command(host, Path('/l'), ids),
+            [str(host), 'register', '--library', '/l', '--chrome-extension-id', 'r' * 32,
+             '--firefox-extension-id', 'cm@example.org'])
+        with tempfile.TemporaryDirectory() as directory:
+            prefix = Path(directory)
+            calls = []
+            run = lambda command, check: calls.append(command)  # noqa: E731
+            self.assertIsNone(installer.register_browsers(prefix, Path('/l'), True, run=run))
+            (prefix / 'bin').mkdir()
+            (prefix / 'bin/papers-native-host').write_bytes(b'host')
+            command = installer.register_browsers(prefix, Path('/l'), True, run=run)
+            self.assertEqual(calls, [command])
+            self.assertEqual(command[:2], [str(prefix / 'bin/papers-native-host'), 'register'])
 
     def test_desktop_exec_arguments_follow_the_entry_spec(self):
         self.assertEqual(installer.exec_argument('/opt/cm/bin/citation-manager'), '/opt/cm/bin/citation-manager')

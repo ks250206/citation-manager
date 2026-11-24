@@ -93,6 +93,17 @@ Linux では ⌘ の代わりに Ctrl を使います（Ctrl+N / Ctrl+S / Ctrl+F
 同じディレクトリから遅延起動し、0700 の runtime directory 内 0600 Unix socket と library 内の
 bootstrap credential（0600）で接続します。GUI 終了後、client と active job が無ければ daemon は idle 終了します。
 
+ブラウザ保存（#23）: `papers-native-host` を `papersd` と同じディレクトリに置き、ブラウザ用 manifest を登録する。
+正式な拡張（#24）の ID が決まるまでは開発用 smoke 拡張の ID のみ（明示時）。詳細は
+[native messaging ADR](docs/ADR/native-messaging.md)。
+
+```sh
+cargo build -p cm-daemon --bins --features desktop-bootstrap --release --locked
+cargo build -p cm-native-host --release --locked
+python3 scripts/install_linux.py --development-extensions --pair-native-host
+~/.local/bin/papers-native-host status   # 移動/更新後は: papers-native-host refresh
+```
+
 ```sh
 # GUI なしで daemon だけを起動する場合（通常は client が自動起動する）
 target/debug/papersd --library /absolute/private/library [--idle-timeout-ms 30000]

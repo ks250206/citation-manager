@@ -999,3 +999,17 @@ HTTPS・全 DNS 応答/redirect の公開 IP 検査・接続先 pin・cookie/認
 検査付きで取得し、SHA-256 で重複排除して添付する。失敗しても文献は巻き戻さず、一時的失敗は
 上限付き自動再試行、それ以外は理由付き failed と明示 retry。認証が必要な PDF は迂回せず、
 ブラウザでのダウンロード後の明示取り込みを案内する。
+
+## 34. #23 Native Messaging host と Chrome/Firefox 登録
+
+[native messaging ADR](docs/ADR/native-messaging.md) が §5.1/§12.2–12.3 の実装上の明確化となる。
+`papers-native-host` は `papersd` の兄弟実行ファイルとして配置し（`<prefix>/bin`、`.app/Contents/MacOS`）、
+ブラウザ起動時は argv の拡張 ID（Chrome origin / Firefox ID）を自前の許可リストでも検査する。
+4-byte native-endian 長 + UTF-8 JSON（受信 8 MiB、送信 1 MiB）、`v: 1` の閉じた message type
+（hello/destinations/capture.preview/commit/cancel/pdf_job/retry_pdf）と固定 error code を持ち、
+各 type は 1 つの capture/保存先 command にだけ対応する（汎用 IPC proxy ではない）。daemon には
+`pair` で発行された `native_host` preset grant だけで接続し、未起動なら GUI と同じく自身の隣の
+`papersd` を絶対パスで遅延起動する。要求ごとに session を閉じ、stdin close/60 s idle で終了するため、
+PDF 取得 job は host・ブラウザ・GUI の終了後も daemon が完了させる。PDF バイナリは Native Messaging で
+運ばない。manifest は実行中の実行ファイルの絶対パスから生成し（開発 tree は拒否）、移動/更新後は
+`refresh` で再登録する。Linux の Chromium/Firefox ESR 実機 smoke は [ISSUE_23](docs/validation/ISSUE_23.md)。

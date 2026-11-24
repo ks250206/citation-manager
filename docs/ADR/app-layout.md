@@ -39,3 +39,9 @@ See [desktop-bootstrap](desktop-bootstrap.md) and [native evidence](../validatio
 `MacOS/citation-manager`, or `<prefix>/bin/papersd` on Linux), the per-library lock, private
 runtime socket and idle exit. Only the Linux behaviour is verified ([ISSUE_25](../validation/ISSUE_25.md));
 the .app placement, Finder/launchd start and browser host probes remain #34/#23.
+
+#23 implements `MacOS/papers-native-host` (Linux `<prefix>/bin/papers-native-host`): it lazily starts
+the sibling `papersd` like the GUI, and writes per-user browser manifests whose `path` is its own
+canonical absolute location (never the development tree). After the bundle moves or is updated,
+`papers-native-host refresh` re-points them; #34 must call it on every app launch. See
+[native messaging](native-messaging.md). Only Linux was run.

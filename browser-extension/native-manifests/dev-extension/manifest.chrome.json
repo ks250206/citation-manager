@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Citation Manager native host smoke (development only)",
+  "description": "Test-only extension that exercises the papers-native-host contract. Not the #24 extension.",
+  "version": "0.0.1",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAm1S3fbpH7Q2acvaU7O9NMu12EoGL72t39Mefcz++wJz4NjC52730oDgR17NvwPoOFvp53UnQcxN3V7ISnKXV99h/OFu4j8gEut9APRfu26+pwUQsp+dXmdV7+Fg+2C3H2p90ZyUnRYY0vaX/lvcKbvJTGFcmnSBZ/Gz8Di9j8FzfK1IRWp2ix6vkugdFa8sjeKi+SSwGANnCyRazI4jqBiS1wxlXiHqj2kBA11CwaKcMsf42lEGGUCnF515tcSs/2AQp16CBvpyGdHue3LsSIuZkIEeD8kpjjI0u2CL3TMHxbYypvTO1thYt/95s234VTZIdV9lPGIa6wF9+HFTvAwIDAQAB",
+  "permissions": ["nativeMessaging"],
+  "host_permissions": ["http://127.0.0.1/*"],
+  "background": { "service_worker": "background.js" }
+}

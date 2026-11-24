@@ -1,0 +1,11 @@
+{
+  "_comment": "Extension IDs papers-native-host may accept. 'development' is the pinned smoke-test extension in dev-extension/: its Chrome ID is derived from the public key in manifest.chrome.json (the private key was discarded, so the ID cannot be published to a store) and its gecko ID uses the reserved .invalid domain. 'release' is filled by #24 with the store-assigned IDs. Installers register release IDs; development IDs only on explicit request.",
+  "development": {
+    "chrome": ["baapgkfjfjjagdkpkmocjhfopmaohcdc"],
+    "firefox": ["citation-manager-dev@citation-manager.invalid"]
+  },
+  "release": {
+    "chrome": [],
+    "firefox": []
+  }
+}
