@@ -72,6 +72,18 @@ class InstallLinux(unittest.TestCase):
             command = installer.register_browsers(prefix, Path('/l'), True, run=run)
             self.assertEqual(calls, [command])
             self.assertEqual(command[:2], [str(prefix / 'bin/papers-native-host'), 'register'])
+            # Without any extension ID the installer still refreshes an existing registration
+            # (no-op when unregistered) instead of leaving stale manifests after a move.
+            original = installer.EXTENSION_IDS
+            empty = prefix / 'ids.json'
+            empty.write_text('{"development": {}, "release": {"chrome": [], "firefox": []}}')
+            installer.EXTENSION_IDS = empty
+            try:
+                command = installer.register_browsers(prefix, Path('/l'), False, run=run)
+            finally:
+                installer.EXTENSION_IDS = original
+            self.assertEqual(command, [str(prefix / 'bin/papers-native-host'), 'refresh'])
+            self.assertEqual(calls[-1], command)
 
     def test_desktop_exec_arguments_follow_the_entry_spec(self):
         self.assertEqual(installer.exec_argument('/opt/cm/bin/citation-manager'), '/opt/cm/bin/citation-manager')
