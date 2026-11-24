@@ -44,7 +44,44 @@ The CI `linux-native` lane runs the two runtime commands after fetching the pinn
 
 ## Measurements
 
-RESULTS_PLACEHOLDER
+Final run on merge head (base `271edae` + #18), all commands above exit 0:
+fmt check; workspace clippy; runtime-feature clippy (`cm-daemon/pdfium-runtime-tests`,
+`cm-pdf/runtime`); `cargo test --workspace --locked` **284 passed, 0 failed** (57 result
+lines incl. doctests); architecture; migrations vs `origin/main` and vs
+`origin/claude/issue-25-daemon-ipc` (4 checksums/IDs valid); Python 32 tests OK; PDFium
+runtime tests (metadata_runtime, runtime, extract_runtime: 3 passed); `fulltext_runtime` 1
+passed. An earlier pre-merge workspace run had one failure in the #25 timing test
+`daemon_lifecycle::active_and_retry_waiting_jobs_block_idle_exit_until_done` while the
+4-vCPU container was shared with other builds; it passed when rerun alone and in the final
+run. It is recorded here rather than hidden.
+
+### Synthetic corpus (`fts::measure`, debug build, in-memory DB, warm, nearest-rank of 31)
+
+120 papers (Japanese/English titles and abstracts), 360 pages, 480 projection documents.
+Recall is against a literal oracle (ASCII case-insensitive substring) over the same text
+with `all_pages` scope and a window covering the corpus; precision is exact (no extra hits).
+
+| Term | Scalars | Series | Expected | Found (recall) | Default bounded scope | p50 / p95 ms |
+|---|---:|---|---:|---:|---:|---:|
+| `電` | 1 | short fallback | 240 | 240 (1.0) | 60 (pages unsearched) | 4.93 / 5.58 |
+| `電池` | 2 | short fallback | 90 | 90 (1.0) | 30 (pages unsearched) | 4.25 / 4.84 |
+| `Li` | 2 | short fallback | 132 | 132 (1.0) | 72 (pages unsearched) | 4.63 / 5.05 |
+| `固体電` | 3 | FTS | 120 | 120 (1.0) | 120 | 2.00 / 2.36 |
+| `電解質` | 3 | FTS | 90 | 90 (1.0) | 90 | 1.72 / 2.17 |
+| `lithium` | 7 | FTS | 90 | 90 (1.0) | 90 | 2.93 / 3.69 |
+| `"current density"` | 15 | FTS | 60 | 60 (1.0) | 60 | 3.53 / 4.00 |
+
+- Candidate window 100: 5 windows, disjoint hits, union = oracle for `電池`.
+- Index size (DBSTAT allocated bytes): total 348,160 — projection 77,824 (+ indexes
+  32,768 / 24,576 / 16,384), trigram `_data` 81,920, unicode61 `_data` 24,576, docsize
+  12,288 each, `fulltext_pages` 45,056. Synthetic short texts; not a production estimate.
+- Indexing cost: 360 page inserts (trigger → projection → both FTS) 90 ms total.
+
+### Real PDFium over IPC (`fulltext_runtime`, debug)
+
+4 PDFs (corpus 6 pages, scanned, encrypted, malformed) imported and extracted:
+266 ms wall from the first import job to all extraction states settled. Warm IPC search
+(31 runs): FTS `日本語` p50 1.60 / p95 1.99 ms; scoped short term `日本` p50 1.98 / p95 2.13 ms.
 
 ## Not verified / limits
 
@@ -61,3 +98,5 @@ RESULTS_PLACEHOLDER
 - OCR for image-only PDFs is out of scope (`no_text`).
 - #33 previews: extraction commits (one per ≤64 pages/4 MiB) invalidate open import
   previews like any library write; not narrowed here.
+- The 20-minute run budget and the 30-minute `max_run` were exercised only with a zero
+  budget in a unit test, not with a real long-running document.
