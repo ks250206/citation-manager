@@ -314,3 +314,93 @@ fn request_meta_and_json_ld_are_used_without_html() {
         Some(("10.9999/url.form".into(), MetadataTier::PageUrl))
     );
 }
+
+#[test]
+fn decode_never_splits_multibyte_characters() {
+    // Regression (#22 review P1): the 12-byte entity window used to be a str slice.
+    for input in [
+        "&日本語の文字列",
+        "&é",
+        "a&\u{1F600}\u{1F600}\u{1F600};b",
+        "&ab日;",
+        "&#x65e5;&",
+        "&&&&&&&&&&&日",
+    ] {
+        let _ = decode(input);
+    }
+    assert_eq!(decode("&日本;x"), "&日本;x");
+    assert_eq!(decode("&#x65e5;&amp;本"), "日&本");
+    let page = extract(
+        &request(
+            "https://example.org/a",
+            "<meta name=\"citation_title\" content=\"R&日本語の題名&amp;\">",
+        ),
+        &FetchPolicy::default(),
+    );
+    assert_eq!(
+        tier(&page, MetadataTier::Highwire).title.as_deref(),
+        Some("R&日本語の題名&")
+    );
+}
+
+fn timed(html: &str) -> (Scanned, std::time::Duration) {
+    let started = std::time::Instant::now();
+    let scanned = scan(html);
+    (scanned, started.elapsed())
+}
+
+#[test]
+fn unterminated_tags_and_quotes_scan_in_bounded_work() {
+    // Regression (#22 review P1/P2): each failed tag used to rescan to the end of input.
+    let size = MAX_HTML_BYTES;
+    let open_tags = "<a ".repeat(size / 3);
+    let open_quote = format!("<a x=\"{}", "y".repeat(size));
+    let mut quote_then_tags = String::from("<meta name=a content=b>");
+    quote_then_tags.push_str(&"<a x='>".repeat(size / 7));
+    for (label, html) in [
+        ("open tags", open_tags.as_str()),
+        ("open quote", open_quote.as_str()),
+        ("repeated broken quotes", quote_then_tags.as_str()),
+    ] {
+        let (scanned, elapsed) = timed(html);
+        assert!(
+            scanned.work <= MAX_SCAN_WORK + MAX_TAG_BYTES,
+            "{label}: {} bytes examined",
+            scanned.work
+        );
+        assert!(elapsed.as_secs() < 10, "{label}: {elapsed:?}");
+    }
+    // A tag running to the end stops the scan after at most one tag window.
+    assert!(timed(&open_tags).0.work <= MAX_TAG_BYTES);
+    assert!(timed(&open_quote).0.work <= MAX_TAG_BYTES);
+    // The broken-quote flood exhausts the budget and is reported as truncated, but tags
+    // before it are kept.
+    let (scanned, _) = timed(&quote_then_tags);
+    assert!(scanned.truncated);
+    assert_eq!(scanned.meta, [("a".into(), "b".into())]);
+    // A well-formed page is examined about once.
+    let page = fixture("publisher.html").repeat(200);
+    let (scanned, _) = timed(&page);
+    assert!(
+        scanned.work <= page.len(),
+        "{} > {}",
+        scanned.work,
+        page.len()
+    );
+    assert!(!scanned.truncated);
+    // An oversized tag is skipped to the next `>`; later tags still parse.
+    let html = format!(
+        "<meta name=x content=\"{}\"><meta name=citation_title content=Kept>",
+        "z".repeat(MAX_TAG_BYTES)
+    );
+    let scanned = scan(&html);
+    assert!(
+        scanned
+            .meta
+            .iter()
+            .any(|(k, v)| k == "citation_title" && v == "Kept")
+    );
+    // `<` in text still costs one byte.
+    let scanned = scan("1 < 2 <3 <meta name=a content=b>");
+    assert_eq!(scanned.meta.len(), 1);
+}

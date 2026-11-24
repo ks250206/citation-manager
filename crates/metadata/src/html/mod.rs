@@ -21,6 +21,13 @@ const MAX_LINK_TAGS: usize = 1024;
 const MAX_DIAGNOSTICS: usize = 48;
 const MAX_AUTHORS: usize = 256;
 const MAX_JSON_NODES: usize = 2048;
+/// One tag (name plus attributes) longer than this is treated as broken markup. Above the
+/// 64 KiB meta content limit so legitimate long `content` attributes still parse.
+pub const MAX_TAG_BYTES: usize = 80 * 1024;
+/// Total bytes `parse_tag` may examine over one scan. Every byte of a well-formed page is
+/// examined about once; only repeated broken tags (e.g. `<a x='>` without a closing quote)
+/// re-examine input, and they stop the scan once this budget is spent.
+pub const MAX_SCAN_WORK: usize = 16 * 1024 * 1024;
 
 /// Raw markup pieces collected by the scanner.
 #[derive(Debug, Default)]
@@ -33,10 +40,16 @@ pub struct Scanned {
     pub doi_links: Vec<String>,
     pub json_ld: Vec<String>,
     pub title: Option<String>,
+    /// Bytes examined by the tag parser (bounded by `MAX_SCAN_WORK`).
+    pub work: usize,
+    /// The scan stopped early (tag/work limit); later markup was not read.
+    pub truncated: bool,
 }
 
-/// Scans an HTML snapshot without building a DOM. Linear in the input; every collection is
-/// capped. Malformed or unterminated markup ends the scan instead of erroring.
+/// Scans an HTML snapshot without building a DOM. Every collection is capped and the total
+/// work is bounded (`MAX_TAG_BYTES` per tag, `MAX_SCAN_WORK` overall). Markup that runs to the
+/// end of the input (unterminated tag or quoted value) ends the scan, as it does for an HTML
+/// parser; an oversized tag is skipped up to the next `>`.
 pub fn scan(html: &str) -> Scanned {
     let mut out = Scanned::default();
     let bytes = html.as_bytes();
@@ -45,7 +58,8 @@ pub fn scan(html: &str) -> Scanned {
     while let Some(offset) = memchr(b'<', &bytes[i..]) {
         i += offset;
         tags += 1;
-        if tags > MAX_TAGS {
+        if tags > MAX_TAGS || out.work > MAX_SCAN_WORK {
+            out.truncated = true;
             break;
         }
         let rest = &html[i..];
@@ -63,9 +77,24 @@ pub fn scan(html: &str) -> Scanned {
             }
             continue;
         }
-        let Some((name, attrs, end)) = parse_tag(rest) else {
-            i += 1;
-            continue;
+        let (parsed, examined) = parse_tag(rest);
+        out.work += examined;
+        let (name, attrs, end) = match parsed {
+            Ok(tag) => tag,
+            // `<` not followed by a tag name is text (e.g. `a < b`); constant cost.
+            Err(TagError::NotATag) => {
+                i += 1;
+                continue;
+            }
+            // Runs to the end of the input: nothing after it can be a tag.
+            Err(TagError::Eof) => break,
+            Err(TagError::TooLong) => match memchr(b'>', &bytes[i + 1..]) {
+                Some(end) => {
+                    i += end + 2;
+                    continue;
+                }
+                None => break,
+            },
         };
         i += end;
         match name.as_str() {
@@ -126,28 +155,61 @@ fn find_ci(haystack: &str, needle: &str) -> Option<usize> {
 }
 
 type Attrs = Vec<(String, String)>;
-/// `<name attr=value ...>`; returns lowercase name, decoded attributes and bytes consumed.
-fn parse_tag(input: &str) -> Option<(String, Attrs, usize)> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TagError {
+    /// `<` is not followed by a tag name.
+    NotATag,
+    /// The tag (or a quoted value) runs to the end of the input.
+    Eof,
+    /// No complete tag within `MAX_TAG_BYTES`.
+    TooLong,
+}
+/// Largest char boundary `<= at`.
+fn floor_boundary(s: &str, at: usize) -> usize {
+    let mut at = at.min(s.len());
+    while !s.is_char_boundary(at) {
+        at -= 1;
+    }
+    at
+}
+/// `<name attr=value ...>`: (lowercase name, decoded attributes, bytes consumed), plus the
+/// number of bytes examined (at most `MAX_TAG_BYTES`).
+fn parse_tag(input: &str) -> (Result<(String, Attrs, usize), TagError>, usize) {
+    let window = floor_boundary(input, MAX_TAG_BYTES);
+    let capped = window < input.len();
+    let mut i = 1;
+    let result = parse_tag_in(&input[..window], &mut i);
+    let result = result.map_err(|e| match e {
+        TagError::Eof if capped => TagError::TooLong,
+        other => other,
+    });
+    (result, i.min(window))
+}
+fn parse_tag_in(input: &str, cursor: &mut usize) -> Result<(String, Attrs, usize), TagError> {
     let b = input.as_bytes();
     let mut i = 1;
     let start = i;
     while i < b.len() && (b[i].is_ascii_alphanumeric() || b[i] == b'-' || b[i] == b':') {
         i += 1;
     }
+    *cursor = i;
     if i == start || !b[start].is_ascii_alphabetic() {
-        return None;
+        return Err(TagError::NotATag);
     }
     let name = input[start..i].to_ascii_lowercase();
     let mut attrs = Vec::new();
     loop {
+        *cursor = i;
         while i < b.len() && (b[i].is_ascii_whitespace() || b[i] == b'/') {
             i += 1;
         }
         if i >= b.len() {
-            return None;
+            *cursor = b.len();
+            return Err(TagError::Eof);
         }
         if b[i] == b'>' {
-            return Some((name, attrs, i + 1));
+            *cursor = i + 1;
+            return Ok((name, attrs, i + 1));
         }
         let key_start = i;
         while i < b.len() && !b[i].is_ascii_whitespace() && !matches!(b[i], b'=' | b'>' | b'/') {
@@ -166,7 +228,11 @@ fn parse_tag(input: &str) -> Option<(String, Attrs, usize)> {
             if i < b.len() && (b[i] == b'"' || b[i] == b'\'') {
                 let quote = b[i];
                 let begin = i + 1;
-                let end = begin + memchr(quote, &b[begin..])?;
+                let Some(found) = memchr(quote, &b[begin..]) else {
+                    *cursor = b.len();
+                    return Err(TagError::Eof);
+                };
+                let end = begin + found;
                 value = decode(&input[begin..end]);
                 i = end + 1;
             } else {
@@ -199,7 +265,10 @@ pub fn decode(input: &str) -> String {
     while let Some(pos) = rest.find('&') {
         out.push_str(&rest[..pos]);
         rest = &rest[pos..];
-        let end = rest[..rest.len().min(12)].find(';');
+        // Byte search: `;` is ASCII, so the bound never splits a multibyte character.
+        let end = rest.as_bytes()[..rest.len().min(12)]
+            .iter()
+            .position(|b| *b == b';');
         let decoded = end.and_then(|end| {
             let entity = &rest[1..end];
             let ch = match entity {
@@ -883,6 +952,13 @@ pub fn extract(request: &CaptureRequest, policy: &FetchPolicy) -> PageMetadata {
     let mut blocks: Vec<String> = request.json_ld.clone();
     blocks.extend(scanned.json_ld.iter().cloned());
     blocks.truncate(MAX_JSON_LD_BLOCKS);
+    if scanned.truncated {
+        diag(
+            &mut d,
+            "html",
+            "page markup exceeded the scan limits; later markup was not read".into(),
+        );
+    }
     let page = Url::parse(request.page_url.trim()).ok();
     let landing_url = public_url(request.page_url.trim());
     if landing_url.is_none() {
