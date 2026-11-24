@@ -4,6 +4,7 @@ pub mod backup;
 pub mod daemon;
 pub mod db;
 mod error;
+pub mod fts;
 pub mod integrity;
 pub mod migrations;
 pub mod repositories;

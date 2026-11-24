@@ -155,6 +155,9 @@ mod tests {
             Operation::ImportCommit,
             Operation::OrganizationDelete,
             Operation::GrantIssue,
+            Operation::FulltextSearch,
+            Operation::FulltextStatus,
+            Operation::FulltextRead,
         ] {
             assert_eq!(
                 authorize(Some(&host), None, op, 0),
@@ -165,6 +168,13 @@ mod tests {
         assert!(authorize(Some(&host), None, Operation::ImportPreview, 0).is_ok());
         let mcp = grant(presets::mcp_read_only());
         assert!(authorize(Some(&mcp), None, Operation::LibraryQuery, 0).is_ok());
+        for op in [
+            Operation::FulltextSearch,
+            Operation::FulltextStatus,
+            Operation::FulltextRead,
+        ] {
+            assert!(authorize(Some(&mcp), None, op, 0).is_ok());
+        }
         for op in [
             Operation::PaperCreate,
             Operation::PaperUpdate,

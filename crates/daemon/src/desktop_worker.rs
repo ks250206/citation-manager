@@ -19,8 +19,6 @@ pub(super) struct Worker<'a> {
     pdfs: PdfReport,
     partial_pdfs: Vec<PdfFile>,
     pdf_preview: Option<(usize, cm_protocol::import::PreviewId)>,
-    #[cfg(feature = "pdf-metadata")]
-    pdf: Option<Result<cm_pdf::worker::PdfWorker, String>>,
     /// Retained parse/PDF state of sessions other than the one currently executing.
     sessions: HashMap<u64, Retained>,
 }
@@ -104,8 +102,6 @@ impl InProcessLibraryClient {
                         pdfs: PdfReport::default(),
                         partial_pdfs: Vec::new(),
                         pdf_preview: None,
-                        #[cfg(feature = "pdf-metadata")]
-                        pdf: None,
                         sessions: HashMap::new(),
                     };
                     first(Ok(&mut worker));

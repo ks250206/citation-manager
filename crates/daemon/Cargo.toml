@@ -26,6 +26,8 @@ uuid = { workspace = true, features = ["v7"] }
 default = []
 desktop-bootstrap = ["dep:cm-desktop", "cm-desktop/native-gpui", "pdf-metadata"]
 pdf-metadata = ["cm-pdf/runtime"]
+# Opt-in real-PDFium daemon test (needs CM_PDFIUM_LIBRARY); never enabled by other lanes.
+pdfium-runtime-tests = ["pdf-metadata"]
 
 [target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
 cm-desktop = { path = "../desktop", optional = true }
@@ -66,6 +68,18 @@ path = "../../tests/integration/daemon/lifecycle.rs"
 [[test]]
 name = "daemon_jobs"
 path = "../../tests/integration/daemon/jobs.rs"
+
+# #18 extraction jobs, search IPC and authorization (deterministic extractor, no PDFium).
+[[test]]
+name = "daemon_fulltext"
+path = "../../tests/integration/daemon/fulltext.rs"
+
+# #18 PDF -> real pinned PDFium extraction -> search. Needs CM_PDFIUM_LIBRARY and the
+# explicit `pdfium-runtime-tests` feature (not implied by desktop-bootstrap lanes).
+[[test]]
+name = "fulltext_runtime"
+path = "../../tests/integration/daemon/fulltext_runtime.rs"
+required-features = ["pdfium-runtime-tests"]
 
 # Headless composition only; preserves metadata/storage dependency direction.
 [[example]]

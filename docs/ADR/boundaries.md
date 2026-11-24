@@ -53,3 +53,13 @@ No new crate edge. `protocol` gains `ipc` (envelope/handshake/framing), `jobs` (
 `core::policy` holds the transport-neutral authorizer. `storage::daemon` owns the grant/job
 SQL. `daemon` gains `papersd` (unconditional bin, works without GUI deps) and `rustix`'s
 `fs`/`net` features for the lock and peer credentials.
+
+## #18 additions
+
+No new crate edge. `core::search` gains transport-neutral search/extraction DTOs, the
+`SearchIndex`/`FulltextStore`/`PageTextExtractor` ports and the pure orchestration
+(`search::search`, `extraction::run`). `storage::fts` owns every FTS/projection SQL statement.
+`pdf::extract` adds the text-only `Operation::Text` (runtime feature). `protocol::search`
+re-exports the DTOs; `daemon::fulltext` composes job handlers and the PDFium extractor
+(`pdf-metadata` feature). `cm-search` stays an empty placeholder: SQL must stay in storage
+and the orchestration is pure core. See [fulltext-search](fulltext-search.md).

@@ -110,6 +110,12 @@ pub enum Operation {
     GrantIssue,
     GrantList,
     GrantRevoke,
+    /// #18 full-text search over bibliographic records, annotations and PDF page text.
+    FulltextSearch,
+    /// #18 per-attachment extraction state (pending/complete/no_text/encrypted/...).
+    FulltextStatus,
+    /// #18 bounded read of extracted page text (page range, character and count limits).
+    FulltextRead,
     /// Daemon version/limits/session diagnostics; still requires an authenticated live grant.
     Status,
 }
@@ -139,6 +145,7 @@ impl Operation {
             PaperList | PaperGet | LibraryQuery | OrganizationForPaper | AttachmentList => {
                 All(&[LibraryRead])
             }
+            FulltextSearch | FulltextStatus | FulltextRead => All(&[LibraryRead]),
             OrganizationList => Any(&[LibraryRead, DestinationRead]),
             PaperCreate | PaperUpdate | OrganizationWrite => All(&[LibraryWrite]),
             PaperTrash | PaperRestore | OrganizationDelete => All(&[LibraryDelete]),

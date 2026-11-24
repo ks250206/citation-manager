@@ -283,21 +283,9 @@ impl Worker<'_> {
     fn metadata(&mut self, path: &Path, digest: [u8; 32]) -> (Option<PaperDraft>, Vec<String>) {
         use cm_pdf::worker::*;
         use std::time::Duration;
-        if self.pdf.is_none() {
-            self.pdf = Some(
-                std::env::current_exe()
-                    .map_err(|e| e.to_string())
-                    .and_then(|exe| bundled_library(&exe).map_err(|e| e.to_string()))
-                    .and_then(|path| PdfWorker::start(path).map_err(|e| e.to_string())),
-            );
-        }
         let result: Result<MetadataSnapshot, String> = (|| {
-            let worker = self
-                .pdf
-                .as_ref()
-                .expect("initialized")
-                .as_ref()
-                .map_err(Clone::clone)?;
+            // One PDFium worker per process, shared with #18 text extraction.
+            let worker = crate::fulltext::pdf_runtime::shared(None)?;
             let output = worker
                 .submit(
                     Operation::Metadata {

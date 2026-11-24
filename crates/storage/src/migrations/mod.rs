@@ -39,6 +39,10 @@ fn registry() -> Result<Vec<Migration<'static>>, StorageError> {
             "20261124T000000Z_issue-25_001_daemon-grants-jobs.sql",
             include_str!("../../migrations/20261124T000000Z_issue-25_001_daemon-grants-jobs.sql"),
         ),
+        (
+            "20261124T120000Z_issue-18_001_fulltext-search.sql",
+            include_str!("../../migrations/20261124T120000Z_issue-18_001_fulltext-search.sql"),
+        ),
     ];
     if manifest.len() != files.len() {
         return Err(StorageError::Migration("registry/files differ".into()));

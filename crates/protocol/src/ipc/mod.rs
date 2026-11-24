@@ -17,6 +17,7 @@ use crate::{
     library::{LibraryReply, LibraryRequest, ServiceError},
     library_query::{LibraryPage, LibraryQuery},
     organization::{Organization, OrganizationRequest},
+    search::{FulltextReply, FulltextRequest, SearchReply, SearchRequest},
     settings::{Settings, SettingsLoaded},
 };
 pub use cm_core::policy::{Capability, CapabilitySet, Denial, GrantId, Operation};
@@ -124,6 +125,10 @@ pub enum Command {
     Pdf(PdfCommand),
     Jobs(JobCommand),
     Grants(GrantCommand),
+    /// #18 full-text search (bibliographic records, annotations, PDF page text).
+    Search(Box<SearchRequest>),
+    /// #18 extraction status and bounded page text reads.
+    Fulltext(FulltextRequest),
 }
 impl Command {
     pub fn operation(&self) -> Operation {
@@ -177,6 +182,13 @@ impl Command {
                 GrantCommand::List => O::GrantList,
                 GrantCommand::Revoke(_) => O::GrantRevoke,
             },
+            Self::Search(_) => O::FulltextSearch,
+            Self::Fulltext(r) => match r {
+                FulltextRequest::Status(_) | FulltextRequest::AttachmentStatus(_) => {
+                    O::FulltextStatus
+                }
+                FulltextRequest::Pages(_) => O::FulltextRead,
+            },
         }
     }
 }
@@ -197,6 +209,8 @@ pub enum Reply {
     Pdf(PdfReply),
     Jobs(JobReply),
     Grants(GrantReply),
+    Search(SearchReply),
+    Fulltext(FulltextReply),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

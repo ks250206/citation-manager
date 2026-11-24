@@ -132,6 +132,25 @@ pub mod kinds {
         pub original_name: Option<String>,
         pub media_type: Option<String>,
     }
+    /// #18: extract page text of PDF attachments into the full-text index. Resumable
+    /// (committed page batches survive a crash), cancellable between pages, bounded per page
+    /// and document. Unreadable PDFs get a per-attachment state; the job still succeeds.
+    /// papersd also submits `{scope: pending}` itself when attachments await extraction.
+    pub const FULLTEXT_EXTRACT: &str = "fulltext.extract";
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct FulltextExtract {
+        pub scope: crate::search::ExtractScope,
+        /// Re-extract even finished attachments (e.g. retry `failed`/`encrypted`).
+        #[serde(default)]
+        pub force: bool,
+    }
+    /// #18: rebuild the search projection and both FTS indexes from source tables.
+    /// papersd submits it itself when a search finds the index damaged.
+    pub const SEARCH_REBUILD: &str = "search.rebuild";
+    #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct SearchRebuild {}
     /// Diagnostic job without library effects: waits (cancellable, with progress) and can
     /// fail its first attempts on purpose. Used to exercise lifecycle/retry/lease recovery.
     pub const DIAGNOSTIC_WAIT: &str = "diagnostic.wait";

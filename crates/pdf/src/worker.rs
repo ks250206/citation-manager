@@ -136,6 +136,14 @@ pub enum Operation {
         page_index: PageIndex,
         zoom: Option<f32>,
     },
+    /// #18: text of pages `first_page..first_page+max_pages` (clamped) from one load,
+    /// each cut to `max_chars` scalars. No glyph geometry, bitmaps or annotations.
+    Text {
+        source: Source,
+        first_page: u32,
+        max_pages: u32,
+        max_chars: u32,
+    },
     /// Returns a separate PDF in memory; the caller must write with create_new/atomic storage.
     Export {
         source: Source,
@@ -156,6 +164,7 @@ pub enum AppearanceStatus {
 pub enum Output {
     Metadata(Box<MetadataSnapshot>),
     Page(Box<PageSnapshot>),
+    Text(Box<crate::extract::TextBatch>),
     Export(NativeExport),
 }
 #[derive(Clone, Default)]
@@ -307,8 +316,18 @@ fn validate_operation(op: &Operation) -> Result<(), PdfError> {
     let source = match op {
         Operation::Page { source, .. }
         | Operation::Export { source, .. }
+        | Operation::Text { source, .. }
         | Operation::Metadata { source } => source,
     };
+    if let Operation::Text {
+        first_page,
+        max_pages,
+        max_chars,
+        ..
+    } = op
+    {
+        crate::extract::validate(*first_page, *max_pages, *max_chars)?;
+    }
     if !source.path.is_absolute()
         || source
             .password

@@ -16,6 +16,7 @@ pub mod jobs;
 pub mod attachments;
 pub mod exchange;
 pub mod organization;
+pub mod search;
 pub mod settings;
 pub mod library_query {
     pub use cm_core::library_query::*;

@@ -22,7 +22,7 @@ pub(crate) fn load(path: &Path) -> Result<Pdfium, PdfError> {
     claim_process()?;
     Ok(Pdfium::new(bindings))
 }
-fn native(e: PdfiumError) -> PdfError {
+pub(crate) fn native(e: PdfiumError) -> PdfError {
     match e {
         PdfiumError::PdfiumLibraryInternalError(PdfiumInternalError::PasswordError) => {
             PdfError::PasswordRequiredOrIncorrect
@@ -37,7 +37,7 @@ fn native(e: PdfiumError) -> PdfError {
         _ => PdfError::NativeFailure,
     }
 }
-fn read(source: &Source, ctx: &Context) -> Result<Vec<u8>, PdfError> {
+pub(crate) fn read(source: &Source, ctx: &Context) -> Result<Vec<u8>, PdfError> {
     ctx.check()?;
     let f = File::open(&source.path).map_err(|_| PdfError::Io)?;
     if !f.metadata().map_err(|_| PdfError::Io)?.is_file() {
@@ -303,6 +303,13 @@ pub(crate) fn execute(pdfium: &Pdfium, op: Operation, ctx: &Context) -> Result<O
                 bitmap,
             })))
         }
+        Operation::Text {
+            source,
+            first_page,
+            max_pages,
+            max_chars,
+        } => crate::extract::text(pdfium, &source, first_page, max_pages, max_chars, ctx)
+            .map(|batch| Output::Text(Box::new(batch))),
         Operation::Export {
             source,
             highlights,

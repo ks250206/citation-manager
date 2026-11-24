@@ -18,6 +18,7 @@ use cm_core::{
     ServiceError,
     metadata_resolve::Cancellation,
     policy::{self, Capability, CapabilitySet, Denial, GrantId, Operation},
+    search::extraction::PageTextExtractor,
 };
 use cm_protocol::{
     attachments::PdfReply,
@@ -31,6 +32,7 @@ use cm_protocol::{
     },
     jobs::{JobCommand, JobReply},
     library::LibraryClient,
+    search::{FulltextReply, FulltextRequest, SearchReply, SearchRequest},
 };
 use cm_storage::{LibraryDb, LibraryDirectory, StorageError};
 use std::{
@@ -62,6 +64,10 @@ pub struct DaemonConfig {
     pub idle_timeout: Duration,
     pub jobs: JobPolicy,
     pub handlers: Vec<Arc<dyn JobHandler>>,
+    /// #18 page text extractor. `Some` registers `fulltext.extract` and automatic
+    /// extraction of pending PDF attachments; `None` (no PDF runtime) leaves PDF text
+    /// unindexed and searches report it as `PendingExtraction`.
+    pub extractor: Option<Arc<dyn PageTextExtractor>>,
 }
 impl DaemonConfig {
     pub fn new(library: PathBuf) -> Self {
@@ -72,6 +78,7 @@ impl DaemonConfig {
             idle_timeout: Duration::from_secs(30),
             jobs: JobPolicy::default(),
             handlers: default_handlers(),
+            extractor: None,
         }
     }
 }
@@ -106,6 +113,8 @@ struct Shared {
     auth: Authenticator,
     engine: InProcessLibraryClient,
     jobs: JobEngine,
+    /// #18 read connection for search/extraction status (WAL readers do not block writers).
+    search: Mutex<LibraryDb>,
     activity: Arc<Activity>,
     sessions: AtomicU64,
     /// Import preview handle -> grant that created it (preview grant binding).
@@ -152,19 +161,22 @@ pub fn start(config: DaemonConfig) -> Result<RunningDaemon, StartError> {
     // The lock holder is the only migration runner. Upgrades take a pre-migration backup.
     let control = LibraryDb::open_with_safety_backups(&directory).map_err(StartError::Storage)?;
     let control = Arc::new(Mutex::new(control));
+    let search = LibraryDb::open(&directory).map_err(StartError::Storage)?;
     let auth = Authenticator::load(control.clone()).map_err(StartError::Service)?;
     auth.bootstrap_desktop(&paths.desktop_credential, now_ms())?;
     let activity = Arc::new(Activity::default());
     let engine =
         InProcessLibraryClient::start_with_settings(paths.library.clone(), config.settings)?;
-    let jobs = JobEngine::start(
-        directory,
-        control,
-        config.handlers,
-        config.jobs,
-        activity.clone(),
-    )
-    .map_err(StartError::Service)?;
+    let mut handlers = config.handlers;
+    if let Some(extractor) = config.extractor {
+        handlers.push(Arc::new(crate::fulltext::FulltextExtractHandler {
+            extractor,
+        }));
+    }
+    let jobs = JobEngine::start(directory, control, handlers, config.jobs, activity.clone())
+        .map_err(StartError::Service)?;
+    // Attachments added while no daemon (or no PDF runtime) was running.
+    jobs.ensure_extraction();
     lifecycle::prepare_private_dir(&paths.runtime_dir)?;
     lifecycle::remove_stale_socket(&paths.socket)?;
     let listener = UnixListener::bind(&paths.socket)?;
@@ -175,6 +187,7 @@ pub fn start(config: DaemonConfig) -> Result<RunningDaemon, StartError> {
         auth,
         engine,
         jobs,
+        search: Mutex::new(search),
         activity,
         sessions: AtomicU64::new(0),
         previews: Mutex::new(HashMap::new()),
@@ -556,6 +569,12 @@ impl Session {
                 let tx = self.tx.clone();
                 let previews = self.shared.clone();
                 let grant = self.grant;
+                let adds_attachments = matches!(
+                    command,
+                    PdfCommand::Attach { .. }
+                        | PdfCommand::CommitNew { .. }
+                        | PdfCommand::RetryAttachment { .. }
+                );
                 self.engine.pdf(
                     command.into_request(self.cancellation(id)),
                     Box::new(move |report| {
@@ -568,6 +587,9 @@ impl Session {
                                 .lock()
                                 .unwrap_or_else(|e| e.into_inner())
                                 .insert(p.id.clone(), grant);
+                        }
+                        if adds_attachments && r.is_ok() {
+                            previews.jobs.ensure_extraction();
                         }
                         done(r.map(Reply::Pdf).map_err(Into::into))
                     }),
@@ -637,6 +659,14 @@ impl Session {
                 done(result.map(Reply::Grants));
                 Ok(())
             }
+            Command::Search(request) => {
+                done(self.search(&request).map(Reply::Search));
+                Ok(())
+            }
+            Command::Fulltext(request) => {
+                done(self.fulltext(request).map(Reply::Fulltext));
+                Ok(())
+            }
             _ => {
                 done(Err(WireError::Service(ServiceError::InvalidInput(
                     "unsupported command".into(),
@@ -652,6 +682,55 @@ impl Session {
                 .unwrap_or_else(|e| e.into_inner())
                 .remove(&id);
         }
+    }
+}
+
+impl Session {
+    /// #18 search. A failing search verifies the index; damage (or a projection that drifted
+    /// from the source tables) schedules one `search.rebuild` job and is reported, while the
+    /// source tables are never modified by the search path.
+    fn search(&self, request: &SearchRequest) -> Result<SearchReply, WireError> {
+        let db = self.shared.search.lock().unwrap_or_else(|e| e.into_inner());
+        let index = db.search_index();
+        match cm_core::search::search(&index, request) {
+            Ok(reply) => Ok(reply),
+            Err(ServiceError::Unavailable) => {
+                let health = index.verify().map_err(WireError::Service)?;
+                if health.ok() {
+                    return Err(WireError::Service(ServiceError::Unavailable));
+                }
+                let generation = index.generation().unwrap_or_default();
+                drop(db);
+                let job = self.shared.jobs.submit_system(
+                    cm_protocol::jobs::kinds::SEARCH_REBUILD,
+                    &format!("auto-rebuild:{generation}"),
+                    serde_json::json!({}),
+                )?;
+                Err(WireError::Service(ServiceError::InvalidInput(format!(
+                    "search index is damaged; rebuild job {} scheduled",
+                    job.id.0
+                ))))
+            }
+            Err(e) => Err(WireError::Service(e)),
+        }
+    }
+    fn fulltext(&self, request: FulltextRequest) -> Result<FulltextReply, WireError> {
+        let db = self.shared.search.lock().unwrap_or_else(|e| e.into_inner());
+        let reader = db.fulltext_reader();
+        Ok(match request {
+            FulltextRequest::Status(paper) => FulltextReply::Status(reader.for_paper(paper)?),
+            FulltextRequest::AttachmentStatus(attachment) => {
+                FulltextReply::Status(reader.for_attachment(attachment)?.into_iter().collect())
+            }
+            FulltextRequest::Pages(request) => {
+                FulltextReply::Pages(Box::new(reader.pages(&request)?))
+            }
+            _ => {
+                return Err(WireError::Service(ServiceError::InvalidInput(
+                    "unsupported full-text request".into(),
+                )));
+            }
+        })
     }
 }
 
