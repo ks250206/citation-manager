@@ -226,6 +226,18 @@ impl LibraryView {
         match (&mut self.viewer, wanted) {
             (Some(v), Some(id)) if v.attachment == id => {}
             (viewer, wanted) => {
+                if self.find.attachment.is_some() && self.find.attachment != wanted {
+                    self.find.generation += 1;
+                    self.find.query.clear();
+                    self.find.pages.clear();
+                    self.find.current = 0;
+                    self.find.status.clear();
+                    self.find.attachment = None;
+                    self.find.loaded_only = false;
+                }
+                if self.pending_jump.is_some_and(|(a, _)| Some(a) != wanted) {
+                    self.pending_jump = None;
+                }
                 if let Some(mut old) = viewer.take() {
                     old.cancel_all();
                     for image in old.cache.drain() {
@@ -1059,8 +1071,7 @@ impl LibraryView {
             .child(
                 button("find-close", "✕", true).on_click(cx.listener(|this, _, _, cx| {
                     this.find.open = false;
-                    this.find.query.clear();
-                    this.find.pages.clear();
+                    this.reset_find();
                     cx.notify();
                 })),
             )

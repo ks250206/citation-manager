@@ -500,12 +500,19 @@ impl LibraryView {
                         self.set_editor(Some(*p), None, cx);
                     }
                 }
-                Ok(_) => self.status("Unexpected load reply", true, cx),
-                Err(e) => self.status(
-                    format!("{}; paper load failed: {e}", self.message),
-                    true,
-                    cx,
-                ),
+                Ok(_) => {
+                    self.find_search.open = None;
+                    self.status("Unexpected load reply", true, cx)
+                }
+                Err(e) => {
+                    // A hit/link open that failed must not fire later on another selection.
+                    self.find_search.open = None;
+                    self.status(
+                        format!("{}; paper load failed: {e}", self.message),
+                        true,
+                        cx,
+                    )
+                }
             },
             Event::Organization(result) => match result {
                 Ok(org) => {
@@ -590,6 +597,10 @@ impl LibraryView {
     fn reload(&mut self, cx: &mut Context<Self>) {
         let query = self.library.reload();
         self.call(Lane::Query, Event::Query, |c, done| c.query(query, done));
+        // Full-text results follow the sidebar scope (collection / Trash) too.
+        if self.find_search.fulltext && self.find_search.request.is_some() {
+            self.run_fulltext(cx);
+        }
         cx.notify();
     }
     fn organize(&mut self, request: OrganizationRequest, cx: &mut Context<Self>) {
@@ -986,7 +997,7 @@ impl LibraryView {
             cx.notify();
         }
         if self.screen == Screen::Library {
-            self.table_focus.focus(window, cx);
+            self.list_focus().focus(window, cx);
         }
     }
     fn show(&mut self, screen: Screen, window: &mut Window, cx: &mut Context<Self>) {
@@ -1003,7 +1014,7 @@ impl LibraryView {
                     );
                 }
             }
-            Screen::Library => self.table_focus.focus(window, cx),
+            Screen::Library => self.list_focus().focus(window, cx),
             _ => (),
         }
         self.screen = screen;
@@ -1098,7 +1109,7 @@ impl Render for LibraryView {
         if layout != self.focus_layout {
             self.focus_layout = layout;
             let target = if self.screen == Screen::Library {
-                self.table_focus.clone()
+                self.list_focus()
             } else {
                 self.focus.clone()
             };

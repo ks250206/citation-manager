@@ -14,11 +14,13 @@ use cm_protocol::search::{
 const MAX_FIND_CALLS: u32 = 40;
 
 pub(super) enum SearchOp {
-    /// First page (`false`) or "load more" (`true`).
-    Results(bool),
+    /// First page (`false`) or "load more" (`true`), tagged with the search sequence it
+    /// answers; replies for an older search are dropped.
+    Results(bool, u64),
     FindPages {
         attachment: AttachmentId,
         calls: u32,
+        generation: u64,
     },
 }
 
@@ -45,6 +47,10 @@ pub(super) struct SearchState {
     pub errors: Vec<QueryError>,
     pub loading: bool,
     pub open: Option<OpenTarget>,
+    /// Bumped for every new search (not "load more"); stale replies are ignored.
+    pub seq: u64,
+    /// The query text exactly as sent (trimmed); correction offsets refer to it.
+    pub sent_query: String,
 }
 impl SearchState {
     pub fn new() -> Self {
@@ -58,6 +64,8 @@ impl SearchState {
             errors: vec![],
             loading: false,
             open: None,
+            seq: 0,
+            sent_query: String::new(),
         }
     }
 }
@@ -74,6 +82,9 @@ pub(super) struct FindState {
     /// Stored text unavailable: matches come only from pages already rendered.
     pub loaded_only: bool,
     pub last_g: Option<std::time::Instant>,
+    /// Bumped when a find starts, is closed or its attachment goes away; replies from an
+    /// older chain are dropped so two chains never merge their pages.
+    pub generation: u64,
 }
 impl FindState {
     pub fn new(cx: &mut Context<LibraryView>) -> Self {
@@ -87,6 +98,7 @@ impl FindState {
             status: String::new(),
             loaded_only: false,
             last_g: None,
+            generation: 0,
         }
     }
 }
@@ -94,6 +106,12 @@ impl FindState {
 impl LibraryView {
     fn search_send(&mut self, request: SearchRequest, more: bool) {
         let sender = self.sender.clone();
+        if !more {
+            self.find_search.seq += 1;
+            self.find_search.next = None;
+            self.find_search.total = 0;
+        }
+        let seq = self.find_search.seq;
         self.find_search.loading = true;
         let follow = request.clone();
         let sent = self.client.search(
@@ -102,7 +120,7 @@ impl LibraryView {
                 let _ = sender.send(Message {
                     lane: Lane::Pdf,
                     ticket: 0,
-                    event: Event::Search(Box::new(SearchOp::Results(more)), Box::new(result)),
+                    event: Event::Search(Box::new(SearchOp::Results(more, seq)), Box::new(result)),
                 });
             }),
         );
@@ -134,6 +152,7 @@ impl LibraryView {
         self.find_search.hits.clear();
         self.find_search.errors.clear();
         self.find_search.coverage = None;
+        self.find_search.sent_query = query.clone();
         self.search_send(request, false);
         self.status(format!("Searching for “{query}”…"), false, cx);
     }
@@ -148,6 +167,7 @@ impl LibraryView {
             request.short_term_scope = ShortTermScope::AllPages;
             request.cursor = None;
             self.find_search.hits.clear();
+            self.find_search.coverage = None;
             self.search_send(request, false);
             cx.notify();
         }
@@ -158,9 +178,14 @@ impl LibraryView {
         result: Result<SearchReply, ServiceError>,
         cx: &mut Context<Self>,
     ) {
+        if let SearchOp::Results(_, seq) = op
+            && seq != self.find_search.seq
+        {
+            return;
+        }
         self.find_search.loading = false;
         match (op, result) {
-            (SearchOp::Results(more), Ok(SearchReply::Results(page))) => {
+            (SearchOp::Results(more, _), Ok(SearchReply::Results(page))) => {
                 let SearchPage {
                     hits,
                     next_page,
@@ -186,8 +211,11 @@ impl LibraryView {
                     cx,
                 );
             }
-            (SearchOp::Results(_), Ok(SearchReply::Invalid(errors))) => {
+            (SearchOp::Results(..), Ok(SearchReply::Invalid(errors))) => {
                 self.find_search.hits.clear();
+                self.find_search.next = None;
+                self.find_search.total = 0;
+                self.find_search.coverage = None;
                 self.find_search.errors = errors
                     .diagnostics
                     .into_iter()
@@ -207,7 +235,10 @@ impl LibraryView {
                     cx,
                 );
             }
-            (SearchOp::Results(_), Err(e)) => self.status(format!("Search failed: {e}"), true, cx),
+            (SearchOp::Results(..), Err(e)) => {
+                self.find_search.next = None;
+                self.status(format!("Search failed: {e}"), true, cx)
+            }
             (SearchOp::FindPages { .. }, _) => {}
         }
         cx.notify();
@@ -220,7 +251,8 @@ impl LibraryView {
         replacement: String,
         cx: &mut Context<Self>,
     ) {
-        let query = self.search.read(cx).content.to_string();
+        // Offsets refer to the query as sent (trimmed), not the raw field text.
+        let query = self.find_search.sent_query.clone();
         if start <= end
             && end <= query.len()
             && query.is_char_boundary(start)
@@ -301,9 +333,10 @@ impl LibraryView {
                 paper: hit.paper_id,
                 attachment: hit.attachment_id,
                 page: hit.page_index,
-                focus: (hit.page_index.is_some())
-                    .then(|| focus_text(hit))
-                    .flatten(),
+                focus: (hit.source == cm_protocol::search::DocumentSource::Page
+                    && hit.page_index.is_some())
+                .then(|| focus_text(hit))
+                .flatten(),
                 annotation: hit.annotation_id.clone(),
             },
             cx,
@@ -353,6 +386,7 @@ impl LibraryView {
         query: String,
         cx: &mut Context<Self>,
     ) {
+        self.find.generation += 1;
         self.find.query = query.trim().to_owned();
         self.find.attachment = Some(attachment);
         self.find.pages.clear();
@@ -369,6 +403,7 @@ impl LibraryView {
     }
     fn find_pages(&mut self, attachment: AttachmentId, from_page: u32, calls: u32) {
         let sender = self.sender.clone();
+        let generation = self.find.generation;
         let request = FulltextRequest::Pages(PageTextRequest {
             attachment,
             from_page,
@@ -382,7 +417,11 @@ impl LibraryView {
                     lane: Lane::Pdf,
                     ticket: 0,
                     event: Event::Find(
-                        Box::new(SearchOp::FindPages { attachment, calls }),
+                        Box::new(SearchOp::FindPages {
+                            attachment,
+                            calls,
+                            generation,
+                        }),
                         Box::new(result),
                     ),
                 });
@@ -399,10 +438,18 @@ impl LibraryView {
         result: Result<FulltextReply, ServiceError>,
         cx: &mut Context<Self>,
     ) {
-        let SearchOp::FindPages { attachment, calls } = op else {
+        let SearchOp::FindPages {
+            attachment,
+            calls,
+            generation,
+        } = op
+        else {
             return;
         };
-        if self.find.attachment != Some(attachment) || self.find.query.is_empty() {
+        if generation != self.find.generation
+            || self.find.attachment != Some(attachment)
+            || self.find.query.is_empty()
+        {
             return;
         }
         match result {
@@ -415,16 +462,13 @@ impl LibraryView {
                     }
                 }
                 let indexed = matches!(state, ExtractionState::Complete | ExtractionState::Partial);
-                match read.next_page {
-                    Some(next) if calls + 1 < MAX_FIND_CALLS => {
-                        self.find_pages(attachment, next, calls + 1)
-                    }
-                    Some(_) => {
-                        self.find.status = "Stopped after 2000 pages; refine the search".into()
-                    }
-                    None => {}
+                let capped = read.next_page.is_some() && calls + 1 >= MAX_FIND_CALLS;
+                if let Some(next) = read.next_page
+                    && !capped
+                {
+                    self.find_pages(attachment, next, calls + 1)
                 }
-                if read.next_page.is_none() || calls + 1 >= MAX_FIND_CALLS {
+                if read.next_page.is_none() || capped {
                     let total: usize = self.find.pages.iter().map(|(_, n)| n).sum();
                     self.find.status = if !indexed && self.find.pages.is_empty() {
                         self.find.loaded_only = true;
@@ -437,6 +481,9 @@ impl LibraryView {
                     } else {
                         format!("{total} match(es) on {} page(s)", self.find.pages.len())
                     };
+                    if capped {
+                        self.find.status.push_str(" — stopped after 2000 pages");
+                    }
                     if let Some((page, _)) = self.find.pages.first().copied() {
                         self.find.current = 0;
                         self.pending_jump = Some((attachment, page));
@@ -455,6 +502,9 @@ impl LibraryView {
         let Some(attachment) = self.find.attachment else {
             return;
         };
+        if self.host.selected != Some(attachment) {
+            return;
+        }
         if self.find.pages.is_empty() {
             return;
         }
@@ -468,6 +518,25 @@ impl LibraryView {
         self.pending_jump = Some((attachment, page));
         self.find.status = format!("Page {} of {} with matches", self.find.current + 1, n);
         cx.notify();
+    }
+    /// Forget find results (and any pending jump) that belong to another attachment.
+    pub(super) fn reset_find(&mut self) {
+        self.find.generation += 1;
+        self.find.query.clear();
+        self.find.pages.clear();
+        self.find.current = 0;
+        self.find.status.clear();
+        self.find.attachment = None;
+        self.find.loaded_only = false;
+    }
+    /// Where keyboard focus goes on the Library screen: the table, or the root while the
+    /// full-text results (which have no table) are shown.
+    pub(super) fn list_focus(&self) -> FocusHandle {
+        if self.find_search.fulltext {
+            self.focus.clone()
+        } else {
+            self.table_focus.clone()
+        }
     }
     pub(super) fn subscribe_search_inputs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         cx.subscribe_in(

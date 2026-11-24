@@ -179,3 +179,24 @@ fn stored_page_text_counts_match_the_character_layer_rules() {
     assert_eq!(count_in_text("日本語の日本", "日本"), 2);
     assert_eq!(count_in_text("anything", "  "), 0);
 }
+
+#[test]
+fn deep_links_accept_only_the_canonical_form_they_print() {
+    use cm_desktop::deep_links::DeepLink;
+    let paper = "0192f2a1-7b3c-7d4e-8f00-112233445566";
+    let att = "0192f2a1-7b3c-7d4e-8f00-aabbccddeeff";
+    let ok = format!("paper://{paper}/attachment/{att}/page/12");
+    let link = DeepLink::parse(&ok).expect("canonical link parses");
+    assert_eq!(link.to_string(), ok);
+    for bad in [
+        format!("paper://{paper}/attachment/{att}/page/+12"),
+        format!("paper://{paper}/attachment/{att}/page/012"),
+        format!("paper://{paper}/attachment/{att}/page/0"),
+        format!("paper://{paper}/attachment/{att}/page/"),
+        format!("paper://{}/attachment/{att}", paper.replace('-', "")),
+        format!("paper://{{{paper}}}"),
+        format!("paper://{}", paper.to_uppercase()),
+    ] {
+        assert!(DeepLink::parse(&bad).is_none(), "{bad} must be rejected");
+    }
+}

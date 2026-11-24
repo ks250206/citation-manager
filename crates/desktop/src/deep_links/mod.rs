@@ -34,13 +34,22 @@ impl DeepLink {
         }
         let rest = text.strip_prefix(SCHEME)?;
         let parts: Vec<&str> = rest.split('/').collect();
-        let uuid = |s: &str| uuid::Uuid::parse_str(s).ok().filter(|u| !u.is_nil());
+        // Only the canonical hyphenated lowercase form that `Display` writes.
+        let uuid = |s: &str| {
+            uuid::Uuid::parse_str(s)
+                .ok()
+                .filter(|u| !u.is_nil() && u.hyphenated().to_string() == s)
+        };
         let paper = PaperId(uuid(parts.first()?)?);
         let target = match parts.as_slice() {
             [_] => Target::Paper,
             [_, "attachment", a] => Target::Attachment(AttachmentId(uuid(a)?)),
             [_, "attachment", a, "page", n] => {
-                let display: u32 = n.parse().ok().filter(|n: &u32| *n >= 1)?;
+                // Canonical decimal only: no sign, no leading zeros.
+                if n.is_empty() || n.starts_with('0') || !n.bytes().all(|b| b.is_ascii_digit()) {
+                    return None;
+                }
+                let display: u32 = n.parse().ok()?;
                 // Display numbers fit the 0-based PageIndex range (max 4294967294).
                 Target::Page(AttachmentId(uuid(a)?), display.checked_sub(1)?)
             }

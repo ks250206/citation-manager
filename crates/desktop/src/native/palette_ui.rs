@@ -192,7 +192,7 @@ impl LibraryView {
         }
         self.palette_open = false;
         if self.screen == Screen::Library {
-            self.table_focus.focus(window, cx);
+            self.list_focus().focus(window, cx);
         } else {
             self.focus.focus(window, cx);
         }
@@ -364,7 +364,12 @@ impl LibraryView {
                 }
             }
             pdf::FIND => {
+                if self.host.selected.is_none() {
+                    self.status("Open a PDF attachment first", true, cx);
+                    return;
+                }
                 self.show_pdf_tab(cx);
+                self.focus_layout = (self.screen, self.settings.details_tab.clone());
                 self.find.open = true;
                 self.find.input.focus_handle(cx).focus(window, cx);
             }
@@ -376,6 +381,7 @@ impl LibraryView {
             pdf::HIGHLIGHT => self.highlight_selection_command(cx),
             pdf::ADD_NOTE => {
                 self.show_pdf_tab(cx);
+                self.focus_layout = (self.screen, self.settings.details_tab.clone());
                 self.ann.note_open = true;
                 self.ann.note.focus_handle(cx).focus(window, cx);
             }
