@@ -230,15 +230,12 @@ fn local_file_write_grant_cannot_replace_existing_files_with_pdf_export() {
         ]),
     );
     let mut mcp = env.session("mcp", write);
+    // Canonical: on macOS the temp dir is under /var -> /private/var, and destination folders
+    // reached through a symlink are (rightly) refused before the checks under test.
+    let dir = env.temp.path().canonicalize().unwrap();
     let victims = [
-        (
-            env.temp.path().join("victim.pdf"),
-            b"%PDF user's own".to_vec(),
-        ),
-        (
-            env.temp.path().join(".profile"),
-            b"export PATH=...".to_vec(),
-        ),
+        (dir.join("victim.pdf"), b"%PDF user's own".to_vec()),
+        (dir.join(".profile"), b"export PATH=...".to_vec()),
     ];
     for (path, bytes) in &victims {
         std::fs::write(path, bytes).unwrap();
