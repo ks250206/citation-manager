@@ -208,6 +208,10 @@ fn paper_with(session: &mut Session, title: &str) -> PaperId {
 fn attempt_limit_fails_with_reason_and_explicit_retry_requeues() {
     let env = Env::new();
     let mut config = env.config();
+    // The retry_wait window must be much longer than one IPC poll on a loaded runner,
+    // otherwise the observation below races the 100 ms fast-policy backoff.
+    config.jobs.base_backoff = Duration::from_secs(1);
+    config.jobs.max_backoff = Duration::from_secs(1);
     config
         .handlers
         .push(Arc::new(FailRuns(AtomicU32::new(0), 3)));
