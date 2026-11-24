@@ -31,7 +31,12 @@ fn latin() -> &'static HashMap<char, char> {
     static TABLE: OnceLock<HashMap<char, char>> = OnceLock::new();
     TABLE.get_or_init(|| {
         let chars: Vec<char> = LATIN.chars().collect();
-        chars.as_chunks::<2>().0.iter().map(|[c, b]| (*c, *b)).collect()
+        chars
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|[c, b]| (*c, *b))
+            .collect()
     })
 }
 
