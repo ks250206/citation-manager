@@ -31,12 +31,12 @@ impl LibraryView {
                     .border_b_1()
                     .border_color(rgb(BORDER))
                     .children(["Info", "Notes", "PDF"].into_iter().map(|name| {
-                        nav_item(name, name, tab == name).px_3().on_click(cx.listener(
-                            move |this, _, _, cx| {
+                        nav_item(name, name, tab == name)
+                            .px_3()
+                            .on_click(cx.listener(move |this, _, _, cx| {
                                 this.settings.details_tab = name.into();
                                 this.persist(cx);
-                            },
-                        ))
+                            }))
                     }))
                     .child(div().flex_1())
                     .child(
@@ -69,21 +69,19 @@ impl LibraryView {
                 )
                 .child(viewer)
             })
-            .when(tab != "PDF", |el| el.child(
-                div()
-                    .id("details-content")
-                    .flex_1()
-                    .overflow_y_scroll()
-                    .p_3()
-                    .child(match tab {
-                        "Notes" => div()
-                            .child(hint(
-                                "Notes editing is not available in this version. No note text is saved.",
-                            ))
-                            .into_any_element(),
-                        _ => self.info_tab(enabled, cx).into_any_element(),
-                    }),
-            ))
+            .when(tab != "PDF", |el| {
+                el.child(
+                    div()
+                        .id("details-content")
+                        .flex_1()
+                        .overflow_y_scroll()
+                        .p_3()
+                        .child(match tab {
+                            "Notes" => self.notes_tab(cx).into_any_element(),
+                            _ => self.info_tab(enabled, cx).into_any_element(),
+                        }),
+                )
+            })
     }
     fn info_tab(&self, enabled: bool, cx: &mut Context<Self>) -> Div {
         div()

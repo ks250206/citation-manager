@@ -282,7 +282,7 @@ impl Worker<'_> {
         }
     }
     #[cfg(feature = "pdf-metadata")]
-    fn pdf_worker(&mut self) -> Result<&cm_pdf::worker::PdfWorker, String> {
+    pub(super) fn pdf_worker(&mut self) -> Result<&cm_pdf::worker::PdfWorker, String> {
         use cm_pdf::worker::*;
         if self.pdf.is_none() {
             self.pdf = Some(

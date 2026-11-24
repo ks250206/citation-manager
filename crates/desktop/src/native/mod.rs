@@ -12,6 +12,7 @@ macro_rules! primary {
         concat!("ctrl-", $key)
     };
 }
+mod annotations_ui;
 mod details_ui;
 mod import_ui;
 mod library_ui;
@@ -59,6 +60,8 @@ actions!(
         PalettePrevious,
         PaletteClose,
         CopySelection,
+        AnnotationUndo,
+        AnnotationRedo,
     ]
 );
 enum Event {
@@ -80,6 +83,10 @@ enum Event {
         crate::pdf_viewer::RenderKey,
         u64,
         Result<PdfReply, ServiceError>,
+    ),
+    Annotation(
+        Box<annotations_ui::AnnOp>,
+        Result<cm_protocol::annotations::AnnotationReply, ServiceError>,
     ),
 }
 struct Message {
@@ -163,6 +170,9 @@ struct LibraryView {
     palette_query: Entity<TextInput>,
     palette_scroll: ScrollHandle,
     viewer: Option<pdf_viewer_ui::Viewer>,
+    ann: annotations_ui::AnnotationState,
+    /// Page to show once the viewer for that attachment is ready (from the Notes list).
+    pending_jump: Option<(AttachmentId, u32)>,
     viewer_focus: FocusHandle,
     page_input: Entity<TextInput>,
 }
@@ -251,10 +261,13 @@ impl LibraryView {
             palette_query: cx.new(|cx| TextInput::new("Type a command…", cx)),
             palette_scroll: ScrollHandle::new(),
             viewer: None,
+            ann: annotations_ui::AnnotationState::new(cx),
+            pending_jump: None,
             viewer_focus: cx.focus_handle(),
             page_input: cx.new(|cx| TextInput::new("Page", cx)),
         };
         view.subscribe_viewer_inputs(window, cx);
+        view.subscribe_annotation_inputs(window, cx);
         cx.subscribe(
             &view.palette_query,
             |this, _, _: &text_input::Edited, cx| {
@@ -394,10 +407,17 @@ impl LibraryView {
         cx.notify();
     }
     fn receive(&mut self, message: Message, cx: &mut Context<Self>) {
-        if let Event::Render(key, serial, result) = message.event {
-            self.render_reply(key, serial, result, cx);
-            return;
-        }
+        let message = match message.event {
+            Event::Render(key, serial, result) => {
+                self.render_reply(key, serial, result, cx);
+                return;
+            }
+            Event::Annotation(op, result) => {
+                self.annotation_reply(*op, result, cx);
+                return;
+            }
+            event => Message { event, ..message },
+        };
         if let Event::Progress(report) = message.event {
             if self.pending.get(&message.lane) == Some(&message.ticket) {
                 self.pdf_report = report;
@@ -535,7 +555,7 @@ impl LibraryView {
                 }
                 Err(e) => self.status(format!("Export failed: {e}"), true, cx),
             },
-            Event::Progress(_) | Event::Render(..) => (),
+            Event::Progress(_) | Event::Render(..) | Event::Annotation(..) => (),
         }
         self.lock_fields(cx);
         cx.notify();
@@ -643,6 +663,7 @@ impl LibraryView {
         self.membership = Organization::default();
         self.host = AttachmentHost::default();
         self.load_membership();
+        self.reset_annotations();
         if let Some(p) = &self.editor {
             let id = p.id;
             self.call(Lane::Attachments, Event::Attachments, |c, done| {
@@ -1140,6 +1161,8 @@ fn key_bindings() -> Vec<KeyBinding> {
         KeyBinding::new("up", PalettePrevious, Some("Palette")),
         KeyBinding::new("escape", PaletteClose, Some("Palette")),
         KeyBinding::new(primary!("c"), CopySelection, Some("PdfViewer")),
+        KeyBinding::new(primary!("z"), AnnotationUndo, Some("PdfViewer")),
+        KeyBinding::new(primary!("shift-z"), AnnotationRedo, Some("PdfViewer")),
         KeyBinding::new("tab", NextField, Some("Library")),
         KeyBinding::new("shift-tab", PreviousField, Some("Library")),
         KeyBinding::new(primary!("q"), Quit, None),

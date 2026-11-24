@@ -1,4 +1,5 @@
 //! Local in-process composition. All IO and retained import state stay on workers.
+mod annotations;
 mod files;
 mod pdf;
 mod settings;
@@ -40,7 +41,9 @@ impl InProcessLibraryClient {
                 while let Ok(first) = receiver.recv() {
                     let opened = (|| {
                         let directory = LibraryDirectory::prepare(&path)?;
-                        let db = LibraryDb::open(&directory)?;
+                        // Upgrades of an existing library take a pre-migration backup first
+                        // (new schema from later issues, e.g. #19 annotations).
+                        let db = LibraryDb::open_with_safety_backups(&directory)?;
                         let import_db = LibraryDb::open(&directory)?;
                         Ok::<_, cm_storage::StorageError>((directory, db, import_db))
                     })();
@@ -207,6 +210,13 @@ impl LibraryClient for InProcessLibraryClient {
                 s.restore(paper)
             }
         })
+    }
+    fn annotations(
+        &self,
+        request: cm_protocol::annotations::AnnotationRequest,
+        complete: Reply<cm_protocol::annotations::AnnotationReply>,
+    ) -> Result<(), ServiceError> {
+        self.enqueue(complete, move |w| w.annotations(request))
     }
     fn load_settings(&self, complete: Reply<SettingsLoaded>) -> Result<(), ServiceError> {
         self.enqueue(complete, |w| settings::load(&w.settings_path))

@@ -55,6 +55,11 @@ impl LibraryDb {
             connection: &mut self.connection,
         }
     }
+    pub fn annotations(&self) -> crate::repositories::annotations::SqliteAnnotations<'_> {
+        crate::repositories::annotations::SqliteAnnotations {
+            connection: &self.connection,
+        }
+    }
     pub fn attachments(&self) -> SqliteAttachments<'_> {
         SqliteAttachments {
             connection: &self.connection,

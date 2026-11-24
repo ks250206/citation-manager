@@ -48,6 +48,14 @@ pub trait LibraryClient: Send + Sync + 'static {
     ) -> Result<(), ServiceError> {
         Err(ServiceError::Unavailable)
     }
+    /// Highlights/notes (#19). Clients without annotation support report Unavailable.
+    fn annotations(
+        &self,
+        _request: crate::annotations::AnnotationRequest,
+        _complete: Reply<crate::annotations::AnnotationReply>,
+    ) -> Result<(), ServiceError> {
+        Err(ServiceError::Unavailable)
+    }
     fn load_settings(
         &self,
         _complete: Reply<crate::settings::SettingsLoaded>,

@@ -10,6 +10,7 @@ pub use cm_domain as domain;
 
 pub mod library;
 
+pub mod annotations;
 pub mod attachments;
 pub mod exchange;
 pub mod organization;
