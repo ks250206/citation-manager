@@ -183,7 +183,20 @@ fn native_host_capture_saves_paper_then_fetches_public_pdf() {
         _ => Response::new(404),
     });
     let env = Env::new();
-    let _daemon = start(config(&env)).unwrap();
+    let config = config(&env);
+    // A partial download left by a crashed daemon is removed at startup.
+    let downloads = config.library.join("daemon").join("capture-downloads");
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        std::fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(&downloads)
+            .unwrap();
+    }
+    std::fs::write(downloads.join("pdf-crashed.part"), b"%PDF-partial").unwrap();
+    let _daemon = start(config).unwrap();
+    assert!(!downloads.join("pdf-crashed.part").exists());
     let mut desktop = env.desktop();
     let mut host = native_host(&env, &mut desktop);
     let tag = match ok(

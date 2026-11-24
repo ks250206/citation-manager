@@ -1,6 +1,10 @@
 use super::test_server::{Response, TestServer};
 use super::*;
-use std::{collections::HashMap, net::IpAddr};
+use std::{
+    collections::HashMap,
+    net::IpAddr,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 
 /// Maps fixture host names to addresses; everything else fails to resolve.
 struct Names(HashMap<&'static str, Vec<IpAddr>>);
@@ -241,7 +245,14 @@ fn rejects_non_pdf_auth_size_and_classifies_retries() {
     let f = PdfFetcher::with_resolver(policy, fetcher().resolver.clone());
     let url = |p: &str| server.url("pdf.example.org", p);
     let err = |p: &str| get(&f, &url(p)).unwrap_err();
-    for p in ["/login", "/octet-not-pdf", "/gzip", "/empty"] {
+    // Regression (#22 review P3): a compressed body is its own error with its own guidance.
+    let gzip = err("/gzip");
+    assert_eq!(gzip, FetchError::Encoded("gzip".into()));
+    assert!(!gzip.retryable() && !gzip.needs_user_download());
+    assert_eq!(gzip.guidance(), Some(ENCODED_GUIDANCE));
+    assert!(gzip.to_string().contains("Content-Encoding gzip"));
+    assert_eq!(err("/login").guidance(), Some(USER_DOWNLOAD_GUIDANCE));
+    for p in ["/login", "/octet-not-pdf", "/empty"] {
         let e = err(p);
         assert!(matches!(e, FetchError::NotPdf(_)), "{p}: {e:?}");
         assert!(!e.retryable());
@@ -300,4 +311,113 @@ fn cancellation_and_invalid_configuration() {
         ),
         Err(FetchError::InvalidConfig(_))
     ));
+}
+
+/// Resolves `slow.example.org` to loopback after `delay`, unless released earlier; counts
+/// lookups. Other names behave like `fetcher()`'s fixtures.
+struct Slow {
+    delay: Duration,
+    calls: AtomicUsize,
+    release: std::sync::atomic::AtomicBool,
+}
+impl HostResolver for Slow {
+    fn resolve(&self, _host: &str, _port: u16) -> std::io::Result<Vec<IpAddr>> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        let started = Instant::now();
+        while started.elapsed() < self.delay && !self.release.load(Ordering::SeqCst) {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        Ok(vec![ip("127.0.0.1")])
+    }
+}
+fn slow(delay: Duration) -> Arc<Slow> {
+    Arc::new(Slow {
+        delay,
+        calls: AtomicUsize::new(0),
+        release: false.into(),
+    })
+}
+
+#[test]
+fn dns_wait_is_cancellable_bounded_and_counts_against_the_deadline() {
+    // Regression (#22 review P2).
+    let resolver = slow(Duration::from_secs(5));
+    let f = PdfFetcher::with_resolver(FetchPolicy::loopback_test_server(), resolver.clone());
+    // Cancellation is observed while the lookup is still blocked.
+    let cancel = Cancellation::default();
+    let canceller = {
+        let cancel = cancel.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(150));
+            cancel.cancel();
+        })
+    };
+    let started = Instant::now();
+    let mut sink = Vec::new();
+    assert_eq!(
+        f.fetch(
+            "http://slow.example.org:9/a.pdf",
+            &mut sink,
+            &cancel,
+            &mut |_| true
+        ),
+        Err(FetchError::Cancelled)
+    );
+    assert!(
+        started.elapsed() < Duration::from_secs(2),
+        "{:?}",
+        started.elapsed()
+    );
+    canceller.join().unwrap();
+
+    // Stuck lookups are bounded: once MAX_DNS_IN_FLIGHT are outstanding, further fetches
+    // fail fast without starting another lookup thread.
+    let policy = FetchPolicy {
+        io_timeout: Duration::from_millis(50),
+        ..FetchPolicy::loopback_test_server()
+    };
+    let resolver = slow(Duration::from_secs(10));
+    let f = PdfFetcher::with_resolver(policy, resolver.clone());
+    for _ in 0..MAX_DNS_IN_FLIGHT {
+        assert_eq!(
+            get(&f, "http://slow.example.org:9/a.pdf").unwrap_err(),
+            FetchError::Timeout
+        );
+    }
+    let started = Instant::now();
+    let refused = get(&f, "http://slow.example.org:9/a.pdf").unwrap_err();
+    assert_eq!(refused, FetchError::Network);
+    assert!(refused.retryable());
+    assert!(started.elapsed() < Duration::from_secs(1));
+    assert_eq!(resolver.calls.load(Ordering::SeqCst), MAX_DNS_IN_FLIGHT);
+    // When the stuck lookups return, capacity comes back.
+    resolver.release.store(true, Ordering::SeqCst);
+    let mut freed = false;
+    for _ in 0..200 {
+        if f.dns_in_flight.load(Ordering::SeqCst) == 0 {
+            freed = true;
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(freed);
+
+    // Time spent resolving is taken from the whole-fetch budget for the HTTP hop.
+    let server = TestServer::start(|_| Response {
+        stall: Some(Duration::from_secs(3)),
+        ..Response::pdf(PDF)
+    });
+    let policy = FetchPolicy {
+        total_timeout: Duration::from_millis(1000),
+        io_timeout: Duration::from_millis(1000),
+        ..FetchPolicy::loopback_test_server()
+    };
+    let f = PdfFetcher::with_resolver(policy, slow(Duration::from_millis(800)));
+    let started = Instant::now();
+    assert_eq!(
+        get(&f, &server.url("slow.example.org", "/a.pdf")).unwrap_err(),
+        FetchError::Timeout
+    );
+    let elapsed = started.elapsed();
+    assert!(elapsed < Duration::from_millis(1500), "{elapsed:?}");
 }

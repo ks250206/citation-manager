@@ -23,7 +23,13 @@ use std::{
 
 /// Longer than the coordinator's maximum preview lifetime (300 s).
 const BINDING_LIFETIME: Duration = Duration::from_secs(330);
-const MAX_BINDINGS: usize = 64;
+/// Live capture previews one grant may hold; its own oldest is replaced first. The
+/// coordinator retains at most 4 previews, so this only bounds stale bindings.
+const BINDINGS_PER_GRANT: usize = 8;
+/// Safety net over all grants (grants and connections are bounded elsewhere). When full,
+/// the oldest binding of the grant holding the most is evicted, never one of a grant that
+/// holds fewer than another.
+const MAX_BINDINGS: usize = 256;
 /// Automatic attempts for a capture PDF fetch (network/5xx/429/timeout only).
 pub const PDF_ATTEMPTS: u32 = 4;
 /// A capture PDF job that still has not succeeded after a day fails instead of retrying.
@@ -40,10 +46,24 @@ pub(super) struct Bindings(HashMap<PreviewId, Binding>);
 impl Bindings {
     fn insert(&mut self, id: PreviewId, binding: Binding) {
         self.0.retain(|_, b| b.created.elapsed() < BINDING_LIFETIME);
-        if self.0.len() >= MAX_BINDINGS
+        let mut held: HashMap<GrantId, usize> = HashMap::new();
+        for b in self.0.values() {
+            *held.entry(b.grant).or_default() += 1;
+        }
+        let victim_grant = if held.get(&binding.grant).copied().unwrap_or(0) >= BINDINGS_PER_GRANT {
+            Some(binding.grant)
+        } else if self.0.len() >= MAX_BINDINGS {
+            held.iter()
+                .max_by_key(|(grant, n)| (**n, **grant == binding.grant))
+                .map(|(grant, _)| *grant)
+        } else {
+            None
+        };
+        if let Some(grant) = victim_grant
             && let Some(oldest) = self
                 .0
                 .iter()
+                .filter(|(_, b)| b.grant == grant)
                 .min_by_key(|(_, b)| b.created)
                 .map(|(k, _)| k.clone())
         {
@@ -203,7 +223,7 @@ impl Session {
                             );
                             match submitted {
                                 Ok(job) => pdf_job = Some(job),
-                                Err(e) => pdf_error = Some(format!("{e:?}")),
+                                Err(e) => pdf_error = Some(e.to_string()),
                             }
                         }
                         done(Ok(Reply::Capture(CaptureReply::Committed(Box::new(
@@ -287,5 +307,69 @@ impl Session {
                 Err(WireError::Service(ServiceError::NotFound))
             }
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn binding(grant: GrantId) -> Binding {
+        Binding {
+            grant,
+            pdfs: vec![],
+            created: Instant::now(),
+        }
+    }
+    fn id(n: usize) -> PreviewId {
+        PreviewId(format!("preview-{n}"))
+    }
+
+    /// Regression (#22 review P3): one grant opening many previews must not evict another
+    /// grant's binding (which would make that grant's commit fail as Forbidden).
+    #[test]
+    fn eviction_stays_within_the_inserting_grant() {
+        let a = GrantId(uuid::Uuid::now_v7());
+        let b = GrantId(uuid::Uuid::now_v7());
+        let mut bindings = Bindings::default();
+        bindings.insert(id(0), binding(b));
+        for n in 1..=BINDINGS_PER_GRANT * 4 {
+            bindings.insert(id(n), binding(a));
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        assert!(bindings.owned(&id(0), b).is_some());
+        let held_by_a = bindings.0.values().filter(|x| x.grant == a).count();
+        assert_eq!(held_by_a, BINDINGS_PER_GRANT);
+        // A's newest survive, its oldest were replaced.
+        assert!(bindings.owned(&id(BINDINGS_PER_GRANT * 4), a).is_some());
+        assert!(bindings.owned(&id(1), a).is_none());
+        // Global cap: the grant holding the most loses its oldest, not a smaller holder.
+        let mut bindings = Bindings::default();
+        let big = GrantId(uuid::Uuid::now_v7());
+        let mut n = 0;
+        let mut add = |bindings: &mut Bindings, grant| {
+            n += 1;
+            bindings.0.insert(id(n), binding(grant));
+        };
+        for _ in 0..BINDINGS_PER_GRANT {
+            add(&mut bindings, big);
+        }
+        let mut small = vec![];
+        while bindings.0.len() < MAX_BINDINGS {
+            let grant = GrantId(uuid::Uuid::now_v7());
+            small.push(grant);
+            for _ in 0..(BINDINGS_PER_GRANT - 1).min(MAX_BINDINGS - bindings.0.len()) {
+                add(&mut bindings, grant);
+            }
+        }
+        let count = |bindings: &Bindings, grant: GrantId| {
+            bindings.0.values().filter(|x| x.grant == grant).count()
+        };
+        let before: Vec<usize> = small.iter().map(|g| count(&bindings, *g)).collect();
+        bindings.insert(id(usize::MAX), binding(GrantId(uuid::Uuid::now_v7())));
+        let after: Vec<usize> = small.iter().map(|g| count(&bindings, *g)).collect();
+        assert_eq!(before, after);
+        assert_eq!(count(&bindings, big), BINDINGS_PER_GRANT - 1);
+        assert_eq!(bindings.0.len(), MAX_BINDINGS);
     }
 }

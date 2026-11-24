@@ -11,7 +11,7 @@ use cm_core::{
     policy::Capability,
     ports::AttachmentRepository,
 };
-use cm_metadata::fetch_policy::{FetchError, PdfFetcher, USER_DOWNLOAD_GUIDANCE};
+use cm_metadata::fetch_policy::{FetchError, PdfFetcher};
 use cm_protocol::jobs::{
     JobProgress,
     kinds::{self, CapturePdfFetch},
@@ -24,6 +24,30 @@ use std::{
 
 /// Directory (inside the private `<library>/daemon/`) for in-flight downloads.
 pub const DOWNLOAD_DIR: &str = "capture-downloads";
+
+/// Removes partial downloads (`pdf-*.part`) left by a daemon that stopped mid-fetch. Called
+/// at startup while holding the library lock, before any job runs; jobs re-download.
+/// Only regular files with that name pattern are removed. Returns how many were removed.
+pub fn sweep_stale_downloads(library: &std::path::Path) -> usize {
+    let dir = library.join("daemon").join(DOWNLOAD_DIR);
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return 0;
+    };
+    let mut removed = 0;
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        let partial = name.starts_with("pdf-") && name.ends_with(".part");
+        let regular = entry
+            .path()
+            .symlink_metadata()
+            .is_ok_and(|m| m.file_type().is_file());
+        if partial && regular && std::fs::remove_file(entry.path()).is_ok() {
+            removed += 1;
+        }
+    }
+    removed
+}
 
 pub struct CapturePdfFetchHandler {
     fetcher: PdfFetcher,
@@ -139,10 +163,10 @@ impl JobHandler for CapturePdfFetchHandler {
             Err(FetchError::Cancelled) if cancel.is_cancelled() => return Outcome::Cancelled,
             Err(FetchError::Cancelled) => return Outcome::Retryable("lease lost".into()),
             Err(e) if e.retryable() => return Outcome::Retryable(e.to_string()),
-            Err(e) if e.needs_user_download() => {
-                return Outcome::Fatal(format!("{e}. {USER_DOWNLOAD_GUIDANCE}"));
-            }
-            Err(e) => return Outcome::Fatal(e.to_string()),
+            Err(e) => match e.guidance() {
+                Some(guidance) => return Outcome::Fatal(format!("{e}. {guidance}")),
+                None => return Outcome::Fatal(e.to_string()),
+            },
         };
         if let Err(e) = temp
             .as_file_mut()
@@ -198,6 +222,31 @@ impl JobHandler for CapturePdfFetchHandler {
 
 #[cfg(test)]
 mod tests {
+    /// Regression (#22 review P3): partial downloads from a crash are cleaned at startup.
+    #[test]
+    fn startup_sweep_removes_only_partial_downloads() {
+        let library = tempfile::tempdir().unwrap();
+        let dir = library.path().join("daemon").join(super::DOWNLOAD_DIR);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("pdf-abc.part"), b"%PDF-partial").unwrap();
+        std::fs::write(dir.join("pdf-def.part"), b"").unwrap();
+        std::fs::write(dir.join("keep.txt"), b"x").unwrap();
+        std::fs::create_dir(dir.join("pdf-dir.part")).unwrap();
+        let outside = library.path().join("outside.part");
+        std::fs::write(&outside, b"x").unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&outside, dir.join("pdf-link.part")).unwrap();
+        assert_eq!(super::sweep_stale_downloads(library.path()), 2);
+        assert!(!dir.join("pdf-abc.part").exists());
+        assert!(dir.join("keep.txt").exists());
+        assert!(dir.join("pdf-dir.part").is_dir());
+        assert!(outside.exists());
+        // Missing directory is fine.
+        assert_eq!(
+            super::sweep_stale_downloads(&library.path().join("none")),
+            0
+        );
+    }
     #[test]
     fn display_names_are_inert() {
         assert_eq!(

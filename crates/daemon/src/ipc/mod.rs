@@ -172,6 +172,8 @@ pub fn start(config: DaemonConfig) -> Result<RunningDaemon, StartError> {
     let directory = LibraryDirectory::prepare(&paths.library).map_err(StartError::Storage)?;
     lifecycle::prepare_private_dir(&paths.state_dir)?;
     let lock = LibraryLock::try_acquire(&paths.lock)?.ok_or(StartError::AlreadyRunning)?;
+    // Only the lock holder runs jobs, so no fetch can be writing these right now.
+    crate::jobs::sweep_stale_downloads(directory.path());
     // The lock holder is the only migration runner. Upgrades take a pre-migration backup.
     let control = LibraryDb::open_with_safety_backups(&directory).map_err(StartError::Storage)?;
     let control = Arc::new(Mutex::new(control));
