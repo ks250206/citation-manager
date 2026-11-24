@@ -2,24 +2,72 @@ use super::*;
 impl LibraryView {
     pub(super) fn toolbar(&self, cx: &mut Context<Self>) -> Div {
         let enabled = !self.locked();
+        let tab = |id: &'static str, label: &'static str, screen: Screen| {
+            nav_item(id, label, self.screen == screen).px_3()
+        };
         div()
-            .p_3()
+            .px_4()
+            .py_2()
             .flex()
             .items_center()
             .gap_2()
-            .child(div().text_size(px(20.)).child("Citation Manager"))
+            .bg(rgb(SURFACE))
+            .border_b_1()
+            .border_color(rgb(BORDER))
             .child(
-                button("library", "Library", true).on_click(cx.listener(|this, _, _, cx| {
-                    this.screen = Screen::Library;
-                    cx.notify();
-                })),
+                div()
+                    .text_size(px(15.))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .mr_2()
+                    .child("Citation Manager"),
             )
             .child(
-                button("new", "New paper", enabled)
+                div()
+                    .flex()
+                    .gap_1()
+                    .p(px(2.))
+                    .rounded_md()
+                    .bg(rgb(SIDEBAR))
+                    .child(
+                        tab("library", "Library", Screen::Library).on_click(
+                            cx.listener(|this, _, w, cx| this.show(Screen::Library, w, cx)),
+                        ),
+                    )
+                    .child(
+                        tab(
+                            "review-tab",
+                            if self.reviews.needs_attention() {
+                                "Import review •"
+                            } else {
+                                "Import review"
+                            },
+                            Screen::Import,
+                        )
+                        .on_click(cx.listener(|this, _, w, cx| this.show(Screen::Import, w, cx))),
+                    )
+                    .child(tab("pdfs", "PDFs", Screen::Pdf).on_click(cx.listener(
+                        |this, _, _, cx| {
+                            if !this.locked() {
+                                this.invalidate_doi();
+                                this.load_pdf_form(this.pdf_row, cx);
+                                this.screen = Screen::Pdf;
+                                cx.notify();
+                            }
+                        },
+                    )))
+                    .child(
+                        tab("layout", "Organize & export", Screen::Settings).on_click(
+                            cx.listener(|this, _, w, cx| this.show(Screen::Settings, w, cx)),
+                        ),
+                    ),
+            )
+            .child(div().flex_1())
+            .child(
+                primary_button("new", "＋ New paper", enabled)
                     .on_click(cx.listener(|this, _, w, cx| this.new_paper(&New, w, cx))),
             )
             .child(
-                button("bibtex", "Import BibTeX", enabled).on_click(cx.listener(
+                button("bibtex", "Import BibTeX…", enabled).on_click(cx.listener(
                     |this, _, _, cx| {
                         if !this.locked() {
                             this.pick_bibliography(Format::Bibtex, cx);
@@ -28,58 +76,18 @@ impl LibraryView {
                 )),
             )
             .child(
-                button("ris", "Import RIS", enabled).on_click(cx.listener(|this, _, _, cx| {
+                button("ris", "Import RIS…", enabled).on_click(cx.listener(|this, _, _, cx| {
                     if !this.locked() {
                         this.pick_bibliography(Format::Ris, cx);
                     }
                 })),
             )
             .child(
-                button("pdfs", "PDF files / folder", enabled).on_click(cx.listener(
-                    |this, _, _, cx| {
-                        if !this.locked() {
-                            this.invalidate_doi();
-                            this.load_pdf_form(this.pdf_row, cx);
-                            this.screen = Screen::Pdf;
-                            cx.notify();
-                        }
-                    },
-                )),
-            )
-            .child(
-                button("layout", "Layout / organize / export", enabled).on_click(cx.listener(
-                    |this, _, _, cx| {
-                        this.screen = Screen::Settings;
-                        cx.notify();
-                    },
-                )),
-            )
-            .child(
-                button("review-tab", "Import review", true).on_click(cx.listener(
-                    |this, _, _, cx| {
-                        if this.locked() {
-                            return;
-                        }
-                        let cancelled = this.invalidate_doi();
-                        this.screen = Screen::Import;
-                        if cancelled {
-                            this.status(
-                                "DOI lookup cancelled; retained import review is unchanged",
-                                false,
-                                cx,
-                            );
-                        } else {
-                            cx.notify();
-                        }
-                    },
-                )),
-            )
-            .child(
-                button("reload", "Reload", !self.busy(Lane::Query))
+                button("reload", "↻", !self.busy(Lane::Query))
                     .on_click(cx.listener(|this, _, _, cx| this.reload(cx))),
             )
     }
-    fn filter(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn filter(&mut self, cx: &mut Context<Self>) {
         let text = |field: &Entity<TextInput>| {
             let text = field.read(cx).content.to_string();
             if text.trim().is_empty() {
@@ -125,89 +133,108 @@ impl LibraryView {
         self.reload(cx);
     }
     pub(super) fn library_screen(&self, cx: &mut Context<Self>) -> Div {
+        let filter = &self.library.query.filter;
+        let filtered = filter.keyword.is_some()
+            || filter.author.is_some()
+            || filter.year_from.is_some()
+            || filter.year_to.is_some()
+            || filter.paper_type.is_some()
+            || filter.has_pdf.is_some()
+            || filter.collection.is_some()
+            || !filter.tags.is_empty();
         div()
             .flex_1()
             .min_h_0()
             .flex()
-            .flex_col()
-            .child(
+            .when(!self.settings.reading, |el| el.child(self.navigation(cx)))
+            .when(!self.settings.reading, |el| el.child(
                 div()
-                    .px_3()
-                    .py_2()
+                    .flex_1()
+                    .min_w_0()
+                    .min_h_0()
                     .flex()
-                    .gap_2()
-                    .child(div().flex_1().child(self.search.clone()))
-                    .child(div().w(px(140.)).child(self.author.clone()))
-                    .child(div().w(px(90.)).child(self.year_from.clone()))
-                    .child(div().w(px(90.)).child(self.year_to.clone()))
-                    .child(div().w(px(110.)).child(self.paper_type.clone()))
+                    .flex_col()
                     .child(
-                        button("apply", "Search / filter", true)
-                            .on_click(cx.listener(|this, _, _, cx| this.filter(cx))),
-                    ),
-            )
-            .child(
-                div()
-                    .px_3()
-                    .pb_2()
-                    .flex()
-                    .gap_2()
-                    .child(line(
-                        "Metadata only · literal keywords · direct collection membership",
-                    ))
-                    .child(
-                        button(
-                            "has-pdf",
-                            format!(
-                                "PDF: {}",
-                                match self.library.query.filter.has_pdf {
-                                    None => "Any",
-                                    Some(true) => "Attached",
-                                    Some(false) => "None",
-                                }
+                        div()
+                            .px_3()
+                            .pt_3()
+                            .pb_2()
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .child(div().flex_1().min_w(px(160.)).child(self.search.clone()))
+                            .child(div().w(px(130.)).child(self.author.clone()))
+                            .child(div().w(px(88.)).child(self.year_from.clone()))
+                            .child(div().w(px(88.)).child(self.year_to.clone()))
+                            .child(div().w(px(100.)).child(self.paper_type.clone()))
+                            .child(
+                                primary_button("apply", "Search", true)
+                                    .on_click(cx.listener(|this, _, _, cx| this.filter(cx))),
                             ),
-                            true,
-                        )
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.library.query.filter.has_pdf =
-                                match this.library.query.filter.has_pdf {
-                                    None => Some(true),
-                                    Some(true) => Some(false),
-                                    Some(false) => None,
-                                };
-                            this.reload(cx);
-                        })),
                     )
                     .child(
-                        button("reset-filter", "Clear filters", true).on_click(cx.listener(
-                            |this, _, _, cx| {
-                                this.library.query.filter = LibraryFilter::default();
-                                for field in [
-                                    &this.search,
-                                    &this.author,
-                                    &this.year_from,
-                                    &this.year_to,
-                                    &this.paper_type,
-                                ] {
-                                    field.update(cx, |f, cx| f.set_text(String::new(), cx));
-                                }
-                                this.reload(cx);
-                            },
-                        )),
-                    ),
-            )
-            .child(
-                div()
-                    .flex()
-                    .flex_1()
-                    .min_h_0()
-                    .when(!self.settings.reading, |el| el.child(self.navigation(cx)))
-                    .when(!self.settings.reading, |el| el.child(self.table(cx)))
-                    .child(self.details_screen(cx)),
-            )
+                        div()
+                            .px_3()
+                            .pb_2()
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                button(
+                                    "has-pdf",
+                                    format!(
+                                        "PDF: {}",
+                                        match filter.has_pdf {
+                                            None => "any",
+                                            Some(true) => "attached",
+                                            Some(false) => "none",
+                                        }
+                                    ),
+                                    true,
+                                )
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.library.query.filter.has_pdf =
+                                        match this.library.query.filter.has_pdf {
+                                            None => Some(true),
+                                            Some(true) => Some(false),
+                                            Some(false) => None,
+                                        };
+                                    this.reload(cx);
+                                })),
+                            )
+                            .child(
+                                button("reset-filter", "Clear filters", filtered).on_click(
+                                    cx.listener(|this, _, _, cx| {
+                                        this.library.query.filter = LibraryFilter {
+                                            visibility: this.library.query.filter.visibility,
+                                            ..LibraryFilter::default()
+                                        };
+                                        for field in [
+                                            &this.search,
+                                            &this.author,
+                                            &this.year_from,
+                                            &this.year_to,
+                                            &this.paper_type,
+                                        ] {
+                                            field.update(cx, |f, cx| {
+                                                f.set_text(String::new(), cx)
+                                            });
+                                        }
+                                        this.reload(cx);
+                                    }),
+                                ),
+                            )
+                            .child(hint(
+                                "↩ to search · metadata only · literal keywords · direct collection membership",
+                            )),
+                    )
+                    .child(self.table(cx)),
+            ))
+            .child(self.details_screen(cx))
     }
     fn navigation(&self, cx: &mut Context<Self>) -> Stateful<Div> {
         let filter = &self.library.query.filter;
+        let trash = filter.visibility == cm_protocol::library_query::PaperVisibility::Deleted;
         let mut ordered = Vec::new();
         fn walk(
             org: &Organization,
@@ -226,14 +253,25 @@ impl LibraryView {
         walk(&self.organization, None, 0, &mut ordered);
         div()
             .id("navigation")
+            .h_full()
             .w(px(self.settings.navigation_width as f32))
             .flex_shrink_0()
-            .p_3()
+            .p_2()
+            .flex()
+            .flex_col()
+            .gap(px(2.))
             .overflow_y_scroll()
+            .bg(rgb(SIDEBAR))
             .border_r_1()
-            .border_color(rgb(0xd5dce5))
+            .border_color(rgb(BORDER))
+            .child(section("LIBRARY"))
             .child(
-                button("all", "All Papers", true).on_click(cx.listener(|this, _, _, cx| {
+                nav_item(
+                    "all",
+                    "📚  All papers",
+                    !trash && filter.collection.is_none(),
+                )
+                .on_click(cx.listener(|this, _, _, cx| {
                     this.library.query.filter.collection = None;
                     this.library.query.filter.visibility =
                         cm_protocol::library_query::PaperVisibility::Active;
@@ -241,68 +279,78 @@ impl LibraryView {
                 })),
             )
             .child(
-                button("trash", "Trash / restore", true).on_click(cx.listener(|this, _, _, cx| {
+                nav_item("trash", "🗑  Trash", trash).on_click(cx.listener(|this, _, _, cx| {
+                    this.library.query.filter.collection = None;
                     this.library.query.filter.visibility =
                         cm_protocol::library_query::PaperVisibility::Deleted;
                     this.reload(cx);
                 })),
             )
-            .child(line("Collections"))
-            .children(ordered.into_iter().enumerate().map(|(i, (c, depth))| {
-                let selected = filter.collection == Some(c.id);
-                let id = c.id;
-                button(
-                    ("collection", i),
-                    format!("{}{}", if selected { "▸ " } else { "" }, c.name),
-                    true,
+            .child(section("COLLECTIONS"))
+            .when(ordered.is_empty(), |el| {
+                el.child(
+                    div()
+                        .px_2()
+                        .child(hint("None yet — create one in Organize & export")),
                 )
-                .w_full()
-                .pl(px(12. + depth as f32 * 16.))
+            })
+            .children(ordered.into_iter().enumerate().map(|(i, (c, depth))| {
+                let id = c.id;
+                nav_item(
+                    ("collection", i),
+                    format!("📁  {}", c.name),
+                    filter.collection == Some(id),
+                )
+                .pl(px(8. + depth as f32 * 14.))
                 .on_click(cx.listener(move |this, _, _, cx| {
                     this.library.query.filter.collection = Some(id);
+                    this.library.query.filter.visibility =
+                        cm_protocol::library_query::PaperVisibility::Active;
                     this.reload(cx);
                 }))
             }))
-            .child(line("Tags"))
             .child(
-                button(
-                    "tag-mode",
-                    format!(
-                        "Match tags: {}",
-                        if filter.tag_match == TagMatch::All {
-                            "AND"
-                        } else {
-                            "OR"
-                        }
-                    ),
-                    true,
-                )
-                .on_click(cx.listener(|this, _, _, cx| {
-                    this.library.query.filter.tag_match =
-                        if this.library.query.filter.tag_match == TagMatch::All {
-                            TagMatch::Any
-                        } else {
-                            TagMatch::All
-                        };
-                    this.reload(cx);
-                })),
+                div()
+                    .flex()
+                    .items_center()
+                    .child(div().flex_1().child(section("TAGS")))
+                    .when(!self.organization.tags.is_empty(), |el| {
+                        el.child(
+                            nav_item(
+                                "tag-mode",
+                                if filter.tag_match == TagMatch::All {
+                                    "match all"
+                                } else {
+                                    "match any"
+                                },
+                                false,
+                            )
+                            .mt_2()
+                            .text_size(px(11.))
+                            .text_color(rgb(ACCENT_TEXT))
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.library.query.filter.tag_match =
+                                    if this.library.query.filter.tag_match == TagMatch::All {
+                                        TagMatch::Any
+                                    } else {
+                                        TagMatch::All
+                                    };
+                                this.reload(cx);
+                            })),
+                        )
+                    }),
             )
+            .when(self.organization.tags.is_empty(), |el| {
+                el.child(div().px_2().child(hint("None yet")))
+            })
             .children(self.organization.tags.iter().enumerate().map(|(i, t)| {
                 let id = t.id;
-                button(
+                let on = filter.tags.contains(&id);
+                nav_item(
                     ("tag", i),
-                    format!(
-                        "{} {}",
-                        if filter.tags.contains(&id) {
-                            "☑"
-                        } else {
-                            "☐"
-                        },
-                        t.name
-                    ),
-                    true,
+                    format!("{} #{}", if on { "☑" } else { "☐" }, t.name),
+                    on,
                 )
-                .w_full()
                 .on_click(cx.listener(move |this, _, _, cx| {
                     if let Some(n) = this.library.query.filter.tags.iter().position(|t| *t == id) {
                         this.library.query.filter.tags.remove(n);
@@ -313,78 +361,119 @@ impl LibraryView {
                 }))
             }))
     }
-    fn table(&self, cx: &mut Context<Self>) -> Div {
+    fn table(&self, cx: &mut Context<Self>) -> Stateful<Div> {
         let columns = self.settings.columns.clone();
+        let sort = self.library.query.sort;
+        let focused_table = self.table_focus.clone();
         div()
+            .id("paper-table")
+            .track_focus(&self.table_focus)
+            .key_context("PaperTable")
+            .on_action(cx.listener(Self::select_next))
+            .on_action(cx.listener(Self::select_previous))
+            .on_action(cx.listener(Self::edit_selected))
             .flex()
             .flex_col()
             .flex_1()
             .min_w_0()
             .min_h_0()
-            .child(div().px_3().py_2().child(format!(
-                "Page {} · {} rows · {} selected{}",
-                self.library.previous.len() + 1,
-                self.library.papers.len(),
-                self.library.selected.len(),
-                if self.busy(Lane::Query) {
-                    " · Loading…"
-                } else {
-                    ""
-                }
-            )))
+            .mx_3()
+            .mb_2()
+            .rounded_md()
+            .border_1()
+            .border_color(rgb(BORDER))
+            .bg(rgb(SURFACE))
+            .overflow_hidden()
             .child(
                 div()
                     .id("columns")
                     .overflow_x_scroll()
                     .flex_shrink_0()
+                    .bg(rgb(0xf8f9fb))
+                    .border_b_1()
+                    .border_color(rgb(BORDER))
                     .child(
-                        div().flex().children(
+                        div().flex().min_w_full().children(
                             columns
                                 .iter()
                                 .enumerate()
                                 .filter(|(_, c)| c.visible)
                                 .map(|(i, c)| {
-                                    button(("column", i), c.name.clone(), true)
-                                        .w(px(c.width as f32))
+                                    // Only Title and Year have a server-side sort key.
+                                    let field = match i {
+                                        0 => Some(SortField::Title),
+                                        1 => Some(SortField::Year),
+                                        _ => None,
+                                    };
+                                    let arrow = match (field, sort.direction) {
+                                        (Some(f), SortDirection::Asc) if f == sort.field => " ▲",
+                                        (Some(f), SortDirection::Desc) if f == sort.field => " ▼",
+                                        _ => "",
+                                    };
+                                    // Title absorbs spare width so rows span the table.
+                                    div()
+                                        .id(("column", i))
+                                        .when(i == 0, |el| el.flex_1().min_w(px(c.width as f32)))
+                                        .when(i != 0, |el| el.w(px(c.width as f32)))
                                         .flex_shrink_0()
-                                        .on_click(cx.listener(move |this, _, _, cx| {
-                                            if i >= 2 {
-                                                return;
-                                            }
-                                            let field = match i {
-                                                0 => SortField::Title,
-                                                1 => SortField::Year,
-                                                _ => SortField::Id,
-                                            };
-                                            if this.library.query.sort.field == field {
-                                                this.library.query.sort.direction =
-                                                    if this.library.query.sort.direction
-                                                        == SortDirection::Asc
-                                                    {
-                                                        SortDirection::Desc
+                                        .px_3()
+                                        .py_1()
+                                        .text_size(px(12.))
+                                        .font_weight(FontWeight::SEMIBOLD)
+                                        .text_color(rgb(MUTED))
+                                        .whitespace_nowrap()
+                                        .child(format!("{}{arrow}", c.name))
+                                        .when_some(field, |el, field| {
+                                            el.cursor_pointer()
+                                                .hover(|s| s.bg(rgb(0xeef1f5)))
+                                                .on_click(cx.listener(move |this, _, _, cx| {
+                                                    let sort = &mut this.library.query.sort;
+                                                    if sort.field == field {
+                                                        sort.direction =
+                                                            if sort.direction == SortDirection::Asc {
+                                                                SortDirection::Desc
+                                                            } else {
+                                                                SortDirection::Asc
+                                                            };
                                                     } else {
-                                                        SortDirection::Asc
-                                                    };
-                                            } else {
-                                                this.library.query.sort = LibrarySort {
-                                                    field,
-                                                    direction: SortDirection::Asc,
-                                                };
-                                            }
-                                            this.settings.sort = this.library.query.sort;
-                                            this.persist(cx);
-                                            this.reload(cx);
-                                        }))
+                                                        *sort = LibrarySort {
+                                                            field,
+                                                            direction: SortDirection::Asc,
+                                                        };
+                                                    }
+                                                    this.settings.sort = this.library.query.sort;
+                                                    this.persist(cx);
+                                                    this.reload(cx);
+                                                }))
+                                        })
                                 }),
                         ),
                     ),
             )
             .when(self.library.papers.is_empty(), |el| {
-                el.child(div().p_4().child(if self.busy(Lane::Query) {
-                    "Loading library…"
-                } else {
-                    "No matching papers. Clear filters, add a paper, or reload."
-                }))
+                let trash = self.library.query.filter.visibility
+                    == cm_protocol::library_query::PaperVisibility::Deleted;
+                el.child(
+                    div()
+                        .p_6()
+                        .flex()
+                        .flex_col()
+                        .items_center()
+                        .gap_2()
+                        .text_color(rgb(MUTED))
+                        .child(if self.busy(Lane::Query) {
+                            "Loading library…"
+                        } else if trash {
+                            "Trash is empty."
+                        } else {
+                            "No matching papers."
+                        })
+                        .when(!self.busy(Lane::Query) && !trash, |el| {
+                            el.child(hint(
+                                "Add one with ＋ New paper (⌘N), import BibTeX/RIS, or clear filters.",
+                            ))
+                        }),
+                )
             })
             .child(
                 uniform_list(
@@ -403,31 +492,45 @@ impl LibraryView {
                                     b.paper_type.clone().unwrap_or_default(),
                                     b.doi.clone().unwrap_or_default(),
                                 ];
+                                let focus = focused_table.clone();
                                 div()
                                     .id(index)
-                                    .h(px(42.))
+                                    .w_full()
+                                    .h(px(32.))
                                     .flex()
                                     .items_center()
-                                    .bg(rgb(if selected { 0xe0eaff } else { 0xffffff }))
-                                    .border_b_1()
-                                    .border_color(rgb(0xe4e8ee))
+                                    .bg(rgb(if selected {
+                                        ACCENT_SOFT
+                                    } else if index % 2 == 1 {
+                                        0xfafbfc
+                                    } else {
+                                        SURFACE
+                                    }))
+                                    .when(selected, |el| el.text_color(rgb(ACCENT_TEXT)))
+                                    .when(!selected, |el| el.hover(|s| s.bg(rgb(0xf0f4fa))))
                                     .overflow_hidden()
                                     .cursor_pointer()
                                     .children(
-                                        columns.iter().zip(values).filter(|(c, _)| c.visible).map(
-                                            |(c, v)| {
+                                        columns.iter().zip(values).enumerate().filter(|(_, (c, _))| c.visible).map(
+                                            |(i, (c, v))| {
                                                 div()
-                                                    .w(px(c.width as f32))
+                                                    .when(i == 0, |el| {
+                                                        el.flex_1().min_w(px(c.width as f32))
+                                                    })
+                                                    .when(i != 0, |el| el.w(px(c.width as f32)))
                                                     .flex_shrink_0()
                                                     .px_3()
                                                     .overflow_hidden()
                                                     .text_ellipsis()
+                                                    .whitespace_nowrap()
+                                                    .when(i > 0, |el| el.text_color(rgb(if selected { ACCENT_TEXT } else { MUTED })))
                                                     .child(v)
                                             },
                                         ),
                                     )
                                     .on_click(cx.listener(
-                                        move |this, event: &ClickEvent, _, cx| {
+                                        move |this, event: &ClickEvent, window, cx| {
+                                            focus.focus(window, cx);
                                             this.select(
                                                 id,
                                                 event.modifiers().platform
@@ -440,18 +543,41 @@ impl LibraryView {
                             .collect()
                     }),
                 )
+                .track_scroll(&self.rows)
                 .flex_1()
                 .min_h_0(),
             )
             .child(
                 div()
-                    .p_2()
+                    .px_3()
+                    .py_1()
                     .flex()
+                    .items_center()
                     .gap_2()
+                    .border_t_1()
+                    .border_color(rgb(BORDER))
+                    .bg(rgb(0xf8f9fb))
+                    .child(
+                        hint(format!(
+                            "Page {} · {} papers{}{}",
+                            self.library.previous.len() + 1,
+                            self.library.papers.len(),
+                            match self.library.selected.len() {
+                                0 => String::new(),
+                                n => format!(" · {n} selected"),
+                            },
+                            if self.busy(Lane::Query) {
+                                " · loading…"
+                            } else {
+                                ""
+                            }
+                        ))
+                        .flex_1(),
+                    )
                     .child(
                         button(
                             "previous",
-                            "Previous page",
+                            "‹ Previous",
                             !self.library.previous.is_empty() && !self.busy(Lane::Query),
                         )
                         .on_click(cx.listener(|this, _, _, cx| {
@@ -468,7 +594,7 @@ impl LibraryView {
                     .child(
                         button(
                             "next",
-                            "Next page",
+                            "Next ›",
                             self.library.next.is_some() && !self.busy(Lane::Query),
                         )
                         .on_click(cx.listener(|this, _, _, cx| {

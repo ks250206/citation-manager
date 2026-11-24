@@ -63,7 +63,9 @@ python3 scripts/prepare_native_smoke.py --deny-network
 ```
 
 ⌘N で新規、Info の metadata を入力し ⌘S で共通 preview を開き、明示的な decisions を確認して保存します。
-保存済み文献はテーブルから選んで編集し、⌘S で更新。⌘F で metadata 検索欄へ移動します。
+保存済み文献はテーブルから選んで編集し、⌘S で更新。⌘F で metadata 検索欄へ移動し、↩ で検索します。
+テーブルでは ↑/↓ で選択移動、↩ で Title 欄へ移動、Esc で入力欄からテーブルへ戻ります。
+⌘1 Library、⌘2 Import review、⌘, Organize & export。未保存の編集は下部ステータスバーに表示されます。
 ⌘Q で完全終了し、同じ library/settings で再起動します。
 既定の実ライブラリは自動接続しません。HTTP/IPC listener はありません。
 現在の追加経路は新規 metadata の preview、DOI（read-only）、UTF-8 BibTeX/RIS、PDF files/folder。

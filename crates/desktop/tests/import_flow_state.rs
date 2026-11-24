@@ -184,3 +184,17 @@ fn editing_or_cancelling_doi_never_cancels_attach_retry_or_commit_and_reverse_is
         assert!(!pdf_retry.is_cancelled());
     }
 }
+
+#[test]
+fn review_tab_needs_attention_only_for_pending_or_paused_reviews() {
+    let mut sessions = ReviewSessions::default();
+    assert!(!sessions.needs_attention());
+    sessions.active.set_preview(preview("manual"));
+    assert!(sessions.needs_attention());
+    sessions.cancel_active(|_| Ok(())).unwrap();
+    assert!(!sessions.needs_attention());
+    sessions.active = file_review();
+    sessions.pause_file(|_| Ok(())).unwrap();
+    assert!(sessions.active.preview.is_none());
+    assert!(sessions.needs_attention());
+}

@@ -9,6 +9,10 @@ pub struct ReviewSessions {
     pub replaced_file: Option<String>,
 }
 impl ReviewSessions {
+    /// A preview awaits decisions or a bibliography file is paused mid-review.
+    pub fn needs_attention(&self) -> bool {
+        self.active.preview.is_some() || self.paused_file.is_some()
+    }
     pub fn cancel_active(
         &mut self,
         mut cancel: impl FnMut(&PreviewId) -> Result<(), ServiceError>,

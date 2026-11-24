@@ -70,6 +70,27 @@ impl Library {
         self.next = page.next;
         true
     }
+    /// Row reached by moving `delta` rows from the most recently selected visible
+    /// paper. With no visible selection, Down starts at the first row and Up at
+    /// the last. Movement clamps to the loaded page; paging stays explicit.
+    pub fn adjacent(&self, delta: isize) -> Option<PaperId> {
+        let last = self.papers.len().checked_sub(1)?;
+        let current = self
+            .selected
+            .iter()
+            .rev()
+            .find_map(|id| self.papers.iter().position(|p| p.id == *id));
+        let index = match current {
+            Some(i) => i.saturating_add_signed(delta).min(last),
+            None if delta < 0 => last,
+            None => 0,
+        };
+        Some(self.papers[index].id)
+    }
+    /// Position of a paper in the loaded page, used to keep it scrolled into view.
+    pub fn index_of(&self, id: PaperId) -> Option<usize> {
+        self.papers.iter().position(|p| p.id == id)
+    }
     pub fn select(&mut self, id: PaperId, multiple: bool) {
         if !multiple {
             self.selected.clear();
