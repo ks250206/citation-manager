@@ -65,3 +65,33 @@ the shared host); no repository setting was changed.
 - Live Crossref/DataCite during a capture and real publisher pages (offline fixtures only).
 - Real DNS/TLS fetches from the internet (the policy and pinning are exercised against the
   loopback fixture server with an injected resolver).
+
+## Review fixes (after independent review of PR #63)
+
+Merged `origin/claude/issue-25-daemon-ipc` @ `40f7699` first: it includes `378f454`, the storage
+`prepare()` fix for the concurrent-mkdir race behind the `daemon_lifecycle` flake noted above.
+Each fix has a regression test:
+
+| Finding | Fix | Regression test |
+|---|---|---|
+| P1 `decode` sliced a str at byte 12 (panic on multibyte after `&`) | byte search for `;` | `html::tests::decode_never_splits_multibyte_characters` |
+| P1 a panic killed the network worker | `catch_unwind` per item; `ReplyOnce` replies with an error if the item unwinds; provider service rebuilt | `desktop_worker::resolver_tests::a_panicking_item_replies_with_an_error_and_the_worker_keeps_serving` |
+| P1/P2 quadratic scan on unterminated tags/quotes | 80 KiB tag window; EOF inside a tag ends the scan; oversized tag skipped to next `>`; 16 MiB total parse budget with `truncated` diagnostic | `html::tests::unterminated_tags_and_quotes_scan_in_bounded_work` (2 MiB `<a `, unterminated quote, `<a x='>` flood; asserts the work counter) |
+| P2 DNS wait not counted, not cancellable, unbounded threads | budget recomputed after DNS; lookup bounded by min(I/O, remaining) and polls cancel; ≤ 4 lookups in flight per fetcher | `fetch_policy::tests::dns_wait_is_cancellable_bounded_and_counts_against_the_deadline` |
+| P3 gzip/br reported as NotPdf | `FetchError::Encoded` with its own guidance (`FetchError::guidance`) | `fetch_policy::tests::rejects_non_pdf_auth_size_and_classifies_retries` |
+| P3 stale `.part` files | swept at startup under the library lock (regular `pdf-*.part` files only) | `jobs::capture::tests::startup_sweep_removes_only_partial_downloads`, `daemon_capture::native_host_capture_saves_paper_then_fetches_public_pdf` |
+| P3 `pdf_error` used Debug | `Display` for `WireError` | `ipc::wire_errors_display_for_users` (cm-protocol) |
+| P3 binding eviction across grants | 8 per grant (own oldest replaced), 256 global evicting from the largest holder | `ipc::capture::tests::eviction_stays_within_the_inserting_grant` |
+| P3 Retry-After | documented as ignored (ADR, `FetchError::retryable` doc) | n/a |
+| P3 test feature in release builds | `check_architecture.py` rejects `loopback-test-server` outside dev-dependency edges and in any default/feature table; `cargo tree --workspace -e normal,build,features -i cm-metadata` shows 0 occurrences | `scripts/test_validation.py` `test_test_only_features_stay_on_dev_dependencies` |
+
+Verification after the fixes (same environment and disk settings):
+
+| Command | Result |
+|---|---|
+| `cargo fmt --all -- --check` | passed |
+| `cargo clippy --workspace --all-targets --locked -- -D warnings` | passed |
+| `cargo test --workspace --locked --no-fail-fast` | passed: 298 tests, 0 failed, 0 ignored (56 groups) |
+| `python3 scripts/check_architecture.py` | passed |
+| `python3 scripts/check_migrations.py --base origin/main` | passed |
+| `python3 -m unittest discover -s scripts -p 'test_*.py'` | passed: 33 |

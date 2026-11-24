@@ -54,9 +54,16 @@ extra JSON are shed in that order with a diagnostic; nothing is truncated mid-va
 - `CaptureRequest` bounds: page URL ≤ 4 KiB, title ≤ 16 KiB, HTML ≤ 2 MiB, ≤ 1024 meta tags
   (name ≤ 256 B, content ≤ 64 KiB), ≤ 32 JSON-LD blocks of ≤ 512 KiB, 4 MiB in total; checked
   before any work (the IPC request frame is 8 MiB).
-- The HTML scanner is linear and inert: no DOM, no script execution, comments/`<script>`/
-  `<style>`/`<template>` bodies skipped (only `application/ld+json` is read), basic and numeric
-  entities only, ≤ 100k tags, bounded collections. Truncated or malformed markup ends the scan.
+- The HTML scanner is inert and work-bounded: no DOM, no script execution, comments/
+  `<script>`/`<style>`/`<template>` bodies skipped (only `application/ld+json` is read), basic
+  and numeric entities only (decoded on char boundaries), ≤ 100k tags, bounded collections.
+  One tag may span at most 80 KiB; the tag parser examines at most 16 MiB in total per scan.
+  A tag or quoted value that runs to the end of the input ends the scan (as in an HTML parser),
+  an oversized tag is skipped to the next `>`, a bare `<` in text costs one byte, and an
+  exhausted budget stops the scan with a `html` diagnostic.
+- Capture extraction and the DOI complement run on the daemon's network worker. A panic in one
+  item is contained (`catch_unwind`): that request gets an error reply and later requests are
+  still served.
 - Page values are data. They are never used as commands, local paths, endpoints or file names
   (the attachment display name is derived from the final URL's last segment and restricted to
   `[A-Za-z0-9._-]`; storage is content-addressed). Unknown JSON fields in the request (e.g. a
@@ -74,7 +81,9 @@ local file access, network lookup outside a capture, or job control.
 
 - Capture previews are bound to the creating grant; another grant gets `Forbidden(CaptureSave /
   CaptureCancel)` and cannot learn whether the preview exists. Bindings expire after 330 s
-  (longer than the coordinator's 300 s preview lifetime) and are capped at 64.
+  (longer than the coordinator's 300 s preview lifetime). Each grant holds at most 8; a ninth
+  replaces that grant's own oldest, so one grant cannot evict another's. A daemon-wide safety
+  cap of 256 evicts from the grant holding the most.
 - Without `LibraryRead` duplicate matches are redacted (as for #25 import previews). Without
   `LibraryWrite` only `Create`/`Skip` are accepted; `Merge` is `Forbidden(ImportCommit)`.
   An exact duplicate therefore cannot be created by the native host (#33 rule); the user
@@ -95,12 +104,12 @@ local file access, network lookup outside a capture, or job control.
 | URL | no userinfo, default port only, ≤ 4 KiB, no whitespace/control characters |
 | Host names | reject single-label, `localhost`, `.local`, `.localdomain`, `.internal`, `.intranet`, `.lan`, `.home`, `.corp`, `.home.arpa`, `.arpa`, `.invalid`, `.test`, `.onion` |
 | Addresses | public unicast only, for IP literals (incl. decimal/hex IPv4 forms) and **every** DNS answer: no 0/8, 10/8, 100.64/10, 127/8, 169.254/16, 172.16/12, 192.0.0/24, 192.0.2/24, 192.88.99/24, 192.168/16, 198.18/15, 198.51.100/24, 203.0.113/24, multicast/reserved/broadcast; IPv6 must be 2000::/3 minus documentation, 2001::/23, 6to4 and 3fff::/20; IPv4-mapped IPv6 is judged as IPv4 |
-| DNS | resolved by the policy (≤ I/O timeout), all answers checked, connection pinned to exactly those addresses (`resolve_to_addrs`); every other name is refused by the client's resolver, so no rebinding between check and connect |
+| DNS | resolved by the policy on a helper thread, bounded by min(I/O timeout, remaining fetch budget) with cancellation polled while waiting; at most 4 lookups in flight per fetcher (more fail fast as retryable); the HTTP hop gets only the budget left after DNS; all answers checked, connection pinned to exactly those addresses (`resolve_to_addrs`); every other name is refused by the client's resolver, so no rebinding between check and connect |
 | Redirects | followed manually, ≤ 5, each hop re-validated (scheme, host, port, DNS) |
 | Requests | GET, `Accept: application/pdf`, `Accept-Encoding: identity`, identifying User-Agent; no cookies (no cookie store), no credentials, no `Referer`, no ambient proxy, no implicit retries |
-| Response | 200 only; 401/403/407 → `AuthRequired`, 404/410 → `NotFound`; Content-Type must be PDF-compatible (`application/pdf`, `application/x-pdf`, octet-stream variants) or absent; no content encoding; `%PDF-` within the first 1024 bytes |
+| Response | 200 only; 401/403/407 → `AuthRequired`, 404/410 → `NotFound`; Content-Type must be PDF-compatible (`application/pdf`, `application/x-pdf`, octet-stream variants) or absent; a `Content-Encoding` other than identity → `Encoded` (own message and guidance, not retried); `%PDF-` within the first 1024 bytes |
 | Size/time | 64 MiB (≤ 256 MiB) via Content-Length and while streaming; 120 s total (≤ 600 s); 15 s connect and between chunks |
-| Output | streamed into a private temp file under `<library>/daemon/capture-downloads/` while hashing SHA-256 |
+| Output | streamed into a private temp file (`pdf-*.part`) under `<library>/daemon/capture-downloads/` while hashing SHA-256; leftovers from a crash are removed at daemon startup under the library lock |
 
 Authenticated PDFs are never bypassed: no browser cookies or tokens are forwarded, and a
 401/403 or an HTML (login/landing) response fails at once with guidance to download the PDF in
@@ -123,8 +132,9 @@ carries the job status (or `pdf_error` if submission failed — the paper is sti
   engine's bounded backoff; 4 attempts; deadline 24 h. Policy blocks, redirects limits, auth,
   non-PDF, not found and size violations fail at once. Failed/cancelled jobs can be retried
   explicitly by the owner (`CaptureCommand::RetryPdf`) or a GrantAdmin (`JobCommand::Retry`).
-- Retry-After is not honored beyond the engine backoff (a 429 is retried at the next backoff
-  step, still bounded by the attempt limit).
+- `Retry-After` is ignored: a 429/503 is retried on the engine's own backoff schedule, still
+  bounded by the attempt limit and deadline.
+- `pdf_error` in the commit reply is the user-facing (`Display`) text of the submission error.
 
 ## Known limits
 
@@ -132,6 +142,10 @@ carries the job status (or `pdf_error` if submission failed — the paper is sti
   attachment write between a capture preview and its commit makes the commit fail with
   `Conflict`; the client must preview again. Clients should commit promptly; the #18 revision
   refinement is the long-term fix.
+- The `loopback-test-server` feature (loopback-permitting policy, fixture server) is enabled
+  only by `cm-daemon`'s dev-dependency. `scripts/check_architecture.py` rejects it on any normal
+  or build dependency edge, in any default or feature table; `cargo tree -e normal,build,features`
+  shows it absent from non-test builds.
 - The coordinator retains at most 4 previews daemon-wide; parallel unfinished captures beyond
   that fail with a capacity error until one is committed, cancelled or expires.
 - No site-specific extractors (DESIGN §8.2 step 4) and no PMID provider. Live Crossref/DataCite

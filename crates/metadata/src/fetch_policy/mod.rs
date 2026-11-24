@@ -19,7 +19,11 @@ use sha2::{Digest, Sha256};
 use std::{
     io::Write,
     net::{IpAddr, Ipv4Addr, SocketAddr, ToSocketAddrs},
-    sync::{Arc, mpsc},
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+        mpsc,
+    },
     time::{Duration, Instant},
 };
 
@@ -29,6 +33,10 @@ pub mod test_server;
 mod tests;
 
 pub const MAX_PDF_BYTES: u64 = 256 * 1024 * 1024;
+/// Name lookups (blocking getaddrinfo on helper threads) one fetcher may have in flight.
+/// A lookup that outlives its timeout keeps its thread until the OS resolver returns; past
+/// this bound new fetches fail fast (retryable) instead of piling up threads.
+pub const MAX_DNS_IN_FLIGHT: usize = 4;
 const MAGIC_WINDOW: usize = 1024;
 
 #[derive(Debug, Clone)]
@@ -73,6 +81,8 @@ pub enum FetchError {
     NotFound(u16),
     /// Wrong Content-Type or missing `%PDF-` magic (often a login or landing page).
     NotPdf(String),
+    /// The server compressed the body (`Content-Encoding`) although identity was requested.
+    Encoded(String),
     TooLarge,
     Http(u16),
     Timeout,
@@ -82,7 +92,8 @@ pub enum FetchError {
     Sink(String),
 }
 impl FetchError {
-    /// Transient failures worth another automatic attempt.
+    /// Transient failures worth another automatic attempt. `Retry-After` is not read: a
+    /// retryable 429/503 is retried on the job engine's own bounded backoff schedule.
     pub fn retryable(&self) -> bool {
         match self {
             Self::Timeout | Self::Network | Self::Sink(_) => true,
@@ -93,6 +104,14 @@ impl FetchError {
     /// The page or server requires the user's own access: guide to an explicit import.
     pub fn needs_user_download(&self) -> bool {
         matches!(self, Self::AuthRequired(_) | Self::NotPdf(_))
+    }
+    /// What the user can do instead, when an automatic retry will not help.
+    pub fn guidance(&self) -> Option<&'static str> {
+        match self {
+            Self::AuthRequired(_) | Self::NotPdf(_) => Some(USER_DOWNLOAD_GUIDANCE),
+            Self::Encoded(_) => Some(ENCODED_GUIDANCE),
+            _ => None,
+        }
     }
 }
 impl std::fmt::Display for FetchError {
@@ -105,6 +124,11 @@ impl std::fmt::Display for FetchError {
             }
             Self::NotFound(c) => write!(f, "HTTP {c}: PDF not found"),
             Self::NotPdf(r) => write!(f, "response is not a PDF: {r}"),
+            Self::Encoded(e) => write!(
+                f,
+                "the server sent the file with Content-Encoding {e} although an uncompressed \
+                 download was requested; compressed downloads are not accepted"
+            ),
             Self::TooLarge => f.write_str("PDF exceeds the size limit"),
             Self::Http(c) => write!(f, "HTTP {c}"),
             Self::Timeout => f.write_str("timed out"),
@@ -116,6 +140,11 @@ impl std::fmt::Display for FetchError {
     }
 }
 impl std::error::Error for FetchError {}
+
+/// Guidance shown when the server only delivers a compressed body.
+pub const ENCODED_GUIDANCE: &str = "The paper was saved without the PDF because this server \
+only sends it compressed. Download the PDF in your browser and attach the file explicitly \
+(PDF > Attach to the saved paper).";
 
 /// Guidance shown when a PDF needs the user's own browser access.
 pub const USER_DOWNLOAD_GUIDANCE: &str = "The PDF is not publicly downloadable. The paper was saved without it; \
@@ -311,13 +340,26 @@ impl reqwest::dns::Resolve for DenyResolver {
 pub struct PdfFetcher {
     policy: FetchPolicy,
     resolver: Arc<dyn HostResolver>,
+    /// Lookup threads still running (including ones whose fetch already gave up).
+    dns_in_flight: Arc<AtomicUsize>,
+}
+/// Decrements the in-flight lookup count when the lookup thread ends.
+struct InFlight(Arc<AtomicUsize>);
+impl Drop for InFlight {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
+    }
 }
 impl PdfFetcher {
     pub fn new(policy: FetchPolicy) -> Self {
         Self::with_resolver(policy, Arc::new(SystemResolver))
     }
     pub fn with_resolver(policy: FetchPolicy, resolver: Arc<dyn HostResolver>) -> Self {
-        Self { policy, resolver }
+        Self {
+            policy,
+            resolver,
+            dns_in_flight: Arc::new(AtomicUsize::new(0)),
+        }
     }
     pub fn policy(&self) -> &FetchPolicy {
         &self.policy
@@ -349,13 +391,17 @@ impl PdfFetcher {
             if cancel.is_cancelled() {
                 return Err(FetchError::Cancelled);
             }
-            let remaining = self
-                .policy
-                .total_timeout
-                .checked_sub(started.elapsed())
-                .filter(|d| !d.is_zero())
-                .ok_or(FetchError::Timeout)?;
-            let client = self.client_for(&current, remaining)?;
+            let left = || {
+                self.policy
+                    .total_timeout
+                    .checked_sub(started.elapsed())
+                    .filter(|d| !d.is_zero())
+                    .ok_or(FetchError::Timeout)
+            };
+            let pinned = self.pin(&current, left()?, cancel)?;
+            // The lookup used part of the budget: the HTTP hop gets only what is left.
+            let remaining = left()?;
+            let client = self.client_for(pinned, remaining)?;
             let hop = runtime.block_on(cancellable(
                 self.hop(&client, &current, sink, cancel, progress),
                 cancel,
@@ -380,8 +426,29 @@ impl PdfFetcher {
         }
     }
 
+    /// The validated addresses of the hop's host (none for an IP literal).
+    fn pin(
+        &self,
+        url: &Url,
+        remaining: Duration,
+        cancel: &Cancellation,
+    ) -> Result<Option<(String, Vec<SocketAddr>)>, FetchError> {
+        let Some(Host::Name(name)) = host(url) else {
+            return Ok(None);
+        };
+        let port = url
+            .port_or_known_default()
+            .ok_or_else(|| FetchError::Blocked("unknown port".into()))?;
+        let addrs = self.resolve_checked(name, port, remaining, cancel)?;
+        Ok(Some((name.to_owned(), addrs)))
+    }
+
     /// One client per hop, pinned to the validated addresses of that hop's host.
-    fn client_for(&self, url: &Url, remaining: Duration) -> Result<Client, FetchError> {
+    fn client_for(
+        &self,
+        pinned: Option<(String, Vec<SocketAddr>)>,
+        remaining: Duration,
+    ) -> Result<Client, FetchError> {
         let mut builder = Client::builder()
             .user_agent(&self.policy.user_agent)
             .timeout(remaining)
@@ -392,32 +459,58 @@ impl PdfFetcher {
             .retry(reqwest::retry::never())
             .no_proxy()
             .dns_resolver(DenyResolver);
-        if let Some(Host::Name(name)) = host(url) {
-            let port = url
-                .port_or_known_default()
-                .ok_or_else(|| FetchError::Blocked("unknown port".into()))?;
-            let addrs = self.resolve_checked(name, port)?;
-            builder = builder.resolve_to_addrs(name, &addrs);
+        if let Some((name, addrs)) = pinned {
+            builder = builder.resolve_to_addrs(&name, &addrs);
         }
         builder
             .build()
             .map_err(|_| FetchError::InvalidConfig("HTTP client".into()))
     }
 
-    fn resolve_checked(&self, name: &str, port: u16) -> Result<Vec<SocketAddr>, FetchError> {
+    /// Resolves on a helper thread, bounded by min(I/O timeout, remaining budget), polling
+    /// cancellation while waiting. At most `MAX_DNS_IN_FLIGHT` lookups run at once.
+    fn resolve_checked(
+        &self,
+        name: &str,
+        port: u16,
+        remaining: Duration,
+        cancel: &Cancellation,
+    ) -> Result<Vec<SocketAddr>, FetchError> {
+        let claimed = self
+            .dns_in_flight
+            .try_update(Ordering::SeqCst, Ordering::SeqCst, |n| {
+                (n < MAX_DNS_IN_FLIGHT).then_some(n + 1)
+            });
+        if claimed.is_err() {
+            // Earlier lookups are still stuck in the OS resolver: retry later.
+            return Err(FetchError::Network);
+        }
+        let guard = InFlight(self.dns_in_flight.clone());
         let (tx, rx) = mpsc::channel();
         let resolver = self.resolver.clone();
         let host = name.to_owned();
         std::thread::Builder::new()
             .name("pdf-dns".into())
             .spawn(move || {
+                let _guard = guard;
                 let _ = tx.send(resolver.resolve(&host, port));
             })
             .map_err(|_| FetchError::Network)?;
-        let ips = match rx.recv_timeout(self.policy.io_timeout) {
-            Ok(Ok(ips)) => ips,
-            Ok(Err(_)) => return Err(FetchError::Network),
-            Err(_) => return Err(FetchError::Timeout),
+        let deadline = Instant::now() + self.policy.io_timeout.min(remaining);
+        let ips = loop {
+            if cancel.is_cancelled() {
+                return Err(FetchError::Cancelled);
+            }
+            let left = deadline.saturating_duration_since(Instant::now());
+            if left.is_zero() {
+                return Err(FetchError::Timeout);
+            }
+            match rx.recv_timeout(left.min(Duration::from_millis(50))) {
+                Ok(Ok(ips)) => break ips,
+                Ok(Err(_)) => return Err(FetchError::Network),
+                Err(mpsc::RecvTimeoutError::Timeout) => {}
+                Err(mpsc::RecvTimeoutError::Disconnected) => return Err(FetchError::Network),
+            }
         };
         if ips.is_empty() {
             return Err(FetchError::Network);
@@ -480,12 +573,13 @@ impl PdfFetcher {
         {
             return Err(FetchError::NotPdf(format!("Content-Type {media}")));
         }
-        if headers
+        if let Some(encoding) = headers
             .get("content-encoding")
-            .and_then(|v| v.to_str().ok())
-            .is_some_and(|v| !v.trim().eq_ignore_ascii_case("identity"))
+            .map(|v| v.to_str().unwrap_or("(invalid)").trim())
+            .filter(|v| !v.eq_ignore_ascii_case("identity"))
         {
-            return Err(FetchError::NotPdf("encoded response body".into()));
+            let shown: String = encoding.chars().take(32).collect();
+            return Err(FetchError::Encoded(shown));
         }
         if response
             .content_length()

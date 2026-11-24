@@ -24,7 +24,7 @@
 //!   `JobHandler::max_run`.
 mod capture;
 mod handlers;
-pub use capture::CapturePdfFetchHandler;
+pub use capture::{CapturePdfFetchHandler, sweep_stale_downloads};
 pub use handlers::{AttachmentImportHandler, DiagnosticWaitHandler};
 
 use crate::{ipc::auth::now_ms, lifecycle::Activity};

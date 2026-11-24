@@ -217,6 +217,30 @@ pub enum WireError {
     /// Daemon is shutting down or a worker is unavailable.
     Unavailable,
 }
+impl std::fmt::Display for WireError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Service(e) => e.fmt(f),
+            Self::Denied(d) => d.fmt(f),
+            Self::Busy => f.write_str("too many requests in flight on this connection"),
+            Self::TooLarge => f.write_str("message exceeds the size limit"),
+            Self::Cancelled => f.write_str("request cancelled"),
+            Self::Unavailable => f.write_str("the library service is unavailable"),
+        }
+    }
+}
+impl std::error::Error for WireError {}
+#[cfg(test)]
+#[test]
+fn wire_errors_display_for_users() {
+    // #22 review P3: capture `pdf_error` uses Display, not Debug.
+    let denied = WireError::Denied(Denial::Forbidden(cm_core::policy::Operation::JobSubmit));
+    assert!(!denied.to_string().contains("Denied("));
+    assert_eq!(
+        WireError::Service(ServiceError::Unavailable).to_string(),
+        ServiceError::Unavailable.to_string()
+    );
+}
 impl From<ServiceError> for WireError {
     fn from(e: ServiceError) -> Self {
         Self::Service(e)
