@@ -150,7 +150,8 @@ impl LibraryView {
         self.library.query = query;
         self.reload(cx);
     }
-    pub(super) fn library_screen(&self, cx: &mut Context<Self>) -> Div {
+    pub(super) fn library_screen(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Div {
+        let details = self.details_screen(window, cx);
         let filter = &self.library.query.filter;
         let filtered = filter.keyword.is_some()
             || filter.author.is_some()
@@ -231,7 +232,7 @@ impl LibraryView {
                     )
                     .child(self.table(cx)),
             ))
-            .child(self.details_screen(cx))
+            .child(details)
     }
     fn navigation(&self, cx: &mut Context<Self>) -> Stateful<Div> {
         let filter = &self.library.query.filter;

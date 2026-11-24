@@ -2,6 +2,7 @@
 pub mod commands;
 pub mod keymap;
 pub mod palette;
+pub mod pdf_viewer;
 #[cfg(any(
     test,
     all(feature = "native-gpui", any(target_os = "macos", target_os = "linux"))
