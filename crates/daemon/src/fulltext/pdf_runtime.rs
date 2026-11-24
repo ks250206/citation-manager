@@ -14,8 +14,9 @@ use std::{
 };
 
 static WORKER: OnceLock<Result<PdfWorker, String>> = OnceLock::new();
-/// Budget per text batch (`PAGES_PER_CALL` pages, one PDF load).
-const BATCH_BUDGET: Duration = Duration::from_secs(30);
+/// Budget per text batch (`PAGES_PER_CALL` pages, one PDF load). Exceeding it is a
+/// transient failure of the attachment (retried a bounded number of times).
+const BATCH_BUDGET: Duration = Duration::from_secs(60);
 
 /// The process worker. The first call decides the library: `explicit` (tests and
 /// developer tools pass an absolute pinned library) or the bundle location next to the
@@ -94,10 +95,11 @@ impl PageTextExtractor for PdfiumExtractor {
                 PdfError::QueueFull | PdfError::WorkerClosed => {
                     ExtractError::Busy("PDF worker busy".into())
                 }
+                // May pass on a later attempt (load spike, slow or briefly unavailable disk).
                 PdfError::Deadline => {
-                    ExtractError::Failed("page text extraction exceeded its time budget".into())
+                    ExtractError::Transient("page text extraction exceeded its time budget".into())
                 }
-                PdfError::Io => ExtractError::Failed("stored PDF could not be read".into()),
+                PdfError::Io => ExtractError::Transient("stored PDF could not be read".into()),
                 _ => ExtractError::Failed("text extraction failed".into()),
             })?;
         let Output::Text(batch) = output else {

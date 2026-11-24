@@ -10,6 +10,7 @@ pub mod auth;
 
 use crate::{
     desktop_worker::InProcessLibraryClient,
+    fulltext::readers::{MAX_SEARCH_READERS, ReaderPool},
     jobs::{JobEngine, JobHandler, JobPolicy, default_handlers},
     lifecycle::{self, Activity, DaemonPaths, LibraryLock},
 };
@@ -34,7 +35,7 @@ use cm_protocol::{
     library::LibraryClient,
     search::{FulltextReply, FulltextRequest, SearchReply, SearchRequest},
 };
-use cm_storage::{LibraryDb, LibraryDirectory, StorageError};
+use cm_storage::{LibraryDb, LibraryDirectory, SqlFault, StorageError, fts::SearchReader};
 use std::{
     collections::HashMap,
     io,
@@ -49,7 +50,7 @@ use std::{
         mpsc,
     },
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
@@ -113,8 +114,9 @@ struct Shared {
     auth: Arc<Authenticator>,
     engine: InProcessLibraryClient,
     jobs: JobEngine,
-    /// #18 read connection for search/extraction status (WAL readers do not block writers).
-    search: Mutex<LibraryDb>,
+    /// #18 pool of interruptible read connections for search/extraction status (WAL
+    /// readers do not block each other or the writer).
+    readers: ReaderPool,
     activity: Arc<Activity>,
     sessions: AtomicU64,
     /// Import preview handle -> grant that created it (preview grant binding).
@@ -161,7 +163,8 @@ pub fn start(config: DaemonConfig) -> Result<RunningDaemon, StartError> {
     // The lock holder is the only migration runner. Upgrades take a pre-migration backup.
     let control = LibraryDb::open_with_safety_backups(&directory).map_err(StartError::Storage)?;
     let control = Arc::new(Mutex::new(control));
-    let search = LibraryDb::open(&directory).map_err(StartError::Storage)?;
+    let readers =
+        ReaderPool::new(directory.clone(), MAX_SEARCH_READERS).map_err(StartError::Storage)?;
     let auth = Arc::new(Authenticator::load(control.clone()).map_err(StartError::Service)?);
     auth.bootstrap_desktop(&paths.desktop_credential, now_ms())?;
     let activity = Arc::new(Activity::default());
@@ -195,7 +198,7 @@ pub fn start(config: DaemonConfig) -> Result<RunningDaemon, StartError> {
         auth,
         engine,
         jobs,
-        search: Mutex::new(search),
+        readers,
         activity,
         sessions: AtomicU64::new(0),
         previews: Mutex::new(HashMap::new()),
@@ -722,37 +725,64 @@ impl Session {
 }
 
 impl Session {
-    /// #18 search. A failing search verifies the index; damage (or a projection that drifted
-    /// from the source tables) schedules one `search.rebuild` job and is reported, while the
+    /// #18 search on a pooled read connection, inside one read snapshot and within the
+    /// request's `timeout_ms` (enforced inside SQLite; an interrupted lookup is reported as
+    /// a timed-out page by the search service).
+    ///
+    /// Only real damage leads to recovery: a failure classified as corruption verifies the
+    /// index, and only a failed verification schedules one `search.rebuild` job (which
+    /// renumbers documents). Lock contention (BUSY/LOCKED), here or during verification,
+    /// is returned as `WireError::Busy` (retry later) and never triggers a rebuild. The
     /// source tables are never modified by the search path.
     fn search(&self, request: &SearchRequest) -> Result<SearchReply, WireError> {
-        let db = self.shared.search.lock().unwrap_or_else(|e| e.into_inner());
-        let index = db.search_index();
-        match cm_core::search::search(&index, request) {
-            Ok(reply) => Ok(reply),
-            Err(ServiceError::Unavailable) => {
-                let health = index.verify().map_err(WireError::Service)?;
-                if health.ok() {
-                    return Err(WireError::Service(ServiceError::Unavailable));
-                }
-                let generation = index.generation().unwrap_or_default();
-                drop(db);
-                let job = self.shared.jobs.submit_system(
-                    cm_protocol::jobs::kinds::SEARCH_REBUILD,
-                    &format!("auto-rebuild:{generation}"),
-                    serde_json::json!({}),
-                )?;
-                Err(WireError::Service(ServiceError::InvalidInput(format!(
-                    "search index is damaged; rebuild job {} scheduled",
-                    job.id.0
-                ))))
+        let budget = request
+            .timeout_ms
+            .clamp(1, cm_core::search::types::MAX_TIMEOUT_MS);
+        let reader = self
+            .shared
+            .readers
+            .acquire(Instant::now() + Duration::from_millis(u64::from(budget)))?;
+        let (error, fault) = {
+            let snapshot = reader.snapshot().map_err(|_| WireError::Unavailable)?;
+            match cm_core::search::search(&*snapshot, request) {
+                Ok(reply) => return Ok(reply),
+                Err(e) => (e, snapshot.fault()),
             }
-            Err(e) => Err(WireError::Service(e)),
+        };
+        match fault {
+            Some(SqlFault::Busy) => Err(WireError::Busy),
+            Some(SqlFault::Corrupt) => self.recover_index(&reader),
+            _ => Err(WireError::Service(error)),
         }
     }
+    /// A search hit corruption: verify, and schedule a rebuild only for confirmed damage.
+    fn recover_index(&self, reader: &SearchReader) -> Result<SearchReply, WireError> {
+        let index = reader.search_index();
+        let health = match index.verify() {
+            Ok(health) => health,
+            Err(_) if index.fault() == Some(SqlFault::Busy) => return Err(WireError::Busy),
+            Err(e) => return Err(WireError::Service(e)),
+        };
+        if health.ok() {
+            return Err(WireError::Service(ServiceError::Unavailable));
+        }
+        let generation = index.generation().unwrap_or_default();
+        let job = self.shared.jobs.submit_system(
+            cm_protocol::jobs::kinds::SEARCH_REBUILD,
+            &format!("auto-rebuild:{generation}"),
+            serde_json::json!({}),
+        )?;
+        Err(WireError::Service(ServiceError::InvalidInput(format!(
+            "search index is damaged; rebuild job {} scheduled",
+            job.id.0
+        ))))
+    }
     fn fulltext(&self, request: FulltextRequest) -> Result<FulltextReply, WireError> {
-        let db = self.shared.search.lock().unwrap_or_else(|e| e.into_inner());
-        let reader = db.fulltext_reader();
+        let reader = self
+            .shared
+            .readers
+            .acquire(Instant::now() + FULLTEXT_READ_WAIT)?;
+        let reader = reader.fulltext_reader();
         Ok(match request {
             FulltextRequest::Status(paper) => FulltextReply::Status(reader.for_paper(paper)?),
             FulltextRequest::AttachmentStatus(attachment) => {
@@ -769,6 +799,9 @@ impl Session {
         })
     }
 }
+
+/// How long a full-text status/page read waits for a free search reader.
+const FULLTEXT_READ_WAIT: Duration = Duration::from_secs(5);
 
 /// Without LibraryRead a preview must not reveal existing papers (native host capture).
 fn redact_matches(preview: &mut ImportPreview) {

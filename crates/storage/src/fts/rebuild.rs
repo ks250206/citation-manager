@@ -2,7 +2,10 @@
 //! and both FTS indexes from the authoritative source tables in one transaction.
 //! Source tables (papers, contributors, tags, annotations, fulltext_pages) are only read.
 use super::SqliteSearch;
-use crate::{StorageError, error::service_error};
+use crate::{
+    StorageError,
+    error::{SqlFault, sql_fault},
+};
 use cm_core::ServiceError;
 use rusqlite::TransactionBehavior;
 
@@ -42,6 +45,12 @@ const ACTUAL: &str = "SELECT source, source_key, paper_id, attachment_id, page_i
 
 impl SqliteSearch<'_> {
     /// Checks both FTS indexes against their content and the projection against sources.
+    ///
+    /// Only real damage is reported as unhealthy: an FTS `integrity-check` that fails with
+    /// SQLITE_CORRUPT (or an FTS5 "malformed" report) sets `fts_ok=false`. Lock contention
+    /// (BUSY/LOCKED: the check is an INSERT and needs the write lock), an interrupt or any
+    /// other error is returned as `Err` (no verdict), so callers never rebuild a healthy
+    /// index because the writer was busy. `fault()` tells which it was.
     pub fn verify(&self) -> Result<IndexHealth, ServiceError> {
         let mut fts_ok = true;
         let mut detail = None;
@@ -51,31 +60,31 @@ impl SqliteSearch<'_> {
                 &format!("INSERT INTO {table}({table}, rank) VALUES ('integrity-check', 1)"),
                 [],
             ) {
+                if sql_fault(&e) != SqlFault::Corrupt {
+                    return Err(self.err(e));
+                }
                 fts_ok = false;
                 detail = Some(format!("{table} integrity-check failed: {}", code(&e)));
             }
         }
-        let differences = |a: &str, b: &str| -> Result<i64, ServiceError> {
-            self.connection
-                .query_row(
-                    &format!(
-                        "SELECT count(*) FROM (SELECT * FROM ({a}) EXCEPT SELECT * FROM ({b}))"
-                    ),
-                    [],
-                    |r| r.get(0),
-                )
-                .map_err(service_error)
+        // One statement = one read snapshot: both EXCEPT directions and the row counts see
+        // the same committed state, so a write committed between them cannot look like drift.
+        let projection_ok = match self.connection.query_row(
+            &format!(
+                "SELECT (SELECT count(*) FROM (SELECT * FROM ({EXPECTED}) EXCEPT SELECT * FROM ({ACTUAL})))
+                      + (SELECT count(*) FROM (SELECT * FROM ({ACTUAL}) EXCEPT SELECT * FROM ({EXPECTED}))) = 0
+                    AND (SELECT count(*) FROM ({EXPECTED})) = (SELECT count(*) FROM search_documents)"
+            ),
+            [],
+            |r| r.get::<_, bool>(0),
+        ) {
+            Ok(same) => same,
+            Err(e) if sql_fault(&e) == SqlFault::Corrupt => {
+                detail.get_or_insert_with(|| format!("search projection unreadable: {}", code(&e)));
+                false
+            }
+            Err(e) => return Err(self.err(e)),
         };
-        let projection_ok = differences(EXPECTED, ACTUAL)? == 0
-            && differences(ACTUAL, EXPECTED)? == 0
-            && self
-                .connection
-                .query_row(
-                    &format!("SELECT (SELECT count(*) FROM ({EXPECTED})) = (SELECT count(*) FROM search_documents)"),
-                    [],
-                    |r| r.get::<_, bool>(0),
-                )
-                .map_err(service_error)?;
         if !projection_ok && detail.is_none() {
             detail = Some("search projection differs from source tables".into());
         }
@@ -114,11 +123,11 @@ impl SqliteSearch<'_> {
                  WHERE name GLOB 'search_*' OR name IN ('fulltext_pages','sqlite_autoindex_search_documents_1')
                  GROUP BY name ORDER BY name",
             )
-            .map_err(service_error)?
+            .map_err(|e| self.err(e))?
             .query_map([], |r| Ok((r.get(0)?, r.get::<_, i64>(1)? as u64)))
-            .map_err(service_error)?
+            .map_err(|e| self.err(e))?
             .collect::<rusqlite::Result<Vec<_>>>()
-            .map_err(service_error)
+            .map_err(|e| self.err(e))
     }
     pub fn generation(&self) -> Result<u64, ServiceError> {
         self.connection
@@ -128,7 +137,7 @@ impl SqliteSearch<'_> {
                 |r| r.get::<_, i64>(0),
             )
             .map(|g| g as u64)
-            .map_err(service_error)
+            .map_err(|e| self.err(e))
     }
 }
 

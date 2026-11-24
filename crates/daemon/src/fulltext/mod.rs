@@ -8,6 +8,7 @@
 //! extraction job runs may need to be re-created; commits themselves never lose data.
 #[cfg(feature = "pdf-metadata")]
 pub mod pdf_runtime;
+pub mod readers;
 #[cfg(feature = "pdf-metadata")]
 pub use pdf_runtime::PdfiumExtractor;
 
@@ -40,7 +41,7 @@ impl JobHandler for FulltextExtractHandler {
     fn required(&self) -> &'static [Capability] {
         &[Capability::LibraryWrite]
     }
-    /// A run ends itself after `RUN_TIME_BUDGET` (20 min) plus at most one batch (30 s
+    /// A run ends itself after `RUN_TIME_BUDGET` (20 min) plus at most one batch (60 s
     /// worker budget); progress is reported before every batch.
     fn max_run(&self) -> std::time::Duration {
         extraction::RUN_TIME_BUDGET + std::time::Duration::from_secs(10 * 60)
@@ -87,6 +88,12 @@ impl JobHandler for FulltextExtractHandler {
             &cancel,
             &mut progress,
         ) {
+            // Transient per-attachment failures: committed work stays, the job is retried
+            // with the runner's backoff and the attachment's own attempt count bounds it.
+            Ok(summary) if summary.deferred > 0 => Outcome::Retryable(format!(
+                "{} attachment(s) hit a transient extraction error",
+                summary.deferred
+            )),
             Ok(summary) if summary.attachments == 0 => {
                 // Nothing left to do: an earlier (possibly crashed) attempt committed it.
                 Outcome::AlreadyCommitted(json!(summary))
