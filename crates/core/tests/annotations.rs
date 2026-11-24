@@ -22,6 +22,12 @@ impl AnnotationRepository for &mut Memory {
         self.rows.insert(a.id.0.to_string(), a.clone());
         Ok(())
     }
+    fn insert_all(&mut self, rows: &[Annotation]) -> Result<(), ServiceError> {
+        for a in rows {
+            self.insert(a)?;
+        }
+        Ok(())
+    }
     fn replace(&mut self, a: &Annotation) -> Result<(), ServiceError> {
         self.rows
             .get_mut(&a.id.0.to_string())
@@ -267,7 +273,11 @@ fn replaced_pdf_carries_annotations_unresolved_and_proposes_positions() {
         ),
         (5, 2, true)
     );
-    assert_eq!(proposal.quads.len(), 3);
+    assert_eq!(
+        proposal.quads.len(),
+        1,
+        "one quad per line, as the viewer stores"
+    );
     // Nothing moved until the person confirms.
     assert!(matches!(
         service.get(copy.id).unwrap().unwrap().anchor,
@@ -293,4 +303,289 @@ fn replaced_pdf_carries_annotations_unresolved_and_proposes_positions() {
         chars: &empty,
     }];
     assert!(propose_anchor(&copy, &none).is_none());
+}
+
+fn ai(service: &mut AnnotationService<&mut Memory>) -> Annotation {
+    let mut input = highlight(attachment(1));
+    input.source = Source::Ai;
+    created(service.create(input).unwrap())
+}
+fn invalid(r: Result<(), ServiceError>) -> bool {
+    matches!(r, Err(ServiceError::InvalidInput(_)))
+}
+
+#[test]
+fn redo_and_undo_validate_client_supplied_rows() {
+    let mut memory = Memory {
+        attachments: vec![attachment(1)],
+        ..Default::default()
+    };
+    let mut service = AnnotationService::new(&mut memory);
+    let human = created(service.create(highlight(attachment(1))).unwrap());
+
+    // A forged "created" AI row that claims a confirmation nobody gave.
+    let mut forged = human.clone();
+    forged.id = AnnotationId(uuid::Uuid::now_v7());
+    forged.source = Source::Ai;
+    forged.confirmed_at = Some("2026-01-01T00:00:59Z".into());
+    assert!(invalid(service.redo(&Edit::Created(forged.clone()))));
+    assert!(service.get(forged.id).unwrap().is_none());
+    // Confirmation on a non-AI row is never valid.
+    let mut human_confirmed = forged.clone();
+    human_confirmed.source = Source::Human;
+    assert!(invalid(service.redo(&Edit::Created(human_confirmed))));
+    // NaN geometry would make the stored JSON unreadable for the whole paper.
+    let mut nan = human.clone();
+    nan.id = AnnotationId(uuid::Uuid::now_v7());
+    nan.anchor = Anchor::Resolved {
+        page_index: 0,
+        page_label: None,
+        quads: vec![
+            Rect {
+                left: f32::NAN,
+                bottom: 0.0,
+                right: 1.0,
+                top: 1.0,
+            }
+            .quad(),
+        ],
+    };
+    assert!(invalid(service.redo(&Edit::Created(nan.clone()))));
+    let mut input = highlight(attachment(1));
+    input.anchor = nan.anchor.clone();
+    assert!(service.create(input).is_err());
+    // Other field rules apply to replayed rows too.
+    let mut bad_color = human.clone();
+    bad_color.id = AnnotationId(uuid::Uuid::now_v7());
+    bad_color.color = Some("url(x)".into());
+    assert!(invalid(service.redo(&Edit::Created(bad_color))));
+
+    // Updates may not change identity, quoted text or provenance...
+    let mut moved = human.clone();
+    moved.quote = "rewritten".into();
+    assert!(invalid(service.redo(&Edit::Updated {
+        before: human.clone(),
+        after: moved,
+    })));
+    let mut promoted = human.clone();
+    promoted.source = Source::Ai;
+    promoted.confirmed_at = Some("2026-01-01T00:00:58Z".into());
+    assert!(invalid(service.redo(&Edit::Updated {
+        before: human.clone(),
+        after: promoted,
+    })));
+    let mut other = human.clone();
+    other.id = AnnotationId(uuid::Uuid::now_v7());
+    assert!(invalid(service.redo(&Edit::Updated {
+        before: human.clone(),
+        after: other,
+    })));
+    // ...nor invent a confirmation for an existing AI row.
+    let pending = ai(&mut service);
+    let mut confirmed = pending.clone();
+    confirmed.confirmed_at = Some("2026-01-01T00:00:57Z".into());
+    assert!(invalid(service.redo(&Edit::Updated {
+        before: pending.clone(),
+        after: confirmed,
+    })));
+    assert_eq!(service.get(pending.id).unwrap().unwrap(), pending);
+    assert_eq!(service.get(human.id).unwrap().unwrap(), human);
+}
+
+#[test]
+fn confirmed_ai_rows_round_trip_through_undo_and_redo_exactly() {
+    let mut memory = Memory {
+        attachments: vec![attachment(1)],
+        ..Default::default()
+    };
+    let mut service = AnnotationService::new(&mut memory);
+    let a = ai(&mut service);
+    // Confirm -> undo -> redo restores the server's own confirmation.
+    let confirm = service.confirm_ai(a.id).unwrap();
+    service.undo(&confirm).unwrap();
+    assert!(service.get(a.id).unwrap().unwrap().confirmed_at.is_none());
+    service.redo(&confirm).unwrap();
+    let Edit::Updated { after, .. } = &confirm else {
+        panic!()
+    };
+    assert_eq!(&service.get(a.id).unwrap().unwrap(), after);
+    assert!(service.confirm_ai(a.id).is_err(), "already confirmed");
+    // Remove a confirmed AI row -> undo brings it back confirmed; redo/undo again.
+    let removed = service.delete(a.id).unwrap();
+    service.undo(&removed).unwrap();
+    assert_eq!(&service.get(a.id).unwrap().unwrap(), after);
+    service.redo(&removed).unwrap();
+    service.undo(&removed).unwrap();
+    // A long-lived writer keeps the ledger across service instances.
+    let ledger = service.into_confirmations();
+    let mut service = AnnotationService::with_confirmations(&mut memory, ledger);
+    let removed = service.delete(a.id).unwrap();
+    let ledger = service.into_confirmations();
+    let mut service = AnnotationService::with_confirmations(&mut memory, ledger);
+    service.undo(&removed).unwrap();
+    // A fresh ledger knows nothing: the same restore is refused.
+    let removed = service.delete(a.id).unwrap();
+    let mut service = AnnotationService::new(&mut memory);
+    assert!(invalid(service.undo(&removed)));
+}
+
+#[test]
+fn bounds_note_text_and_resolve_rules() {
+    let mut memory = Memory {
+        attachments: vec![attachment(1)],
+        ..Default::default()
+    };
+    let mut service = AnnotationService::new(&mut memory);
+    let page = |page_index: u32, label: Option<String>| Anchor::Resolved {
+        page_index,
+        page_label: label,
+        quads: vec![quad(0.0)],
+    };
+    let mut input = highlight(attachment(1));
+    input.anchor = page(u32::MAX, None);
+    assert!(service.create(input).is_err(), "beyond the display range");
+    let mut input = highlight(attachment(1));
+    input.anchor = page(MAX_PAGE_INDEX, None);
+    assert!(service.create(input).is_ok());
+    let mut input = highlight(attachment(1));
+    input.anchor = page(0, Some("x".repeat(MAX_PAGE_LABEL_BYTES + 1)));
+    assert!(service.create(input).is_err());
+    let mut input = highlight(attachment(1));
+    input.anchor = Anchor::Unresolved {
+        reason: "r".repeat(MAX_REASON_BYTES + 1),
+    };
+    assert!(service.create(input).is_err());
+    // A note needs text wherever it is anchored, and whitespace is no text.
+    let note = |anchor: Anchor, comment: &str| NewAnnotation {
+        kind: AnnotationKind::Note,
+        anchor,
+        quote: String::new(),
+        context_before: None,
+        context_after: None,
+        comment: Some(comment.into()),
+        ..highlight(attachment(1))
+    };
+    let unresolved = Anchor::Unresolved {
+        reason: "moved".into(),
+    };
+    assert!(service.create(note(unresolved.clone(), "  ")).is_err());
+    let n = created(service.create(note(unresolved, "keep")).unwrap());
+    let blank = AnnotationPatch {
+        comment: Some(Some(" \n ".into())),
+        color: None,
+    };
+    assert!(service.update(n.id, blank.clone()).is_err());
+    // Whitespace comments on highlights are stored as none.
+    let h = created(service.create(highlight(attachment(1))).unwrap());
+    let Edit::Updated { after, .. } = service.update(h.id, blank).unwrap() else {
+        panic!()
+    };
+    assert_eq!(after.comment, None);
+    // Resolve only places unresolved annotations.
+    assert!(service.resolve(h.id, 0, None, vec![quad(1.0)]).is_err());
+    service.resolve(n.id, 0, None, vec![]).unwrap();
+}
+
+#[test]
+fn carry_over_is_idempotent_and_keeps_provenance() {
+    let mut memory = Memory {
+        attachments: vec![attachment(1), attachment(2)],
+        ..Default::default()
+    };
+    let mut service = AnnotationService::new(&mut memory);
+    created(service.create(highlight(attachment(1))).unwrap());
+    let a = ai(&mut service);
+    service.confirm_ai(a.id).unwrap();
+    let note = |text: &str| NewAnnotation {
+        kind: AnnotationKind::Note,
+        anchor: Anchor::Resolved {
+            page_index: 0,
+            page_label: None,
+            quads: vec![],
+        },
+        quote: String::new(),
+        context_before: None,
+        context_after: None,
+        comment: Some(text.into()),
+        ..highlight(attachment(1))
+    };
+    service.create(note("first")).unwrap();
+    service.create(note("second")).unwrap();
+    let first = service.carry_over(attachment(1), attachment(2)).unwrap();
+    assert_eq!(first.len(), 4, "two distinct notes are both copied");
+    let copies = service.list(attachment(2)).unwrap();
+    let ai_copies: Vec<_> = copies.iter().filter(|c| c.source == Source::Ai).collect();
+    assert_eq!(ai_copies.len(), 1);
+    assert!(ai_copies[0].confirmed_at.is_some(), "confirmation kept");
+    // Second run copies nothing.
+    assert!(
+        service
+            .carry_over(attachment(1), attachment(2))
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(service.list(attachment(2)).unwrap().len(), 4);
+    let from = service.list(attachment(1)).unwrap();
+    let to = service.list(attachment(2)).unwrap();
+    assert!(pending_carry_over(&from, &to).is_empty());
+    // A new annotation on the old PDF is the only one left to copy.
+    service.create(note("third")).unwrap();
+    let from = service.list(attachment(1)).unwrap();
+    assert_eq!(pending_carry_over(&from, &to).len(), 1);
+    assert_eq!(
+        service
+            .carry_over(attachment(1), attachment(2))
+            .unwrap()
+            .len(),
+        1
+    );
+    // Undo and redo of a copied confirmed row restore it exactly.
+    let copy = first
+        .iter()
+        .find(|e| matches!(e, Edit::Created(c) if c.source == Source::Ai))
+        .unwrap()
+        .clone();
+    service.undo(&copy).unwrap();
+    service.redo(&copy).unwrap();
+}
+
+#[test]
+fn proposals_skip_unmapped_characters_and_cap_matches() {
+    let mut memory = Memory {
+        attachments: vec![attachment(1)],
+        ..Default::default()
+    };
+    let mut service = AnnotationService::new(&mut memory);
+    let mut input = highlight(attachment(1));
+    input.quote = "ab".into();
+    input.context_before = None;
+    input.context_after = None;
+    let a = created(service.create(input).unwrap());
+    // The viewer drops characters without Unicode from quotes; so does the search.
+    let chars: Vec<(Option<char>, Quad)> = vec![
+        (Some('x'), quad(0.0)),
+        (Some('a'), quad(5.0)),
+        (None, quad(10.0)),
+        (Some('b'), quad(15.0)),
+    ];
+    let page = PageText {
+        page_index: 0,
+        page_label: None,
+        chars: &chars,
+    };
+    let p = propose_anchor(&a, &[page]).unwrap();
+    assert_eq!(p.matches, 1);
+    let b = p.quads[0].bounds();
+    assert_eq!((b.left, b.right), (5.0, 20.0));
+    // Pathological repetition stops at the cap instead of collecting every match.
+    let many: Vec<(Option<char>, Quad)> = (0..(MAX_PROPOSAL_MATCHES * 2 + 10))
+        .map(|i| (Some(if i % 2 == 0 { 'a' } else { 'b' }), quad(i as f32)))
+        .collect();
+    let page = PageText {
+        page_index: 3,
+        page_label: None,
+        chars: &many,
+    };
+    let p = propose_anchor(&a, &[page]).unwrap();
+    assert_eq!((p.page_index, p.matches), (3, MAX_PROPOSAL_MATCHES));
 }

@@ -2,9 +2,10 @@
 use crate::domain::{AttachmentId, PaperId};
 pub use cm_core::annotations::{
     Anchor, Annotation, AnnotationId, AnnotationKind, AnnotationPatch, COLORS, Edit, History,
-    MAX_CONTEXT_CHARS, NewAnnotation, Proposal, Source, valid_color,
+    MAX_CONTEXT_CHARS, MAX_PROPOSAL_MATCHES, NewAnnotation, Proposal, Source, merge_line_quads,
+    pending_carry_over, valid_color,
 };
-use cm_core::geometry::Quad;
+use cm_core::{geometry::Quad, metadata_resolve::Cancellation};
 
 #[derive(Debug, Clone)]
 pub enum AnnotationRequest {
@@ -23,7 +24,12 @@ pub enum AnnotationRequest {
         to: AttachmentId,
     },
     /// Search the annotation's PDF for its quote/context. Never applied automatically.
-    Propose(AnnotationId),
+    /// Runs off the library worker under an overall deadline; `cancel` stops it early
+    /// (e.g. the paper was switched).
+    Propose {
+        id: AnnotationId,
+        cancel: Cancellation,
+    },
     Resolve {
         id: AnnotationId,
         page_index: u32,

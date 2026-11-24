@@ -115,6 +115,38 @@ fn source(s: Source) -> &'static str {
     }
 }
 
+fn insert(connection: &Connection, a: &Annotation) -> Result<(), ServiceError> {
+    let (page, label, state, reason, quads) = anchor_columns(a)?;
+    connection
+        .execute(
+            "INSERT INTO annotations(id,attachment_id,page_index,page_label,type,source,
+             anchor_state,unresolved_reason,quote_text,context_before,context_after,quads_json,
+             color,comment,confirmed_at,created_at,updated_at)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)",
+            params![
+                a.id.0.to_string(),
+                a.attachment_id.0.to_string(),
+                page,
+                label,
+                kind(a.kind),
+                source(a.source),
+                state,
+                reason,
+                a.quote,
+                a.context_before,
+                a.context_after,
+                quads,
+                a.color,
+                a.comment,
+                a.confirmed_at,
+                a.created_at,
+                a.updated_at
+            ],
+        )
+        .map(|_| ())
+        .map_err(service_error)
+}
+
 impl AnnotationRepository for SqliteAnnotations<'_> {
     fn now(&self) -> Result<String, ServiceError> {
         self.connection
@@ -124,35 +156,17 @@ impl AnnotationRepository for SqliteAnnotations<'_> {
             .map_err(service_error)
     }
     fn insert(&mut self, a: &Annotation) -> Result<(), ServiceError> {
-        let (page, label, state, reason, quads) = anchor_columns(a)?;
-        self.connection
-            .execute(
-                "INSERT INTO annotations(id,attachment_id,page_index,page_label,type,source,
-                 anchor_state,unresolved_reason,quote_text,context_before,context_after,quads_json,
-                 color,comment,confirmed_at,created_at,updated_at)
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)",
-                params![
-                    a.id.0.to_string(),
-                    a.attachment_id.0.to_string(),
-                    page,
-                    label,
-                    kind(a.kind),
-                    source(a.source),
-                    state,
-                    reason,
-                    a.quote,
-                    a.context_before,
-                    a.context_after,
-                    quads,
-                    a.color,
-                    a.comment,
-                    a.confirmed_at,
-                    a.created_at,
-                    a.updated_at
-                ],
-            )
-            .map(|_| ())
-            .map_err(service_error)
+        insert(self.connection, a)
+    }
+    fn insert_all(&mut self, rows: &[Annotation]) -> Result<(), ServiceError> {
+        let transaction = self
+            .connection
+            .unchecked_transaction()
+            .map_err(service_error)?;
+        for a in rows {
+            insert(&transaction, a)?;
+        }
+        transaction.commit().map_err(service_error)
     }
     fn replace(&mut self, a: &Annotation) -> Result<(), ServiceError> {
         let (page, label, state, reason, quads) = anchor_columns(a)?;
