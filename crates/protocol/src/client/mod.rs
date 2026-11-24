@@ -101,7 +101,7 @@ impl ClientError {
                     | io::ErrorKind::BrokenPipe
                     | io::ErrorKind::ConnectionReset
                     | io::ErrorKind::ConnectionAborted
-            )
+            ) || closed_peer_quirk(e)
         };
         match self {
             Self::Protocol(reason) => *reason == CLOSED_DURING_HANDSHAKE,
@@ -111,6 +111,14 @@ impl ClientError {
     }
 }
 const CLOSED_DURING_HANDSHAKE: &str = "daemon closed during handshake";
+
+/// macOS reports a Unix socket whose peer has just closed in two non-standard ways:
+/// `setsockopt` (our timeouts) fails with EINVAL, and a racing `send` can fail with
+/// EPROTOTYPE (41). Both mean "the daemon went away", exactly like EPIPE/ECONNRESET.
+fn closed_peer_quirk(e: &io::Error) -> bool {
+    cfg!(target_os = "macos")
+        && (e.kind() == io::ErrorKind::InvalidInput || e.raw_os_error() == Some(41))
+}
 
 /// Performs the Hello/Welcome exchange on a fresh stream within `HANDSHAKE_TIMEOUT`.
 /// The stream's timeouts are cleared again afterwards.
@@ -125,7 +133,15 @@ pub fn handshake_within(
     hello: Hello,
     timeout: Duration,
 ) -> Result<Welcome, ClientError> {
-    stream.set_io_timeouts(Some(timeout), Some(timeout))?;
+    if let Err(e) = stream.set_io_timeouts(Some(timeout), Some(timeout)) {
+        // Setting socket options on a connection the daemon already closed fails on macOS
+        // (EINVAL); report it as a close so `connect_and_handshake` retries once.
+        return Err(if closed_peer_quirk(&e) {
+            ClientError::Protocol(CLOSED_DURING_HANDSHAKE)
+        } else {
+            e.into()
+        });
+    }
     let result = (|| {
         write_frame(stream, &ClientFrame::Hello(hello), MAX_HANDSHAKE_FRAME)?;
         match read_frame::<_, ServerFrame>(stream, MAX_RESPONSE_FRAME)? {
