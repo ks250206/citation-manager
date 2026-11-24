@@ -87,6 +87,20 @@ pub(crate) fn validate_current(db: &Connection) -> Result<(), StorageError> {
     Ok(())
 }
 
+/// Cheap check for an additional connection to a library another connection migrated:
+/// the applied history must be exactly the embedded registry (no migration is run).
+pub(crate) fn check_applied(db: &Connection) -> Result<(), StorageError> {
+    let migrations = registry()?;
+    let applied = history(db)?;
+    verify_history(&migrations, &applied)?;
+    if applied.len() != migrations.len() {
+        return Err(StorageError::Migration(
+            "library schema is not current".into(),
+        ));
+    }
+    Ok(())
+}
+
 type SchemaObject = (String, String, String, Option<String>);
 fn schema_definition(db: &Connection) -> Result<Vec<SchemaObject>, StorageError> {
     Ok(db.prepare("SELECT type, name, tbl_name, sql FROM sqlite_schema ORDER BY type, name, tbl_name, sql")?

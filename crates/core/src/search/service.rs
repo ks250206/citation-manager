@@ -14,7 +14,11 @@
 //!   Within a scan window only documents in that window are returned, so successive
 //!   continuation windows never repeat a hit.
 //! - No width/NFC/kana normalization is applied (measured constraint, docs/validation/ISSUE_53.md).
+//! - `SearchRequest::timeout_ms` bounds the whole request: the port enforces it inside the
+//!   database (`SearchIndex::set_deadline`). An interrupted index lookup yields an explicit
+//!   timed-out page; the short-term scan stops at its window with a continuation.
 use super::{
+    fold::{fold, fold_needle},
     query::{self, ClauseKind, Span},
     types::*,
 };
@@ -143,6 +147,40 @@ pub trait SearchIndex {
     fn documents(&self, ids: &[i64]) -> Result<Vec<IndexedDocument>, ServiceError>;
     /// PDF attachments of papers in `filter` whose page text is not (yet) searchable.
     fn extraction_gaps(&self, filter: &ResolvedFilter) -> Result<ExtractionGaps, ServiceError>;
+    /// Hard deadline for the following calls (`None` clears it). An implementation that can
+    /// interrupt running statements stops them when it passes and then reports
+    /// `interrupted()`; `scan` instead ends its window early with `timed_out`.
+    fn set_deadline(&self, _deadline: Option<Instant>) {}
+    /// The last failing call was stopped by the `set_deadline` deadline.
+    fn interrupted(&self) -> bool {
+        false
+    }
+}
+
+/// Extra time after the request budget for fetching the hit documents (at most `MAX_LIMIT`,
+/// by primary key) and the extraction coverage counts, so a scan that used up the budget
+/// still returns its partial window.
+pub const RESULT_GRACE: Duration = Duration::from_millis(500);
+
+/// Reply for a request whose deadline interrupted an index lookup before any result could
+/// be ranked: no hits, `timed_out`, not complete. Nothing is claimed as matched or unmatched.
+fn timed_out_reply() -> SearchReply {
+    SearchReply::Results(Box::new(SearchPage {
+        hits: Vec::new(),
+        next_page: None,
+        total_hits: 0,
+        coverage: SearchCoverage {
+            complete: false,
+            fts_truncated: false,
+            timed_out: true,
+            short_terms: Vec::new(),
+            scan: ScanStatus::NotNeeded,
+            scanned_documents: 0,
+            unsearched: Vec::new(),
+            continuation: None,
+            unresolved: Vec::new(),
+        },
+    }))
 }
 
 struct Plan {
@@ -241,13 +279,30 @@ struct Meta {
     paper_id: PaperId,
 }
 
-/// Executes one search request. `started` anchors the scan time budget.
+/// Executes one search request within `request.timeout_ms` (plus `RESULT_GRACE` for the
+/// final document fetch).
 pub fn search(
     index: &dyn SearchIndex,
     request: &SearchRequest,
 ) -> Result<SearchReply, ServiceError> {
     let started = Instant::now();
     let weights = request.validate()?;
+    let deadline = started + Duration::from_millis(u64::from(request.timeout_ms));
+    index.set_deadline(Some(deadline));
+    let result = execute(index, request, weights, deadline);
+    index.set_deadline(None);
+    match result {
+        Err(_) if index.interrupted() => Ok(timed_out_reply()),
+        other => other,
+    }
+}
+
+fn execute(
+    index: &dyn SearchIndex,
+    request: &SearchRequest,
+    weights: Weights,
+    deadline: Instant,
+) -> Result<SearchReply, ServiceError> {
     let plan = match plan(index, request)? {
         Ok(plan) => plan,
         Err(reply) => return Ok(reply),
@@ -327,7 +382,6 @@ pub fn search(
                 .push(UnsearchedScope::PdfPagesForShortTerms);
         }
         let needles: Vec<String> = short.iter().map(|s| s.to_string()).collect();
-        let deadline = started + Duration::from_millis(u64::from(request.timeout_ms));
         let scan = if scan_sources.is_empty() {
             ScanWindow {
                 exhausted: true,
@@ -414,6 +468,7 @@ pub fn search(
     });
 
     let ids: Vec<i64> = page.iter().map(|(id, _)| *id).collect();
+    index.set_deadline(Some(Instant::now().max(deadline) + RESULT_GRACE));
     let documents: HashMap<i64, IndexedDocument> = index
         .documents(&ids)?
         .into_iter()
@@ -478,12 +533,20 @@ fn hit(
     snippet_chars: usize,
 ) -> SearchHit {
     let lowered: Vec<String> = needles.iter().map(|n| n.to_ascii_lowercase()).collect();
+    let folded: Vec<String> = needles.iter().map(|n| fold_needle(n)).collect();
     let matched: Vec<SearchField> = SearchField::ALL
         .into_iter()
         .filter(|f| {
             doc.fields[f.index()].as_deref().is_some_and(|text| {
-                let text = text.to_ascii_lowercase();
-                lowered.iter().any(|n| text.contains(n.as_str()))
+                // Fast literal check first; then the unicode61-like folded comparison
+                // (phrases across line breaks, case and Latin diacritics).
+                let ascii = text.to_ascii_lowercase();
+                lowered.iter().any(|n| ascii.contains(n.as_str())) || {
+                    let text = fold(text).text;
+                    folded
+                        .iter()
+                        .any(|n| !n.is_empty() && text.contains(n.as_str()))
+                }
             })
         })
         .collect();
@@ -503,7 +566,7 @@ fn hit(
         })
         .unwrap_or(fallback);
     let text = doc.fields[field.index()].as_deref().unwrap_or("");
-    let (snippet, highlights, truncated) = snippet(text, &lowered, snippet_chars);
+    let (snippet, highlights, truncated) = snippet(text, needles, snippet_chars);
     SearchHit {
         paper_id: doc.paper_id,
         paper_title: doc.paper_title.clone(),
@@ -526,20 +589,19 @@ fn hit(
 const MAX_HIGHLIGHTS: usize = 32;
 const ELLIPSIS: char = '\u{2026}';
 
-/// Bounded excerpt around the first literal (ASCII case-insensitive) occurrence of any
-/// needle. Control characters become spaces. Highlights are byte ranges in the result.
+/// Bounded excerpt around the first occurrence of any needle (query term or phrase),
+/// located like `matched_fields`: case-insensitive, Latin diacritics folded and any run of
+/// whitespace/line breaks matching one space. Control characters become spaces. Highlights
+/// are byte ranges in the result covering the original matched text.
 pub fn snippet(
     text: &str,
-    lowered_needles: &[String],
+    needles: &[String],
     max_chars: usize,
 ) -> (String, Vec<SnippetRange>, bool) {
-    let haystack = text.to_ascii_lowercase();
-    let first = lowered_needles
-        .iter()
-        .filter(|n| !n.is_empty())
-        .filter_map(|n| haystack.find(n.as_str()))
-        .min()
-        .unwrap_or(0);
+    let folded: Vec<String> = needles.iter().map(|n| fold_needle(n)).collect();
+    let mut matches = fold(text).find_all(&folded, 4 * MAX_HIGHLIGHTS);
+    matches.sort_unstable();
+    let first = matches.first().map_or(0, |m| m.0);
     let char_starts: Vec<usize> = text.char_indices().map(|(i, _)| i).collect();
     let total = char_starts.len();
     let first_char = char_starts.partition_point(|b| *b < first);
@@ -552,39 +614,34 @@ pub fn snippet(
     };
     let end_char = (start_char + max_chars).min(total);
     let byte = |c: usize| char_starts.get(c).copied().unwrap_or(text.len());
+    let (from, to) = (byte(start_char), byte(end_char));
     let mut out = String::new();
     if start_char > 0 {
         out.push(ELLIPSIS);
     }
-    out.extend(
-        text[byte(start_char)..byte(end_char)]
-            .chars()
-            .map(|c| if c.is_control() { ' ' } else { c }),
-    );
-    let body_start = if start_char > 0 {
-        ELLIPSIS.len_utf8()
-    } else {
-        0
-    };
+    // (original byte offset, output byte offset) of every excerpt character, plus its end.
+    let mut positions: Vec<(usize, usize)> = Vec::with_capacity(end_char - start_char + 1);
+    for (at, c) in text[from..to].char_indices() {
+        positions.push((from + at, out.len()));
+        out.push(if c.is_control() { ' ' } else { c });
+    }
+    positions.push((to, out.len()));
     if end_char < total {
         out.push(ELLIPSIS);
     }
-    let lowered = out.to_ascii_lowercase();
-    let mut ranges: Vec<SnippetRange> = Vec::new();
-    for needle in lowered_needles.iter().filter(|n| !n.is_empty()) {
-        let mut from = body_start;
-        while let Some(found) = lowered[from..].find(needle.as_str()) {
-            let start = from + found;
-            ranges.push(SnippetRange {
-                start,
-                end: start + needle.len(),
-            });
-            from = start + needle.len();
-            if ranges.len() > 4 * MAX_HIGHLIGHTS {
-                break;
-            }
-        }
-    }
+    let to_out = |original: usize| {
+        let i = positions.partition_point(|p| p.0 < original);
+        positions[i.min(positions.len() - 1)].1
+    };
+    let mut ranges: Vec<SnippetRange> = matches
+        .iter()
+        .filter(|(start, end)| *end > from && *start < to)
+        .map(|(start, end)| SnippetRange {
+            start: to_out((*start).max(from)),
+            end: to_out((*end).min(to)),
+        })
+        .filter(|r| r.start < r.end)
+        .collect();
     ranges.sort_by_key(|r| (r.start, r.end));
     let mut merged: Vec<SnippetRange> = Vec::new();
     for r in ranges {

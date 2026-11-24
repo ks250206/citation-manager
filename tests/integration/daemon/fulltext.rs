@@ -25,11 +25,21 @@ use std::{
 use support::*;
 
 /// File-content driven fake: "ENCRYPTED" -> Encrypted, "IMAGE" -> pages without text,
-/// otherwise `pages` pages of text naming the file's marker word.
+/// "FLAKY" -> a transient failure on its first call, "TIMEOUT" -> always a transient
+/// failure, otherwise `pages` pages of text naming the file's marker word.
 struct Fake {
     pages: u32,
     delay: Duration,
     calls: Mutex<Vec<u32>>,
+}
+impl Fake {
+    fn new(pages: u32, delay: Duration) -> Arc<Self> {
+        Arc::new(Self {
+            pages,
+            delay,
+            calls: Mutex::new(Vec::new()),
+        })
+    }
 }
 impl PageTextExtractor for Fake {
     fn extract(
@@ -44,11 +54,18 @@ impl PageTextExtractor for Fake {
             return Err(ExtractError::Cancelled);
         }
         std::thread::sleep(self.delay);
-        self.calls.lock().unwrap().push(first_page);
+        let first_call = {
+            let mut calls = self.calls.lock().unwrap();
+            calls.push(first_page);
+            calls.len() == 1
+        };
         let bytes = std::fs::read(path).map_err(|e| ExtractError::Failed(e.to_string()))?;
         let content = String::from_utf8_lossy(&bytes).into_owned();
         if content.contains("ENCRYPTED") {
             return Err(ExtractError::Encrypted);
+        }
+        if content.contains("TIMEOUT") || (content.contains("FLAKY") && first_call) {
+            return Err(ExtractError::Transient("time budget".into()));
         }
         let marker = content.split_whitespace().last().unwrap_or("").to_owned();
         let end = (first_page + max_pages).min(self.pages);
@@ -145,12 +162,7 @@ fn search(session: &mut Session, request: SearchRequest) -> SearchPage {
 fn imported_pdfs_are_extracted_automatically_and_searchable_by_page() {
     let env = Env::new();
     let mut config = env.config();
-    let fake = Arc::new(Fake {
-        pages: 3,
-        delay: Duration::ZERO,
-        calls: Mutex::new(Vec::new()),
-    });
-    config.extractor = Some(fake.clone());
+    config.extractor = Some(Fake::new(3, Duration::ZERO));
     let _daemon = start(config).unwrap();
     let mut desktop = env.desktop();
     let text_paper = create_paper(&mut desktop, "Battery interfaces");
@@ -300,11 +312,8 @@ fn imported_pdfs_are_extracted_automatically_and_searchable_by_page() {
 fn extraction_is_cancellable_and_resumes_from_committed_pages() {
     let env = Env::new();
     let mut config = env.config();
-    let fake = Arc::new(Fake {
-        pages: 320,
-        delay: Duration::from_millis(40),
-        calls: Mutex::new(Vec::new()),
-    });
+    // 64 pages per extractor call: five slow calls leave time to cancel mid-document.
+    let fake = Fake::new(320, Duration::from_millis(300));
     config.extractor = Some(fake.clone());
     let _daemon = start(config).unwrap();
     let mut desktop = env.desktop();
@@ -351,6 +360,115 @@ fn extraction_is_cancellable_and_resumes_from_committed_pages() {
     let mut all = SearchRequest::new("resumable");
     all.limit = 100;
     assert_eq!(search(&mut desktop, all).total_hits, 320);
+}
+
+/// P2-3 regression: a PDF attached while an extraction job is running (the attach hook's
+/// `ensure_extraction` is a no-op then; here the attachment is even committed by another
+/// writer without any hook) is extracted once that job ends, without a daemon restart.
+#[test]
+fn attachment_added_during_a_running_extraction_is_extracted_after_it() {
+    use cm_core::attachments::{AttachmentService, ImportAttachment};
+    let env = Env::new();
+    let mut config = env.config();
+    config.extractor = Some(Fake::new(320, Duration::from_millis(300)));
+    let _daemon = start(config).unwrap();
+    let mut desktop = env.desktop();
+    let first = create_paper(&mut desktop, "First");
+    let second = create_paper(&mut desktop, "Second");
+    import(&env, &mut desktop, first, "first.pdf", "%PDF-1.4 alpha");
+    assert!(wait_until(Duration::from_secs(20), || {
+        status(&mut desktop, first)
+            .first()
+            .is_some_and(|s| s.state == ExtractionState::Extracting && s.pages_done >= 64)
+    }));
+    let source = env.temp.path().canonicalize().unwrap().join("second.pdf");
+    std::fs::write(&source, "%PDF-1.4 bravo").unwrap();
+    let directory = cm_storage::LibraryDirectory::prepare(&env.library).unwrap();
+    let mut db = cm_storage::LibraryDb::open(&directory).unwrap();
+    AttachmentService::new(db.managed_attachments(&directory).unwrap())
+        .import(ImportAttachment {
+            paper_id: second,
+            source,
+            original_name: "second.pdf".into(),
+            media_type: "application/pdf".into(),
+            expected_sha256: None,
+        })
+        .unwrap();
+    drop(db);
+    let running = extraction_jobs(&mut desktop);
+    assert_eq!(running.len(), 1, "{running:?}");
+    assert!(running[0].state.is_active(), "{running:?}");
+    assert_eq!(
+        status(&mut desktop, second)[0].state,
+        ExtractionState::Pending
+    );
+    assert!(
+        wait_until(Duration::from_secs(30), || {
+            status(&mut desktop, second)
+                .first()
+                .is_some_and(|s| s.state == ExtractionState::Complete)
+        }),
+        "{:?}",
+        status(&mut desktop, second)
+    );
+    assert_eq!(
+        status(&mut desktop, first)[0].state,
+        ExtractionState::Complete
+    );
+    assert_eq!(
+        search(&mut desktop, SearchRequest::new("bravo")).total_hits,
+        320
+    );
+}
+
+/// P2-4 regression: a transient extraction failure (batch time budget, read error) is
+/// retried instead of becoming a permanent `Failed`; one that keeps failing ends as `Failed`
+/// after a bounded number of attempts without resubmission loops.
+#[test]
+fn transient_extraction_failures_are_retried_and_bounded() {
+    let env = Env::new();
+    let mut config = env.config();
+    config.extractor = Some(Fake::new(2, Duration::ZERO));
+    let _daemon = start(config).unwrap();
+    let mut desktop = env.desktop();
+    let flaky = create_paper(&mut desktop, "Flaky");
+    import(
+        &env,
+        &mut desktop,
+        flaky,
+        "flaky.pdf",
+        "%PDF-1.4 FLAKY wobble",
+    );
+    let jobs = settle_extraction(&mut desktop);
+    let state = status(&mut desktop, flaky)[0].clone();
+    assert_eq!(state.state, ExtractionState::Complete, "{state:?} {jobs:?}");
+    assert!(
+        jobs.iter().all(|j| j.state == JobState::Succeeded),
+        "{jobs:?}"
+    );
+    assert!(
+        jobs.iter().any(|j| j.attempts >= 2),
+        "retried after the transient failure: {jobs:?}"
+    );
+    assert_eq!(
+        search(&mut desktop, SearchRequest::new("wobble")).total_hits,
+        2
+    );
+    let stuck = create_paper(&mut desktop, "Stuck");
+    import(&env, &mut desktop, stuck, "stuck.pdf", "%PDF-1.4 TIMEOUT");
+    assert!(wait_until(Duration::from_secs(30), || {
+        status(&mut desktop, stuck)
+            .first()
+            .is_some_and(|s| s.state == ExtractionState::Failed)
+    }));
+    let jobs = settle_extraction(&mut desktop);
+    std::thread::sleep(Duration::from_millis(500));
+    assert_eq!(
+        extraction_jobs(&mut desktop).len(),
+        jobs.len(),
+        "no resubmission loop"
+    );
+    assert!(jobs.len() <= 4, "{jobs:?}");
 }
 
 #[test]

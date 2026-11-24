@@ -8,7 +8,10 @@ use cm_core::{
     search::{
         extraction::{ExtractScope, ExtractedPage, ExtractionState, FulltextStore, StoreBatch},
         search,
-        service::{SearchIndex, Tokenizer},
+        service::{
+            Candidate, ExtractionGaps, IndexedDocument, ResolvedFilter, ScanWindow, SearchIndex,
+            Tokenizer,
+        },
         types::*,
     },
     tags::{TagInput, TagService},
@@ -660,7 +663,7 @@ fn extraction_store_commits_batches_resumes_and_records_failures() {
     );
     let broken_status = statuses.iter().find(|s| s.attachment_id == broken).unwrap();
     assert_eq!(broken_status.state, ExtractionState::Encrypted);
-    assert_eq!(reader.unfinished().unwrap().0, 0);
+    assert_eq!(reader.unfinished().unwrap().count, 0);
     // Bounded page reads.
     let read = reader
         .pages(&PageTextRequest {
@@ -711,4 +714,321 @@ fn extraction_store_commits_batches_resumes_and_records_failures() {
             .contains(&UnsearchedScope::NoExtractableText { attachments: 1 })
     );
     assert_synced(&db);
+}
+
+fn file_library() -> (tempfile::TempDir, LibraryDirectory, LibraryDb) {
+    let temp = tempfile::tempdir().unwrap();
+    let directory =
+        LibraryDirectory::prepare(temp.path().canonicalize().unwrap().join("library")).unwrap();
+    let db = LibraryDb::open(&directory).unwrap();
+    (temp, directory, db)
+}
+
+/// P2-1 regression: lock contention is not index damage. While another connection holds the
+/// write lock, searches on a reader still work (WAL) and `verify` (whose FTS integrity-check
+/// needs the write lock) reports BUSY as an error without a verdict instead of
+/// `fts_ok == false`, so the daemon answers "busy" and never schedules a rebuild.
+#[test]
+fn busy_writer_is_reported_as_contention_not_damage() {
+    use crate::{SqlFault, sql_fault};
+    let (_temp, directory, mut db) = file_library();
+    paper(&mut db, "Solid electrolyte interphase", 2024, "SEI growth");
+    let reader = super::SearchReader::open(&directory).unwrap();
+    reader
+        .connection
+        .busy_timeout(std::time::Duration::from_millis(50))
+        .unwrap();
+    let generation = db.search_index().generation().unwrap();
+    db.connection.execute_batch("BEGIN IMMEDIATE").unwrap();
+    {
+        let snapshot = reader.snapshot().unwrap();
+        match search(&*snapshot, &SearchRequest::new("electrolyte")).unwrap() {
+            SearchReply::Results(page) => assert_eq!(page.hits.len(), 1),
+            other => panic!("{other:?}"),
+        }
+    }
+    let index = reader.search_index();
+    assert!(
+        index.verify().is_err(),
+        "no verdict under a held write lock"
+    );
+    assert_eq!(index.fault(), Some(SqlFault::Busy));
+    db.connection.execute_batch("ROLLBACK").unwrap();
+    let health = index.verify().unwrap();
+    assert!(health.ok(), "{health:?}");
+    assert_eq!(db.search_index().generation().unwrap(), generation);
+    // The classifier separates the codes the daemon routes differently.
+    let failure =
+        |code| rusqlite::Error::SqliteFailure(rusqlite::ffi::Error::new(code), Some("x".into()));
+    assert_eq!(
+        sql_fault(&failure(rusqlite::ffi::SQLITE_BUSY)),
+        SqlFault::Busy
+    );
+    assert_eq!(
+        sql_fault(&failure(rusqlite::ffi::SQLITE_LOCKED)),
+        SqlFault::Busy
+    );
+    assert_eq!(
+        sql_fault(&failure(rusqlite::ffi::SQLITE_INTERRUPT)),
+        SqlFault::Interrupted
+    );
+    assert_eq!(
+        sql_fault(&failure(rusqlite::ffi::SQLITE_CORRUPT_VTAB)),
+        SqlFault::Corrupt
+    );
+    assert_eq!(
+        sql_fault(&failure(rusqlite::ffi::SQLITE_ERROR)),
+        SqlFault::Other
+    );
+}
+
+/// Delegates to a reader's port but replaces every deadline with one already passed, so
+/// the deadline interrupts deterministically inside SQLite.
+struct Expired<'a>(super::SqliteSearch<'a>);
+impl SearchIndex for Expired<'_> {
+    fn resolve_tag(
+        &self,
+        key: &cm_domain::TagKey,
+    ) -> Result<Option<cm_domain::TagId>, cm_core::ServiceError> {
+        self.0.resolve_tag(key)
+    }
+    fn resolve_collection(
+        &self,
+        name: &str,
+    ) -> Result<Vec<cm_domain::CollectionId>, cm_core::ServiceError> {
+        self.0.resolve_collection(name)
+    }
+    fn fts(
+        &self,
+        tokenizer: Tokenizer,
+        text: &str,
+        filter: &ResolvedFilter,
+        sources: &[DocumentSource],
+        weights: &Weights,
+        max: u32,
+    ) -> Result<Vec<Candidate>, cm_core::ServiceError> {
+        self.0.fts(tokenizer, text, filter, sources, weights, max)
+    }
+    fn filtered(
+        &self,
+        filter: &ResolvedFilter,
+        max: u32,
+    ) -> Result<Vec<Candidate>, cm_core::ServiceError> {
+        self.0.filtered(filter, max)
+    }
+    fn scan(
+        &self,
+        needles: &[String],
+        filter: &ResolvedFilter,
+        sources: &[DocumentSource],
+        after: i64,
+        max_rows: u32,
+        deadline: std::time::Instant,
+    ) -> Result<ScanWindow, cm_core::ServiceError> {
+        self.0
+            .scan(needles, filter, sources, after, max_rows, deadline)
+    }
+    fn documents(&self, ids: &[i64]) -> Result<Vec<IndexedDocument>, cm_core::ServiceError> {
+        self.0.documents(ids)
+    }
+    fn extraction_gaps(
+        &self,
+        filter: &ResolvedFilter,
+    ) -> Result<ExtractionGaps, cm_core::ServiceError> {
+        self.0.extraction_gaps(filter)
+    }
+    fn set_deadline(&self, deadline: Option<std::time::Instant>) {
+        let past = std::time::Instant::now() - std::time::Duration::from_secs(1);
+        self.0.set_deadline(deadline.map(|_| past));
+    }
+    fn interrupted(&self) -> bool {
+        self.0.interrupted()
+    }
+}
+
+/// P2-2 regression: the request deadline is enforced inside SQLite. A statement that would
+/// run forever is interrupted at the deadline, an interrupted FTS lookup becomes an
+/// explicit timed-out page (not an error, not a rebuild trigger) and a long statement on one
+/// reader does not hold up a search on another reader.
+#[test]
+fn deadline_interrupts_inside_sqlite_and_readers_do_not_serialize() {
+    use std::time::{Duration, Instant};
+    let (_temp, directory, mut db) = file_library();
+    for i in 0..40 {
+        paper(&mut db, &format!("電池 electrolyte {i}"), 2020, "x");
+    }
+    // An endless statement on reader A stops at its deadline.
+    let slow = std::thread::spawn({
+        let directory = directory.clone();
+        move || {
+            let reader = super::SearchReader::open(&directory).unwrap();
+            let index = reader.search_index();
+            index.set_deadline(Some(Instant::now() + Duration::from_millis(1500)));
+            let started = Instant::now();
+            let error = reader
+                .connection
+                .query_row(
+                    "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c) SELECT count(*) FROM c",
+                    [],
+                    |r| r.get::<_, i64>(0),
+                )
+                .unwrap_err();
+            (crate::sql_fault(&error), started.elapsed())
+        }
+    });
+    std::thread::sleep(Duration::from_millis(100));
+    // Meanwhile reader B answers a search right away.
+    let reader = super::SearchReader::open(&directory).unwrap();
+    let started = Instant::now();
+    {
+        let snapshot = reader.snapshot().unwrap();
+        match search(&*snapshot, &SearchRequest::new("electrolyte")).unwrap() {
+            SearchReply::Results(page) => assert_eq!(page.total_hits, 40),
+            other => panic!("{other:?}"),
+        }
+    }
+    let concurrent = started.elapsed();
+    let (fault, slow_elapsed) = slow.join().unwrap();
+    assert_eq!(fault, crate::SqlFault::Interrupted);
+    assert!(
+        slow_elapsed >= Duration::from_millis(1400) && slow_elapsed < Duration::from_secs(10),
+        "{slow_elapsed:?}"
+    );
+    assert!(
+        concurrent < Duration::from_millis(1000),
+        "search waited for the other reader: {concurrent:?}"
+    );
+    // Interrupted FTS lookup -> explicit timed-out page.
+    {
+        let snapshot = reader.snapshot().unwrap();
+        let expired = Expired(super::SqliteSearch::new(
+            snapshot.connection,
+            snapshot.deadline,
+        ));
+        match search(&expired, &SearchRequest::new("electrolyte")).unwrap() {
+            SearchReply::Results(page) => {
+                assert!(page.hits.is_empty());
+                assert!(page.coverage.timed_out && !page.coverage.complete);
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+    // An interrupted scan chunk ends the window early (partial, with a continuation).
+    let index = reader.search_index();
+    index.set_deadline(Some(Instant::now() - Duration::from_secs(1)));
+    let window = index
+        .scan(
+            &["電池".into()],
+            &Default::default(),
+            &[DocumentSource::Paper],
+            0,
+            1000,
+            Instant::now() + Duration::from_secs(60),
+        )
+        .unwrap();
+    assert!(window.timed_out && !window.exhausted && window.examined == 0);
+    index.set_deadline(None);
+    // After the deadline is cleared the same reader works normally.
+    let snapshot = reader.snapshot().unwrap();
+    match search(&*snapshot, &SearchRequest::new("電池")).unwrap() {
+        SearchReply::Results(page) => assert!(page.total_hits > 0),
+        other => panic!("{other:?}"),
+    }
+}
+
+/// P2-5 regression over real SQLite: a phrase spanning a PDF line break matches through
+/// unicode61, and the hit carries `matched_fields`, a snippet around it and a highlight.
+#[test]
+fn phrase_across_pdf_line_break_gets_snippet_and_highlight() {
+    let mut db = LibraryDb::in_memory().unwrap();
+    let owner = paper(&mut db, "Owner", 2020, "z");
+    let att = attachment(&db, owner, 4);
+    let body = format!(
+        "{} we study the solid\r\nelectrolyte interphase of Müller cells {}",
+        "lorem ".repeat(100),
+        "ipsum ".repeat(100)
+    );
+    page(&db, att, 0, "1", &body);
+    for (q, expected) in [
+        ("\"solid electrolyte\"", "solid  electrolyte"),
+        ("muller", "Müller"),
+    ] {
+        let found = query(&db, q);
+        assert_eq!(found.hits.len(), 1, "{q}");
+        let hit = &found.hits[0];
+        assert_eq!(hit.matched_fields, vec![SearchField::Body], "{q}");
+        assert_eq!(hit.highlights.len(), 1, "{q}: {:?}", hit.snippet);
+        let marked = &hit.snippet[hit.highlights[0].start..hit.highlights[0].end];
+        assert_eq!(marked, expected, "{q}");
+    }
+}
+
+/// P3: one attachment with an unsafe stored path is marked failed and skipped; the other
+/// attachments are still returned as extraction targets.
+#[test]
+fn unsafe_attachment_path_fails_only_that_attachment() {
+    let (_temp, directory, mut db) = file_library();
+    let owner = paper(&mut db, "Owner", 2020, "z");
+    let good = attachment(&db, owner, 5);
+    let bad = attachment(&db, owner, 6);
+    db.connection
+        .execute(
+            "UPDATE attachments SET relative_path='../outside.pdf' WHERE id=?1",
+            [bad.0.to_string()],
+        )
+        .unwrap();
+    let mut store = db.fulltext(&directory).unwrap();
+    let targets = store.targets(ExtractScope::Pending, false, 10).unwrap();
+    assert_eq!(
+        targets.iter().map(|t| t.attachment_id).collect::<Vec<_>>(),
+        vec![good]
+    );
+    drop(store);
+    let status = db.fulltext_reader().for_attachment(bad).unwrap().unwrap();
+    assert_eq!(status.state, ExtractionState::Failed);
+    assert_eq!(db.fulltext_reader().unfinished().unwrap().count, 1);
+}
+
+/// P2-4 storage side: deferring keeps the attachment unfinished and resumable, counts
+/// attempts, and a committed batch resets the count.
+#[test]
+fn deferred_attachment_stays_unfinished_with_attempt_count() {
+    let (_temp, directory, mut db) = file_library();
+    let owner = paper(&mut db, "Owner", 2020, "z");
+    let att = attachment(&db, owner, 7);
+    let mut store = db.fulltext(&directory).unwrap();
+    let target = store.targets(ExtractScope::Pending, false, 10).unwrap()[0].clone();
+    assert_eq!(store.defer(&target, "time budget").unwrap(), 1);
+    assert_eq!(store.defer(&target, "time budget").unwrap(), 2);
+    let resumed = store.targets(ExtractScope::Pending, false, 10).unwrap();
+    assert_eq!((resumed[0].resume_from, resumed[0].reset), (0, false));
+    drop(store);
+    let before = db.fulltext_reader().unfinished().unwrap().key();
+    let status = db.fulltext_reader().for_attachment(att).unwrap().unwrap();
+    assert_eq!(status.state, ExtractionState::Extracting);
+    let mut store = db.fulltext(&directory).unwrap();
+    store
+        .store(StoreBatch {
+            target: &target,
+            page_count: 2,
+            pages: &[ExtractedPage {
+                page_index: 0,
+                page_label: None,
+                text: "x".into(),
+                truncated: false,
+            }],
+            next_page: 1,
+            finish: None,
+        })
+        .unwrap();
+    assert_eq!(
+        store.defer(&target, "read error").unwrap(),
+        1,
+        "reset by progress"
+    );
+    let resumed = store.targets(ExtractScope::Pending, false, 10).unwrap();
+    assert_eq!(resumed[0].resume_from, 1);
+    drop(store);
+    let after = db.fulltext_reader().unfinished().unwrap().key();
+    assert_ne!(after, before, "progress changes the automatic job key");
 }

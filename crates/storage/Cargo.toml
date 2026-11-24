@@ -11,7 +11,7 @@ workspace = true
 [dependencies]
 cm-domain.workspace = true
 cm-core.workspace = true
-rusqlite.workspace = true
+rusqlite = { workspace = true, features = ["hooks"] }
 serde_json.workspace = true
 serde.workspace = true
 sha2.workspace = true

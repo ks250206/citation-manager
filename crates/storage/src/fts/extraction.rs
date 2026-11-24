@@ -24,6 +24,29 @@ pub struct FulltextReader<'a> {
     pub(crate) connection: &'a Connection,
 }
 
+/// The set of PDF attachments still awaiting extraction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Unfinished {
+    pub count: u32,
+    /// Smallest attachment ID in the set.
+    pub first: Option<AttachmentId>,
+    /// Pages committed for the set so far.
+    pub committed_pages: u64,
+    /// Transient failures recorded for the set so far.
+    pub attempts: u64,
+}
+impl Unfinished {
+    /// Automatic job idempotency key: it changes whenever the set changes or work was done
+    /// or attempted, and stays equal when a job made no progress (no resubmission loop).
+    pub fn key(&self) -> Option<String> {
+        let first = self.first.filter(|_| self.count > 0)?;
+        Some(format!(
+            "auto:{}:{}:{}:{}",
+            first.0, self.count, self.committed_pages, self.attempts
+        ))
+    }
+}
+
 const NOW: &str = "strftime('%Y-%m-%dT%H:%M:%fZ','now')";
 
 fn uuid(row: &Row<'_>, index: usize) -> rusqlite::Result<Uuid> {
@@ -84,8 +107,18 @@ impl FulltextStore for SqliteFulltext<'_> {
         drop(statement);
         let mut targets = Vec::with_capacity(rows.len());
         for (attachment_id, paper_id, sha256, key, status, next, same_hash) in rows {
-            let path = managed_path(&self.directory, &key, false)
-                .map_err(|_| ServiceError::InvalidInput("unsafe managed attachment path".into()))?;
+            let Ok(path) = managed_path(&self.directory, &key, false) else {
+                // One bad record must not stop extraction of every other attachment: it gets
+                // an explicit failed state (not retried automatically) and is skipped.
+                record_failure(
+                    self.connection,
+                    attachment_id,
+                    &sha256,
+                    ExtractionState::Failed,
+                    "stored attachment path is not a safe managed path",
+                )?;
+                continue;
+            };
             let resumable =
                 !force && status.as_deref() == Some("extracting") && same_hash == Some(true);
             targets.push(ExtractTarget {
@@ -133,7 +166,7 @@ impl FulltextStore for SqliteFulltext<'_> {
                  ON CONFLICT(attachment_id) DO UPDATE SET file_hash=excluded.file_hash, status='extracting',
                     page_count=excluded.page_count, next_page=excluded.next_page,
                     truncated_pages=truncated_pages+excluded.truncated_pages, detail=NULL,
-                    updated_at=excluded.updated_at"
+                    attempts=0, updated_at=excluded.updated_at"
             ),
             params![
                 id,
@@ -217,21 +250,58 @@ impl FulltextStore for SqliteFulltext<'_> {
         if !state.lacks_text() {
             return Err(ServiceError::InvalidInput("not a failure state".into()));
         }
-        let id = target.attachment_id.0.to_string();
-        self.connection
-            .execute(
-                &format!(
-                    "INSERT INTO fulltext_extractions(attachment_id,file_hash,status,detail,updated_at)
-                     VALUES (?1,?2,?3,?4,{NOW})
-                     ON CONFLICT(attachment_id) DO UPDATE SET file_hash=excluded.file_hash,
-                        status=excluded.status, detail=excluded.detail, updated_at=excluded.updated_at,
-                        pages_with_text=(SELECT count(*) FROM fulltext_pages WHERE attachment_id=?1 AND extraction_status='complete')"
-                ),
-                params![id, target.sha256.as_slice(), state.as_str(), detail],
-            )
-            .map_err(service_error)?;
-        Ok(())
+        record_failure(
+            self.connection,
+            target.attachment_id,
+            &target.sha256,
+            state,
+            detail,
+        )
     }
+    fn defer(&mut self, target: &ExtractTarget, detail: &str) -> Result<u32, ServiceError> {
+        let id = target.attachment_id.0.to_string();
+        // A row for other bytes is stale: start over (and count from one) for these bytes.
+        self.connection
+            .query_row(
+                &format!(
+                    "INSERT INTO fulltext_extractions(attachment_id,file_hash,status,attempts,detail,updated_at)
+                     VALUES (?1,?2,'extracting',1,?3,{NOW})
+                     ON CONFLICT(attachment_id) DO UPDATE SET status='extracting',
+                        attempts=CASE WHEN file_hash=excluded.file_hash THEN attempts+1 ELSE 1 END,
+                        next_page=CASE WHEN file_hash=excluded.file_hash THEN next_page ELSE 0 END,
+                        file_hash=excluded.file_hash, detail=excluded.detail,
+                        updated_at=excluded.updated_at
+                     RETURNING attempts"
+                ),
+                params![id, target.sha256.as_slice(), detail],
+                |r| count(r, 0),
+            )
+            .map_err(service_error)
+    }
+}
+
+fn record_failure(
+    connection: &Connection,
+    attachment: AttachmentId,
+    sha256: &[u8; 32],
+    state: ExtractionState,
+    detail: &str,
+) -> Result<(), ServiceError> {
+    let id = attachment.0.to_string();
+    connection
+        .execute(
+            &format!(
+                "INSERT INTO fulltext_extractions(attachment_id,file_hash,status,detail,updated_at)
+                 VALUES (?1,?2,?3,?4,{NOW})
+                 ON CONFLICT(attachment_id) DO UPDATE SET file_hash=excluded.file_hash,
+                    status=excluded.status, detail=excluded.detail, updated_at=excluded.updated_at,
+                    attempts=0,
+                    pages_with_text=(SELECT count(*) FROM fulltext_pages WHERE attachment_id=?1 AND extraction_status='complete')"
+            ),
+            params![id, sha256.as_slice(), state.as_str(), detail],
+        )
+        .map_err(service_error)?;
+    Ok(())
 }
 
 const STATUS: &str =
@@ -282,14 +352,14 @@ impl FulltextReader<'_> {
             .optional()
             .map_err(service_error)
     }
-    /// PDF attachments whose extraction has not finished (never started or interrupted),
-    /// the first such attachment ID and the pages committed for them so far. Together they
-    /// form the automatic job idempotency key: it changes whenever work was done.
-    pub fn unfinished(&self) -> Result<(u32, Option<AttachmentId>, u64), ServiceError> {
+    /// PDF attachments whose extraction has not finished (never started, interrupted or
+    /// deferred after a transient failure). See `Unfinished::key`.
+    pub fn unfinished(&self) -> Result<Unfinished, ServiceError> {
         self.connection
             .query_row(
                 &format!(
-                    "SELECT count(*), min(a.id), coalesce(sum(e.next_page),0) FROM attachments a
+                    "SELECT count(*), min(a.id), coalesce(sum(e.next_page),0), coalesce(sum(e.attempts),0)
+                     FROM attachments a
                      LEFT JOIN fulltext_extractions e ON e.attachment_id=a.id
                      WHERE {PDF_ATTACHMENT}
                        AND (e.attachment_id IS NULL OR e.status='extracting' OR e.file_hash<>a.file_hash)"
@@ -297,14 +367,15 @@ impl FulltextReader<'_> {
                 [],
                 |r| {
                     let first: Option<String> = r.get(1)?;
-                    Ok((
-                        count(r, 0)?,
-                        first
+                    Ok(Unfinished {
+                        count: count(r, 0)?,
+                        first: first
                             .map(|f| Uuid::parse_str(&f).map(AttachmentId))
                             .transpose()
                             .map_err(|_| rusqlite::Error::InvalidQuery)?,
-                        r.get::<_, i64>(2)?.max(0) as u64,
-                    ))
+                        committed_pages: r.get::<_, i64>(2)?.max(0) as u64,
+                        attempts: r.get::<_, i64>(3)?.max(0) as u64,
+                    })
                 },
             )
             .map_err(service_error)

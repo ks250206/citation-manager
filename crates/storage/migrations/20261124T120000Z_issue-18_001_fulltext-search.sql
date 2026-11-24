@@ -13,6 +13,9 @@ CREATE TABLE fulltext_extractions (
     next_page INTEGER NOT NULL DEFAULT 0 CHECK(next_page >= 0),
     pages_with_text INTEGER NOT NULL DEFAULT 0 CHECK(pages_with_text >= 0),
     truncated_pages INTEGER NOT NULL DEFAULT 0 CHECK(truncated_pages >= 0),
+    -- Consecutive transient failures (time budget, read error) without progress; the
+    -- attachment is retried by later runs and marked failed after a bounded number.
+    attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts >= 0),
     detail TEXT,
     updated_at TEXT NOT NULL
 );
