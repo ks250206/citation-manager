@@ -2,7 +2,7 @@
 use crate::ServiceError;
 use cm_domain::{PaperId, Tag, TagId, TagKey, organization_name};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TagInput {
     pub name: String,
     /// Optional #RRGGBB. Stored spelling is preserved.

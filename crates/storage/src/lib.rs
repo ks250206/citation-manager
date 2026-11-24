@@ -1,6 +1,7 @@
 //! SQLite persistence, immutable attachments and WAL-safe backup/restore. Daemon ownership is #25.
 pub mod attachments;
 pub mod backup;
+pub mod daemon;
 pub mod db;
 mod error;
 pub mod integrity;

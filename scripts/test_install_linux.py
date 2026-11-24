@@ -18,6 +18,7 @@ class InstallLinux(unittest.TestCase):
             executable = root / 'build/citation-manager'
             executable.parent.mkdir()
             executable.write_bytes(b'binary')
+            (root / 'build/papersd').write_bytes(b'daemon')
             pdfium = root / 'pdfium'
             (pdfium / 'lib').mkdir(parents=True)
             (pdfium / 'licenses').mkdir()
@@ -30,6 +31,9 @@ class InstallLinux(unittest.TestCase):
             target = installer.install(prefix, executable, library, settings, pdfium)
             self.assertEqual(target, prefix / 'bin/citation-manager')
             self.assertTrue(target.stat().st_mode & 0o111)
+            # The GUI starts the sibling daemon by absolute path.
+            self.assertEqual((prefix / 'bin/papersd').read_bytes(), b'daemon')
+            self.assertTrue((prefix / 'bin/papersd').stat().st_mode & 0o111)
             # Must agree with cm_pdf::worker::linux_bundled_library.
             self.assertEqual((prefix / 'lib/citation-manager/libpdfium.so').read_bytes(), b'so')
             self.assertTrue((prefix / 'share/doc/citation-manager/pdfium-licenses/pdfium.txt').is_file())

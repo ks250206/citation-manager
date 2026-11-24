@@ -3,6 +3,7 @@
 
 Layout (what `cm_pdf::worker::bundled_library` expects):
   <prefix>/bin/citation-manager
+  <prefix>/bin/papersd                            on-demand library daemon (#25), started by the GUI
   <prefix>/lib/citation-manager/libpdfium.so      pinned chromium/8125, checksum-verified
   <prefix>/share/doc/citation-manager/pdfium-licenses/
   <prefix>/share/applications/citation-manager.desktop
@@ -57,6 +58,11 @@ def install(prefix, executable, library, settings, pdfium_dir=None):
     target = bin_dir / 'citation-manager'
     shutil.copy2(executable, target)
     target.chmod(0o755)
+    # The GUI starts its sibling papersd by absolute path (#25); never via PATH.
+    daemon = executable.with_name('papersd')
+    if daemon.is_file():
+        shutil.copy2(daemon, bin_dir / 'papersd')
+        (bin_dir / 'papersd').chmod(0o755)
     if pdfium_dir is not None:
         library_file = pdfium_dir / pdfium.artifact('linux-x64')['library']
         shutil.copy2(library_file, lib_dir / 'libpdfium.so')
@@ -86,6 +92,9 @@ def main():
     args = parser.parse_args()
     if sys.platform != 'linux':
         parser.error('this installer is for Linux; macOS uses the .app layout')
+    if not args.executable.with_name('papersd').is_file():
+        parser.error('papersd must be built next to the executable: '
+                     'cargo build -p cm-daemon --bins --features desktop-bootstrap --release --locked')
     with tempfile.TemporaryDirectory(prefix='cm-pdfium-') as scratch:
         pdfium_dir = None
         if not args.skip_pdfium:

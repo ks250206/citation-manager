@@ -24,6 +24,11 @@ def main():
     binary_dir = bundle / 'Contents/MacOS'
     binary_dir.mkdir(parents=True)
     shutil.copy2(executable, binary_dir / 'citation-manager')
+    # #25: the GUI lazily starts its sibling papersd (unverified on macOS; #34 owns the bundle).
+    daemon = executable.with_name('papersd')
+    if not daemon.is_file():
+        parser.error('build papersd too: cargo build -p cm-daemon --bins --features desktop-bootstrap --locked')
+    shutil.copy2(daemon, binary_dir / 'papersd')
     if args.deny_network:
         launcher = binary_dir / 'launch-smoke'
         launcher.write_text("#!/bin/sh\n" + "exec /usr/bin/sandbox-exec -p '(version 1)(allow default)(deny network-outbound (remote ip \"*:*\"))(deny network-inbound (local ip \"*:*\"))' \"$(dirname \"$0\")/citation-manager\" \"$@\"\n")

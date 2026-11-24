@@ -820,9 +820,11 @@ dependencies = [
  "cm-search",
  "cm-storage",
  "rustix",
+ "serde",
  "serde_json",
  "sha2",
  "tempfile",
+ "uuid",
 ]
 
 [[package]]
@@ -894,6 +896,8 @@ dependencies = [
  "cm-core",
  "cm-domain",
  "serde",
+ "serde_json",
+ "uuid",
 ]
 
 [[package]]

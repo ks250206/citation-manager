@@ -15,10 +15,12 @@ cm-storage.workspace = true
 cm-search.workspace = true
 cm-pdf.workspace = true
 cm-metadata.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 tempfile.workspace = true
-rustix.workspace = true
+rustix = { workspace = true, features = ["fs", "net"] }
+uuid = { workspace = true, features = ["v7"] }
 
 [features]
 default = []
@@ -27,6 +29,11 @@ pdf-metadata = ["cm-pdf/runtime"]
 
 [target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
 cm-desktop = { path = "../desktop", optional = true }
+
+# On-demand per-library daemon (#25): the only writer, serving authenticated local IPC.
+[[bin]]
+name = "papersd"
+path = "src/bin/papersd.rs"
 
 [[bin]]
 name = "citation-manager"
@@ -42,6 +49,23 @@ serde_json.workspace = true
 [[test]]
 name = "doi_import"
 path = "../../tests/integration/doi_import.rs"
+
+# #25 daemon: GUI-less IPC, auth/grants, lifecycle with the real papersd binary, jobs.
+[[test]]
+name = "daemon_ipc"
+path = "../../tests/integration/daemon/ipc.rs"
+
+[[test]]
+name = "daemon_auth"
+path = "../../tests/integration/daemon/auth.rs"
+
+[[test]]
+name = "daemon_lifecycle"
+path = "../../tests/integration/daemon/lifecycle.rs"
+
+[[test]]
+name = "daemon_jobs"
+path = "../../tests/integration/daemon/jobs.rs"
 
 # Headless composition only; preserves metadata/storage dependency direction.
 [[example]]

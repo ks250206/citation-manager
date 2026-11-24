@@ -13,7 +13,7 @@ pub struct ImportAttachment {
     pub expected_sha256: Option<[u8; 32]>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum AttachmentStatus {
     Present,
     Missing,

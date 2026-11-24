@@ -6,12 +6,12 @@ pub use cm_core::{
     metadata_resolve::Cancellation,
 };
 use std::path::PathBuf;
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum Selection {
     Files(Vec<PathBuf>),
     Folder { path: PathBuf, recursive: bool },
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PdfFile {
     pub path: PathBuf,
     pub name: String,
@@ -24,7 +24,7 @@ pub struct PdfFile {
     pub paper: Option<PaperId>,
     pub attachment: Option<AttachmentId>,
 }
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct PdfReport {
     pub files: Vec<PdfFile>,
     pub assessed: usize,
@@ -60,7 +60,7 @@ pub enum PdfRequest {
     },
     List(PaperId),
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum PdfReply {
     Report(PdfReport),
     Preview(ImportPreview),

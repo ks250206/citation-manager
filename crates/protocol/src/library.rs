@@ -6,7 +6,7 @@ pub use cm_core::{
     papers::{NewPaper, PaperList},
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum LibraryRequest {
     List(PaperList),
     Get(PaperId),
@@ -14,7 +14,7 @@ pub enum LibraryRequest {
     Update(Box<Paper>),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum LibraryReply {
     Papers(Vec<Paper>),
     Paper(Box<Paper>),
