@@ -19,6 +19,7 @@ mod library_ui;
 mod palette_ui;
 mod pdf_ui;
 mod pdf_viewer_ui;
+mod search_ui;
 mod settings_ui;
 mod text_input;
 use self::text_input::TextInput;
@@ -83,6 +84,14 @@ enum Event {
         crate::pdf_viewer::RenderKey,
         u64,
         Result<PdfReply, ServiceError>,
+    ),
+    Search(
+        Box<search_ui::SearchOp>,
+        Box<Result<cm_protocol::search::SearchReply, ServiceError>>,
+    ),
+    Find(
+        Box<search_ui::SearchOp>,
+        Box<Result<cm_protocol::search::FulltextReply, ServiceError>>,
     ),
     Annotation(
         Box<annotations_ui::AnnOp>,
@@ -171,6 +180,8 @@ struct LibraryView {
     palette_scroll: ScrollHandle,
     viewer: Option<pdf_viewer_ui::Viewer>,
     ann: annotations_ui::AnnotationState,
+    find_search: search_ui::SearchState,
+    find: search_ui::FindState,
     /// Page to show once the viewer for that attachment is ready (from the Notes list).
     pending_jump: Option<(AttachmentId, u32)>,
     viewer_focus: FocusHandle,
@@ -262,12 +273,15 @@ impl LibraryView {
             palette_scroll: ScrollHandle::new(),
             viewer: None,
             ann: annotations_ui::AnnotationState::new(cx),
+            find_search: search_ui::SearchState::new(),
+            find: search_ui::FindState::new(cx),
             pending_jump: None,
             viewer_focus: cx.focus_handle(),
             page_input: cx.new(|cx| TextInput::new("Page", cx)),
         };
         view.subscribe_viewer_inputs(window, cx);
         view.subscribe_annotation_inputs(window, cx);
+        view.subscribe_search_inputs(window, cx);
         cx.subscribe(
             &view.palette_query,
             |this, _, _: &text_input::Edited, cx| {
@@ -300,7 +314,7 @@ impl LibraryView {
             &view.paper_type,
         ] {
             cx.subscribe(field, |this, _, _: &text_input::Submitted, cx| {
-                this.filter(cx)
+                this.search_or_filter(cx)
             })
             .detach();
         }
@@ -414,6 +428,14 @@ impl LibraryView {
             }
             Event::Annotation(op, result) => {
                 self.annotation_reply(*op, result, cx);
+                return;
+            }
+            Event::Search(op, result) => {
+                self.search_reply(*op, *result, cx);
+                return;
+            }
+            Event::Find(op, result) => {
+                self.find_reply(*op, *result, cx);
                 return;
             }
             event => Message { event, ..message },
@@ -535,6 +557,7 @@ impl LibraryView {
                     if let Some(p) = &self.editor {
                         self.host.set(p.id, a);
                     }
+                    self.continue_open(cx);
                 }
                 Ok(_) => (),
                 Err(e) => self.status(format!("Attachment read failed: {e}"), true, cx),
@@ -555,7 +578,11 @@ impl LibraryView {
                 }
                 Err(e) => self.status(format!("Export failed: {e}"), true, cx),
             },
-            Event::Progress(_) | Event::Render(..) | Event::Annotation(..) => (),
+            Event::Progress(_)
+            | Event::Render(..)
+            | Event::Annotation(..)
+            | Event::Search(..)
+            | Event::Find(..) => (),
         }
         self.lock_fields(cx);
         cx.notify();

@@ -10,24 +10,6 @@ pub fn deferred_commands() -> Vec<Command> {
             "PDF export is not connected",
         ),
         (
-            "pdf.highlight_selection",
-            "Highlight Selection",
-            21,
-            "PDF selection/annotations are not connected",
-        ),
-        (
-            "pdf.show_annotations",
-            "Show Annotations",
-            21,
-            "PDF annotations are not connected",
-        ),
-        (
-            "search.full_text",
-            "Search Full Text",
-            18,
-            "Full-text search is not connected",
-        ),
-        (
             "api.open_settings",
             "Open API Settings",
             26,

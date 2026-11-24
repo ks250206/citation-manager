@@ -1,5 +1,6 @@
 //! Desktop views depend only on the replaceable protocol client.
 pub mod commands;
+pub mod deep_links;
 pub mod keymap;
 pub mod palette;
 pub mod pdf_viewer;
@@ -8,6 +9,7 @@ pub mod pdf_viewer;
     all(feature = "native-gpui", any(target_os = "macos", target_os = "linux"))
 ))]
 mod request_policy;
+pub mod search;
 pub mod service_client;
 #[cfg(all(
     feature = "native-gpui",

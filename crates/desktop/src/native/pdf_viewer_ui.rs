@@ -162,6 +162,18 @@ impl Viewer {
         let text = selected_text(&pages, a, b);
         (!text.is_empty()).then_some(text)
     }
+    pub(super) fn attachment_id(&self) -> AttachmentId {
+        self.attachment
+    }
+    pub(super) fn scroll_by(&mut self, dy: f32) {
+        let offset = self.scroll.offset();
+        self.scroll
+            .set_offset(point(offset.x, px((f32::from(offset.y) - dy).min(0.0))));
+    }
+    /// Jump to a page (clamped to the document).
+    pub(super) fn jump(&mut self, page: u32) {
+        self.scroll_to_page(page);
+    }
     fn scroll_to_page(&mut self, page: u32) {
         let page = page.min(self.page_count.unwrap_or(1).saturating_sub(1));
         if let Some((top, _)) = self.layout().get(page as usize) {
@@ -444,6 +456,14 @@ impl LibraryView {
         let marks_src: Vec<cm_protocol::annotations::Annotation> =
             self.ann.for_attachment(attachment).cloned().collect();
         let selected_ann = self.ann.selected;
+        let find_query = (self.find.attachment == Some(attachment) && !self.find.query.is_empty())
+            .then(|| self.find.query.clone());
+        let find_current_page = self
+            .find
+            .pages
+            .get(self.find.current)
+            .map(|(page, _)| *page);
+        let find_bar = self.find.open.then(|| self.find_bar(cx));
         let Some(v) = &mut self.viewer else {
             return div()
                 .p_3()
@@ -463,6 +483,8 @@ impl LibraryView {
         {
             v.scroll_to_page(page);
             self.pending_jump = None;
+            // The page counter and toolbar were computed from the old offset; repaint once.
+            cx.on_next_frame(window, |_, _, cx| cx.notify());
         }
         let toolbar = div()
             .flex()
@@ -561,6 +583,35 @@ impl LibraryView {
                     .cloned();
                 let failure = v.failures.get(&page).map(ToString::to_string);
                 let image_only = v.has_text.get(&page) == Some(&false);
+                let found: Vec<Div> = match (&find_query, v.geometry.get(&page), v.chars.get(&page))
+                {
+                    (Some(query), Some((crop, r)), Some(chars)) => {
+                        match pdf_viewer::viewport(*crop, rotate(*r, v.turns), scale) {
+                            Some(vp) => crate::search::find_in_page(chars, query)
+                                .into_iter()
+                                .flat_map(|(a, b)| {
+                                    chars[a..=b].iter().map(|c| c.quad).collect::<Vec<_>>()
+                                })
+                                .map(|q| {
+                                    let b = vp.quad_to_display(q).bounds();
+                                    div()
+                                        .absolute()
+                                        .left(px(b.left))
+                                        .top(px(b.bottom.min(b.top)))
+                                        .w(px(b.width().abs()))
+                                        .h(px(b.height().abs()))
+                                        .bg(rgba(if find_current_page == Some(page) {
+                                            0xff8c0088
+                                        } else {
+                                            0xffb34755
+                                        }))
+                                })
+                                .collect(),
+                            None => vec![],
+                        }
+                    }
+                    _ => vec![],
+                };
                 let marks: Vec<Div> = match (
                     v.geometry.get(&page),
                     pdf_viewer::viewport(
@@ -681,6 +732,7 @@ impl LibraryView {
                             .into_any_element(),
                     })
                     .children(marks)
+                    .children(found)
                     .children(overlays)
                     .when(image_only, |el| {
                         el.child(
@@ -713,12 +765,14 @@ impl LibraryView {
             .min_h_0()
             .child(toolbar)
             .children(annotation_bars)
+            .children(find_bar)
             .child(
                 div()
                     .id("pdf-pages")
                     .on_action(cx.listener(|this, _: &AnnotationUndo, _, cx| this.ann_undo(cx)))
                     .on_action(cx.listener(|this, _: &AnnotationRedo, _, cx| this.ann_redo(cx)))
                     .key_context("PdfViewer")
+                    .on_key_down(cx.listener(Self::viewer_key))
                     .track_focus(&self.viewer_focus)
                     .on_action(cx.listener(|this, _: &CopySelection, _, cx| this.viewer_copy(cx)))
                     .flex_1()
@@ -948,5 +1002,54 @@ impl LibraryView {
             );
         }
         bars
+    }
+    fn find_bar(&self, cx: &mut Context<Self>) -> Div {
+        div()
+            .flex()
+            .items_center()
+            .gap_2()
+            .px_2()
+            .py_1()
+            .border_b_1()
+            .border_color(rgb(BORDER))
+            .child(div().w(px(200.)).child(self.find.input.clone()))
+            .child(
+                button("find-prev", "↑", !self.find.pages.is_empty())
+                    .on_click(cx.listener(|this, _, _, cx| this.find_step(false, cx))),
+            )
+            .child(
+                button("find-next", "↓", !self.find.pages.is_empty())
+                    .on_click(cx.listener(|this, _, _, cx| this.find_step(true, cx))),
+            )
+            .child(hint(self.find.status.clone()).flex_1())
+            .child(
+                button("find-close", "✕", true).on_click(cx.listener(|this, _, _, cx| {
+                    this.find.open = false;
+                    this.find.query.clear();
+                    this.find.pages.clear();
+                    cx.notify();
+                })),
+            )
+    }
+    pub(super) fn show_pdf_tab(&mut self, cx: &mut Context<Self>) {
+        if self.settings.details_tab != "PDF" {
+            self.settings.details_tab = "PDF".into();
+            self.persist(cx);
+        }
+    }
+    pub(super) fn highlight_selection_command(&mut self, cx: &mut Context<Self>) {
+        self.highlight_selection(cx);
+    }
+    /// Palette/keymap entry points for viewer controls (same code paths as the toolbar).
+    pub(super) fn viewer_command(&mut self, id: &str, cx: &mut Context<Self>) {
+        use crate::commands::pdf_ids as pdf;
+        let scale = self.viewer.as_ref().map_or(1.0, |v| v.scale);
+        match id {
+            pdf::ZOOM_IN => self.viewer_zoom(ZoomMode::Scale(step_zoom(scale, true)), cx),
+            pdf::ZOOM_OUT => self.viewer_zoom(ZoomMode::Scale(step_zoom(scale, false)), cx),
+            pdf::FIT_WIDTH => self.viewer_zoom(ZoomMode::FitWidth, cx),
+            pdf::ROTATE => self.viewer_rotate(cx),
+            _ => {}
+        }
     }
 }
