@@ -80,8 +80,10 @@ pub struct SqliteJobs<'a> {
 const COLUMNS: &str = "SELECT id, kind, idempotency_key, payload_json, owner_grant, state, attempts, max_attempts, progress_done, progress_total, progress_message, error, result_json, detected_committed, cancel_requested, lease_owner, lease_generation, lease_expires_at_ms, next_attempt_at_ms, deadline_at_ms, created_at_ms, updated_at_ms FROM daemon_jobs";
 
 impl SqliteJobs<'_> {
-    /// Returns `(row, created)`. Same `(kind, key)` returns the existing job in any state;
-    /// a different payload for the same key is a `Conflict`, never a second job.
+    /// Returns `(row, created)`. Idempotency is scoped to the submitting grant: the same
+    /// `(owner_grant, kind, key)` returns the existing job in any state, and a different payload
+    /// for it is a `Conflict`, never a second job. Another grant's key is never visible here
+    /// (no cross-grant status leak or existence oracle).
     pub fn submit(&mut self, job: &NewJob<'_>) -> Result<(JobRow, bool), ServiceError> {
         if !(1..=20).contains(&job.max_attempts) {
             return Err(ServiceError::InvalidInput(
@@ -94,8 +96,14 @@ impl SqliteJobs<'_> {
             .map_err(service_error)?;
         let existing = tx
             .query_row(
-                &format!("{COLUMNS} WHERE kind = ?1 AND idempotency_key = ?2"),
-                params![job.kind, job.idempotency_key],
+                &format!(
+                    "{COLUMNS} WHERE coalesce(owner_grant, '') = coalesce(?1, '') AND kind = ?2 AND idempotency_key = ?3"
+                ),
+                params![
+                    job.owner_grant.map(|g| g.0.to_string()),
+                    job.kind,
+                    job.idempotency_key
+                ],
                 decode,
             )
             .optional()
@@ -335,6 +343,47 @@ impl SqliteJobs<'_> {
             )
             .map_err(service_error)?;
         self.get(id)?.ok_or(ServiceError::NotFound)
+    }
+    /// The owner grant was revoked: its queued/retry_wait jobs fail with `error` at once and its
+    /// running jobs get `cancel_requested` (the runner fails them after the handler stops).
+    /// Returns the affected rows as they are now.
+    pub fn fail_owner_active(
+        &mut self,
+        owner: GrantId,
+        error: &str,
+        now_ms: i64,
+    ) -> Result<Vec<JobRow>, ServiceError> {
+        let owner = owner.0.to_string();
+        let tx = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(service_error)?;
+        let ids: Vec<String> = tx
+            .prepare(&format!(
+                "SELECT id FROM daemon_jobs WHERE owner_grant = ?1 AND state IN {ACTIVE_STATES}"
+            ))
+            .map_err(service_error)?
+            .query_map([&owner], |r| r.get(0))
+            .map_err(service_error)?
+            .collect::<rusqlite::Result<_>>()
+            .map_err(service_error)?;
+        tx.execute(
+            "UPDATE daemon_jobs SET
+                 state = CASE WHEN state = 'running' THEN state ELSE 'failed' END,
+                 error = CASE WHEN state = 'running' THEN error ELSE ?2 END,
+                 next_attempt_at_ms = CASE WHEN state = 'running' THEN next_attempt_at_ms ELSE NULL END,
+                 cancel_requested = CASE WHEN state = 'running' THEN 1 ELSE cancel_requested END,
+                 updated_at_ms = ?3
+             WHERE owner_grant = ?1 AND state IN ('queued','retry_wait','running')",
+            params![owner, error, now_ms],
+        )
+        .map_err(service_error)?;
+        let rows = ids
+            .iter()
+            .map(|id| get(&tx, parse_id(id)?)?.ok_or(ServiceError::Unavailable))
+            .collect::<Result<Vec<_>, _>>()?;
+        tx.commit().map_err(service_error)?;
+        Ok(rows)
     }
     /// Explicit user retry of a failed/cancelled job: attempts reset, deadline cleared.
     pub fn retry(&mut self, id: Uuid, now_ms: i64) -> Result<JobRow, ServiceError> {

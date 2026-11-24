@@ -31,8 +31,9 @@ CREATE TABLE daemon_jobs (
     deadline_at_ms INTEGER,
     created_at_ms INTEGER NOT NULL,
     updated_at_ms INTEGER NOT NULL,
-    UNIQUE(kind, idempotency_key),
     CHECK((state = 'running') = (lease_owner IS NOT NULL AND lease_expires_at_ms IS NOT NULL))
 );
 CREATE INDEX daemon_jobs_runnable ON daemon_jobs(state, next_attempt_at_ms, created_at_ms);
 CREATE INDEX daemon_jobs_owner ON daemon_jobs(owner_grant, created_at_ms);
+-- Idempotency is scoped to the submitting grant: another grant's key never matches.
+CREATE UNIQUE INDEX daemon_jobs_idempotency ON daemon_jobs(coalesce(owner_grant, ''), kind, idempotency_key);

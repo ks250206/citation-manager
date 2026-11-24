@@ -229,6 +229,20 @@ fn revoked_and_expired_grants_are_refused_for_live_and_new_sessions() {
         }
         other => panic!("{other:?}"),
     }
+    // The bootstrap label is reserved: an issued grant can never pose as the owner's.
+    for label in ["desktop-bootstrap", " Desktop-Bootstrap "] {
+        assert!(matches!(
+            desktop
+                .call(Command::Grants(GrantCommand::Issue {
+                    label: label.into(),
+                    capabilities: set(&[Capability::LibraryRead]),
+                    expires_at_ms: None,
+                }))
+                .unwrap(),
+            Err(WireError::Service(cm_protocol::library::ServiceError::InvalidInput(r)))
+                if r.contains("reserved")
+        ));
+    }
     // Expiry applies to an established session too.
     let soon = cm_daemon::ipc::auth::now_ms() + 400;
     let expiring = match ok(desktop.call(Command::Grants(GrantCommand::Issue {

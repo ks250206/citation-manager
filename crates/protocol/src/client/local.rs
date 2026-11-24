@@ -22,6 +22,8 @@ use std::{
 pub const EXIT_ALREADY_RUNNING: i32 = 75;
 /// sockaddr_un.sun_path is 104 bytes on macOS and 108 on Linux (including NUL).
 const MAX_SOCKET_PATH: usize = 100;
+/// Minimum spacing of re-launches while a lock holder without a socket is going away.
+const RESPAWN_INTERVAL: Duration = Duration::from_millis(500);
 
 /// Where one library's daemon lives. Library-scoped state (lock, bootstrap credential) is
 /// inside the private library directory; the socket is in a short private runtime directory.
@@ -39,19 +41,24 @@ pub struct DaemonPaths {
     pub socket: PathBuf,
 }
 impl DaemonPaths {
+    /// `library` is canonicalized first (symlinks, `.`/`..`; a not-yet-created library via its
+    /// nearest existing ancestor), so every spelling of one library maps to one socket, lock
+    /// and `Hello::library`.
+    ///
     /// `runtime_dir`: explicit override (tests, unusual setups); otherwise
-    /// `$XDG_RUNTIME_DIR/citation-manager`, then `$TMPDIR/citation-manager` (macOS per-user
-    /// temp), then `/tmp/citation-manager-<uid>`.
+    /// `$XDG_RUNTIME_DIR/citation-manager`, then `$TMPDIR/citation-manager-<uid>` (macOS
+    /// per-user temp), then `/tmp/citation-manager-<uid>`.
     pub fn new(library: &Path, runtime_dir: Option<&Path>, uid: u32) -> io::Result<Self> {
         if !library.is_absolute() {
             return Err(invalid("library path must be absolute"));
         }
+        let library = &canonical_library(library)?;
         let runtime_dir = match runtime_dir {
             Some(dir) if dir.is_absolute() => dir.to_owned(),
             Some(_) => return Err(invalid("runtime directory must be absolute")),
             None => default_runtime_dir(uid),
         };
-        let socket = runtime_dir.join(format!("{:016x}.sock", fnv1a(library)));
+        let socket = runtime_dir.join(format!("{}.sock", endpoint_name(library)));
         if socket.as_os_str().len() >= MAX_SOCKET_PATH {
             return Err(invalid(
                 "socket path too long; choose a shorter runtime directory",
@@ -69,26 +76,66 @@ impl DaemonPaths {
     }
 }
 fn default_runtime_dir(uid: u32) -> PathBuf {
-    for var in ["XDG_RUNTIME_DIR", "TMPDIR"] {
-        if let Some(dir) = std::env::var_os(var).map(PathBuf::from)
+    runtime_dir_from(
+        std::env::var_os("XDG_RUNTIME_DIR"),
+        std::env::var_os("TMPDIR"),
+        uid,
+    )
+}
+fn runtime_dir_from(xdg: Option<OsString>, tmp: Option<OsString>, uid: u32) -> PathBuf {
+    // XDG_RUNTIME_DIR is per-user by definition; TMPDIR may be shared, so suffix the UID.
+    let candidates = [
+        (xdg, "citation-manager".to_owned()),
+        (tmp, format!("citation-manager-{uid}")),
+    ];
+    for (dir, name) in candidates {
+        if let Some(dir) = dir.map(PathBuf::from)
             && dir.is_absolute()
         {
-            let candidate = dir.join("citation-manager");
-            if candidate.as_os_str().len() + 22 < MAX_SOCKET_PATH {
+            let candidate = dir.join(name);
+            if candidate.as_os_str().len() + ENDPOINT_NAME_LEN + 6 < MAX_SOCKET_PATH {
                 return candidate;
             }
         }
     }
     PathBuf::from(format!("/tmp/citation-manager-{uid}"))
 }
-/// Stable socket naming only (not security): the daemon also checks `Hello::library`.
-fn fnv1a(path: &Path) -> u64 {
-    path.as_os_str()
-        .as_bytes()
+/// Hex characters of the socket name (the first 64 bits of SHA-256, to fit `sun_path`).
+const ENDPOINT_NAME_LEN: usize = 16;
+/// Socket name of a canonical library path: truncated SHA-256, so distinct libraries do not
+/// collide in practice (a crafted FNV collision could make one library's daemon remove the
+/// other's socket). Authority never depends on it: the daemon also checks `Hello::library`.
+fn endpoint_name(library: &Path) -> String {
+    super::sha256::digest(library.as_os_str().as_bytes())[..ENDPOINT_NAME_LEN / 2]
         .iter()
-        .fold(0xcbf2_9ce4_8422_2325, |h, b| {
-            (h ^ u64::from(*b)).wrapping_mul(0x0100_0000_01b3)
-        })
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+/// `fs::canonicalize`, or for a library that does not exist yet, its nearest existing
+/// ancestor canonicalized plus the remaining plain components.
+fn canonical_library(library: &Path) -> io::Result<PathBuf> {
+    let mut missing = Vec::new();
+    let mut existing = library;
+    loop {
+        match fs::canonicalize(existing) {
+            Ok(mut resolved) => {
+                for name in missing.iter().rev() {
+                    resolved.push(name);
+                }
+                return Ok(resolved);
+            }
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                let (Some(parent), Some(std::path::Component::Normal(name))) =
+                    (existing.parent(), existing.components().next_back())
+                else {
+                    return Err(invalid("library path cannot be resolved"));
+                };
+                missing.push(name.to_owned());
+                existing = parent;
+            }
+            Err(e) => return Err(e),
+        }
+    }
 }
 fn invalid(reason: &str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidInput, reason)
@@ -194,18 +241,22 @@ impl LocalConnector {
         if !launch.papersd.is_absolute() {
             return Err(invalid("papersd path must be absolute"));
         }
-        let mut child = Command::new(&launch.papersd)
-            .arg("--library")
-            .arg(&self.paths.library)
-            .arg("--runtime-dir")
-            .arg(&self.paths.runtime_dir)
-            .args(&launch.extra_args)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            // Own process group: terminal signals to the client do not stop the daemon.
-            .process_group(0)
-            .spawn()?;
+        let spawn = || {
+            Command::new(&launch.papersd)
+                .arg("--library")
+                .arg(&self.paths.library)
+                .arg("--runtime-dir")
+                .arg(&self.paths.runtime_dir)
+                .args(&launch.extra_args)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                // Own process group: terminal signals to the client do not stop the daemon.
+                .process_group(0)
+                .spawn()
+        };
+        let mut child = spawn()?;
+        let mut spawned = Instant::now();
         let started = Instant::now();
         let mut delay = Duration::from_millis(10);
         loop {
@@ -224,9 +275,16 @@ impl LocalConnector {
                     ));
                 }
                 Err(_) => {
-                    // A loser of a start race exits EXIT_ALREADY_RUNNING; keep waiting
-                    // for the winner's socket either way.
-                    let _ = child.try_wait();
+                    // A loser of a start race exits EXIT_ALREADY_RUNNING; keep waiting for
+                    // the winner's socket. If the lock holder was a daemon in its idle exit,
+                    // no socket will come: start again (rate-limited) once it is gone.
+                    if let Ok(Some(status)) = child.try_wait()
+                        && status.code() == Some(EXIT_ALREADY_RUNNING)
+                        && spawned.elapsed() >= RESPAWN_INTERVAL
+                    {
+                        child = spawn()?;
+                        spawned = Instant::now();
+                    }
                     thread::sleep(delay);
                     delay = (delay * 2).min(Duration::from_millis(200));
                 }
@@ -260,5 +318,55 @@ impl Connector for LocalConnector {
     fn connect(&self) -> io::Result<(Box<dyn Stream>, Hello)> {
         let stream = self.connect_or_start()?;
         Ok((Box::new(stream), self.hello()?))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_spelling_of_a_library_maps_to_one_endpoint() {
+        let root = std::env::temp_dir().canonicalize().unwrap().join(format!(
+            "cm-paths-{}-{}",
+            std::process::id(),
+            uuid::Uuid::now_v7()
+        ));
+        fs::create_dir_all(root.join("real")).unwrap();
+        std::os::unix::fs::symlink(root.join("real"), root.join("link")).unwrap();
+        let runtime = Path::new("/run/test");
+        let canonical = DaemonPaths::new(&root.join("real/lib"), Some(runtime), 1).unwrap();
+        assert_eq!(canonical.library, root.join("real/lib"));
+        for spelling in ["link/lib", "real/./lib", "link/../real/lib"] {
+            let paths = DaemonPaths::new(&root.join(spelling), Some(runtime), 1).unwrap();
+            assert_eq!(paths, canonical, "{spelling}");
+        }
+        // Still the same endpoint once the library exists.
+        fs::create_dir(root.join("real/lib")).unwrap();
+        assert_eq!(
+            DaemonPaths::new(&root.join("link/lib"), Some(runtime), 1).unwrap(),
+            canonical
+        );
+        let other = DaemonPaths::new(&root.join("real/other"), Some(runtime), 1).unwrap();
+        assert_ne!(other.socket, canonical.socket);
+        let name = canonical.socket.file_name().unwrap().to_str().unwrap();
+        assert_eq!(name.len(), ENDPOINT_NAME_LEN + ".sock".len());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn shared_tmpdir_runtime_directories_are_per_uid() {
+        assert_eq!(
+            runtime_dir_from(Some("/run/user/501".into()), Some("/tmp".into()), 501),
+            PathBuf::from("/run/user/501/citation-manager")
+        );
+        assert_eq!(
+            runtime_dir_from(None, Some("/var/folders/ab/T".into()), 501),
+            PathBuf::from("/var/folders/ab/T/citation-manager-501")
+        );
+        assert_eq!(
+            runtime_dir_from(Some("relative".into()), None, 7),
+            PathBuf::from("/tmp/citation-manager-7")
+        );
     }
 }

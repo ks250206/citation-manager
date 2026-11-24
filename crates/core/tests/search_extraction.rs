@@ -200,6 +200,37 @@ fn cancellation_and_transient_errors_stop_without_marking_attachments() {
 }
 
 #[test]
+fn exhausted_time_budget_commits_buffer_and_reports_more_pending() {
+    let mut store = Store {
+        targets: vec![target("pages-100", 0), target("pages-10", 0)],
+        ..Default::default()
+    };
+    let fake = Fake(Mutex::new(Vec::new()));
+    let summary = run_with_budget(
+        &mut store,
+        &fake,
+        ExtractScope::Pending,
+        false,
+        &Cancellation::default(),
+        &mut |_| true,
+        std::time::Duration::ZERO,
+    )
+    .unwrap();
+    assert!(summary.more_pending);
+    assert_eq!(summary.pages, PAGES_PER_CALL);
+    assert_eq!(store.stored.len(), 1);
+    assert_eq!(
+        (store.stored[0].2, store.stored[0].3),
+        (PAGES_PER_CALL, None)
+    );
+    assert_eq!(
+        fake.0.lock().unwrap().len(),
+        1,
+        "second attachment left for the next run"
+    );
+}
+
+#[test]
 fn page_limit_marks_partial() {
     let mut store = Store {
         targets: vec![target(

@@ -52,8 +52,10 @@ Payload `{"scope": {"kind": "pending"} | {"kind": "attachment", "id": …} |
 `FulltextStore` (storage):
 
 - Bounds: 100,000 Unicode scalars per page (longer → truncated, state `partial`), 5,000
-  pages per document (rest skipped, `partial`), 500 attachments per run (rest stays
-  pending; papersd resubmits), PDF worker limits (32 MiB input, 30 s per batch).
+  pages per document (rest skipped, `partial`), 500 attachments and 20 minutes per run
+  (the run commits what it has and succeeds with `more_pending`; papersd resubmits), PDF
+  worker limits (32 MiB input, 30 s per batch). `max_run` of the kind is 30 minutes, so
+  the #25 per-attempt limit is only reached if a single batch hangs past its budget.
 - Durability: pages are committed with `next_page` in batches of 64 pages or 4 MiB of
   text, or at document end. A crash, lost lease or cancel resumes at `next_page`; the
   retry is idempotent (page upserts) and reports `AlreadyCommitted` when nothing is left.
@@ -64,11 +66,14 @@ Payload `{"scope": {"kind": "pending"} | {"kind": "attachment", "id": …} |
   any page → `no_text` (image-only; OCR out of scope). The job continues with the next
   attachment and succeeds. Worker busy / runtime missing → retryable job error.
 - Automatic submission: papersd submits one ownerless `{scope: pending}` job at start,
-  after `attachment.import` jobs, after PDF attach/commit commands and after a capped run,
-  when unfinished attachments exist and no extraction job is active. The idempotency key
-  `auto:<first pending attachment>:<count>` prevents resubmission loops for a set that
-  already failed; explicit retry stays available. Ownerless jobs are visible to
-  GrantAdmin sessions only.
+  after `attachment.import` jobs, after PDF attach/commit commands and after a run that
+  ended with `more_pending`, when unfinished attachments exist and no extraction job is
+  active. A cancelled or failed extraction job is not resubmitted by the runner (it is
+  picked up again at the next daemon start or attachment import). The idempotency key
+  `auto:<first pending attachment>:<count>:<committed pages>` changes whenever work was
+  done and prevents loops for a set that makes no progress; explicit retry stays
+  available. Ownerless jobs run with daemon authority (#25 `owner_denial`) and are
+  visible to GrantAdmin sessions only.
 - The extractor is registered only when the daemon has a PDF runtime
   (`pdf-metadata` feature and the bundled pinned library next to `papersd`). Otherwise no
   extraction kind exists and searches report PDFs as `PendingExtraction`.

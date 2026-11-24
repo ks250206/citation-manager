@@ -24,6 +24,10 @@ pub const COMMIT_PAGES: usize = 64;
 pub const COMMIT_TEXT_BYTES: usize = 4 << 20;
 /// Attachments handled per job run; the rest stay pending for the next run.
 pub const MAX_ATTACHMENTS_PER_RUN: u32 = 500;
+/// Wall-clock budget of one run. When it is used up the run commits what it has, ends
+/// successfully with `more_pending` and the next run resumes (keeps each job attempt well
+/// inside the job runner's per-attempt limit).
+pub const RUN_TIME_BUDGET: std::time::Duration = std::time::Duration::from_secs(20 * 60);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -228,6 +232,28 @@ pub fn run(
     cancel: &Cancellation,
     progress: &mut dyn FnMut(Progress) -> bool,
 ) -> Result<ExtractionSummary, RunError> {
+    run_with_budget(
+        store,
+        extractor,
+        scope,
+        force,
+        cancel,
+        progress,
+        RUN_TIME_BUDGET,
+    )
+}
+
+/// `run` with an explicit wall-clock budget (tests use a zero budget).
+pub fn run_with_budget(
+    store: &mut dyn FulltextStore,
+    extractor: &dyn PageTextExtractor,
+    scope: ExtractScope,
+    force: bool,
+    cancel: &Cancellation,
+    progress: &mut dyn FnMut(Progress) -> bool,
+    budget: std::time::Duration,
+) -> Result<ExtractionSummary, RunError> {
+    let started = std::time::Instant::now();
     let storage = |e: ServiceError| match e {
         ServiceError::Unavailable | ServiceError::Conflict => RunError::Retryable(e.to_string()),
         other => RunError::Fatal(other.to_string()),
@@ -331,6 +357,23 @@ pub fn run(
                 if finished {
                     break state;
                 }
+            }
+            if started.elapsed() >= budget {
+                // Out of time: commit the buffered pages and leave the rest to the next run.
+                if !buffer.is_empty() {
+                    summary.pages += buffer.len() as u32;
+                    store
+                        .store(StoreBatch {
+                            target,
+                            page_count: batch.page_count,
+                            pages: &buffer,
+                            next_page: next,
+                            finish: None,
+                        })
+                        .map_err(storage)?;
+                }
+                summary.more_pending = true;
+                return Ok(summary);
             }
             if next == before {
                 // A batch that makes no progress would loop forever.

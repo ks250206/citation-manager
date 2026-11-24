@@ -59,6 +59,16 @@ impl SqliteGrants<'_> {
             .optional()
             .map_err(service_error)
     }
+    pub fn by_id(&self, id: GrantId) -> Result<Option<StoredGrant>, ServiceError> {
+        self.connection
+            .query_row(
+                &format!("{COLUMNS} WHERE id = ?1"),
+                [id.0.to_string()],
+                decode,
+            )
+            .optional()
+            .map_err(service_error)
+    }
     /// Idempotent; returns whether the grant exists.
     pub fn revoke(&self, id: GrantId, now_ms: i64) -> Result<bool, ServiceError> {
         self.connection

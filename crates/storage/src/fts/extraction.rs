@@ -283,12 +283,13 @@ impl FulltextReader<'_> {
             .map_err(service_error)
     }
     /// PDF attachments whose extraction has not finished (never started or interrupted),
-    /// and the first such attachment ID (used for the automatic job idempotency key).
-    pub fn unfinished(&self) -> Result<(u32, Option<AttachmentId>), ServiceError> {
+    /// the first such attachment ID and the pages committed for them so far. Together they
+    /// form the automatic job idempotency key: it changes whenever work was done.
+    pub fn unfinished(&self) -> Result<(u32, Option<AttachmentId>, u64), ServiceError> {
         self.connection
             .query_row(
                 &format!(
-                    "SELECT count(*), min(a.id) FROM attachments a
+                    "SELECT count(*), min(a.id), coalesce(sum(e.next_page),0) FROM attachments a
                      LEFT JOIN fulltext_extractions e ON e.attachment_id=a.id
                      WHERE {PDF_ATTACHMENT}
                        AND (e.attachment_id IS NULL OR e.status='extracting' OR e.file_hash<>a.file_hash)"
@@ -302,6 +303,7 @@ impl FulltextReader<'_> {
                             .map(|f| Uuid::parse_str(&f).map(AttachmentId))
                             .transpose()
                             .map_err(|_| rusqlite::Error::InvalidQuery)?,
+                        r.get::<_, i64>(2)?.max(0) as u64,
                     ))
                 },
             )

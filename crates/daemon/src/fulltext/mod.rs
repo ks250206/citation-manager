@@ -40,6 +40,11 @@ impl JobHandler for FulltextExtractHandler {
     fn required(&self) -> &'static [Capability] {
         &[Capability::LibraryWrite]
     }
+    /// A run ends itself after `RUN_TIME_BUDGET` (20 min) plus at most one batch (30 s
+    /// worker budget); progress is reported before every batch.
+    fn max_run(&self) -> std::time::Duration {
+        extraction::RUN_TIME_BUDGET + std::time::Duration::from_secs(10 * 60)
+    }
     fn validate(&self, payload: &Value) -> Result<(), ServiceError> {
         let job: FulltextExtract = parse(payload)?;
         match job.scope {

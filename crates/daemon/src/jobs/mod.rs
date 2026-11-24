@@ -15,6 +15,13 @@
 //!   library lock proves it is gone).
 //! - Re-execution is possible after a crash (at-least-once). Handlers make effects
 //!   idempotent and report `AlreadyCommitted` when they find their earlier result.
+//! - Jobs never outlive their owner's authority: the owner grant must be live and still hold
+//!   the kind's capabilities when the job is claimed and at every heartbeat; otherwise the job
+//!   fails ("owner grant revoked"/"expired"/...). Revoking a grant fails its queued/retry_wait
+//!   jobs at once and stops its running job (`JobEngine::owner_revoked`).
+//! - A running attempt stops (cooperatively, at its next progress report or heartbeat) and
+//!   fails when the job's `deadline_at_ms` passes or it exceeds the kind's
+//!   `JobHandler::max_run`.
 mod handlers;
 pub use handlers::{AttachmentImportHandler, DiagnosticWaitHandler};
 
@@ -22,7 +29,7 @@ use crate::{ipc::auth::now_ms, lifecycle::Activity};
 use cm_core::{
     ServiceError,
     metadata_resolve::Cancellation,
-    policy::{Capability, CapabilitySet, GrantId},
+    policy::{self, Capability, CapabilitySet, Denial, GrantId, Operation},
 };
 use cm_protocol::{
     ipc::WireError,
@@ -41,8 +48,13 @@ use std::{
         mpsc,
     },
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
+
+/// Default per-attempt run-time limit (`JobHandler::max_run`).
+pub const DEFAULT_MAX_RUN: Duration = Duration::from_secs(60 * 60);
+/// Error recorded when a job's owner grant was revoked (queued, waiting or running).
+pub const OWNER_REVOKED: &str = "owner grant revoked";
 
 #[derive(Debug, Clone)]
 pub struct JobPolicy {
@@ -115,6 +127,52 @@ pub trait JobHandler: Send + Sync + 'static {
     fn required(&self) -> &'static [Capability];
     fn validate(&self, payload: &Value) -> Result<(), ServiceError>;
     fn run(&self, ctx: &mut JobContext<'_>) -> Outcome;
+    /// Run-time limit of one attempt. Cancellation is cooperative: the handler observes it
+    /// through `JobContext::progress`/`cancel`. Exceeding it fails the job (no retry).
+    fn max_run(&self) -> Duration {
+        DEFAULT_MAX_RUN
+    }
+}
+
+/// Current authority of a job's owner grant. The runner consults it when it claims a job and
+/// on every heartbeat, so revoked/expired/narrowed grants stop their queued and running work.
+pub trait OwnerAuthority: Send + Sync + 'static {
+    /// The owner grant's current capabilities, or why it can no longer act.
+    fn owner_capabilities(&self, owner: GrantId, now_ms: i64) -> Result<CapabilitySet, Denial>;
+}
+
+/// Fallback authority read from the stored grant rows (used by `JobEngine::start`).
+struct StoredOwners(Arc<Mutex<LibraryDb>>);
+impl OwnerAuthority for StoredOwners {
+    fn owner_capabilities(&self, owner: GrantId, now_ms: i64) -> Result<CapabilitySet, Denial> {
+        let stored = self
+            .0
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .daemon_grants()
+            .by_id(owner)
+            .map_err(|_| Denial::Unauthenticated)?;
+        policy::check_live(stored.as_ref().map(|s| &s.grant), now_ms)
+            .map(|g| g.capabilities.clone())
+    }
+}
+
+/// Why the owner may no longer run a job of a kind needing `required`; `None` = allowed.
+/// Ownerless jobs are daemon-internal and run with daemon authority.
+fn owner_denial(
+    owners: &dyn OwnerAuthority,
+    owner: Option<GrantId>,
+    required: &[Capability],
+    now_ms: i64,
+) -> Option<String> {
+    let owner = owner?;
+    match owners.owner_capabilities(owner, now_ms) {
+        Ok(held) if required.iter().all(|c| held.contains(c)) => None,
+        Ok(_) => Some("owner grant no longer holds the capabilities this job kind requires".into()),
+        Err(Denial::Revoked) => Some(OWNER_REVOKED.into()),
+        Err(Denial::Expired) => Some("owner grant expired".into()),
+        Err(_) => Some("owner grant no longer exists".into()),
+    }
 }
 
 pub fn default_handlers() -> Vec<Arc<dyn JobHandler>> {
@@ -134,7 +192,7 @@ fn ensure_extraction(control: &Mutex<LibraryDb>, handlers: &Handlers) -> Option<
         return None;
     }
     let mut db = control.lock().unwrap_or_else(|e| e.into_inner());
-    let (count, first) = db.fulltext_reader().unfinished().ok()?;
+    let (count, first, committed) = db.fulltext_reader().unfinished().ok()?;
     let first = first?;
     if count == 0 {
         return None;
@@ -148,7 +206,7 @@ fn ensure_extraction(control: &Mutex<LibraryDb>, handlers: &Handlers) -> Option<
     {
         return None;
     }
-    let key = format!("auto:{}:{count}", first.0);
+    let key = format!("auto:{}:{count}:{committed}", first.0);
     jobs.submit(&NewJob {
         kind: FULLTEXT_EXTRACT,
         idempotency_key: &key,
@@ -197,13 +255,27 @@ pub struct JobEngine {
 }
 
 impl JobEngine {
-    /// Recovers stale leases synchronously, then starts the runner.
+    /// Recovers stale leases synchronously, then starts the runner. Owner grants are checked
+    /// against the stored grant rows; the daemon uses `start_with_owners` with its live
+    /// grant registry instead.
     pub fn start(
         directory: LibraryDirectory,
         control: Arc<Mutex<LibraryDb>>,
         handlers: Vec<Arc<dyn JobHandler>>,
         policy: JobPolicy,
         activity: Arc<Activity>,
+    ) -> Result<Self, ServiceError> {
+        let owners = Arc::new(StoredOwners(control.clone()));
+        Self::start_with_owners(directory, control, handlers, policy, activity, owners)
+    }
+    /// As `start`, with `owners` as the authority on job owner grants.
+    pub fn start_with_owners(
+        directory: LibraryDirectory,
+        control: Arc<Mutex<LibraryDb>>,
+        handlers: Vec<Arc<dyn JobHandler>>,
+        policy: JobPolicy,
+        activity: Arc<Activity>,
+        owners: Arc<dyn OwnerAuthority>,
     ) -> Result<Self, ServiceError> {
         let owner = format!("papersd-{}-{}", std::process::id(), uuid::Uuid::now_v7());
         let handlers: Handlers = Arc::new(handlers.into_iter().map(|h| (h.kind(), h)).collect());
@@ -228,6 +300,7 @@ impl JobEngine {
             work,
             activity,
             stop: stop.clone(),
+            owners,
         };
         let runner = thread::Builder::new()
             .name("job-runner".into())
@@ -258,9 +331,7 @@ impl JobEngine {
             .get(submit.kind.as_str())
             .ok_or_else(|| invalid("unknown job kind"))?;
         if !handler.required().iter().all(|c| held.contains(c)) {
-            return Err(WireError::Denied(cm_core::policy::Denial::Forbidden(
-                cm_core::policy::Operation::JobSubmit,
-            )));
+            return Err(WireError::Denied(Denial::Forbidden(Operation::JobSubmit)));
         }
         if submit.idempotency_key.is_empty()
             || submit.idempotency_key.len() > 512
@@ -311,6 +382,8 @@ impl JobEngine {
             .map(|row| status(row).map(|s| self.live.overlay(s)))
             .collect()
     }
+    /// Cancel only stops or prevents effects, so it needs `JobsControl` (and job visibility)
+    /// but not the kind's capabilities.
     pub fn cancel(&self, id: JobId, owner: Option<GrantId>) -> Result<JobStatus, WireError> {
         self.get(id, owner)?;
         let row = self.db().daemon_jobs().request_cancel(id.0, now_ms())?;
@@ -324,8 +397,22 @@ impl JobEngine {
         let _ = self.wake.send(());
         status(row)
     }
-    pub fn retry(&self, id: JobId, owner: Option<GrantId>) -> Result<JobStatus, WireError> {
-        self.get(id, owner)?;
+    /// Explicit retry re-runs the job's effects, so the retrying session's effective
+    /// capabilities (`held`) must cover the kind's requirement, exactly as for submit.
+    pub fn retry(
+        &self,
+        id: JobId,
+        owner: Option<GrantId>,
+        held: &CapabilitySet,
+    ) -> Result<JobStatus, WireError> {
+        let current = self.get(id, owner)?;
+        let handler = self
+            .handlers
+            .get(current.kind.as_str())
+            .ok_or_else(|| invalid("unknown job kind"))?;
+        if !handler.required().iter().all(|c| held.contains(c)) {
+            return Err(WireError::Denied(Denial::Forbidden(Operation::JobRetry)));
+        }
         let row = self.db().daemon_jobs().retry(id.0, now_ms())?;
         let _ = self.wake.send(());
         status(row)
@@ -361,6 +448,23 @@ impl JobEngine {
         })?;
         let _ = self.wake.send(());
         status(row)
+    }
+    /// The grant was revoked: its queued/retry_wait jobs fail with `OWNER_REVOKED` now and
+    /// its running job is told to stop (the runner records the same reason). Returns how many
+    /// active jobs were affected.
+    pub fn owner_revoked(&self, owner: GrantId) -> Result<usize, WireError> {
+        let rows = self
+            .db()
+            .daemon_jobs()
+            .fail_owner_active(owner, OWNER_REVOKED, now_ms())?;
+        {
+            let mut cancel = self.live.cancel.lock().unwrap_or_else(|e| e.into_inner());
+            for row in rows.iter().filter(|r| r.state == "running") {
+                cancel.insert(row.id);
+            }
+        }
+        let _ = self.wake.send(());
+        Ok(rows.len())
     }
     /// Stops after the current job (its lease is recovered on next start if unfinished).
     pub fn stop(&self) {
@@ -421,6 +525,7 @@ struct Runner {
     work: LibraryDb,
     activity: Arc<Activity>,
     stop: Arc<AtomicBool>,
+    owners: Arc<dyn OwnerAuthority>,
 }
 impl Runner {
     fn db(&self) -> std::sync::MutexGuard<'_, LibraryDb> {
@@ -441,12 +546,24 @@ impl Runner {
             self.refresh_active();
             match claimed {
                 Ok(Some(row)) => {
-                    let kind = row.kind.clone();
+                    let (id, kind) = (row.id, row.kind.clone());
                     self.execute(row);
-                    // New attachments (or a capped extraction run) leave pending work.
-                    if kind == cm_protocol::jobs::kinds::ATTACHMENT_IMPORT
-                        || kind == cm_protocol::jobs::kinds::FULLTEXT_EXTRACT
-                    {
+                    // New attachments, or an extraction run that ended on its budget, leave
+                    // pending work. A cancelled/failed extraction is not resubmitted here.
+                    let resume =
+                        kind == cm_protocol::jobs::kinds::ATTACHMENT_IMPORT
+                            || (kind == cm_protocol::jobs::kinds::FULLTEXT_EXTRACT
+                                && self.db().daemon_jobs().get(id).ok().flatten().is_some_and(
+                                    |j| {
+                                        j.state == "succeeded"
+                                            && j.result_json.as_deref().is_some_and(|r| {
+                                                serde_json::from_str::<Value>(r).is_ok_and(|v| {
+                                                    v["more_pending"] == Value::Bool(true)
+                                                })
+                                            })
+                                    },
+                                ));
+                    if resume {
                         ensure_extraction(&self.control, &self.handlers);
                     }
                     self.refresh_active();
@@ -492,6 +609,41 @@ impl Runner {
                 return;
             }
         };
+        if let Some(reason) = owner_denial(
+            self.owners.as_ref(),
+            row.owner_grant,
+            handler.required(),
+            now_ms(),
+        ) {
+            self.finish(&row, Finish::Failed { error: reason });
+            return;
+        }
+        // Wall-clock end of this attempt: the job deadline or the kind's run-time limit.
+        let started = Instant::now();
+        let max_run = handler.max_run();
+        let deadline_at_ms = row.deadline_at_ms;
+        let stop_reason: Mutex<Option<String>> = Mutex::new(None);
+        let stop_with = |reason: String| {
+            stop_reason
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .get_or_insert(reason);
+        };
+        let out_of_time = || -> Option<String> {
+            if deadline_at_ms.is_some_and(|at| now_ms() >= at) {
+                Some("deadline exceeded while running".into())
+            } else if started.elapsed() >= max_run {
+                Some(format!(
+                    "run time limit of {} ms exceeded",
+                    max_run.as_millis()
+                ))
+            } else {
+                None
+            }
+        };
+        let owners = self.owners.clone();
+        let owner = row.owner_grant;
+        let required = handler.required();
         let cancel = Cancellation::default();
         let lost = AtomicBool::new(false);
         let done = AtomicBool::new(false);
@@ -503,8 +655,16 @@ impl Runner {
                 .unwrap_or_else(|e| e.into_inner())
                 .contains(&id)
         };
-        // Lease renewal + sparse progress persistence; also notices DB-side cancel requests.
+        // Lease renewal + sparse progress persistence; also notices DB-side cancel requests,
+        // owner revocation/expiry and the attempt's deadline.
         let beat = || -> bool {
+            let stop =
+                owner_denial(owners.as_ref(), owner, required, now_ms()).or_else(out_of_time);
+            if let Some(reason) = stop {
+                stop_with(reason);
+                cancel.cancel();
+                return false;
+            }
             let progress = live
                 .progress
                 .lock()
@@ -556,6 +716,10 @@ impl Runner {
                 if cancel_signalled() {
                     cancel.cancel();
                 }
+                if let Some(reason) = out_of_time() {
+                    stop_with(reason);
+                    cancel.cancel();
+                }
                 !cancel.is_cancelled() && !lost.load(Ordering::SeqCst)
             };
             let mut ctx = JobContext {
@@ -591,7 +755,36 @@ impl Runner {
         }
         let cancel_requested = cancel.is_cancelled();
         let now = now_ms();
-        let finish = match outcome {
+        // A committed effect is reported truthfully. Otherwise a lost owner authority or an
+        // exhausted run time is the recorded reason (never retried).
+        let stopped = if matches!(
+            outcome,
+            Outcome::Succeeded(_) | Outcome::AlreadyCommitted(_)
+        ) {
+            None
+        } else {
+            owner_denial(
+                self.owners.as_ref(),
+                row.owner_grant,
+                handler.required(),
+                now,
+            )
+            .or_else(|| stop_reason.lock().unwrap_or_else(|e| e.into_inner()).take())
+        };
+        let finish = match (outcome, stopped) {
+            (_, Some(error)) => Finish::Failed { error },
+            (outcome, None) => self.finish_for(&row, outcome, cancel_requested, now),
+        };
+        self.finish(&row, finish);
+    }
+    fn finish_for(
+        &self,
+        row: &JobRow,
+        outcome: Outcome,
+        cancel_requested: bool,
+        now: i64,
+    ) -> Finish {
+        match outcome {
             Outcome::Succeeded(v) => Finish::Succeeded {
                 result_json: v.to_string(),
                 detected_committed: false,
@@ -619,8 +812,7 @@ impl Runner {
                     }
                 }
             }
-        };
-        self.finish(&row, finish);
+        }
     }
     fn finish(&self, row: &JobRow, finish: Finish) {
         // A false return means the lease moved on; the newer owner decides the outcome.
