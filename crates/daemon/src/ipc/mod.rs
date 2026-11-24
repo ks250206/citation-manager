@@ -690,10 +690,19 @@ impl Session {
                 done(self.fulltext(request).map(Reply::Fulltext));
                 Ok(())
             }
-            Command::Annotations(request) => self.engine.annotations(
-                request,
-                Box::new(move |r| done(r.map(Reply::Annotations).map_err(Into::into))),
-            ),
+            Command::Annotations(mut request) => {
+                // The wire form carries no token (`#[serde(skip)]`): Propose gets this request's
+                // server-side token, cancelled by `ClientFrame::Cancel` or by disconnecting.
+                if let cm_protocol::annotations::AnnotationRequest::Propose { cancel, .. } =
+                    &mut request
+                {
+                    *cancel = self.cancellation(id);
+                }
+                self.engine.annotations(
+                    request,
+                    Box::new(move |r| done(r.map(Reply::Annotations).map_err(Into::into))),
+                )
+            }
             _ => {
                 done(Err(WireError::Service(ServiceError::InvalidInput(
                     "unsupported command".into(),

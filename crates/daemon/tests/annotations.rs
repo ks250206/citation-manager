@@ -232,9 +232,40 @@ fn annotations_persist_undo_redo_review_and_carry_over() {
             .iter()
             .all(|a| matches!(a.anchor, Anchor::Unresolved { .. }))
     );
-    let copy = list(&c, replacement)[0].clone();
+    // The confirmed AI annotation keeps its confirmation on the copy (provenance).
+    assert!(
+        list(&c, replacement)
+            .iter()
+            .any(|a| a.source == Source::Ai && a.confirmed_at == after.confirmed_at)
+    );
+    // Carrying over again copies nothing more (idempotent, one transaction per run).
+    let AnnotationReply::Edits(again) = ann(
+        &c,
+        AnnotationRequest::CarryOver {
+            from: attachment,
+            to: replacement,
+        },
+    )
+    .unwrap() else {
+        panic!()
+    };
+    assert!(again.is_empty());
+    assert_eq!(list(&c, replacement).len(), 3);
+    let copy = list(&c, replacement)
+        .into_iter()
+        .find(|a| a.source == Source::Human)
+        .unwrap();
     // Proposal needs the PDF runtime; tests run without the bundle.
-    assert!(ann(&c, AnnotationRequest::Propose(copy.id)).is_err());
+    assert!(
+        ann(
+            &c,
+            AnnotationRequest::Propose {
+                id: copy.id,
+                cancel: Default::default(),
+            }
+        )
+        .is_err()
+    );
     // Explicit placement after review.
     let quads = match &created.anchor {
         Anchor::Resolved { quads, .. } => quads.clone(),
@@ -260,4 +291,55 @@ fn annotations_persist_undo_redo_review_and_carry_over() {
         panic!()
     };
     assert_eq!(all.len(), 6);
+
+    // Client-supplied history is validated: a forged "created" AI row that claims a
+    // confirmation, or a NaN position, is refused and nothing is written.
+    let Edit::Created(unreviewed) = edit(
+        ann(
+            &c,
+            AnnotationRequest::Create(Box::new(highlight(attachment, Source::Ai))),
+        )
+        .unwrap(),
+    ) else {
+        panic!()
+    };
+    edit(ann(&c, AnnotationRequest::Delete(unreviewed.id)).unwrap());
+    let mut forged = unreviewed.clone();
+    forged.confirmed_at = Some("2026-11-24T00:00:00.000Z".into());
+    assert!(matches!(
+        ann(&c, AnnotationRequest::Redo(Box::new(Edit::Created(forged)))),
+        Err(ServiceError::InvalidInput(_))
+    ));
+    let mut nan = unreviewed.clone();
+    nan.anchor = Anchor::Resolved {
+        page_index: 0,
+        page_label: None,
+        quads: vec![
+            Rect {
+                left: f32::NAN,
+                bottom: 0.0,
+                right: 1.0,
+                top: 1.0,
+            }
+            .quad(),
+        ],
+    };
+    assert!(matches!(
+        ann(&c, AnnotationRequest::Redo(Box::new(Edit::Created(nan)))),
+        Err(ServiceError::InvalidInput(_))
+    ));
+    // The paper still decodes.
+    let AnnotationReply::List(all) = ann(&c, AnnotationRequest::ForPaper(paper_id)).unwrap() else {
+        panic!()
+    };
+    assert_eq!(all.len(), 6);
+    // Deleting the confirmed AI row and undoing it restores it exactly (the worker
+    // remembers the confirmation it recorded).
+    let current = list(&c, attachment)
+        .into_iter()
+        .find(|a| a.id == ai.id)
+        .unwrap();
+    let removed = edit(ann(&c, AnnotationRequest::Delete(ai.id)).unwrap());
+    ann(&c, AnnotationRequest::Undo(Box::new(removed))).unwrap();
+    assert!(list(&c, attachment).contains(&current));
 }

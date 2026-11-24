@@ -673,9 +673,14 @@ impl LibraryClient for IpcLibraryClient {
         request: crate::annotations::AnnotationRequest,
         complete: crate::library::Reply<crate::annotations::AnnotationReply>,
     ) -> Result<(), ServiceError> {
+        // Propose's token is not serialized; the transport forwards it as a Cancel frame.
+        let cancel = match &request {
+            crate::annotations::AnnotationRequest::Propose { cancel, .. } => Some(cancel.clone()),
+            _ => None,
+        };
         self.typed(
             Command::Annotations(request),
-            None,
+            cancel,
             None,
             complete,
             |r| match r {
