@@ -23,11 +23,11 @@ class ArchitectureTests(unittest.TestCase):
     def test_daemon_desktop_bootstrap_has_only_the_narrow_optional_edge(self):
         metadata = self.metadata()
         daemon = next(p for p in metadata['packages'] if p['name'] == 'cm-daemon')
-        good = {'name': 'cm-desktop', 'optional': True, 'target': 'cfg(target_os = "macos")', 'kind': None}
+        good = {'name': 'cm-desktop', 'optional': True, 'target': architecture.NATIVE_TARGET, 'kind': None}
         daemon['dependencies'] = [good.copy()]
         daemon['features'] = {'default': [], 'desktop-bootstrap': ['dep:cm-desktop', 'cm-desktop/native-gpui', 'pdf-metadata'], 'pdf-metadata': ['cm-pdf/runtime']}
         architecture.validate(metadata)
-        for field, value in [('optional', False), ('target', None), ('target', 'cfg(unix)'), ('kind', 'dev'), ('kind', 'build')]:
+        for field, value in [('optional', False), ('target', None), ('target', 'cfg(unix)'), ('target', 'cfg(target_os = "windows")'), ('kind', 'dev'), ('kind', 'build')]:
             with self.subTest(field=field, value=value):
                 daemon['dependencies'] = [dict(good, **{field: value})]
                 with self.assertRaisesRegex(ValueError, 'bootstrap must be optional'):
@@ -88,13 +88,13 @@ class ArchitectureTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, message):
                     architecture.validate(metadata)
 
-    def test_desktop_gpui_requires_pinned_optional_macos_dependencies(self):
+    def test_desktop_gpui_requires_pinned_optional_native_dependencies(self):
         for dependency in ['gpui', 'gpui_platform']:
             good = {
                 'name': dependency,
                 'source': 'git+https://github.com/zed-industries/zed?rev=4a6121bb0f10c6e8037b741b7dc0a4cd639ae289',
                 'optional': True,
-                'target': 'cfg(target_os = "macos")',
+                'target': architecture.NATIVE_TARGET,
             }
             metadata = self.metadata()
             package = next(p for p in metadata['packages'] if p['name'] == 'cm-desktop')
@@ -107,7 +107,7 @@ class ArchitectureTests(unittest.TestCase):
             ]:
                 with self.subTest(dependency=dependency, field=field):
                     package['dependencies'] = [dict(good, **{field: invalid})]
-                    with self.assertRaisesRegex(ValueError, 'pinned optional macOS lane'):
+                    with self.assertRaisesRegex(ValueError, 'pinned optional native desktop lane'):
                         architecture.validate(metadata)
 
 class MigrationTests(unittest.TestCase):

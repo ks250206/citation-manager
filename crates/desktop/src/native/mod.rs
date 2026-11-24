@@ -1,3 +1,17 @@
+/// Static binding for the primary modifier: `cmd-` on macOS, `ctrl-` on Linux.
+/// (`KeyBinding::new` rejects GPUI's runtime-resolved `secondary-` prefix.)
+#[cfg(target_os = "macos")]
+macro_rules! primary {
+    ($key:literal) => {
+        concat!("cmd-", $key)
+    };
+}
+#[cfg(not(target_os = "macos"))]
+macro_rules! primary {
+    ($key:literal) => {
+        concat!("ctrl-", $key)
+    };
+}
 mod details_ui;
 mod import_ui;
 mod library_ui;
@@ -88,6 +102,7 @@ struct LibraryView {
     doi: Entity<TextInput>,
     focus: FocusHandle,
     table_focus: FocusHandle,
+    focus_layout: (Screen, String),
     rows: UniformListScrollHandle,
     sender: mpsc::Sender<Message>,
     receiver: mpsc::Receiver<Message>,
@@ -154,6 +169,7 @@ impl LibraryView {
             doi: cx.new(|cx| TextInput::new("DOI or doi.org URL", cx)),
             focus: cx.focus_handle(),
             table_focus: cx.focus_handle(),
+            focus_layout: (Screen::Library, "Info".into()),
             rows: UniformListScrollHandle::new(),
             sender,
             receiver,
@@ -637,6 +653,7 @@ impl LibraryView {
             self.screen = Screen::Library;
             cx.notify();
         }
+        self.focus_layout = (self.screen, self.settings.details_tab.clone());
         self.search.focus_handle(cx).focus(window, cx);
     }
     fn next_field(&mut self, _: &NextField, window: &mut Window, cx: &mut Context<Self>) {
@@ -779,6 +796,15 @@ fn section(text: impl Into<SharedString>) -> Div {
         .text_color(rgb(MUTED))
         .child(text.into())
 }
+/// Shortcut label for the primary modifier: ⌘ on macOS, Ctrl elsewhere.
+/// Bindings use GPUI's `secondary-` modifier, which follows the same rule.
+fn shortcut(key: &str) -> String {
+    if cfg!(target_os = "macos") {
+        format!("⌘{key}")
+    } else {
+        format!("Ctrl+{key}")
+    }
+}
 /// Secondary explanatory text.
 fn hint(text: impl Into<SharedString>) -> Div {
     div()
@@ -898,9 +924,9 @@ impl LibraryView {
             .when(self.dirty, |el| {
                 el.child(div().font_weight(FontWeight::SEMIBOLD).child(
                     if self.screen == Screen::Library {
-                        "Unsaved edits — ⌘S to save"
+                        format!("Unsaved edits — {} to save", shortcut("S"))
                     } else {
-                        "Unsaved edits — return to Library to save"
+                        "Unsaved edits — return to Library to save".into()
                     },
                 ))
                 .child(
@@ -914,20 +940,39 @@ impl LibraryView {
                     div()
                         .text_color(rgb(MUTED))
                         .whitespace_nowrap()
-                        .child("⌘N new · ⌘F search · ↑↓ select · ↩ edit · ⌘S save · esc back"),
+                        .child(format!(
+                            "{} new · {} search · ↑↓ select · ↩ edit · {} save · esc back",
+                            shortcut("N"),
+                            shortcut("F"),
+                            shortcut("S")
+                        )),
                 )
             })
     }
 }
 impl Render for LibraryView {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // Switching screen/tab unmounts whatever field had focus; with no focused
+        // descendant no "Library" binding (Esc, shortcuts) would fire. Hand focus
+        // to the table on Library, else to the root. Find opts out by updating
+        // `focus_layout` itself before focusing the search field.
+        let layout = (self.screen, self.settings.details_tab.clone());
+        if layout != self.focus_layout {
+            self.focus_layout = layout;
+            let target = if self.screen == Screen::Library {
+                self.table_focus.clone()
+            } else {
+                self.focus.clone()
+            };
+            window.defer(cx, move |window, cx| target.focus(window, cx));
+        }
         div()
             .size_full()
             .flex()
             .flex_col()
             .bg(rgb(CANVAS))
             .text_color(rgb(TEXT))
-            .font_family(".AppleSystemUIFont")
+            .font_family(".SystemUIFont")
             .text_size(px(13.))
             .track_focus(&self.focus)
             .key_context("Library")
@@ -971,23 +1016,8 @@ impl Render for LibraryView {
 }
 pub fn run(client: Arc<dyn LibraryClient>) {
     gpui_platform::application().run(move |cx: &mut App| {
-        text_input::bind_keys(cx);
-        cx.bind_keys([
-            KeyBinding::new("cmd-n", New, Some("Library")),
-            KeyBinding::new("cmd-s", Save, Some("Library")),
-            KeyBinding::new("cmd-r", Refresh, Some("Library")),
-            KeyBinding::new("cmd-f", Find, Some("Library")),
-            KeyBinding::new("tab", NextField, Some("Library")),
-            KeyBinding::new("shift-tab", PreviousField, Some("Library")),
-            KeyBinding::new("cmd-q", Quit, None),
-            KeyBinding::new("escape", Back, Some("Library")),
-            KeyBinding::new("cmd-1", ShowLibrary, Some("Library")),
-            KeyBinding::new("cmd-2", ShowImportReview, Some("Library")),
-            KeyBinding::new("cmd-,", ShowOrganize, Some("Library")),
-            KeyBinding::new("down", SelectNext, Some("PaperTable")),
-            KeyBinding::new("up", SelectPrevious, Some("PaperTable")),
-            KeyBinding::new("enter", EditSelected, Some("PaperTable")),
-        ]);
+        cx.bind_keys(text_input::key_bindings());
+        cx.bind_keys(key_bindings());
         cx.on_action(|_: &Quit, cx| cx.quit());
         cx.on_window_closed(|cx, _| {
             if cx.windows().is_empty() {
@@ -996,25 +1026,63 @@ pub fn run(client: Arc<dyn LibraryClient>) {
         })
         .detach();
         let bounds = Bounds::centered(None, size(px(1320.), px(860.)), cx);
-        let window = cx
-            .open_window(
-                WindowOptions {
-                    window_bounds: Some(WindowBounds::Windowed(bounds)),
-                    window_min_size: Some(size(px(1000.), px(680.))),
-                    titlebar: Some(TitlebarOptions {
-                        title: Some("Citation Manager — private local library".into()),
-                        ..Default::default()
-                    }),
-                    ..Default::default()
-                },
-                |_, cx| cx.new(|cx| LibraryView::new(client, cx)),
-            )
-            .expect("open native window");
-        window
-            .update(cx, |view, window, cx| {
-                view.table_focus.focus(window, cx);
-                cx.activate(true);
-            })
-            .expect("activate native window");
+        open_main_window(client, bounds, cx);
     });
+}
+fn key_bindings() -> Vec<KeyBinding> {
+    vec![
+        KeyBinding::new(primary!("n"), New, Some("Library")),
+        KeyBinding::new(primary!("s"), Save, Some("Library")),
+        KeyBinding::new(primary!("r"), Refresh, Some("Library")),
+        KeyBinding::new(primary!("f"), Find, Some("Library")),
+        KeyBinding::new("tab", NextField, Some("Library")),
+        KeyBinding::new("shift-tab", PreviousField, Some("Library")),
+        KeyBinding::new(primary!("q"), Quit, None),
+        KeyBinding::new("escape", Back, Some("Library")),
+        KeyBinding::new(primary!("1"), ShowLibrary, Some("Library")),
+        KeyBinding::new(primary!("2"), ShowImportReview, Some("Library")),
+        KeyBinding::new(primary!(","), ShowOrganize, Some("Library")),
+        KeyBinding::new("down", SelectNext, Some("PaperTable")),
+        KeyBinding::new("up", SelectPrevious, Some("PaperTable")),
+        KeyBinding::new("enter", EditSelected, Some("PaperTable")),
+    ]
+}
+fn open_main_window(client: Arc<dyn LibraryClient>, bounds: Bounds<Pixels>, cx: &mut App) {
+    let window = cx
+        .open_window(
+            WindowOptions {
+                window_bounds: Some(WindowBounds::Windowed(bounds)),
+                window_min_size: Some(size(px(1000.), px(680.))),
+                titlebar: Some(TitlebarOptions {
+                    title: Some("Citation Manager — private local library".into()),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+            |_, cx| cx.new(|cx| LibraryView::new(client, cx)),
+        )
+        .expect("open native window");
+    window
+        .update(cx, |view, window, cx| {
+            view.table_focus.focus(window, cx);
+            cx.activate(true);
+        })
+        .expect("activate native window");
+}
+#[cfg(test)]
+mod tests {
+    // KeyBinding::new panics on an unparsable keystroke only at app start;
+    // build every binding here so the default test lane catches it.
+    #[test]
+    fn every_key_binding_parses_on_this_platform() {
+        let library = super::key_bindings();
+        let text = super::text_input::key_bindings();
+        assert!(library.len() > 10 && text.len() > 10);
+        let primary = if cfg!(target_os = "macos") {
+            "cmd-n"
+        } else {
+            "ctrl-n"
+        };
+        assert_eq!(primary!("n"), primary);
+    }
 }

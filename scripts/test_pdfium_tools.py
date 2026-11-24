@@ -30,6 +30,21 @@ class PdfiumPins(unittest.TestCase):
         self.assertIn(lock['library_sha256'],rust)
         self.assertIn(lock['build'],rust)
         self.assertEqual(manifest['artifact_sha256'],lock['artifact_sha256'])
+        linux=lock['linux_x64']
+        self.assertIn(linux['library_sha256'],rust)
+        self.assertIn('chromium/8125/',linux['url'])
+        # Linux may only override notice digests, never add or drop notice files.
+        self.assertLessEqual(set(linux['notice_overrides_sha256']),set(manifest['upstream_files_sha256']))
+
+    def test_unknown_platform_and_tampered_linux_artifact_fail_closed(self):
+        with self.assertRaisesRegex(ValueError,'unsupported platform'):
+            fetch.artifact('windows')
+        with tempfile.TemporaryDirectory() as directory:
+            p=Path(directory)
+            (p/'pdfium-linux-x64.tgz').write_bytes(b'not the pinned archive')
+            with self.assertRaisesRegex(ValueError,'checksum'):
+                fetch.fetch(p,'linux-x64')
+            self.assertFalse((p/'lib').exists())
 
     def test_cached_tampered_artifact_fails_before_extract(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -52,6 +67,7 @@ class PdfiumPins(unittest.TestCase):
                 (p/'licenses/notice.txt').write_bytes(b'modified')
                 with self.assertRaisesRegex(ValueError,'checksum'):
                     fetch.verify_notices(p)
+                fetch.verify_notices(p,{'notice.txt':hashlib.sha256(b'modified').hexdigest()})
                 (p/'licenses/notice.txt').write_bytes(b'notice')
                 (p/'licenses/extra.txt').write_bytes(b'extra')
                 with self.assertRaisesRegex(ValueError,'file set'):

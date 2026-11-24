@@ -14,6 +14,8 @@ ALLOWED = {
     'cli': {'protocol', 'mcp'}, 'mcp': {'protocol'}, 'native-host': {'protocol'},
 }
 ROOT = Path(__file__).resolve().parents[1]
+# GPUI's native lane builds only on these desktop targets (Metal on macOS, X11/Wayland on Linux).
+NATIVE_TARGET = 'cfg(any(target_os = "macos", target_os = "linux"))'
 
 def validate(metadata):
     packages = {p['id']: p for p in metadata['packages']}
@@ -35,12 +37,12 @@ def validate(metadata):
                     if feature not in visited:
                         visited.add(feature)
                         enabled.extend(features.get(feature, []))
-                if (not dep.get('optional') or dep.get('target') != 'cfg(target_os = "macos")'
+                if (not dep.get('optional') or dep.get('target') != NATIVE_TARGET
                         or dep.get('kind') is not None
                         or set(bootstrap) != {'dep:cm-desktop', 'cm-desktop/native-gpui', 'pdf-metadata'}
                         or features.get('pdf-metadata') != ['cm-pdf/runtime']
                         or visited & {'desktop-bootstrap', 'dep:cm-desktop', 'cm-desktop/native-gpui', 'pdf-metadata', 'cm-pdf/runtime'}):
-                    raise ValueError('daemon desktop bootstrap must be optional, macOS-only and disabled by default')
+                    raise ValueError('daemon desktop bootstrap must be optional, native-desktop-only and disabled by default')
                 continue
             if target.startswith('cm-'):
                 if target not in members or target.removeprefix('cm-') not in ALLOWED[short]:
@@ -60,8 +62,8 @@ def validate(metadata):
             for dep in package['dependencies']:
                 if dep['name'] in {'gpui', 'gpui_platform'}:
                     expected_source = 'git+https://github.com/zed-industries/zed?rev=4a6121bb0f10c6e8037b741b7dc0a4cd639ae289'
-                    if dep['source'] != expected_source or not dep['optional'] or dep['target'] != 'cfg(target_os = "macos")':
-                        raise ValueError('GPUI must use the pinned optional macOS lane')
+                    if dep['source'] != expected_source or not dep['optional'] or dep['target'] != NATIVE_TARGET:
+                        raise ValueError('GPUI must use the pinned optional native desktop lane')
 
 if __name__ == '__main__':
     result = subprocess.run(['cargo', 'metadata', '--locked', '--no-deps', '--format-version', '1'],

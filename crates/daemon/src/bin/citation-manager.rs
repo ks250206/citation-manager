@@ -1,5 +1,5 @@
-//! Optional local macOS composition root. No HTTP/IPC listener is started.
-#[cfg(target_os = "macos")]
+//! Optional local macOS/Linux composition root. No HTTP/IPC listener is started.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn main() {
     use cm_daemon::desktop_worker::InProcessLibraryClient;
     use std::{path::PathBuf, sync::Arc};
@@ -33,5 +33,5 @@ fn main() {
         });
     cm_desktop::run(Arc::new(client));
 }
-#[cfg(not(target_os = "macos"))]
-compile_error!("desktop-bootstrap currently requires macOS");
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+compile_error!("desktop-bootstrap supports macOS and Linux");

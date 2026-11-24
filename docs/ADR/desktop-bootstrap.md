@@ -9,12 +9,12 @@ Submit enqueues work; completion may run on a worker and is delivered to the UI
 through a response channel. Future IPC implements this client without changing views.
 This does not freeze #25's wire envelope, auth, JobStatus or daemon lifecycle.
 
-The optional **macOS-only**, **off-by-default** `cm-daemon/desktop-bootstrap` feature
+The optional **native-desktop-only** (macOS or Linux), **off-by-default** `cm-daemon/desktop-bootstrap` feature
 adds the single `daemon → desktop` composition edge and the real `citation-manager`
 executable. It injects `daemon::desktop_worker::InProcessLibraryClient` into the UI.
 There is no 13th crate. The architecture validator checks the target, optional flag,
 normal dependency kind, exact bootstrap feature wiring, and transitive default-feature
-exclusion. Negative tests reject unconditional/non-macOS/dev/build/default-enabled
+exclusion. Negative tests reject unconditional/other-platform/dev/build/default-enabled
 forms and the reverse desktop-to-daemon edge. Other boundaries are unchanged.
 
 All path preparation, database open/migration, reads and writes run on the named
@@ -76,3 +76,19 @@ which enables the existing PDF runtime only there. The architecture validator st
 exact wiring and rejects default-enabled/reverse/driver leakage. UI uses real #12 query and
 feature-local owned requests; retained #33 state and all IO remain on workers. The #15 native
 CUA blocker is not covered by earlier #10 screenshots or by a successful final build.
+
+## Linux native lane
+
+The GPUI dependencies, the `daemon → desktop` edge and the `citation-manager` binary are
+gated on `cfg(any(target_os = "macos", target_os = "linux"))`; other targets still hit a
+`compile_error!`. `gpui_platform` enables its `x11` and `wayland` backends, which only
+compile on Linux and add no code to macOS builds. Shortcuts use GPUI's `secondary-`
+modifier (⌘ on macOS, Ctrl on Linux) and the UI asks for `.SystemUIFont`.
+
+PDFium keeps the #34 rule of "path derived from `current_exe()`, no search-path fallback,
+pinned checksum". On Linux the layout is `<prefix>/bin/<exe>` →
+`<prefix>/lib/citation-manager/libpdfium.so`, pinned to the chromium/8125 `linux-x64`
+artifact in `scripts/pdfium/runtime-lock.json`. Its notices are the macOS set except
+`pdfium.txt`, which carries the same BSD text without `//` comment markers.
+`scripts/install_linux.py` installs that layout. The independent PDFKit comparison lane
+remains macOS-only; Linux CI runs the pinned runtime corpus and metadata tests.

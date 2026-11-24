@@ -469,9 +469,10 @@ impl LibraryView {
                             "No matching papers."
                         })
                         .when(!self.busy(Lane::Query) && !trash, |el| {
-                            el.child(hint(
-                                "Add one with ＋ New paper (⌘N), import BibTeX/RIS, or clear filters.",
-                            ))
+                            el.child(hint(format!(
+                                "Add one with ＋ New paper ({}), import BibTeX/RIS, or clear filters.",
+                                shortcut("N")
+                            )))
                         }),
                 )
             })
@@ -533,7 +534,7 @@ impl LibraryView {
                                             focus.focus(window, cx);
                                             this.select(
                                                 id,
-                                                event.modifiers().platform
+                                                event.modifiers().secondary(cx)
                                                     || event.modifiers().shift,
                                                 cx,
                                             )

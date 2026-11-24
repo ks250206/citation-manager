@@ -757,25 +757,25 @@ impl Focusable for TextInput {
     }
 }
 
-pub(super) fn bind_keys(cx: &mut App) {
-    cx.bind_keys([
+pub(super) fn key_bindings() -> Vec<KeyBinding> {
+    vec![
         KeyBinding::new("backspace", Backspace, Some("TextInput")),
         KeyBinding::new("delete", Delete, Some("TextInput")),
         KeyBinding::new("left", Left, Some("TextInput")),
         KeyBinding::new("right", Right, Some("TextInput")),
         KeyBinding::new("shift-left", SelectLeft, Some("TextInput")),
         KeyBinding::new("shift-right", SelectRight, Some("TextInput")),
-        KeyBinding::new("cmd-a", SelectAll, Some("TextInput")),
-        KeyBinding::new("cmd-v", Paste, Some("TextInput")),
-        KeyBinding::new("cmd-c", Copy, Some("TextInput")),
-        KeyBinding::new("cmd-x", Cut, Some("TextInput")),
+        KeyBinding::new(primary!("a"), SelectAll, Some("TextInput")),
+        KeyBinding::new(primary!("v"), Paste, Some("TextInput")),
+        KeyBinding::new(primary!("c"), Copy, Some("TextInput")),
+        KeyBinding::new(primary!("x"), Cut, Some("TextInput")),
         KeyBinding::new("cmd-left", Home, Some("TextInput")),
         KeyBinding::new("home", Home, Some("TextInput")),
         KeyBinding::new("cmd-right", End, Some("TextInput")),
         KeyBinding::new("end", End, Some("TextInput")),
         KeyBinding::new("ctrl-cmd-space", ShowCharacterPalette, Some("TextInput")),
         KeyBinding::new("enter", Submit, Some("TextInput")),
-    ]);
+    ]
 }
 
 #[cfg(test)]

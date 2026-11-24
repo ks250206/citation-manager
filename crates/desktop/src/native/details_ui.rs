@@ -90,11 +90,15 @@ impl LibraryView {
                     .child(
                         primary_button(
                             "save",
-                            if self.editor.is_some() {
-                                "Save  ⌘S"
-                            } else {
-                                "Preview  ⌘S"
-                            },
+                            format!(
+                                "{}  {}",
+                                if self.editor.is_some() {
+                                    "Save"
+                                } else {
+                                    "Preview"
+                                },
+                                shortcut("S")
+                            ),
                             enabled && (self.dirty || self.editor.is_none()),
                         )
                         .on_click(cx.listener(|this, _, w, cx| this.save(&Save, w, cx))),

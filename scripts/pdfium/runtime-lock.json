@@ -17,5 +17,16 @@
   "font_sha256": "c2f3b4d463500a2ddcd3849cded1fceeb9fd6d1c32e6cbecd568453ba50fc68f",
   "builder_commit": "4bdb7acd45b39ef6a7fc2a5b4c83f0398e45c9a6",
   "attestation_url": "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/8125/pdfium-attestation.json",
-  "attestation_sha256": "a0964f520afc57593d285b081e23e401169cc42234f2d14f5bdb4a3add08c9b9"
+  "attestation_sha256": "a0964f520afc57593d285b081e23e401169cc42234f2d14f5bdb4a3add08c9b9",
+  "linux_x64": {
+    "url": "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/8125/pdfium-linux-x64.tgz",
+    "artifact_sha256": "e1c3ce6e270cb5e0c20816b379ad9f2c1309972697c505f508de92bf5e7d6659",
+    "library": "lib/libpdfium.so",
+    "library_sha256": "1c251efce460d67437a4c76d4be9033ae2f17bf5603f5bff1af10209b94ca723",
+    "platform": "Linux x86_64 (glibc)",
+    "notice_overrides_sha256": {
+      "pdfium.txt": "961eacd9633fff6d051db7208b755e9210e30efac7adec3e6a6d52798f0ccf0e"
+    },
+    "notice_note": "Same chromium/8125 notices as macOS; pdfium.txt carries the identical BSD text without the leading // comment markers."
+  }
 }

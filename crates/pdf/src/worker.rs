@@ -16,7 +16,16 @@ use std::{
 
 pub const PDFIUM_BUILD: &str = "158.0.8125.0";
 pub const PDFIUM_ABI: &str = "pdfium-render=0.9.5;pdfium_8125;thread_safe";
-pub const PDFIUM_SHA256: &str = "8d1e46a6dbe32d7cb95279ab3def2e71e557a3d4cc49162453afa3e3b250dc5e";
+/// SHA-256 of the pinned chromium/8125 library for this target
+/// (`scripts/pdfium/runtime-lock.json`): macOS universal dylib or Linux x86_64 .so.
+#[cfg(not(target_os = "linux"))]
+pub const PDFIUM_SHA256: &str = MACOS_PDFIUM_SHA256;
+#[cfg(target_os = "linux")]
+pub const PDFIUM_SHA256: &str = LINUX_PDFIUM_SHA256;
+pub const MACOS_PDFIUM_SHA256: &str =
+    "8d1e46a6dbe32d7cb95279ab3def2e71e557a3d4cc49162453afa3e3b250dc5e";
+pub const LINUX_PDFIUM_SHA256: &str =
+    "1c251efce460d67437a4c76d4be9033ae2f17bf5603f5bff1af10209b94ca723";
 pub const MAX_INPUT_BYTES: usize = 32 * 1024 * 1024;
 pub const MAX_PIXELS: usize = 4 * 1024 * 1024;
 pub const MAX_CHARS: usize = 100_000;
@@ -340,7 +349,18 @@ fn validate_operation(op: &Operation) -> Result<(), PdfError> {
     Ok(())
 }
 /// #34: pass current_exe(), no CWD/PATH/system-library fallback or implicit env override.
+/// macOS: `X.app/Contents/MacOS/<exe>` -> `X.app/Contents/Frameworks/libpdfium.dylib`.
+/// Linux: `<prefix>/bin/<exe>` -> `<prefix>/lib/citation-manager/libpdfium.so`, an
+/// app-owned directory that is never on the loader search path. The pinned
+/// checksum is enforced at load time on both platforms.
 pub fn bundled_library(executable: &Path) -> Result<PathBuf, PdfError> {
+    if cfg!(target_os = "linux") {
+        linux_bundled_library(executable)
+    } else {
+        macos_bundled_library(executable)
+    }
+}
+fn macos_bundled_library(executable: &Path) -> Result<PathBuf, PdfError> {
     if !executable.is_absolute()
         || executable
             .parent()
@@ -357,6 +377,14 @@ pub fn bundled_library(executable: &Path) -> Result<PathBuf, PdfError> {
         return Err(PdfError::LibraryPath);
     }
     Ok(contents.join("Frameworks/libpdfium.dylib"))
+}
+fn linux_bundled_library(executable: &Path) -> Result<PathBuf, PdfError> {
+    let bin = executable.parent().ok_or(PdfError::LibraryPath)?;
+    if !executable.is_absolute() || bin.file_name().is_none_or(|p| p != "bin") {
+        return Err(PdfError::LibraryPath);
+    }
+    let prefix = bin.parent().ok_or(PdfError::LibraryPath)?;
+    Ok(prefix.join("lib/citation-manager/libpdfium.so"))
 }
 
 #[cfg(test)]
@@ -406,16 +434,48 @@ mod tests {
     #[test]
     fn resources_use_absolute_bundle_location() {
         assert_eq!(
-            bundled_library(Path::new("/tmp/移動した App.app/Contents/MacOS/papersd")).unwrap(),
+            macos_bundled_library(Path::new("/tmp/移動した App.app/Contents/MacOS/papersd"))
+                .unwrap(),
             PathBuf::from("/tmp/移動した App.app/Contents/Frameworks/libpdfium.dylib")
         );
         assert_eq!(
-            bundled_library(Path::new("target/papersd")),
+            macos_bundled_library(Path::new("target/papersd")),
             Err(PdfError::LibraryPath)
         );
         assert_eq!(
-            bundled_library(Path::new("/usr/bin/papersd")),
+            macos_bundled_library(Path::new("/usr/bin/papersd")),
             Err(PdfError::LibraryPath)
+        );
+    }
+    #[test]
+    fn linux_resources_use_the_prefix_owned_lib_directory() {
+        assert_eq!(
+            linux_bundled_library(Path::new(
+                "/opt/移動した citation-manager/bin/citation-manager"
+            ))
+            .unwrap(),
+            PathBuf::from("/opt/移動した citation-manager/lib/citation-manager/libpdfium.so")
+        );
+        for invalid in [
+            "bin/citation-manager",
+            "/opt/citation-manager/citation-manager",
+            "/tmp/App.app/Contents/MacOS/papersd",
+            "/citation-manager",
+        ] {
+            assert_eq!(
+                linux_bundled_library(Path::new(invalid)),
+                Err(PdfError::LibraryPath),
+                "{invalid}"
+            );
+        }
+        let expected = if cfg!(target_os = "linux") {
+            linux_bundled_library(Path::new("/opt/cm/bin/citation-manager"))
+        } else {
+            macos_bundled_library(Path::new("/opt/cm/bin/citation-manager"))
+        };
+        assert_eq!(
+            bundled_library(Path::new("/opt/cm/bin/citation-manager")),
+            expected
         );
     }
     #[test]

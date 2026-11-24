@@ -89,3 +89,26 @@ jobs:
           name: pdfium-runtime-evidence
           path: target/pdfium-validation/ci/
           if-no-files-found: error
+  linux-native:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.14'
+      - name: Exact toolchain and GPUI Linux system libraries
+        run: |
+          rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-dev libx11-xcb-dev \
+            libxcb1-dev libwayland-dev libfontconfig-dev libfreetype-dev libvulkan-dev
+      - run: cargo clippy -p cm-desktop --all-targets --features native-gpui --locked -- -D warnings
+      - run: cargo clippy -p cm-daemon --all-targets --features desktop-bootstrap --locked -- -D warnings
+      - run: cargo test -p cm-daemon -p cm-desktop --features cm-daemon/desktop-bootstrap --locked
+      - name: Check actual desktop bootstrap executable (no GUI launch on runner)
+        run: cargo build -p cm-daemon --bin citation-manager --features desktop-bootstrap --locked
+      - name: Pinned Linux PDFium runtime (checksum-verified fetch)
+        run: |
+          python3 scripts/pdfium/fetch.py --platform linux-x64 target/pdfium-linux
+          export CM_PDFIUM_LIBRARY="$GITHUB_WORKSPACE/target/pdfium-linux/lib/libpdfium.so"
+          cargo test -p cm-pdf --features runtime --locked --test metadata_runtime --test runtime
