@@ -8,7 +8,7 @@ use cm_daemon::{
 use cm_protocol::{
     client::Session,
     domain::PaperId,
-    ipc::{Capability, Command, Reply, WireError},
+    ipc::{Capability, Command, Denial, GrantCommand, GrantReply, Operation, Reply, WireError},
     jobs::{JobCommand, JobId, JobReply, JobState, JobStatus, JobSubmit, kinds},
     library::{LibraryReply, LibraryRequest, NewPaper, ServiceError},
 };
@@ -306,4 +306,248 @@ fn running_jobs_cancel_and_deadlines_fail() {
         Reply::Jobs(JobReply::Jobs(list)) => assert!(list.is_empty()),
         other => panic!("{other:?}"),
     }
+}
+
+fn caps(list: &[Capability]) -> cm_protocol::ipc::CapabilitySet {
+    list.iter().copied().collect()
+}
+fn job_reply(result: Result<Reply, WireError>) -> Result<JobStatus, WireError> {
+    result.map(|reply| match reply {
+        Reply::Jobs(JobReply::Job(job)) => *job,
+        other => panic!("{other:?}"),
+    })
+}
+fn wait_job(session: &mut Session, id: JobId) -> JobStatus {
+    match ok(session.call(Command::Jobs(JobCommand::Get(id)))) {
+        Reply::Jobs(JobReply::Job(job)) => *job,
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn retry_requires_the_kind_capabilities_of_the_retrying_session() {
+    let env = Env::new();
+    let _daemon = start(env.config()).unwrap();
+    let mut desktop = env.desktop();
+    let source = env.temp.path().canonicalize().unwrap().join("x.pdf");
+    std::fs::write(&source, b"%PDF-1.4").unwrap();
+    // No such paper: the attachment job fails (fatally) and becomes explicitly retryable.
+    let payload = json!({"paper": uuid::Uuid::now_v7(), "path": source, "original_name": null, "media_type": null});
+    let job = submit(&mut desktop, kinds::ATTACHMENT_IMPORT, "a", payload, None);
+    let failed = settle(&mut desktop, job.id);
+    assert_eq!(failed.state, JobState::Failed);
+    // Same grant, but the session narrowed itself to job control only.
+    let mut connector = env.connector("cli");
+    connector.requested = Some(caps(&[Capability::JobsRead, Capability::JobsControl]));
+    let mut narrowed = Session::open(&connector).unwrap();
+    assert_eq!(wait_job(&mut narrowed, job.id).id, job.id);
+    assert_eq!(
+        job_reply(
+            narrowed
+                .call(Command::Jobs(JobCommand::Retry(job.id)))
+                .unwrap()
+        )
+        .unwrap_err(),
+        WireError::Denied(Denial::Forbidden(Operation::JobRetry))
+    );
+    assert_eq!(get(&mut desktop, job.id).state, JobState::Failed);
+    // The full session may retry it.
+    let retried = job_reply(
+        desktop
+            .call(Command::Jobs(JobCommand::Retry(job.id)))
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(retried.state, JobState::Queued);
+    assert_eq!(settle(&mut desktop, job.id).state, JobState::Failed);
+}
+
+#[test]
+fn jobs_of_a_revoked_or_expired_grant_fail_instead_of_running() {
+    let env = Env::new();
+    let _daemon = start(env.config()).unwrap();
+    let mut desktop = env.desktop();
+    let control = caps(&[Capability::JobsRead, Capability::JobsControl]);
+    let credential = issue(&mut desktop, "worker", control.clone());
+    let mut worker = env.session("cli", credential);
+    let grant = worker.welcome.grant;
+    let running = submit(
+        &mut worker,
+        kinds::DIAGNOSTIC_WAIT,
+        "long",
+        json!({"millis": 20000}),
+        None,
+    );
+    assert!(wait_until(Duration::from_secs(10), || {
+        get(&mut worker, running.id).state == JobState::Running
+    }));
+    // One runner: this one waits in the queue behind the running job.
+    let queued = submit(
+        &mut worker,
+        kinds::DIAGNOSTIC_WAIT,
+        "queued",
+        json!({"millis": 0}),
+        None,
+    );
+    assert_eq!(queued.state, JobState::Queued);
+    assert!(matches!(
+        ok(desktop.call(Command::Grants(GrantCommand::Revoke(grant)))),
+        Reply::Grants(GrantReply::Revoked(g)) if g == grant
+    ));
+    let queued = get(&mut desktop, queued.id);
+    assert_eq!(
+        (queued.state, queued.error.as_deref(), queued.attempts),
+        (JobState::Failed, Some("owner grant revoked"), 0)
+    );
+    let running = settle(&mut desktop, running.id);
+    assert_eq!(
+        (running.state, running.error.as_deref()),
+        (JobState::Failed, Some("owner grant revoked"))
+    );
+
+    // Expiry: a queued job of a grant that expired before it was claimed never runs.
+    let blocker = submit(
+        &mut desktop,
+        kinds::DIAGNOSTIC_WAIT,
+        "blocker",
+        json!({"millis": 20000}),
+        None,
+    );
+    assert!(wait_until(Duration::from_secs(10), || {
+        get(&mut desktop, blocker.id).state == JobState::Running
+    }));
+    let soon = cm_daemon::ipc::auth::now_ms() + 400;
+    let expiring = match ok(desktop.call(Command::Grants(GrantCommand::Issue {
+        label: "short".into(),
+        capabilities: control,
+        expires_at_ms: Some(soon),
+    }))) {
+        Reply::Grants(GrantReply::Issued { credential, .. }) => credential,
+        other => panic!("{other:?}"),
+    };
+    let mut short = env.session("cli", expiring);
+    let late = submit(
+        &mut short,
+        kinds::DIAGNOSTIC_WAIT,
+        "late",
+        json!({"millis": 0}),
+        None,
+    );
+    std::thread::sleep(Duration::from_millis(500));
+    ok(desktop.call(Command::Jobs(JobCommand::Cancel(blocker.id))));
+    let late = settle(&mut desktop, late.id);
+    assert_eq!(
+        (late.state, late.error.as_deref()),
+        (JobState::Failed, Some("owner grant expired"))
+    );
+    assert!(late.result.is_none());
+}
+
+#[test]
+fn idempotency_keys_are_scoped_to_the_submitting_grant() {
+    let env = Env::new();
+    let _daemon = start(env.config()).unwrap();
+    let mut desktop = env.desktop();
+    let control = caps(&[Capability::JobsRead, Capability::JobsControl]);
+    let mut a = env.session("cli", issue(&mut desktop, "a", control.clone()));
+    let mut b = env.session("cli", issue(&mut desktop, "b", control));
+    let first = submit(
+        &mut a,
+        kinds::DIAGNOSTIC_WAIT,
+        "same",
+        json!({"millis": 0}),
+        None,
+    );
+    // Another grant, same key, even another payload: its own job, no Conflict, no leak.
+    let second = submit(
+        &mut b,
+        kinds::DIAGNOSTIC_WAIT,
+        "same",
+        json!({"millis": 1}),
+        None,
+    );
+    assert_ne!(first.id, second.id);
+    assert_eq!(second.state, JobState::Queued);
+    assert_eq!(second.attempts, 0);
+    // Each grant still deduplicates its own key.
+    assert_eq!(
+        submit(
+            &mut b,
+            kinds::DIAGNOSTIC_WAIT,
+            "same",
+            json!({"millis": 1}),
+            None
+        )
+        .id,
+        second.id
+    );
+    assert_eq!(settle(&mut a, first.id).state, JobState::Succeeded);
+    assert_eq!(settle(&mut b, second.id).state, JobState::Succeeded);
+    match ok(b.call(Command::Jobs(JobCommand::List { active_only: false }))) {
+        Reply::Jobs(JobReply::Jobs(list)) => {
+            assert_eq!(list.iter().map(|j| j.id).collect::<Vec<_>>(), [second.id]);
+        }
+        other => panic!("{other:?}"),
+    }
+}
+
+/// Reports progress forever; only the run-time limit stops it.
+struct Endless;
+impl JobHandler for Endless {
+    fn kind(&self) -> &'static str {
+        "test.endless"
+    }
+    fn required(&self) -> &'static [Capability] {
+        &[]
+    }
+    fn validate(&self, _: &Value) -> Result<(), ServiceError> {
+        Ok(())
+    }
+    fn max_run(&self) -> Duration {
+        Duration::from_millis(300)
+    }
+    fn run(&self, ctx: &mut JobContext<'_>) -> Outcome {
+        while ctx.progress(cm_protocol::jobs::JobProgress::default()) {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        Outcome::Cancelled
+    }
+}
+
+#[test]
+fn running_jobs_stop_at_their_deadline_or_run_time_limit() {
+    let env = Env::new();
+    let mut config = env.config();
+    config.handlers.push(Arc::new(Endless));
+    let _daemon = start(config).unwrap();
+    let mut desktop = env.desktop();
+    let endless = submit(&mut desktop, "test.endless", "e", json!({}), Some(5));
+    let endless = settle(&mut desktop, endless.id);
+    assert_eq!(
+        (endless.state, endless.error.as_deref(), endless.attempts),
+        (
+            JobState::Failed,
+            Some("run time limit of 300 ms exceeded"),
+            1
+        )
+    );
+    let deadline = cm_daemon::ipc::auth::now_ms() + 500;
+    let late = job_reply(
+        desktop
+            .call(Command::Jobs(JobCommand::Submit(JobSubmit {
+                kind: kinds::DIAGNOSTIC_WAIT.into(),
+                idempotency_key: "deadline".into(),
+                payload: json!({"millis": 20000}),
+                max_attempts: None,
+                deadline_at_ms: Some(deadline),
+            })))
+            .unwrap(),
+    )
+    .unwrap();
+    let late = settle(&mut desktop, late.id);
+    assert_eq!(
+        (late.state, late.error.as_deref()),
+        (JobState::Failed, Some("deadline exceeded while running"))
+    );
+    assert!(late.updated_at_ms < deadline + 5_000);
 }

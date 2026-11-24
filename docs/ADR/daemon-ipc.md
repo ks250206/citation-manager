@@ -28,20 +28,46 @@ starts `papersd` from the same directory as its own executable (`.app/Contents/M
 
 ## Endpoint and lifecycle
 
-`DaemonPaths` (`cm_protocol::client::local`, std-only so CLI/MCP/native host can reuse it):
-socket `<runtime>/<fnv64(library path)>.sock`, runtime directory override, else
-`$XDG_RUNTIME_DIR/citation-manager`, `$TMPDIR/citation-manager`, `/tmp/citation-manager-<uid>`.
-Clients refuse a runtime directory that is not a real directory owned by their UID without
-group/other bits, and a socket not owned by them. `Hello.library` must equal the daemon's
-library (a hash collision cannot attach to the wrong library).
+`DaemonPaths` (`cm_protocol::client::local`, std-only so CLI/MCP/native host can reuse it)
+canonicalizes the library path first (a library that does not exist yet via its nearest
+existing ancestor), so every spelling of one library shares one socket, lock and
+`Hello.library`. Socket `<runtime>/<first 64 bits of SHA-256(canonical path), hex>.sock`
+(a dependency-free SHA-256 keeps `cm-protocol` free of implementation crates); runtime
+directory override, else `$XDG_RUNTIME_DIR/citation-manager`, `$TMPDIR/citation-manager-<uid>`,
+`/tmp/citation-manager-<uid>`. Clients refuse a runtime directory that is not a real directory
+owned by their UID without group/other bits, and a socket not owned by them. `Hello.library`
+must equal the daemon's library (a hash collision cannot attach to the wrong library).
 
 `LocalConnector` connects or starts `papersd` (own process group, stdio closed) and retries
 with backoff until a timeout. Concurrent starts: losers exit 75, every client reaches the
-single winner. Lifetime: a connection or any active job (queued/running/retry_wait) keeps the
+single winner. If the lock holder was a daemon in its idle exit (75 but no socket appears),
+the connector launches again, at most every 500 ms, until its timeout. A connection closed
+during the handshake (the daemon accepted just before its idle exit) is retried exactly once
+(`connect_and_handshake`). Lifetime: a connection or any active job (queued/running/retry_wait) keeps the
 daemon alive. Idle time counts from when both reached zero; after `--idle-timeout-ms`
 (default 30 s) the daemon removes its socket and exits. The GUI keeps one connection open for
 its lifetime. A lost daemon fails in-flight requests with `Unavailable`; the next request
 reconnects (and restarts it).
+
+Client liveness (`cm_protocol::client::ClientTimeouts`; `IpcLibraryClient::new` uses the
+defaults, `with_timeouts` overrides them). Nothing the daemon does can block the GUI forever:
+
+| Limit | Default | Applies to |
+|---|---|---|
+| handshake | 10 s | each read/write of Hello/Welcome (`handshake`, `Session::open`, the client) |
+| write | 30 s | socket writes of request/cancel frames |
+| control | 30 s | `Status`, `Jobs`, `Grants` (answered on the daemon connection thread) |
+| interactive | 5 min | library CRUD, query, organization, lifecycle, settings, DOI resolve |
+| long | 60 min | `Import`, `Export`, `Pdf`; each PDF progress frame restarts it |
+| reconnect backoff | 250 ms doubling to 10 s | from the 2nd consecutive failed connect |
+
+Library commands share the daemon's single library worker, so a query may wait behind an
+import; hence the generous interactive/long limits. An expired request completes with
+`Unavailable` and a best-effort `Cancel` is sent; the connection is dropped (and re-made by the
+next request) only when no other request is still waiting on it, so one slow request never
+aborts a long operation within its own limit. A failed connect also fails the requests already
+queued behind it, and during backoff requests fail fast instead of each re-running a daemon
+start.
 
 ## Wire protocol
 
@@ -85,9 +111,20 @@ through the `LibraryClient` adapter. Core/domain DTOs gained additive serde deri
   only a non-empty subset of its own (narrowed) capabilities. MCP cannot mint itself write.
 - Preview binding: an import/PDF preview handle is bound to the grant that created it; commit or
   cancel from another grant is `Forbidden` even with LibraryWrite. Retained parse/PDF selection
-  state is per session.
+  state is per session. Import and PDF previews both hide duplicate matches without LibraryRead.
 - Jobs: non-admin grants see/cancel/retry only their own jobs; each job kind adds capability
-  requirements (`attachment.import` needs LibraryWrite + LocalFileRead).
+  requirements (`attachment.import` needs LibraryWrite + LocalFileRead) that the *session*
+  must hold for submit **and** explicit retry (`Forbidden(JobRetry)` otherwise). Cancel only
+  stops effects and needs JobsControl alone.
+- Jobs never outlive their owner's authority: the runner checks the owner grant (live, and
+  still holding the kind's capabilities) when it claims a job and at every heartbeat. Revoking
+  a grant fails its queued/retry_wait jobs at once and stops its running job, all with error
+  "owner grant revoked"; an expired owner's queued job fails "owner grant expired" when
+  claimed. Ownerless jobs are daemon-internal.
+- Revocation fails closed: the in-memory registry consulted by every request is updated before
+  the database, so a failed write still revokes the grant for the daemon's lifetime (the
+  command reports the error). The `desktop-bootstrap` label is reserved for the daemon's own
+  bootstrap grant; `GrantCommand::Issue` rejects it.
 
 Minimal bootstrap: on start the daemon checks `<library>/daemon/desktop.credential` (0600). If
 missing or not matching a live `desktop-bootstrap` grant it revokes previous bootstrap grants,
@@ -99,11 +136,13 @@ rotation UX are #26.
 
 Table `daemon_jobs` (migration `20261124T000000Z_issue-25_001_daemon-grants-jobs.sql`):
 state, attempts/max_attempts, progress, error, result, `detected_committed`, cancel flag,
-lease owner/generation/expiry, next attempt, deadline, owner grant, `UNIQUE(kind,
-idempotency_key)`.
+lease owner/generation/expiry, next attempt, deadline, owner grant, and a unique index on
+`(coalesce(owner_grant, ''), kind, idempotency_key)`.
 
-- Submit is idempotent on `(kind, idempotency_key)`: the existing job is returned in any state;
-  a different payload under the same key is `Conflict`.
+- Submit is idempotent per owner grant on `(kind, idempotency_key)`: the grant's existing job
+  is returned in any state; a different payload under the same key is `Conflict`. Another
+  grant's key never matches, so keys neither leak another owner's `JobStatus` nor reveal that
+  a job exists.
 - Claim (one IMMEDIATE transaction) fails expired deadlines, then leases the next runnable job:
   `attempts+1`, `lease_generation+1`, expiry `now + lease`. Every running-job update is fenced on
   `(state='running', lease_generation)`; a stale runner can neither renew nor commit.
@@ -116,6 +155,10 @@ idempotency_key)`.
   attempt limit (default 3, 1..=20) → `failed` "attempt limit N reached: reason"; a retry past
   the deadline → `failed` "deadline exceeded before retry". Fatal errors fail immediately.
 - Cancel: queued/retry_wait → cancelled; running → `cancel_requested`, the handler stops.
+- Running time: an attempt that passes the job's `deadline_at_ms` fails "deadline exceeded
+  while running"; one that exceeds its kind's `JobHandler::max_run` (default 60 min) fails
+  "run time limit of N ms exceeded" (no retry). Stopping is cooperative: the handler sees it
+  at its next `progress` call.
   Explicit retry of failed/cancelled resets attempts (and the deadline) to queued.
 - Restart recovery: the new lock holder reclaims every `running` row of another owner
   (or with an expired lease): cancel requested → cancelled; attempt limit → failed

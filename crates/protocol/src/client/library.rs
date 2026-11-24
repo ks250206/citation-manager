@@ -1,6 +1,12 @@
 //! `LibraryClient` over IPC. Exactly-once completion: whoever removes a pending entry
-//! (reader on response/EOF, or the transport thread on a failed write) completes it.
-use super::{ClientError, Connector, Stream, handshake};
+//! (reader on response/EOF, the transport thread on a failed write or an expired deadline)
+//! completes it.
+//!
+//! No request can hang the caller: the handshake has read/write timeouts, request writes a
+//! write timeout, and every pending request a deadline (`ClientTimeouts`) after which it
+//! completes with `Unavailable`. Failed (re)connects back off instead of re-running a
+//! possibly slow daemon start for every queued request.
+use super::{ClientError, Connector, Stream, connect_and_handshake};
 use crate::{
     attachments::{PdfProgress, PdfReply, PdfRequest},
     exchange::{
@@ -23,14 +29,85 @@ use std::{
         mpsc,
     },
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
+
+/// Client-side time limits. Every request completes exactly once: with the daemon's answer,
+/// or `Unavailable` when its deadline passes, the connection is lost, or (re)connecting fails.
+///
+/// Deadlines are per command class because the daemon runs library work on one serial
+/// worker: a quick query can legitimately wait behind a long import, so only the control
+/// commands get a short limit. When a request expires the client sends a best-effort
+/// `Cancel` for it; the connection itself is dropped (and re-established by the next
+/// request) only when no other request is still waiting on it, so one slow request never
+/// aborts another long operation that is still within its own deadline.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ClientTimeouts {
+    /// Each read/write of the Hello/Welcome exchange. Default 10 s.
+    pub handshake: Duration,
+    /// Socket write limit for request and cancel frames. Default 30 s.
+    pub write: Duration,
+    /// `Status`, `Jobs`, `Grants`: answered on the daemon's connection thread. Default 30 s.
+    pub control: Duration,
+    /// Library CRUD, queries, organization, lifecycle, settings, DOI resolve: they queue
+    /// behind the daemon's single library worker. Default 5 min.
+    pub interactive: Duration,
+    /// Imports, exports and PDF commands (inspection, rendering, attachment, commit).
+    /// Default 60 min. For PDF commands every progress frame restarts it, so it bounds
+    /// silence rather than total work.
+    pub long: Duration,
+    /// Wait before reconnecting after the second consecutive failed connect, doubling up to
+    /// `backoff_max`; requests during the wait fail fast with `Unavailable`. A single failure
+    /// is retried by the next request at once (a daemon restart is not delayed). 250 ms.
+    pub backoff_base: Duration,
+    /// Default 10 s.
+    pub backoff_max: Duration,
+}
+impl Default for ClientTimeouts {
+    fn default() -> Self {
+        Self {
+            handshake: super::HANDSHAKE_TIMEOUT,
+            write: Duration::from_secs(30),
+            control: Duration::from_secs(30),
+            interactive: Duration::from_secs(5 * 60),
+            long: Duration::from_secs(60 * 60),
+            backoff_base: Duration::from_millis(250),
+            backoff_max: Duration::from_secs(10),
+        }
+    }
+}
+impl ClientTimeouts {
+    /// Deadline of one request of this command, measured from when it is sent.
+    pub fn for_command(&self, command: &Command) -> Duration {
+        match command {
+            Command::Status | Command::Jobs(_) | Command::Grants(_) => self.control,
+            Command::Library(_)
+            | Command::Query(_)
+            | Command::Organization(_)
+            | Command::Lifecycle { .. }
+            | Command::LoadSettings
+            | Command::SaveSettings(_)
+            | Command::Resolve { .. } => self.interactive,
+            Command::Import(_) | Command::Export(_) | Command::Pdf(_) => self.long,
+        }
+    }
+    pub(super) fn backoff(&self, failures: u32) -> Option<Duration> {
+        let doublings = failures.checked_sub(2)?.min(16);
+        Some(
+            self.backoff_base
+                .saturating_mul(1u32 << doublings)
+                .min(self.backoff_max),
+        )
+    }
+}
 
 type RawCompletion = Box<dyn FnOnce(Result<Reply, WireError>) + Send>;
 struct Pending {
     complete: RawCompletion,
     progress: Option<PdfProgress>,
     generation: u64,
+    deadline: Instant,
+    timeout: Duration,
 }
 enum Outgoing {
     Request {
@@ -49,15 +126,15 @@ struct Shared {
     last_error: Mutex<Option<String>>,
 }
 impl Shared {
+    fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<u64, Pending>> {
+        self.pending.lock().unwrap_or_else(|e| e.into_inner())
+    }
     fn take(&self, id: u64) -> Option<Pending> {
-        self.pending
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .remove(&id)
+        self.lock().remove(&id)
     }
     fn fail_generation(&self, generation: u64) {
         let failed: Vec<Pending> = {
-            let mut pending = self.pending.lock().unwrap_or_else(|e| e.into_inner());
+            let mut pending = self.lock();
             let ids: Vec<u64> = pending
                 .iter()
                 .filter(|(_, p)| p.generation == generation)
@@ -71,6 +148,36 @@ impl Shared {
             (p.complete)(Err(WireError::Unavailable));
         }
     }
+    fn take_expired(&self, now: Instant) -> Vec<(u64, Pending)> {
+        let mut pending = self.lock();
+        let ids: Vec<u64> = pending
+            .iter()
+            .filter(|(_, p)| p.deadline <= now)
+            .map(|(id, _)| *id)
+            .collect();
+        ids.into_iter()
+            .filter_map(|id| pending.remove(&id).map(|p| (id, p)))
+            .collect()
+    }
+    fn has_generation(&self, generation: u64) -> bool {
+        self.lock().values().any(|p| p.generation == generation)
+    }
+    fn set_error(&self, error: Option<String>) {
+        *self.last_error.lock().unwrap_or_else(|e| e.into_inner()) = error;
+    }
+    fn connect_error(&self) -> WireError {
+        let reason = self
+            .last_error
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+            .unwrap_or_default();
+        if reason.contains("rejected") {
+            WireError::Service(ServiceError::InvalidInput(reason))
+        } else {
+            WireError::Unavailable
+        }
+    }
 }
 
 /// Persistent connection to the daemon. Holding it open keeps the daemon alive (GUI
@@ -82,13 +189,29 @@ pub struct IpcLibraryClient {
     shared: Arc<Shared>,
 }
 impl IpcLibraryClient {
+    /// Uses `ClientTimeouts::default()`.
     pub fn new(connector: impl Connector) -> std::io::Result<Self> {
+        Self::with_timeouts(connector, ClientTimeouts::default())
+    }
+    pub fn with_timeouts(
+        connector: impl Connector,
+        timeouts: ClientTimeouts,
+    ) -> std::io::Result<Self> {
         let (sender, receiver) = mpsc::sync_channel::<Outgoing>(64);
         let shared = Arc::new(Shared::default());
-        let transport_shared = shared.clone();
+        let transport = Transport {
+            connector,
+            shared: shared.clone(),
+            timeouts,
+            connection: None,
+            generation: 0,
+            failures: 0,
+            retry_at: None,
+            cancels: Vec::new(),
+        };
         thread::Builder::new()
             .name("ipc-client".into())
-            .spawn(move || transport(connector, receiver, transport_shared))?;
+            .spawn(move || transport.run(receiver))?;
         Ok(Self { sender, shared })
     }
     /// Asks the transport thread to connect now (e.g. at GUI start) without blocking.
@@ -157,14 +280,24 @@ struct Connection {
     generation: u64,
     alive: Arc<AtomicBool>,
 }
+impl Connection {
+    /// Marks the connection dead and unblocks its reader, which fails its pending requests.
+    fn kill(&self) {
+        self.alive.store(false, Ordering::SeqCst);
+        self.writer.shutdown_stream();
+    }
+}
 
 fn connect(
     connector: &dyn Connector,
     shared: &Arc<Shared>,
     generation: u64,
+    timeouts: &ClientTimeouts,
 ) -> Result<Connection, ClientError> {
-    let (mut stream, hello) = connector.connect()?;
-    handshake(stream.as_mut(), hello)?;
+    let (stream, _) = connect_and_handshake(connector, timeouts.handshake)?;
+    // The reader blocks without a timeout (deadlines are enforced by the transport thread);
+    // writes are bounded so a daemon that stops reading cannot wedge the transport.
+    stream.set_io_timeouts(None, Some(timeouts.write))?;
     let mut reader = stream.try_clone_stream()?;
     let alive = Arc::new(AtomicBool::new(true));
     let reader_alive = alive.clone();
@@ -180,12 +313,13 @@ fn connect(
                         }
                     }
                     Ok(Some(ServerFrame::PdfProgress { id, report })) => {
-                        let pending = reader_shared
-                            .pending
-                            .lock()
-                            .unwrap_or_else(|e| e.into_inner());
-                        if let Some(progress) = pending.get(&id).and_then(|p| p.progress.as_ref()) {
-                            progress(report);
+                        let mut pending = reader_shared.lock();
+                        if let Some(p) = pending.get_mut(&id) {
+                            // Progress proves the operation is alive: restart its deadline.
+                            p.deadline = Instant::now() + p.timeout;
+                            if let Some(progress) = p.progress.as_ref() {
+                                progress(report);
+                            }
                         }
                     }
                     Ok(Some(_)) | Ok(None) | Err(_) => break,
@@ -201,132 +335,202 @@ fn connect(
     })
 }
 
-fn transport(connector: impl Connector, receiver: mpsc::Receiver<Outgoing>, shared: Arc<Shared>) {
-    let mut connection: Option<Connection> = None;
-    let mut generation = 0u64;
-    let mut cancels: Vec<(u64, Cancellation)> = Vec::new();
-    let mut ensure = |connection: &mut Option<Connection>| -> bool {
-        if connection
+struct Transport<C: Connector> {
+    connector: C,
+    shared: Arc<Shared>,
+    timeouts: ClientTimeouts,
+    connection: Option<Connection>,
+    generation: u64,
+    /// Consecutive failed connects; reset by a successful handshake.
+    failures: u32,
+    /// No connect attempt before this instant (backoff).
+    retry_at: Option<Instant>,
+    cancels: Vec<(u64, Cancellation)>,
+}
+impl<C: Connector> Transport<C> {
+    fn ensure(&mut self) -> bool {
+        if self
+            .connection
             .as_ref()
             .is_some_and(|c| c.alive.load(Ordering::SeqCst))
         {
             return true;
         }
-        if let Some(old) = connection.take() {
+        if let Some(old) = self.connection.take() {
             old.writer.shutdown_stream();
         }
-        generation += 1;
-        match connect(&connector, &shared, generation) {
+        if self.retry_at.is_some_and(|at| Instant::now() < at) {
+            return false;
+        }
+        self.generation += 1;
+        match connect(
+            &self.connector,
+            &self.shared,
+            self.generation,
+            &self.timeouts,
+        ) {
             Ok(c) => {
-                *connection = Some(c);
-                *shared.last_error.lock().unwrap_or_else(|e| e.into_inner()) = None;
+                self.connection = Some(c);
+                self.shared.set_error(None);
+                self.failures = 0;
+                self.retry_at = None;
                 true
             }
             Err(e) => {
-                *shared.last_error.lock().unwrap_or_else(|e| e.into_inner()) = Some(e.to_string());
+                self.shared.set_error(Some(e.to_string()));
+                self.failures = self.failures.saturating_add(1);
+                self.retry_at = self
+                    .timeouts
+                    .backoff(self.failures)
+                    .map(|wait| Instant::now() + wait);
                 false
             }
         }
-    };
-    loop {
-        match receiver.recv_timeout(Duration::from_millis(50)) {
-            Ok(Outgoing::Connect) => {
-                ensure(&mut connection);
+    }
+    fn run(mut self, receiver: mpsc::Receiver<Outgoing>) {
+        loop {
+            match receiver.recv_timeout(Duration::from_millis(50)) {
+                Ok(Outgoing::Connect) => {
+                    self.ensure();
+                }
+                Ok(Outgoing::Request {
+                    id,
+                    command,
+                    complete,
+                    progress,
+                    cancel,
+                }) => {
+                    if self.ensure() {
+                        self.write(id, *command, complete, progress, cancel);
+                    } else {
+                        // Requests queued during the failed connect would each re-run it
+                        // (possibly a slow daemon start): fail them now as well.
+                        let mut failed = vec![complete];
+                        while let Ok(queued) = receiver.try_recv() {
+                            if let Outgoing::Request { complete, .. } = queued {
+                                failed.push(complete);
+                            }
+                        }
+                        for complete in failed {
+                            complete(Err(self.shared.connect_error()));
+                        }
+                    }
+                }
+                Err(mpsc::RecvTimeoutError::Timeout) => {}
+                Err(mpsc::RecvTimeoutError::Disconnected) => break,
             }
-            Ok(Outgoing::Request {
-                id,
-                command,
+            self.expire();
+            self.forward_cancels();
+        }
+        if let Some(c) = self.connection {
+            c.writer.shutdown_stream();
+        }
+    }
+    fn write(
+        &mut self,
+        id: u64,
+        command: Command,
+        complete: RawCompletion,
+        progress: Option<PdfProgress>,
+        cancel: Option<Cancellation>,
+    ) {
+        let timeout = self.timeouts.for_command(&command);
+        let c = self.connection.as_mut().expect("connected");
+        self.shared.lock().insert(
+            id,
+            Pending {
                 complete,
                 progress,
-                cancel,
-            }) => {
-                if !ensure(&mut connection) {
-                    let reason = shared
-                        .last_error
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner())
-                        .clone()
-                        .unwrap_or_default();
-                    complete(Err(if reason.contains("rejected") {
-                        WireError::Service(ServiceError::InvalidInput(reason))
-                    } else {
-                        WireError::Unavailable
-                    }));
-                    continue;
-                }
-                let c = connection.as_mut().expect("connected");
-                shared
-                    .pending
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .insert(
-                        id,
-                        Pending {
-                            complete,
-                            progress,
-                            generation: c.generation,
-                        },
-                    );
-                let frame = ClientFrame::Request {
-                    id,
-                    command: *command,
-                };
-                match write_frame(c.writer.as_mut(), &frame, MAX_REQUEST_FRAME) {
-                    Ok(()) if c.alive.load(Ordering::SeqCst) => {
-                        if let Some(cancel) = cancel {
-                            cancels.push((id, cancel));
-                        }
-                    }
-                    Ok(()) => {
-                        if let Some(p) = shared.take(id) {
-                            (p.complete)(Err(WireError::Unavailable));
-                        }
-                    }
-                    Err(e) => {
-                        let error = match e {
-                            crate::ipc::FrameError::TooLarge(_) => WireError::TooLarge,
-                            _ => {
-                                c.alive.store(false, Ordering::SeqCst);
-                                WireError::Unavailable
-                            }
-                        };
-                        if let Some(p) = shared.take(id) {
-                            (p.complete)(Err(error));
-                        }
-                    }
+                generation: c.generation,
+                deadline: Instant::now() + timeout,
+                timeout,
+            },
+        );
+        let frame = ClientFrame::Request { id, command };
+        match write_frame(c.writer.as_mut(), &frame, MAX_REQUEST_FRAME) {
+            Ok(()) if c.alive.load(Ordering::SeqCst) => {
+                if let Some(cancel) = cancel {
+                    self.cancels.push((id, cancel));
                 }
             }
-            Err(mpsc::RecvTimeoutError::Timeout) => {}
-            Err(mpsc::RecvTimeoutError::Disconnected) => break,
-        }
-        if !cancels.is_empty() {
-            let pending: Vec<u64> = shared
-                .pending
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .keys()
-                .copied()
-                .collect();
-            cancels.retain(|(id, _)| pending.contains(id));
-            let fired: Vec<u64> = cancels
-                .iter()
-                .filter(|(_, c)| c.is_cancelled())
-                .map(|(id, _)| *id)
-                .collect();
-            cancels.retain(|(_, c)| !c.is_cancelled());
-            if let Some(c) = connection.as_mut() {
-                for id in fired {
-                    let _ = write_frame(
-                        c.writer.as_mut(),
-                        &ClientFrame::Cancel { id },
-                        MAX_REQUEST_FRAME,
-                    );
+            Ok(()) => {
+                if let Some(p) = self.shared.take(id) {
+                    (p.complete)(Err(WireError::Unavailable));
+                }
+            }
+            Err(e) => {
+                let error = match e {
+                    crate::ipc::FrameError::TooLarge(_) => WireError::TooLarge,
+                    // Failed or timed-out write: the stream may hold a partial frame.
+                    _ => {
+                        c.kill();
+                        WireError::Unavailable
+                    }
+                };
+                if let Some(p) = self.shared.take(id) {
+                    (p.complete)(Err(error));
                 }
             }
         }
     }
-    if let Some(c) = connection {
-        c.writer.shutdown_stream();
+    /// Completes requests past their deadline with `Unavailable`.
+    fn expire(&mut self) {
+        let expired = self.shared.take_expired(Instant::now());
+        let current = self.connection.as_ref().map(|c| c.generation);
+        if !expired.iter().any(|(_, p)| Some(p.generation) == current) {
+            for (_, p) in expired {
+                (p.complete)(Err(WireError::Unavailable));
+            }
+            return;
+        }
+        for (id, p) in expired {
+            if let Some(c) = self
+                .connection
+                .as_mut()
+                .filter(|c| c.generation == p.generation && c.alive.load(Ordering::SeqCst))
+                && write_frame(
+                    c.writer.as_mut(),
+                    &ClientFrame::Cancel { id },
+                    MAX_REQUEST_FRAME,
+                )
+                .is_err()
+            {
+                c.kill();
+            }
+            (p.complete)(Err(WireError::Unavailable));
+        }
+        // Nothing else is waiting on this connection: treat the daemon as unresponsive and
+        // drop it; the next request reconnects (and, if needed, restarts the daemon).
+        if let Some(c) = self.connection.take() {
+            if self.shared.has_generation(c.generation) {
+                self.connection = Some(c);
+            } else {
+                c.kill();
+            }
+        }
+    }
+    fn forward_cancels(&mut self) {
+        if self.cancels.is_empty() {
+            return;
+        }
+        let pending: Vec<u64> = self.shared.lock().keys().copied().collect();
+        self.cancels.retain(|(id, _)| pending.contains(id));
+        let fired: Vec<u64> = self
+            .cancels
+            .iter()
+            .filter(|(_, c)| c.is_cancelled())
+            .map(|(id, _)| *id)
+            .collect();
+        self.cancels.retain(|(_, c)| !c.is_cancelled());
+        if let Some(c) = self.connection.as_mut() {
+            for id in fired {
+                let _ = write_frame(
+                    c.writer.as_mut(),
+                    &ClientFrame::Cancel { id },
+                    MAX_REQUEST_FRAME,
+                );
+            }
+        }
     }
 }
 

@@ -7,20 +7,36 @@
 mod library;
 #[cfg(unix)]
 pub mod local;
-pub use library::IpcLibraryClient;
+#[cfg(unix)]
+mod sha256;
+#[cfg(all(test, unix))]
+mod tests;
+pub use library::{ClientTimeouts, IpcLibraryClient};
 
 use crate::ipc::{
     ClientFrame, Command, FrameError, HandshakeRejection, Hello, MAX_HANDSHAKE_FRAME,
     MAX_REQUEST_FRAME, MAX_RESPONSE_FRAME, Reply, ServerFrame, Welcome, WireError, read_frame,
     write_frame,
 };
-use std::io::{self, Read, Write};
+use std::{
+    io::{self, Read, Write},
+    time::Duration,
+};
+
+/// Default limit for the whole Hello/Welcome exchange on a fresh connection.
+pub const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// A connected, bidirectional byte stream that can be split into reader/writer halves.
 pub trait Stream: Read + Write + Send + 'static {
     fn try_clone_stream(&self) -> io::Result<Box<dyn Stream>>;
     /// Unblocks a concurrent reader on the other half.
     fn shutdown_stream(&self);
+    /// Read/write timeouts of the underlying socket (`None` = block). Socket options are
+    /// shared by every clone of the stream. Streams without timeouts may ignore this.
+    fn set_io_timeouts(&self, read: Option<Duration>, write: Option<Duration>) -> io::Result<()> {
+        let _ = (read, write);
+        Ok(())
+    }
 }
 #[cfg(unix)]
 impl Stream for std::os::unix::net::UnixStream {
@@ -30,6 +46,13 @@ impl Stream for std::os::unix::net::UnixStream {
     fn shutdown_stream(&self) {
         let _ = self.shutdown(std::net::Shutdown::Both);
     }
+    fn set_io_timeouts(&self, read: Option<Duration>, write: Option<Duration>) -> io::Result<()> {
+        self.set_read_timeout(read.map(nonzero))?;
+        self.set_write_timeout(write.map(nonzero))
+    }
+}
+fn nonzero(timeout: Duration) -> Duration {
+    timeout.max(Duration::from_millis(1))
 }
 
 /// Produces an authenticated-ready stream plus the `Hello` to present. May block (e.g.
@@ -67,14 +90,72 @@ impl From<FrameError> for ClientError {
     }
 }
 
-/// Performs the Hello/Welcome exchange on a fresh stream.
+impl ClientError {
+    /// The daemon went away right after accepting (e.g. it was in the middle of its idle
+    /// exit): worth exactly one fresh connect, unlike a rejection or a malformed reply.
+    fn closed_during_handshake(&self) -> bool {
+        let io = |e: &io::Error| {
+            matches!(
+                e.kind(),
+                io::ErrorKind::UnexpectedEof
+                    | io::ErrorKind::BrokenPipe
+                    | io::ErrorKind::ConnectionReset
+                    | io::ErrorKind::ConnectionAborted
+            )
+        };
+        match self {
+            Self::Protocol(reason) => *reason == CLOSED_DURING_HANDSHAKE,
+            Self::Io(e) | Self::Frame(FrameError::Io(e)) => io(e),
+            _ => false,
+        }
+    }
+}
+const CLOSED_DURING_HANDSHAKE: &str = "daemon closed during handshake";
+
+/// Performs the Hello/Welcome exchange on a fresh stream within `HANDSHAKE_TIMEOUT`.
+/// The stream's timeouts are cleared again afterwards.
 pub fn handshake(stream: &mut dyn Stream, hello: Hello) -> Result<Welcome, ClientError> {
-    write_frame(stream, &ClientFrame::Hello(hello), MAX_HANDSHAKE_FRAME)?;
-    match read_frame::<_, ServerFrame>(stream, MAX_RESPONSE_FRAME)? {
-        Some(ServerFrame::Welcome(welcome)) => Ok(welcome),
-        Some(ServerFrame::Rejected(reason)) => Err(ClientError::Rejected(reason)),
-        Some(_) => Err(ClientError::Protocol("expected welcome")),
-        None => Err(ClientError::Protocol("daemon closed during handshake")),
+    handshake_within(stream, hello, HANDSHAKE_TIMEOUT)
+}
+
+/// `handshake` with an explicit limit for each read/write of the exchange; a daemon that
+/// accepts but never answers fails with a timeout error instead of blocking forever.
+pub fn handshake_within(
+    stream: &mut dyn Stream,
+    hello: Hello,
+    timeout: Duration,
+) -> Result<Welcome, ClientError> {
+    stream.set_io_timeouts(Some(timeout), Some(timeout))?;
+    let result = (|| {
+        write_frame(stream, &ClientFrame::Hello(hello), MAX_HANDSHAKE_FRAME)?;
+        match read_frame::<_, ServerFrame>(stream, MAX_RESPONSE_FRAME)? {
+            Some(ServerFrame::Welcome(welcome)) => Ok(welcome),
+            Some(ServerFrame::Rejected(reason)) => Err(ClientError::Rejected(reason)),
+            Some(_) => Err(ClientError::Protocol("expected welcome")),
+            None => Err(ClientError::Protocol(CLOSED_DURING_HANDSHAKE)),
+        }
+    })();
+    let cleared = stream.set_io_timeouts(None, None);
+    let welcome = result?;
+    cleared?;
+    Ok(welcome)
+}
+
+/// Connects and handshakes, retrying exactly once when the daemon closes the fresh
+/// connection during the handshake (the idle-exit race: it accepted just before exiting).
+/// The connector then finds no socket and starts a new daemon if it may.
+pub fn connect_and_handshake(
+    connector: &dyn Connector,
+    timeout: Duration,
+) -> Result<(Box<dyn Stream>, Welcome), ClientError> {
+    let attempt = || -> Result<(Box<dyn Stream>, Welcome), ClientError> {
+        let (mut stream, hello) = connector.connect()?;
+        let welcome = handshake_within(stream.as_mut(), hello, timeout)?;
+        Ok((stream, welcome))
+    };
+    match attempt() {
+        Err(e) if e.closed_during_handshake() => attempt(),
+        other => other,
     }
 }
 
@@ -88,8 +169,13 @@ pub struct Session {
 }
 impl Session {
     pub fn open(connector: &dyn Connector) -> Result<Self, ClientError> {
-        let (stream, hello) = connector.connect()?;
-        Self::from_stream(stream, hello)
+        let (stream, welcome) = connect_and_handshake(connector, HANDSHAKE_TIMEOUT)?;
+        Ok(Self {
+            stream,
+            next: 1,
+            welcome,
+            progress: Vec::new(),
+        })
     }
     pub fn from_stream(mut stream: Box<dyn Stream>, hello: Hello) -> Result<Self, ClientError> {
         let welcome = handshake(stream.as_mut(), hello)?;

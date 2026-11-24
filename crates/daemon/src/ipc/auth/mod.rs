@@ -20,7 +20,8 @@ use std::{
 };
 
 /// Label of the owner's bootstrap grant. A label is diagnostic; this one is only used to
-/// rotate the previous bootstrap grant when its credential file is lost or replaced.
+/// rotate the previous bootstrap grant when its credential file is lost or replaced, and is
+/// therefore reserved: `GrantCommand::Issue` cannot create a grant with it.
 pub const DESKTOP_BOOTSTRAP: &str = "desktop-bootstrap";
 
 pub fn now_ms() -> i64 {
@@ -129,6 +130,9 @@ impl Authenticator {
                 "label must be 1..=128 printable characters",
             ));
         }
+        if issuer.is_some() && label.eq_ignore_ascii_case(DESKTOP_BOOTSTRAP) {
+            return Err(IssueError::Invalid("label is reserved"));
+        }
         if capabilities.is_empty() {
             return Err(IssueError::Invalid("at least one capability is required"));
         }
@@ -161,24 +165,25 @@ impl Authenticator {
             .insert(stored);
         Ok((info, credential))
     }
-    /// Takes effect for every live session at its next request.
+    /// Takes effect for every live session at its next request. Fails closed: the in-memory
+    /// registry (which every request consults) is updated first, so the grant stays revoked
+    /// for this daemon's lifetime even when persisting the revocation fails (`Err`).
     pub fn revoke(&self, id: GrantId, now: i64) -> Result<bool, ServiceError> {
-        let found = self
-            .control
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .daemon_grants()
-            .revoke(id, now)?;
-        if let Some(s) = self
+        let cached = self
             .cache
             .write()
             .unwrap_or_else(|e| e.into_inner())
             .by_id
             .get_mut(&id)
-        {
-            s.grant.revoked = true;
-        }
-        Ok(found)
+            .map(|s| s.grant.revoked = true)
+            .is_some();
+        let stored = self
+            .control
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .daemon_grants()
+            .revoke(id, now)?;
+        Ok(stored || cached)
     }
     pub fn list(&self) -> Vec<GrantInfo> {
         let mut grants: Vec<GrantInfo> = self.read().by_id.values().map(info).collect();
@@ -231,6 +236,14 @@ impl Authenticator {
             File::open(parent)?.sync_all()?;
         }
         Ok(())
+    }
+}
+
+impl crate::jobs::OwnerAuthority for Authenticator {
+    fn owner_capabilities(&self, owner: GrantId, now_ms: i64) -> Result<CapabilitySet, Denial> {
+        let cache = self.read();
+        policy::check_live(cache.by_id.get(&owner).map(|s| &s.grant), now_ms)
+            .map(|g| g.capabilities.clone())
     }
 }
 

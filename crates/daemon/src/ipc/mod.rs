@@ -103,7 +103,7 @@ impl From<io::Error> for StartError {
 
 struct Shared {
     paths: DaemonPaths,
-    auth: Authenticator,
+    auth: Arc<Authenticator>,
     engine: InProcessLibraryClient,
     jobs: JobEngine,
     activity: Arc<Activity>,
@@ -152,17 +152,19 @@ pub fn start(config: DaemonConfig) -> Result<RunningDaemon, StartError> {
     // The lock holder is the only migration runner. Upgrades take a pre-migration backup.
     let control = LibraryDb::open_with_safety_backups(&directory).map_err(StartError::Storage)?;
     let control = Arc::new(Mutex::new(control));
-    let auth = Authenticator::load(control.clone()).map_err(StartError::Service)?;
+    let auth = Arc::new(Authenticator::load(control.clone()).map_err(StartError::Service)?);
     auth.bootstrap_desktop(&paths.desktop_credential, now_ms())?;
     let activity = Arc::new(Activity::default());
     let engine =
         InProcessLibraryClient::start_with_settings(paths.library.clone(), config.settings)?;
-    let jobs = JobEngine::start(
+    // The live grant registry decides whether a job's owner may still run it.
+    let jobs = JobEngine::start_with_owners(
         directory,
         control,
         config.handlers,
         config.jobs,
         activity.clone(),
+        auth.clone(),
     )
     .map_err(StartError::Service)?;
     lifecycle::prepare_private_dir(&paths.runtime_dir)?;
@@ -556,18 +558,23 @@ impl Session {
                 let tx = self.tx.clone();
                 let previews = self.shared.clone();
                 let grant = self.grant;
+                let redact = !held.contains(&Capability::LibraryRead);
                 self.engine.pdf(
                     command.into_request(self.cancellation(id)),
                     Box::new(move |report| {
                         let _ = tx.send(ServerFrame::PdfProgress { id, report });
                     }),
-                    Box::new(move |r| {
-                        if let Ok(PdfReply::Preview(p)) = &r {
+                    Box::new(move |mut r| {
+                        if let Ok(PdfReply::Preview(p)) = &mut r {
                             previews
                                 .previews
                                 .lock()
                                 .unwrap_or_else(|e| e.into_inner())
                                 .insert(p.id.clone(), grant);
+                            // Same rule as import previews: no LibraryRead, no existing matches.
+                            if redact {
+                                redact_matches(p);
+                            }
                         }
                         done(r.map(Reply::Pdf).map_err(Into::into))
                     }),
@@ -589,9 +596,9 @@ impl Session {
                     JobCommand::Cancel(job) => {
                         jobs.cancel(job, owner).map(|s| JobReply::Job(Box::new(s)))
                     }
-                    JobCommand::Retry(job) => {
-                        jobs.retry(job, owner).map(|s| JobReply::Job(Box::new(s)))
-                    }
+                    JobCommand::Retry(job) => jobs
+                        .retry(job, owner, &held)
+                        .map(|s| JobReply::Job(Box::new(s))),
                     _ => Err(WireError::Service(ServiceError::InvalidInput(
                         "unsupported job command".into(),
                     ))),
@@ -625,11 +632,21 @@ impl Session {
                             IssueError::Unavailable => WireError::Unavailable,
                         }),
                     GrantCommand::List => Ok(GrantReply::Grants(auth.list())),
-                    GrantCommand::Revoke(grant) => match auth.revoke(grant, now_ms()) {
-                        Ok(true) => Ok(GrantReply::Revoked(grant)),
-                        Ok(false) => Err(WireError::Service(ServiceError::NotFound)),
-                        Err(e) => Err(WireError::Service(e)),
-                    },
+                    GrantCommand::Revoke(grant) => {
+                        let revoked = auth.revoke(grant, now_ms());
+                        // Fail closed: the grant is revoked in memory even if persisting failed,
+                        // and its jobs must not keep running with its authority.
+                        let jobs = match revoked {
+                            Ok(false) => Ok(0),
+                            Ok(true) | Err(_) => self.shared.jobs.owner_revoked(grant),
+                        };
+                        match (revoked, jobs) {
+                            (Ok(true), Ok(_)) => Ok(GrantReply::Revoked(grant)),
+                            (Ok(false), _) => Err(WireError::Service(ServiceError::NotFound)),
+                            (Err(e), _) => Err(WireError::Service(e)),
+                            (Ok(true), Err(e)) => Err(e),
+                        }
+                    }
                     _ => Err(WireError::Service(ServiceError::InvalidInput(
                         "unsupported grant command".into(),
                     ))),

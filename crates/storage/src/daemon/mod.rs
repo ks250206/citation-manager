@@ -174,4 +174,82 @@ mod tests {
         );
         assert_eq!(jobs.active_count().unwrap(), 0);
     }
+
+    fn grant(db: &LibraryDb, hash: u8) -> GrantId {
+        let stored = StoredGrant {
+            grant: Grant {
+                id: GrantId(uuid::Uuid::now_v7()),
+                label: format!("grant {hash}"),
+                capabilities: presets::desktop(),
+                expires_at_ms: None,
+                revoked: false,
+            },
+            token_sha256: [hash; 32],
+            issued_by: None,
+            created_at_ms: 1,
+        };
+        db.daemon_grants().insert(&stored).unwrap();
+        stored.grant.id
+    }
+
+    #[test]
+    fn idempotency_is_scoped_to_the_owner_grant() {
+        let mut db = LibraryDb::in_memory().unwrap();
+        let (a, b) = (grant(&db, 1), grant(&db, 2));
+        let mut jobs = db.daemon_jobs();
+        let owned = |owner, payload| NewJob {
+            owner_grant: Some(owner),
+            ..job("shared-key", payload)
+        };
+        let (first, created) = jobs.submit(&owned(a, r#"{"a":1}"#)).unwrap();
+        assert!(created);
+        // Another grant with the same key (even another payload) gets its own job.
+        let (other, created) = jobs.submit(&owned(b, r#"{"b":2}"#)).unwrap();
+        assert!(created);
+        assert_ne!(other.id, first.id);
+        assert_eq!(other.owner_grant, Some(b));
+        // The same owner still deduplicates / conflicts as before.
+        assert_eq!(jobs.submit(&owned(a, r#"{"a":1}"#)).unwrap().0.id, first.id);
+        assert_eq!(
+            jobs.submit(&owned(a, r#"{"a":9}"#)),
+            Err(cm_core::ServiceError::Conflict)
+        );
+        // Daemon-internal (ownerless) jobs form their own scope.
+        let (internal, created) = jobs.submit(&job("shared-key", "{}")).unwrap();
+        assert!(created);
+        assert_eq!(
+            jobs.submit(&job("shared-key", "{}")).unwrap().0.id,
+            internal.id
+        );
+        assert_eq!(jobs.active_count().unwrap(), 3);
+    }
+
+    #[test]
+    fn revoking_an_owner_fails_its_waiting_jobs_and_flags_running_ones() {
+        let mut db = LibraryDb::in_memory().unwrap();
+        let (a, b) = (grant(&db, 1), grant(&db, 2));
+        let mut jobs = db.daemon_jobs();
+        let owned = |owner, key| NewJob {
+            owner_grant: Some(owner),
+            ..job(key, "{}")
+        };
+        let (running, _) = jobs.submit(&owned(a, "run")).unwrap();
+        let claimed = jobs.claim("d", 1_000, 100).unwrap().unwrap();
+        assert_eq!(claimed.id, running.id);
+        let (queued, _) = jobs.submit(&owned(a, "queued")).unwrap();
+        let (unrelated, _) = jobs.submit(&owned(b, "queued")).unwrap();
+        let affected = jobs
+            .fail_owner_active(a, "owner grant revoked", 1_010)
+            .unwrap();
+        assert_eq!(affected.len(), 2);
+        let queued = jobs.get(queued.id).unwrap().unwrap();
+        assert_eq!(
+            (queued.state.as_str(), queued.error.as_deref()),
+            ("failed", Some("owner grant revoked"))
+        );
+        let running = jobs.get(running.id).unwrap().unwrap();
+        assert_eq!(running.state, "running");
+        assert!(running.cancel_requested);
+        assert_eq!(jobs.get(unrelated.id).unwrap().unwrap().state, "queued");
+    }
 }
