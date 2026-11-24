@@ -53,14 +53,14 @@ pub fn organization_name(raw: &str) -> Result<String, ValueError> {
     Ok(value)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Collection {
     pub id: CollectionId,
     pub parent: Option<CollectionId>,
     pub name: String,
     pub sort_order: i64,
 }
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Tag {
     pub id: TagId,
     pub name: String,

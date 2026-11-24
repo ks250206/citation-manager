@@ -974,3 +974,25 @@ AND/OR と複合 filter、stable keyset pagination を worker 側 core port / SQ
 collection 削除は直接の子を親へ移して自身の所属だけを解除し、文献/添付を消さない。
 M1 keyword は書誌情報の literal substring で、PDF全文/FTS/relevance は #18。
 #33 は既存 ImportDestination の ID と TagKey を共有し、import commit の全体 transaction を別途所有する。
+
+## 32. #25 papersd・認可付きIPC・単一writer・永続ジョブ
+
+[daemon-ipc ADR](docs/ADR/daemon-ipc.md) が §5.1/§7/§18–19 の実装上の明確化となる。`papersd` が
+library ごとの OS lock を持つ唯一の writer/migration 実行主体で、0700 runtime directory 内の 0600
+Unix socket だけで待ち受ける（HTTP なし）。長さ付き JSON frame、protocol version、入力上限、
+Linux の peer UID 検査、credential → daemon 保存 grant の default-deny 判定を全 command に適用する。
+GUI は `IpcLibraryClient` で同じ `LibraryClient` を使い、接続中は daemon を維持、client/active job が
+無ければ idle 終了、次の要求で遅延起動する。`JobStatus` と jobs table は lease/世代 fencing、backoff、
+試行上限 failed、明示 retry/cancel、restart 後の lease 回収、idempotency key と commit 済み検知を持ち、
+exactly-once ではなく at-least-once + 冪等効果と明記する。macOS .app 配置/起動は #34 で検証する。
+
+## 33. #18 ページ抽出ジョブ・FTS5・日本語短語フォールバック
+
+[fulltext-search ADR](docs/ADR/fulltext-search.md) が §10/§14.3/§18 の実装上の明確化となる。
+書誌/注釈/ページ本文/タグ/soft delete の索引同期は SQLite trigger が単一の `search_documents`
+投影を同じ transaction で更新し、unicode61 (全項目) と trigram (識別子以外) の外部 content FTS5 を
+維持する。再構築は原データを読むだけで投影と両索引を作り直し、trigger 維持結果と一致することを検証した。
+抽出は #25 永続ジョブ `fulltext.extract`（ページ batch commit による再開、ページ間 cancel、
+ページ/文書/実行あたりの上限、画像/暗号化/破損 PDF の明示状態）で行う。3文字未満の語は
+unicode61 token と、範囲・件数・時間上限付きの literal scan で検索し、未検索領域と continuation を
+返す（0件表示と区別）。幅/NFC 正規化は #53 実測どおり行わない。GUI #21、負荷 #30 は未実施。

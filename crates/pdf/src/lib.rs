@@ -6,6 +6,8 @@ pub use pdfium_render::prelude::Pdfium;
 #[cfg(feature = "runtime")]
 mod adapter;
 #[cfg(feature = "runtime")]
+pub mod extract;
+#[cfg(feature = "runtime")]
 pub mod worker;
 
 #[cfg(feature = "runtime")]

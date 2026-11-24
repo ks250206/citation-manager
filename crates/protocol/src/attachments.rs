@@ -7,12 +7,12 @@ pub use cm_core::{
     metadata_resolve::Cancellation,
 };
 use std::path::PathBuf;
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum Selection {
     Files(Vec<PathBuf>),
     Folder { path: PathBuf, recursive: bool },
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PdfFile {
     pub path: PathBuf,
     pub name: String,
@@ -25,7 +25,7 @@ pub struct PdfFile {
     pub paper: Option<PaperId>,
     pub attachment: Option<AttachmentId>,
 }
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct PdfReport {
     pub files: Vec<PdfFile>,
     pub assessed: usize,
@@ -80,12 +80,12 @@ impl RenderRequest {
     }
 }
 /// One character in unrotated PDF user space (points); text order is the index order.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct PageChar {
     pub unicode: Option<char>,
     pub quad: Quad,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct RenderedPage {
     pub attachment: AttachmentId,
     pub page: u32,
@@ -98,14 +98,15 @@ pub struct RenderedPage {
     pub zoom: f32,
     pub width: u32,
     pub height: u32,
-    /// Straight RGBA, row-major, `width * height * 4` bytes.
+    /// Straight RGBA, row-major, `width * height * 4` bytes (base64 on the wire).
+    #[serde(with = "crate::ipc::b64")]
     pub rgba: std::sync::Arc<[u8]>,
     /// False for image-only/scanned pages: viewing works, selection does not.
     pub has_text: bool,
     pub chars: Vec<PageChar>,
 }
 /// Why a page could not be shown. Bibliographic data is unaffected in every case.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum RenderFailure {
     /// Stored bytes missing or not matching the recorded SHA-256.
     MissingOrCorrupt,
@@ -135,7 +136,7 @@ impl std::fmt::Display for RenderFailure {
         })
     }
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum PdfReply {
     Report(PdfReport),
     Preview(ImportPreview),

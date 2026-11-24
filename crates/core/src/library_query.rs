@@ -57,7 +57,7 @@ pub struct LibrarySort {
     pub direction: SortDirection,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct LibraryQuery {
     pub filter: LibraryFilter,
     pub sort: LibrarySort,
@@ -135,7 +135,7 @@ struct CursorPayload {
 /// Opaque versioned JSON, not a credential or authorization mechanism. Tied to
 /// exact filter+sort (including tag order), independent of page size. Its stored
 /// key survives deleting the anchor. Metadata changes between pages may move rows.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct LibraryCursor(String);
 impl LibraryCursor {
     pub fn from_encoded(value: String) -> Result<Self, ServiceError> {
@@ -194,7 +194,7 @@ impl LibraryCursor {
         Ok((p.id, p.value))
     }
 }
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct LibraryPage {
     pub papers: Vec<Paper>,
     pub next: Option<LibraryCursor>,

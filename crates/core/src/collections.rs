@@ -2,7 +2,7 @@
 use crate::{ServiceError, import::ImportDestination};
 use cm_domain::{Collection, CollectionId, PaperId, organization_name};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct CollectionInput {
     pub name: String,
     pub parent: Option<CollectionId>,

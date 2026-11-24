@@ -150,7 +150,7 @@ fn validate(a: &NewAnnotation) -> Result<(), ServiceError> {
 // Edits are created one per user action and kept in a bounded history; boxing would only
 // complicate every pattern match for no measurable gain.
 #[allow(clippy::large_enum_variant)]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Edit {
     Created(Annotation),
     Updated {
@@ -411,7 +411,7 @@ pub struct PageText<'a> {
     pub page_label: Option<String>,
     pub chars: &'a [(Option<char>, Quad)],
 }
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Proposal {
     pub page_index: u32,
     pub page_label: Option<String>,

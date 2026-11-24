@@ -43,4 +43,23 @@ The only additional edge is optional macOS/Linux `daemon → desktop`, behind th
 off-by-default `desktop-bootstrap` feature. See [desktop bootstrap ADR](desktop-bootstrap.md).
 The validator rejects unconditional/dev/build/other-platform and default-enabled forms.
 Desktop still depends only on protocol; daemon remains the storage composition root.
-#25 replaces the in-process client transport and owns actual IPC/lifecycle/auth.
+#25 replaced the in-process client transport and owns actual IPC/lifecycle/auth; see
+[daemon-ipc](daemon-ipc.md). The GUI binary now uses `IpcLibraryClient`; the edge itself is unchanged.
+
+## #25 additions
+
+No new crate edge. `protocol` gains `ipc` (envelope/handshake/framing), `jobs` (JobStatus) and
+`client` (std-only IPC client and local connector), using only serde/serde_json/uuid.
+`core::policy` holds the transport-neutral authorizer. `storage::daemon` owns the grant/job
+SQL. `daemon` gains `papersd` (unconditional bin, works without GUI deps) and `rustix`'s
+`fs`/`net` features for the lock and peer credentials.
+
+## #18 additions
+
+No new crate edge. `core::search` gains transport-neutral search/extraction DTOs, the
+`SearchIndex`/`FulltextStore`/`PageTextExtractor` ports and the pure orchestration
+(`search::search`, `extraction::run`). `storage::fts` owns every FTS/projection SQL statement.
+`pdf::extract` adds the text-only `Operation::Text` (runtime feature). `protocol::search`
+re-exports the DTOs; `daemon::fulltext` composes job handlers and the PDFium extractor
+(`pdf-metadata` feature). `cm-search` stays an empty placeholder: SQL must stay in storage
+and the orchestration is pure core. See [fulltext-search](fulltext-search.md).

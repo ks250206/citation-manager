@@ -5,7 +5,11 @@ use cm_protocol::{annotations::*, library::ServiceError};
 
 /// Page index, label and characters of one page of the PDF being searched.
 #[cfg(feature = "pdf-metadata")]
-type ExtractedPage = (u32, Option<String>, Vec<(Option<char>, cm_core::geometry::Quad)>);
+type ExtractedPage = (
+    u32,
+    Option<String>,
+    Vec<(Option<char>, cm_core::geometry::Quad)>,
+);
 /// Re-anchoring reads at most this many pages of the replacement PDF.
 #[cfg(feature = "pdf-metadata")]
 const MAX_PROPOSAL_PAGES: u32 = 2000;

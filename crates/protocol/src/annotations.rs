@@ -6,7 +6,7 @@ pub use cm_core::annotations::{
 };
 use cm_core::geometry::Quad;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum AnnotationRequest {
     List(AttachmentId),
     ForPaper(PaperId),
@@ -31,11 +31,22 @@ pub enum AnnotationRequest {
         quads: Vec<Quad>,
     },
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum AnnotationReply {
     List(Vec<Annotation>),
     Edit(Box<Edit>),
     Edits(Vec<Edit>),
     Done,
     Proposal(Option<Proposal>),
+}
+
+impl AnnotationRequest {
+    /// Reads need LibraryRead; any change (including AI-proposed annotations) needs LibraryWrite.
+    pub fn operation(&self) -> cm_core::policy::Operation {
+        use cm_core::policy::Operation as O;
+        match self {
+            Self::List(_) | Self::ForPaper(_) | Self::Propose(_) => O::AnnotationRead,
+            _ => O::AnnotationWrite,
+        }
+    }
 }

@@ -89,7 +89,7 @@ pub struct FieldEvidence {
     pub value: Value,
     pub selected: bool,
 }
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct MetadataResolution {
     pub canonical_doi: String,
     /// Blank title means manual completion is required; do not invent a successful title.

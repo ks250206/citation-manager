@@ -11,7 +11,9 @@ Rust + GPUI のローカル文献管理アプリを実装中です。#7 の 12-c
 （[起動・実機検証](docs/validation/ISSUE_10.md)）。#15 は実 library query による分類・metadata 検索・
 ページング、書誌 preview/import/export、PDF 添付/新規登録、private 設定を接続しています。
 **#15 の native CUA acceptance は未完了**です（[検証・blocker](docs/validation/ISSUE_15.md)、
-[保存と worker 境界](docs/ADR/library-workbench.md)）。daemon/IPC/CLI、MCP tools はまだ利用できません。
+[保存と worker 境界](docs/ADR/library-workbench.md)）。#25 で library ごとの `papersd`（唯一の writer、
+認可付きローカル IPC、永続 job）を追加し、GUI は IPC 経由で使います（[daemon-ipc ADR](docs/ADR/daemon-ipc.md)、
+[Linux 検証](docs/validation/ISSUE_25.md)）。CLI、MCP tools、REST はまだ利用できません。
 #11 の PDFium runtime は [再現可能な検証PoC](docs/validation/PDFIUM_POC.md) を追加し、
 専用worker・継承CropBox/回転/Unicode・注釈搬出をPDFKitと独立照合しました。製品viewer/exportは後続です。
 `cm_mcp::run_stdio()` は #29 未実装を明示するエラーを返し、MCP stdout を出力しません。
@@ -56,7 +58,7 @@ cargo check -p cm-pdf --features bindings-check --locked
 #10 の実行ファイル（macOS、未署名のローカル開発用。Linux は下記）:
 
 ```sh
-cargo build -p cm-daemon --bin citation-manager --features desktop-bootstrap --locked
+cargo build -p cm-daemon --bins --features desktop-bootstrap --locked
 # 専用絶対パスを明示する。検証では helper が作った temp library のみを使用。
 python3 scripts/prepare_native_smoke.py --deny-network
 # 表示された open コマンドを実行。再起動も同じコマンド/同じ library を使う。
@@ -70,7 +72,8 @@ Ubuntu 24.04 の例:
 ```sh
 sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-dev libx11-xcb-dev libxcb1-dev \
   libwayland-dev libfontconfig-dev libfreetype-dev libvulkan-dev mesa-vulkan-drivers
-cargo build -p cm-daemon --bin citation-manager --features desktop-bootstrap --release --locked
+# citation-manager は同じディレクトリの papersd を必要に応じて起動する（#25）。両方をビルドする。
+cargo build -p cm-daemon --bins --features desktop-bootstrap --release --locked
 # ~/.local/bin と ~/.local/lib/citation-manager/libpdfium.so（chromium/8125, checksum 固定）に配置し、
 # デスクトップエントリを作成。PDFium の取得にはネットワークが必要（--skip-pdfium で省略可）。
 python3 scripts/install_linux.py
@@ -86,7 +89,14 @@ Linux では ⌘ の代わりに Ctrl を使います（Ctrl+N / Ctrl+S / Ctrl+F
 テーブルでは ↑/↓ で選択移動、↩ で Title 欄へ移動、Esc で入力欄からテーブルへ戻ります。
 ⌘1 Library、⌘2 Import review、⌘, Organize & export。未保存の編集は下部ステータスバーに表示されます。
 ⌘Q で完全終了し、同じ library/settings で再起動します。
-既定の実ライブラリは自動接続しません。HTTP/IPC listener はありません。
+既定の実ライブラリは自動接続しません。HTTP listener はありません。GUI は library ごとの `papersd` を
+同じディレクトリから遅延起動し、0700 の runtime directory 内 0600 Unix socket と library 内の
+bootstrap credential（0600）で接続します。GUI 終了後、client と active job が無ければ daemon は idle 終了します。
+
+```sh
+# GUI なしで daemon だけを起動する場合（通常は client が自動起動する）
+target/debug/papersd --library /absolute/private/library [--idle-timeout-ms 30000]
+```
 現在の追加経路は新規 metadata の preview、DOI（read-only）、UTF-8 BibTeX/RIS、PDF files/folder。
 PDF 既存添付と新規文献化は別操作です。Info/Notes/PDF host のうち notes 編集と PDF viewer はまだ利用できません。
 各書誌 batch は最大100件の別承認が必要で、途中 cancel は以前の commit を取り消しません。
