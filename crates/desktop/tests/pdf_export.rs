@@ -9,7 +9,7 @@ use cm_desktop::{
     },
     keymap::{Context, InputState, KeyResolver, KeyStroke, Keymap, Mode, Resolution},
     palette::rank,
-    pdf_export::{ExportState, Picked, suggested_name},
+    pdf_export::{ExportState, ExportTarget, Picked, suggested_name},
 };
 use cm_protocol::{
     annotations::{AnnotationId, AnnotationKind, COLORS},
@@ -239,8 +239,11 @@ fn an_existing_destination_needs_an_in_app_confirmation_and_must_be_a_pdf() {
 #[test]
 fn status_never_reports_incomplete_or_failed_exports_as_success() {
     let mut state = ExportState::default();
-    let request = || (attachment(), PathBuf::from("/tmp/x.pdf"), false);
-    let finish = |state: &mut ExportState, reply| state.finish(request(), Ok(reply));
+    let request = |state: &ExportState| current(state, "/tmp/x.pdf");
+    let finish = |state: &mut ExportState, reply| {
+        let target = request(state);
+        state.finish(target, Ok(reply)).unwrap()
+    };
 
     let (text, error) = finish(&mut state, PdfReply::Exported(Ok(Box::new(report(vec![])))));
     assert!(
@@ -288,9 +291,76 @@ fn status_never_reports_incomplete_or_failed_exports_as_success() {
         PdfReply::Exported(Err(PdfExportFailure::Cancelled)),
     );
     assert!(!error && text.contains("nothing written"), "{text}");
-    let (text, error) = state.finish(request(), Err(ServiceError::Unavailable));
+    let target = request(&state);
+    let (text, error) = state
+        .finish(target, Err(ServiceError::Unavailable))
+        .unwrap();
     assert!(error && text.starts_with("PDF not saved"), "{text}");
     assert!(state.running.is_none());
+}
+
+fn current(state: &ExportState, path: &str) -> ExportTarget {
+    ExportTarget {
+        generation: state.generation,
+        attachment: attachment(),
+        destination: path.into(),
+        replace_existing: false,
+    }
+}
+
+#[test]
+fn a_stale_reply_never_changes_a_newer_exports_state() {
+    let mut state = ExportState::default();
+    let first = state.begin(attachment(), "/tmp/a.pdf".into(), false, false);
+    let old = state.target(&first).unwrap();
+    assert!(state.cancel());
+    let second = state.begin(attachment(), "/tmp/b.pdf".into(), false, false);
+    let new = state.target(&second).unwrap();
+    assert_ne!(old.generation, new.generation);
+    // The cancelled export's late reply: no status, and the newer export is still running.
+    assert_eq!(
+        state.finish(
+            old.clone(),
+            Ok(PdfReply::Exported(Err(PdfExportFailure::Cancelled)))
+        ),
+        None
+    );
+    assert!(state.running.is_some());
+    // A stale Unexportable reply does not arm a confirmation for the old destination.
+    assert_eq!(
+        state.finish(
+            old.clone(),
+            Ok(PdfReply::Exported(Err(PdfExportFailure::Unexportable(
+                vec![omitted()]
+            ))))
+        ),
+        None
+    );
+    assert!(state.confirm.is_none() && state.running.is_some());
+    // If the old export did write its file, that is still reported, without touching state.
+    let (text, _) = state
+        .finish(old, Ok(PdfReply::Exported(Ok(Box::new(report(vec![]))))))
+        .unwrap();
+    assert!(text.starts_with("Earlier save finished"), "{text}");
+    assert!(state.running.is_some());
+    // The current reply finishes the current export.
+    let (text, error) = state
+        .finish(new, Ok(PdfReply::Exported(Ok(Box::new(report(vec![]))))))
+        .unwrap();
+    assert!(!error && text.contains("verified"), "{text}");
+    assert!(state.running.is_none());
+}
+
+#[test]
+fn only_one_save_dialog_at_a_time() {
+    let mut state = ExportState::default();
+    assert!(state.begin_pick());
+    assert!(
+        !state.begin_pick(),
+        "a second press while the dialog is open"
+    );
+    state.end_pick();
+    assert!(state.begin_pick());
 }
 
 #[test]

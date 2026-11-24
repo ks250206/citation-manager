@@ -62,14 +62,48 @@ pub enum Picked {
     Status(String, bool),
 }
 
-/// Per-window export state: at most one export runs at a time.
+/// Identifies one export request; replies carry it back so a late reply from an earlier
+/// (e.g. cancelled) export can never change the state of a newer one.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExportTarget {
+    pub generation: u64,
+    pub attachment: AttachmentId,
+    pub destination: PathBuf,
+    pub replace_existing: bool,
+}
+
+/// Per-window export state: at most one export runs and one save dialog is open at a time.
 #[derive(Debug, Default)]
 pub struct ExportState {
     pub running: Option<Cancellation>,
     pub confirm: Option<Confirmation>,
     pub replace: Option<ReplaceConfirmation>,
+    /// Incremented by every `begin`; the current request's generation.
+    pub generation: u64,
+    /// A save dialog is open.
+    pub picking: bool,
 }
 impl ExportState {
+    /// Open the save dialog unless one is already open; false means "do not open another".
+    pub fn begin_pick(&mut self) -> bool {
+        !std::mem::replace(&mut self.picking, true)
+    }
+    /// The save dialog closed (any outcome).
+    pub fn end_pick(&mut self) {
+        self.picking = false;
+    }
+    /// The reply key for a request `begin` just produced.
+    pub fn target(&self, request: &PdfRequest) -> Option<ExportTarget> {
+        let PdfRequest::Export(r) = request else {
+            return None;
+        };
+        Some(ExportTarget {
+            generation: self.generation,
+            attachment: r.attachment,
+            destination: r.destination.clone(),
+            replace_existing: r.replace_existing,
+        })
+    }
     /// Toolbar label for the current state.
     pub fn button_label(&self, attachment: Option<AttachmentId>) -> String {
         if self.running.is_some() {
@@ -141,6 +175,7 @@ impl ExportState {
         allow_omissions: bool,
     ) -> PdfRequest {
         let cancel = Cancellation::default();
+        self.generation += 1;
         self.running = Some(cancel.clone());
         self.confirm = None;
         self.replace = None;
@@ -158,16 +193,34 @@ impl ExportState {
     }
     /// Turn a reply into status text and whether it is an error. A copy with omitted
     /// annotations is reported as incomplete (error styling), never as a plain success.
+    ///
+    /// A reply for an older generation (an export that was cancelled and superseded) leaves
+    /// the current state alone and returns nothing, except that a copy it did save is still
+    /// reported, since that file now exists.
     pub fn finish(
         &mut self,
-        request: (AttachmentId, PathBuf, bool),
+        target: ExportTarget,
         result: Result<PdfReply, ServiceError>,
-    ) -> (String, bool) {
+    ) -> Option<(String, bool)> {
+        if target.generation != self.generation {
+            return match result {
+                Ok(PdfReply::Exported(Ok(report))) => {
+                    let (text, error) = saved(&report);
+                    Some((format!("Earlier save finished: {text}"), error))
+                }
+                _ => None,
+            };
+        }
         self.running = None;
-        match result {
+        Some(match result {
             Ok(PdfReply::Exported(Ok(report))) => saved(&report),
             Ok(PdfReply::Exported(Err(PdfExportFailure::Unexportable(omitted)))) => {
-                let (attachment, destination, replace_existing) = request;
+                let ExportTarget {
+                    attachment,
+                    destination,
+                    replace_existing,
+                    ..
+                } = target;
                 let message = format!(
                     "Nothing saved: {}. Choose \"Save without {} unplaced…\" to save a copy without them",
                     describe(&omitted),
@@ -187,7 +240,7 @@ impl ExportState {
             Ok(PdfReply::Exported(Err(failure))) => (format!("PDF not saved: {failure}"), true),
             Ok(_) => ("PDF not saved: unexpected reply".into(), true),
             Err(e) => (format!("PDF not saved: {e}"), true),
-        }
+        })
     }
 }
 

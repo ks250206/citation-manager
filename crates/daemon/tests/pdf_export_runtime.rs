@@ -250,6 +250,24 @@ fn library_annotations_export_to_a_verified_copy_and_the_original_is_untouched()
     );
     assert!(report.max_position_error <= 0.01);
     assert!(!report.replaced);
+    // A new copy gets the ordinary mode for a saved file: 0666 & !umask (not 0600).
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+        let probe = out.join("umask-probe");
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o666)
+            .open(&probe)
+            .unwrap();
+        let expected = std::fs::metadata(&probe).unwrap().permissions().mode() & 0o777;
+        std::fs::remove_file(&probe).unwrap();
+        assert_eq!(
+            std::fs::metadata(&copy).unwrap().permissions().mode() & 0o777,
+            expected
+        );
+    }
     // Independent re-read of the copy: every DB annotation by /NM, with its Unicode text.
     let read = names(&copy);
     assert_eq!(read.len(), 8);
@@ -271,8 +289,22 @@ fn library_annotations_export_to_a_verified_copy_and_the_original_is_untouched()
         Err(PdfExportFailure::Destination(reason)) => assert!(reason.contains("already exists")),
         other => panic!("{other:?}"),
     }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&copy, std::fs::Permissions::from_mode(0o640)).unwrap();
+    }
     let replaced = export(&client, attachment, copy.clone(), true, true).unwrap();
     assert!(replaced.replaced);
+    // Replacing keeps the replaced file's permission bits.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(
+            std::fs::metadata(&copy).unwrap().permissions().mode() & 0o777,
+            0o640
+        );
+    }
     // Only the requested file exists; no temporary/partial files remain.
     assert_eq!(
         std::fs::read_dir(&out).unwrap().count(),

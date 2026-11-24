@@ -61,25 +61,32 @@ impl LibraryView {
             return;
         };
         let title = self.editor.as_ref().map_or("", |p| p.title.as_str());
+        if !self.pdf_export.begin_pick() {
+            self.status("The save dialog is already open", false, cx);
+            return;
+        }
         let picker = cx.prompt_for_new_path(&directory, Some(&suggested_name(title)));
         cx.spawn(async move |view, cx| {
             let result = picker.await;
-            let _ = view.update(cx, |this, cx| match result {
-                Ok(Ok(Some(path))) => {
-                    // Not relying on the platform dialog's replace prompt: an existing file
-                    // needs a confirmation here first (and must be a .pdf).
-                    let exists = std::fs::symlink_metadata(&path).is_ok();
-                    match this.pdf_export.picked(attachment, path, exists) {
-                        crate::pdf_export::Picked::Export(request) => {
-                            this.send_request(request, cx)
-                        }
-                        crate::pdf_export::Picked::Status(text, error) => {
-                            this.status(text, error, cx)
+            let _ = view.update(cx, |this, cx| {
+                this.pdf_export.end_pick();
+                match result {
+                    Ok(Ok(Some(path))) => {
+                        // Not relying on the platform dialog's replace prompt: an existing file
+                        // needs a confirmation here first (and must be a .pdf).
+                        let exists = std::fs::symlink_metadata(&path).is_ok();
+                        match this.pdf_export.picked(attachment, path, exists) {
+                            crate::pdf_export::Picked::Export(request) => {
+                                this.send_request(request, cx)
+                            }
+                            crate::pdf_export::Picked::Status(text, error) => {
+                                this.status(text, error, cx)
+                            }
                         }
                     }
+                    Ok(Ok(None)) => this.status("Save cancelled; nothing written", false, cx),
+                    _ => this.status("The save dialog failed; nothing written", true, cx),
                 }
-                Ok(Ok(None)) => this.status("Save cancelled; nothing written", false, cx),
-                _ => this.status("The save dialog failed; nothing written", true, cx),
             });
         })
         .detach();
@@ -98,10 +105,9 @@ impl LibraryView {
         self.send_request(request, cx);
     }
     fn send_request(&mut self, request: PdfRequest, cx: &mut Context<Self>) {
-        let PdfRequest::Export(r) = &request else {
+        let Some(target) = self.pdf_export.target(&request) else {
             return;
         };
-        let target = (r.attachment, r.destination.clone(), r.replace_existing);
         let lost_sender = self.sender.clone();
         let lost_target = target.clone();
         let mut lost = LostReply(Some(Box::new(move || {
@@ -141,12 +147,13 @@ impl LibraryView {
     }
     pub(super) fn pdf_export_reply(
         &mut self,
-        target: (AttachmentId, std::path::PathBuf, bool),
+        target: crate::pdf_export::ExportTarget,
         result: Result<PdfReply, ServiceError>,
         cx: &mut Context<Self>,
     ) {
-        let (text, error) = self.pdf_export.finish(target, result);
-        self.status(text, error, cx);
+        if let Some((text, error)) = self.pdf_export.finish(target, result) {
+            self.status(text, error, cx);
+        }
     }
 }
 

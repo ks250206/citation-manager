@@ -91,7 +91,7 @@ enum Event {
     ),
     /// #20 export replies bypass the lanes too (a save never blocks other PDF work).
     PdfExport(
-        (AttachmentId, std::path::PathBuf, bool),
+        crate::pdf_export::ExportTarget,
         Result<PdfReply, ServiceError>,
     ),
 }

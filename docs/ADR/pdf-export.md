@@ -24,8 +24,12 @@ DESIGN §9.3 / §21.2. Evidence: [ISSUE_20](../validation/ISSUE_20.md).
    appearance** `/AP /N` (below), and returns the saved bytes plus the final note rectangles.
    Existing annotations are never touched: no recolouring, no `/AP` added or rewritten (the
    pdfium-render colour setters are only called on the new annotations, before their appearance).
-3. **Write** (daemon helper thread): `tempfile` in the destination directory
-   (`.citation-manager-export-*.pdf.partial`, mode 0600), `fsync`.
+3. **Write** (daemon helper thread): every destination check (folder, library identity,
+   existing file, `.pdf` for replacement) is repeated right before anything is created, then a
+   `tempfile` in the destination directory (`.citation-manager-export-*.pdf.partial`, mode
+   `0666 & !umask` like any saved file; a replaced PDF's permission bits are kept), `fsync`.
+   If the daemon is killed mid-export that `.partial` file can remain in the person's folder:
+   it is never swept automatically, because those folders are the person's own, not ours.
 4. **Re-read and verify**: `Operation::Annotations` re-reads the source and the temp file
    *without rendering* (rendering lets PDFium synthesise appearances in memory and would hide a
    missing `/AP`); `pdf_export::verify` then requires: every source annotation unchanged and first
@@ -120,6 +124,17 @@ It was not run for this change (no macOS runner here); see ISSUE_20.
 `unsafe` confinement is enforced by `scripts/check_architecture.py`: any `unsafe` block/fn/impl or
 `allow(unsafe_code)` outside `crates/pdf/src/appearance.rs`, a crate not inheriting the workspace
 lints (other than cm-pdf's `deny`), or a workspace without `forbid` fails the check.
+
+## What verification does not prove
+
+`verify` compares annotation dictionaries and the *colour/opacity* of the parsed appearance; it
+does not compare appearance geometry (the path shapes) with the quads — that is covered by the
+PDFium and poppler pixel checks in the tests and `validate_export.py`, not at runtime. Nor does
+it check that non-annotation content (page content streams, fonts, outlines, forms, metadata)
+survived; it checks the page count and relies on PDFium copying everything else unchanged.
+
+GUI: replies carry a generation, so a late reply from a cancelled export never changes a newer
+export's state (a copy it did save is still reported), and only one save dialog can be open.
 
 ## Limits / not covered
 

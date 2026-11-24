@@ -120,6 +120,8 @@ pub(in crate::desktop_worker) struct PendingExport {
     pub(super) sha256: [u8; 32],
     pub(super) plan: ExportPlan,
     pub(super) request: PdfExportRequest,
+    /// Library directory, to repeat the destination checks right before writing.
+    pub(super) library: PathBuf,
 }
 
 impl Worker<'_> {
@@ -158,6 +160,7 @@ impl Worker<'_> {
             sha256: attachment.sha256,
             plan,
             request,
+            library: self.directory.path().to_path_buf(),
         })
     }
     #[cfg(feature = "pdf-metadata")]
@@ -239,6 +242,26 @@ mod runtime {
         let mut hash = Sha256::new();
         std::io::copy(&mut file, &mut hash)?;
         Ok(hash.finalize().into())
+    }
+
+    fn new_file_options() -> tempfile::Builder<'static, 'static> {
+        let mut builder = tempfile::Builder::new();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            // The process umask applies at creation: the result is 0666 & !umask.
+            builder.permissions(std::fs::Permissions::from_mode(0o666));
+        }
+        builder
+    }
+
+    /// A replaced PDF keeps its permission bits (not owner/ACLs).
+    fn keep_mode(file: &std::fs::File, existing: &Path) -> Result<(), Failure> {
+        let permissions = std::fs::metadata(existing)
+            .map_err(|e| destination_error(format!("Cannot inspect destination: {e}")))?
+            .permissions();
+        file.set_permissions(permissions)
+            .map_err(|e| destination_error(format!("Cannot set file permissions: {e}")))
     }
 
     /// Per PDFium operation; the worker caps budgets at 60 s.
@@ -382,9 +405,17 @@ mod runtime {
             .destination
             .parent()
             .ok_or_else(|| destination_error("Choose a destination folder"))?;
+        // The folder may have changed since the library thread checked it (seconds of PDF
+        // work): repeat every destination check right before creating anything there.
+        check_destination(
+            &request.destination,
+            &pending.library,
+            request.replace_existing,
+        )?;
         // Same directory as the destination, so the final move is a rename. Dropped (deleted)
-        // on every early return below.
-        let mut temp = tempfile::Builder::new()
+        // on every early return below. Created 0666 & !umask, like any new file the person
+        // saves; when replacing, the replaced file's mode is kept (below).
+        let mut temp = new_file_options()
             .prefix(".citation-manager-export-")
             .suffix(".pdf.partial")
             .tempfile_in(parent)
@@ -440,6 +471,9 @@ mod runtime {
                     true
                 }
             };
+            if existed {
+                keep_mode(temp.as_file(), &request.destination)?;
+            }
             temp.persist(&request.destination)
                 .map_err(|e| destination_error(format!("Saving the copy failed: {}", e.error)))?;
             existed
