@@ -1,0 +1,25 @@
+{
+  "name": "citation-manager-browser-extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Chrome/Firefox capture extension for Citation Manager (#24). Talks only to papers-native-host over Native Messaging.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "build:release": "node build.mjs --release",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "tsc --noEmit -p tsconfig.json && node build.mjs --check",
+    "test": "node build.mjs --tests && node --test dist/tests/*.test.mjs",
+    "e2e": "node tests/e2e/run.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.21",
+    "esbuild": "0.25.12",
+    "linkedom": "0.18.12",
+    "typescript": "5.9.3"
+  }
+}
