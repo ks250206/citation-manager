@@ -24,7 +24,9 @@ impl Worker<'_> {
     ) -> Result<PdfReply, ServiceError> {
         match request {
             // Routed by `InProcessLibraryClient::pdf` before reaching the library queue.
-            PdfRequest::Render(_) => Err(invalid("Render requests are not queued here")),
+            PdfRequest::Render(_) | PdfRequest::Export(_) => {
+                Err(invalid("Render/export requests are not queued here"))
+            }
             PdfRequest::List(id) => {
                 let attachments = self.db.attachments().for_paper(id)?;
                 let service = AttachmentService::new(

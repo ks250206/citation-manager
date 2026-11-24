@@ -38,6 +38,13 @@ pub enum PdfCommand {
         page: u32,
         zoom: f32,
     },
+    /// #20 annotated copy (the token stays client-side; see `ClientFrame::Cancel`).
+    Export {
+        attachment: crate::domain::AttachmentId,
+        destination: std::path::PathBuf,
+        replace_existing: bool,
+        allow_omissions: bool,
+    },
 }
 impl PdfCommand {
     /// Splits the cancellation token (kept by the client) from the serializable command.
@@ -82,6 +89,15 @@ impl PdfCommand {
                 },
                 Some(r.cancel),
             ),
+            PdfRequest::Export(r) => (
+                Self::Export {
+                    attachment: r.attachment,
+                    destination: r.destination,
+                    replace_existing: r.replace_existing,
+                    allow_omissions: r.allow_omissions,
+                },
+                Some(r.cancel),
+            ),
         }
     }
     /// Daemon side: bind the command to a daemon-owned token for this request.
@@ -123,6 +139,18 @@ impl PdfCommand {
                 zoom,
                 cancel,
             }),
+            Self::Export {
+                attachment,
+                destination,
+                replace_existing,
+                allow_omissions,
+            } => PdfRequest::Export(crate::attachments::PdfExportRequest {
+                attachment,
+                destination,
+                replace_existing,
+                allow_omissions,
+                cancel,
+            }),
         }
     }
     pub fn operation(&self) -> Operation {
@@ -134,6 +162,7 @@ impl PdfCommand {
             Self::RetryAttachment { .. } => Operation::PdfRetryAttachment,
             Self::List(_) => Operation::AttachmentList,
             Self::Render { .. } => Operation::PdfRender,
+            Self::Export { .. } => Operation::PdfExport,
         }
     }
 }

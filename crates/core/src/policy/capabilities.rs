@@ -118,6 +118,8 @@ pub enum Operation {
     FulltextRead,
     /// #17 render one page of a stored attachment for viewing.
     PdfRender,
+    /// #20 write an annotated copy of a stored PDF to a caller-named new file.
+    PdfExport,
     /// #19 list annotations / propose a position for an unresolved one.
     AnnotationRead,
     /// #19 create/update/delete/undo/confirm/carry-over/resolve annotations.
@@ -165,7 +167,7 @@ impl Operation {
             PdfPreviewNew => All(&[LibraryWrite, LocalFileRead]),
             PdfAttach | PdfCommitNew | PdfRetryAttachment => All(&[LibraryWrite, LocalFileRead]),
             MetadataResolve => All(&[NetworkLookup]),
-            Export => All(&[LibraryRead, LocalFileWrite]),
+            Export | PdfExport => All(&[LibraryRead, LocalFileWrite]),
             JobSubmit | JobCancel | JobRetry => All(&[JobsControl]),
             JobRead => All(&[JobsRead]),
             GrantIssue | GrantList | GrantRevoke => All(&[GrantAdmin]),

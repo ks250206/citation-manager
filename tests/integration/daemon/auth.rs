@@ -8,7 +8,7 @@ use cm_protocol::{
     import::{ImportCommit, ImportDestination, ImportRequest, PaperDraft},
     ipc::{
         Capability, CapabilitySet, Command, Denial, GrantCommand, GrantReply, HandshakeRejection,
-        Operation, Reply, WireError,
+        Operation, PdfCommand, Reply, WireError,
     },
     jobs::{JobCommand, JobReply, JobSubmit, kinds},
     library::{LibraryRequest, NewPaper, PaperList},
@@ -25,6 +25,15 @@ fn denied(result: Result<Result<Reply, WireError>, ClientError>, op: Operation) 
         result.unwrap().unwrap_err(),
         WireError::Denied(Denial::Forbidden(op))
     );
+}
+/// #20 annotated PDF export writes a caller-named file: LibraryRead + LocalFileWrite.
+fn pdf_export(path: std::path::PathBuf) -> Command {
+    Command::Pdf(PdfCommand::Export {
+        attachment: cm_protocol::domain::AttachmentId(uuid::Uuid::now_v7()),
+        destination: path,
+        replace_existing: true,
+        allow_omissions: true,
+    })
 }
 fn create(session: &mut Session, title: &str) -> cm_protocol::domain::Paper {
     let mut paper = NewPaper::titled(title);
@@ -102,7 +111,12 @@ fn native_host_grant_is_minimal_even_when_claiming_desktop_and_all_scopes() {
         spoof.call(Command::Grants(GrantCommand::List)),
         Operation::GrantList,
     );
+    denied(
+        spoof.call(pdf_export(env.temp.path().join("leak.pdf"))),
+        Operation::PdfExport,
+    );
     assert!(!env.temp.path().join("leak.bib").exists());
+    assert!(!env.temp.path().join("leak.pdf").exists());
     // Allowed: destination names/IDs and a non-persisting capture preview whose duplicate
     // matches (existing paper contents) are hidden.
     assert!(matches!(
@@ -143,6 +157,11 @@ fn mcp_is_read_only_until_a_separate_write_grant_is_approved() {
         ok(mcp.call(Command::Query(LibraryQuery::default()))),
         Reply::Page(p) if p.papers.len() == 1
     ));
+    // Reading the library is not enough to write an annotated PDF to a local path.
+    denied(
+        mcp.call(pdf_export(env.temp.path().join("mcp.pdf"))),
+        Operation::PdfExport,
+    );
     denied(
         mcp.call(Command::Library(LibraryRequest::Create(Box::new(
             NewPaper::titled("AI write"),

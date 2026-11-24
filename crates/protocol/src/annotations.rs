@@ -2,7 +2,7 @@
 use crate::domain::{AttachmentId, PaperId};
 pub use cm_core::annotations::{
     Anchor, Annotation, AnnotationId, AnnotationKind, AnnotationPatch, COLORS, Edit, History,
-    MAX_CONTEXT_CHARS, NewAnnotation, Proposal, Source, valid_color,
+    MAX_CONTEXT_CHARS, NewAnnotation, Proposal, Source, rgb, valid_color,
 };
 use cm_core::geometry::Quad;
 

@@ -17,6 +17,7 @@ mod details_ui;
 mod import_ui;
 mod library_ui;
 mod palette_ui;
+mod pdf_export_ui;
 mod pdf_ui;
 mod pdf_viewer_ui;
 mod settings_ui;
@@ -87,6 +88,11 @@ enum Event {
     Annotation(
         Box<annotations_ui::AnnOp>,
         Result<cm_protocol::annotations::AnnotationReply, ServiceError>,
+    ),
+    /// #20 export replies bypass the lanes too (a save never blocks other PDF work).
+    PdfExport(
+        (AttachmentId, std::path::PathBuf, bool),
+        Result<PdfReply, ServiceError>,
     ),
 }
 struct Message {
@@ -171,6 +177,7 @@ struct LibraryView {
     palette_scroll: ScrollHandle,
     viewer: Option<pdf_viewer_ui::Viewer>,
     ann: annotations_ui::AnnotationState,
+    pdf_export: pdf_export_ui::PdfExportState,
     /// Page to show once the viewer for that attachment is ready (from the Notes list).
     pending_jump: Option<(AttachmentId, u32)>,
     viewer_focus: FocusHandle,
@@ -262,6 +269,7 @@ impl LibraryView {
             palette_scroll: ScrollHandle::new(),
             viewer: None,
             ann: annotations_ui::AnnotationState::new(cx),
+            pdf_export: Default::default(),
             pending_jump: None,
             viewer_focus: cx.focus_handle(),
             page_input: cx.new(|cx| TextInput::new("Page", cx)),
@@ -416,6 +424,10 @@ impl LibraryView {
                 self.annotation_reply(*op, result, cx);
                 return;
             }
+            Event::PdfExport(target, result) => {
+                self.pdf_export_reply(target, result, cx);
+                return;
+            }
             event => Message { event, ..message },
         };
         if let Event::Progress(report) = message.event {
@@ -555,7 +567,10 @@ impl LibraryView {
                 }
                 Err(e) => self.status(format!("Export failed: {e}"), true, cx),
             },
-            Event::Progress(_) | Event::Render(..) | Event::Annotation(..) => (),
+            Event::Progress(_)
+            | Event::Render(..)
+            | Event::Annotation(..)
+            | Event::PdfExport(..) => {}
         }
         self.lock_fields(cx);
         cx.notify();

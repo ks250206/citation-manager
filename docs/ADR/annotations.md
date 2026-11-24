@@ -19,5 +19,7 @@ Status: accepted for #19. Builds on #8 (annotations table), #17 (viewer, shared 
   returns a proposal; nothing is placed until `Resolve` after the person confirms.
 - **Viewer**: selection → one highlight per page with per-line quads (`desktop::annotations`).
   Overlays draw quads with the shared viewport, so rotation/zoom/CropBox match the text layer.
+- **Export** (#20, [pdf-export](pdf-export.md)): highlights/comments/notes become standard PDF
+  annotations in a verified copy; unresolved anchors are listed, never silently dropped.
 - Opening a library created before this migration goes through `open_with_safety_backups`
   (pre-migration backup) in the in-process worker, matching the #25 daemon.
