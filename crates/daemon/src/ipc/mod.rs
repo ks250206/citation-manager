@@ -6,6 +6,10 @@
 //!
 //! Per connection: OS peer check, a bounded/timed Hello, credential -> stored grant, then
 //! every request is authorized against the *current* grant (default deny).
+//!
+//! #26: the same per-request decision covers scoped API/MCP/CLI tokens. On top of it the
+//! daemon applies the bulk guard (`policy::elevation`), restricts `exports:write` tokens to
+//! the allowed export folders, and records denials and non-read operations in the audit log.
 pub mod auth;
 
 use crate::{
@@ -18,8 +22,13 @@ use auth::{Authenticator, IssueError, now_ms};
 use cm_core::{
     ServiceError,
     metadata_resolve::Cancellation,
-    policy::{self, Capability, CapabilitySet, Denial, GrantId, Operation},
+    policy::{self, Capability, CapabilitySet, Denial, GrantId, Operation, elevation::BulkGuard},
     search::extraction::PageTextExtractor,
+};
+use cm_protocol::{
+    api::{AuditEntry, AuditOutcome},
+    client::secrets::{PlatformSecretStore, SecretStore},
+    organization::OrganizationRequest,
 };
 use cm_protocol::{
     attachments::PdfReply,
@@ -69,6 +78,11 @@ pub struct DaemonConfig {
     /// extraction of pending PDF attachments; `None` (no PDF runtime) leaves PDF text
     /// unindexed and searches report it as `PendingExtraction`.
     pub extractor: Option<Arc<dyn PageTextExtractor>>,
+    /// #26 store for issued token plaintext. `None` = the platform store (Keychain /
+    /// Secret Service) with the private-file fallback. Tests inject a memory store.
+    pub secret_store: Option<Arc<dyn SecretStore>>,
+    /// #26 size of each of the two audit log files.
+    pub audit_max_bytes: u64,
 }
 impl DaemonConfig {
     pub fn new(library: PathBuf) -> Self {
@@ -80,6 +94,8 @@ impl DaemonConfig {
             jobs: JobPolicy::default(),
             handlers: default_handlers(),
             extractor: None,
+            secret_store: None,
+            audit_max_bytes: crate::audit::DEFAULT_MAX_BYTES,
         }
     }
 }
@@ -123,6 +139,10 @@ struct Shared {
     previews: Mutex<HashMap<PreviewId, GrantId>>,
     /// Live authenticated connections, closed on explicit shutdown.
     streams: Mutex<HashMap<u64, UnixStream>>,
+    /// #26 token management, API settings and the audit log.
+    api: crate::api::ApiService,
+    /// #26 per-grant burst limit for trash/delete and membership changes.
+    bulk: Mutex<BulkGuard>,
 }
 
 /// A started daemon. `wait` blocks until idle exit or `shutdown`.
@@ -167,6 +187,23 @@ pub fn start(config: DaemonConfig) -> Result<RunningDaemon, StartError> {
         ReaderPool::new(directory.clone(), MAX_SEARCH_READERS).map_err(StartError::Storage)?;
     let auth = Arc::new(Authenticator::load(control.clone()).map_err(StartError::Service)?);
     auth.bootstrap_desktop(&paths.desktop_credential, now_ms())?;
+    let secrets = match config.secret_store {
+        Some(store) => store,
+        None => Arc::new(PlatformSecretStore::detect(
+            paths.secrets_dir(),
+            lifecycle::euid(),
+        )),
+    };
+    let api = crate::api::ApiService::new(
+        auth.clone(),
+        secrets,
+        paths.library_key(),
+        Arc::new(crate::audit::AuditLog::new(
+            paths.audit_log(),
+            config.audit_max_bytes,
+        )),
+    )
+    .map_err(StartError::Service)?;
     let activity = Arc::new(Activity::default());
     let engine =
         InProcessLibraryClient::start_with_settings(paths.library.clone(), config.settings)?;
@@ -203,6 +240,8 @@ pub fn start(config: DaemonConfig) -> Result<RunningDaemon, StartError> {
         sessions: AtomicU64::new(0),
         previews: Mutex::new(HashMap::new()),
         streams: Mutex::new(HashMap::new()),
+        api,
+        bulk: Mutex::new(BulkGuard::default()),
     });
     let stop = Arc::new(AtomicBool::new(false));
     let accept_stop = stop.clone();
@@ -227,6 +266,7 @@ pub fn start(config: DaemonConfig) -> Result<RunningDaemon, StartError> {
                 thread::sleep(Duration::from_millis(10));
             }
             shared.jobs.stop();
+            shared.auth.flush_last_used();
             drop(shared);
             drop(lock);
         })?;
@@ -312,7 +352,7 @@ fn serve(mut stream: UnixStream, shared: &Arc<Shared>) {
         daemon_version: env!("CARGO_PKG_VERSION").into(),
         session,
         grant: grant.id,
-        capabilities: policy::effective(&grant, hello.requested.as_ref()),
+        capabilities: policy::effective_at(&grant, hello.requested.as_ref(), now_ms()),
         max_request_frame: MAX_REQUEST_FRAME,
         max_in_flight: MAX_IN_FLIGHT as u32,
     };
@@ -450,17 +490,29 @@ impl Session {
             return;
         }
         let operation = command.operation();
-        let held = match self.shared.auth.authorize(
-            self.grant,
-            self.requested.as_ref(),
-            operation,
-            now_ms(),
-        ) {
-            Ok(held) => held,
-            Err(denial) => {
-                self.respond_now(id, Err(WireError::Denied(denial)));
-                return;
-            }
+        let now = now_ms();
+        let held =
+            match self
+                .shared
+                .auth
+                .authorize(self.grant, self.requested.as_ref(), operation, now)
+            {
+                Ok(held) => held,
+                Err(denial) => {
+                    self.audit(operation, &Err(WireError::Denied(denial)), None);
+                    self.respond_now(id, Err(WireError::Denied(denial)));
+                    return;
+                }
+            };
+        if let Err(error) = self.guard(&command, operation, &held, now) {
+            self.audit(operation, &Err(error.clone()), None);
+            self.respond_now(id, Err(error));
+            return;
+        }
+        let target = match &command {
+            Command::Api(c) => api_target(c),
+            Command::Grants(GrantCommand::Revoke(g)) => Some(*g),
+            _ => None,
         };
         self.in_flight.fetch_add(1, Ordering::SeqCst);
         let responder = Responder(Arc::new(Mutex::new(Some((
@@ -471,11 +523,21 @@ impl Session {
         let cancels = self.cancels.clone();
         let done = {
             let responder = responder.clone();
+            let audit = crate::api::audited(operation).then(|| {
+                (
+                    self.shared.api.audit.clone(),
+                    self.grant,
+                    self.shared.auth.kind_of(self.grant),
+                )
+            });
             move |result: Result<Reply, WireError>| {
                 cancels
                     .lock()
                     .unwrap_or_else(|e| e.into_inner())
                     .remove(&id);
+                if let Some((log, grant, kind)) = audit {
+                    log.record(&audit_entry(grant, kind, operation, &result, target));
+                }
                 responder.send(result);
             }
         };
@@ -532,7 +594,8 @@ impl Session {
                 }
                 let previews = self.shared.clone();
                 let grant = self.grant;
-                let redact = !held.contains(&Capability::LibraryRead);
+                let redact = !held.contains(&Capability::LibraryRead)
+                    && !held.contains(&Capability::MetadataRead);
                 self.engine.import(
                     request,
                     Box::new(move |r| {
@@ -586,7 +649,8 @@ impl Session {
                         | PdfCommand::CommitNew { .. }
                         | PdfCommand::RetryAttachment { .. }
                 );
-                let redact = !held.contains(&Capability::LibraryRead);
+                let redact = !held.contains(&Capability::LibraryRead)
+                    && !held.contains(&Capability::MetadataRead);
                 self.engine.pdf(
                     command.into_request(self.cancellation(id)),
                     Box::new(move |report| {
@@ -665,6 +729,12 @@ impl Session {
                     GrantCommand::List => Ok(GrantReply::Grants(auth.list())),
                     GrantCommand::Revoke(grant) => {
                         let revoked = auth.revoke(grant, now_ms());
+                        self.shared.api.forget_secret(grant);
+                        self.shared
+                            .bulk
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .forget(grant);
                         // Fail closed: the grant is revoked in memory even if persisting failed,
                         // and its jobs must not keep running with its authority.
                         let jobs = match revoked {
@@ -683,6 +753,29 @@ impl Session {
                     ))),
                 };
                 done(result.map(Reply::Grants));
+                Ok(())
+            }
+            Command::Api(command) => {
+                let revoked = match &command {
+                    cm_protocol::api::ApiCommand::Revoke(g)
+                    | cm_protocol::api::ApiCommand::Reissue(g) => Some(*g),
+                    _ => None,
+                };
+                let result = self.shared.api.handle(
+                    self.grant,
+                    self.requested.as_ref(),
+                    command,
+                    &self.shared.jobs,
+                    now_ms(),
+                );
+                if let Some(g) = revoked.filter(|_| result.is_ok()) {
+                    self.shared
+                        .bulk
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .forget(g);
+                }
+                done(result.map(Reply::Api));
                 Ok(())
             }
             Command::Search(request) => {
@@ -725,6 +818,49 @@ impl Session {
 }
 
 impl Session {
+    /// #26 checks after the operation's capability requirement passed: the bulk guard
+    /// (decided as `BulkTrash`/`BulkMove`) and export folders for `exports:write` tokens.
+    fn guard(
+        &self,
+        command: &Command,
+        operation: Operation,
+        held: &CapabilitySet,
+        now: i64,
+    ) -> Result<(), WireError> {
+        let moves = matches!(
+            command,
+            Command::Organization(
+                OrganizationRequest::CollectionMember(..) | OrganizationRequest::TagMember(..)
+            )
+        );
+        self.shared
+            .bulk
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .check(self.grant, held, operation, moves, now)
+            .map_err(|bulk| WireError::Denied(Denial::Forbidden(bulk)))?;
+        if let Command::Export(request) = command
+            && !held.contains(&Capability::LocalFileWrite)
+            && !policy::export::destination_allowed(&request.path, &self.shared.api.export_dirs())
+        {
+            return Err(WireError::Denied(Denial::Forbidden(Operation::Export)));
+        }
+        Ok(())
+    }
+    fn audit(
+        &self,
+        operation: Operation,
+        result: &Result<Reply, WireError>,
+        target: Option<GrantId>,
+    ) {
+        self.shared.api.audit.record(&audit_entry(
+            self.grant,
+            self.shared.auth.kind_of(self.grant),
+            operation,
+            result,
+            target,
+        ));
+    }
     /// #18 search on a pooled read connection, inside one read snapshot and within the
     /// request's `timeout_ms` (enforced inside SQLite; an interrupted lookup is reported as
     /// a timed-out page by the search service).
@@ -797,6 +933,46 @@ impl Session {
                 )));
             }
         })
+    }
+}
+
+/// The grant a token-management command acts on (recorded in the audit log).
+fn api_target(command: &cm_protocol::api::ApiCommand) -> Option<GrantId> {
+    use cm_protocol::api::ApiCommand as A;
+    match command {
+        A::Reissue(g) | A::Revoke(g) | A::EndElevation(g) => Some(*g),
+        A::SetScopes { grant, .. } | A::Elevate { grant, .. } => Some(*grant),
+        _ => None,
+    }
+}
+/// Ids and fixed codes only: never request content, paths, labels or secrets.
+fn audit_entry(
+    grant: GrantId,
+    kind: Option<policy::ClientKind>,
+    operation: Operation,
+    result: &Result<Reply, WireError>,
+    target: Option<GrantId>,
+) -> AuditEntry {
+    let target = match result {
+        Ok(Reply::Api(cm_protocol::api::ApiReply::Issued { token, .. })) => Some(token.id),
+        Ok(Reply::Grants(GrantReply::Issued { grant, .. })) => Some(grant.id),
+        _ => target,
+    };
+    AuditEntry {
+        at_ms: now_ms(),
+        grant: Some(grant),
+        kind,
+        operation,
+        outcome: match result {
+            Ok(_) => AuditOutcome::Succeeded,
+            Err(WireError::Denied(_)) => AuditOutcome::Denied,
+            Err(_) => AuditOutcome::Failed,
+        },
+        reason: result
+            .as_ref()
+            .err()
+            .map(|e| crate::api::reason_code(e).to_owned()),
+        target,
     }
 }
 

@@ -1,13 +1,21 @@
 //! Daemon-only tables (#25): grants and durable jobs. Only the lock-holding daemon
 //! composition root should call these; GUI/CLI/MCP never open storage directly.
+mod api_settings;
 mod grants;
 mod jobs;
+pub use api_settings::SqliteApiSettings;
 pub use grants::{SqliteGrants, StoredGrant};
 pub use jobs::{Finish, Heartbeat, JobRow, NewJob, SqliteJobs};
 
 impl crate::LibraryDb {
     pub fn daemon_grants(&self) -> SqliteGrants<'_> {
         SqliteGrants {
+            connection: &self.connection,
+        }
+    }
+    /// #26 local API listener settings (singleton row).
+    pub fn api_settings(&self) -> SqliteApiSettings<'_> {
+        SqliteApiSettings {
             connection: &self.connection,
         }
     }
@@ -22,7 +30,7 @@ impl crate::LibraryDb {
 mod tests {
     use super::*;
     use crate::LibraryDb;
-    use cm_core::policy::{Grant, GrantId, presets};
+    use cm_core::policy::{ClientKind, Grant, GrantId, Scope, presets};
 
     fn job<'a>(key: &'a str, payload: &'a str) -> NewJob<'a> {
         NewJob {
@@ -46,10 +54,15 @@ mod tests {
                 capabilities: presets::desktop(),
                 expires_at_ms: None,
                 revoked: false,
+                elevated_until_ms: None,
             },
             token_sha256: [7; 32],
             issued_by: None,
             created_at_ms: 5,
+            client_kind: ClientKind::Desktop,
+            scopes: None,
+            last_used_at_ms: None,
+            replaces: None,
         };
         db.daemon_grants().insert(&stored).unwrap();
         assert_eq!(
@@ -64,6 +77,95 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+    }
+
+    #[test]
+    fn token_metadata_scope_change_elevation_and_touch_round_trip() {
+        let db = LibraryDb::in_memory().unwrap();
+        let read: cm_core::policy::ScopeSet = [Scope::PapersRead].into();
+        let mut stored = StoredGrant {
+            grant: Grant {
+                id: GrantId(uuid::Uuid::now_v7()),
+                label: "mcp profile".into(),
+                capabilities: cm_core::policy::scopes::capabilities(&read),
+                expires_at_ms: Some(100),
+                revoked: false,
+                elevated_until_ms: None,
+            },
+            token_sha256: [3; 32],
+            issued_by: None,
+            created_at_ms: 1,
+            client_kind: ClientKind::Mcp,
+            scopes: Some(read),
+            last_used_at_ms: None,
+            replaces: None,
+        };
+        db.daemon_grants().insert(&stored).unwrap();
+        assert_eq!(db.daemon_grants().all().unwrap(), vec![stored.clone()]);
+        let write: cm_core::policy::ScopeSet = [Scope::PapersRead, Scope::PapersWrite].into();
+        let caps = cm_core::policy::scopes::capabilities(&write);
+        assert!(
+            db.daemon_grants()
+                .set_access(stored.grant.id, &caps, Some(&write), Some(50))
+                .unwrap()
+        );
+        assert!(
+            db.daemon_grants()
+                .set_elevation(stored.grant.id, Some(70))
+                .unwrap()
+        );
+        db.daemon_grants().touch(stored.grant.id, 9).unwrap();
+        db.daemon_grants().touch(stored.grant.id, 4).unwrap();
+        stored.grant.capabilities = caps;
+        stored.scopes = Some(write);
+        stored.grant.expires_at_ms = Some(50);
+        stored.grant.elevated_until_ms = Some(70);
+        stored.last_used_at_ms = Some(9);
+        assert_eq!(
+            db.daemon_grants().by_id(stored.grant.id).unwrap(),
+            Some(stored.clone())
+        );
+        // Revoked grants cannot be widened or elevated afterwards.
+        db.daemon_grants().revoke(stored.grant.id, 10).unwrap();
+        assert!(
+            !db.daemon_grants()
+                .set_access(stored.grant.id, &presets::desktop(), None, None)
+                .unwrap()
+        );
+        assert!(
+            !db.daemon_grants()
+                .set_elevation(stored.grant.id, Some(99))
+                .unwrap()
+        );
+    }
+
+    #[test]
+    fn api_settings_default_off_round_trip_and_constraints() {
+        use cm_core::policy::api::{ApiSettings, BindAddress};
+        let db = LibraryDb::in_memory().unwrap();
+        assert_eq!(db.api_settings().load().unwrap(), ApiSettings::default());
+        let settings = ApiSettings {
+            enabled: true,
+            bind: BindAddress::LoopbackV6,
+            port: 40000,
+            export_dirs: vec!["/tmp/exports".into()],
+        };
+        db.api_settings().save(&settings, 5).unwrap();
+        assert_eq!(db.api_settings().load().unwrap(), settings);
+        // The table itself refuses non-loopback addresses and privileged ports.
+        for sql in [
+            "UPDATE api_settings SET bind_address = '0.0.0.0'",
+            "UPDATE api_settings SET port = 80",
+            "INSERT INTO api_settings(id) VALUES (2)",
+        ] {
+            assert!(db.connection.execute(sql, []).is_err(), "{sql}");
+        }
+        let invalid = ApiSettings {
+            port: 22,
+            ..ApiSettings::default()
+        };
+        assert!(db.api_settings().save(&invalid, 6).is_err());
+        assert_eq!(db.api_settings().load().unwrap(), settings);
     }
 
     #[test]
@@ -183,10 +285,15 @@ mod tests {
                 capabilities: presets::desktop(),
                 expires_at_ms: None,
                 revoked: false,
+                elevated_until_ms: None,
             },
             token_sha256: [hash; 32],
             issued_by: None,
             created_at_ms: 1,
+            client_kind: ClientKind::Unspecified,
+            scopes: None,
+            last_used_at_ms: None,
+            replaces: None,
         };
         db.daemon_grants().insert(&stored).unwrap();
         stored.grant.id

@@ -82,6 +82,8 @@ impl ClientTimeouts {
     pub fn for_command(&self, command: &Command) -> Duration {
         match command {
             Command::Status | Command::Jobs(_) | Command::Grants(_) => self.control,
+            // Issuing may wait on the OS secret store (bounded by the daemon).
+            Command::Api(_) => self.control,
             // #18: bounded by the request's scan budget (<= 10 s) and FTS candidate caps.
             Command::Search(_) | Command::Fulltext(_) => self.control,
             Command::Annotations(_) => self.interactive,
@@ -539,6 +541,16 @@ impl<C: Connector> Transport<C> {
 }
 
 impl LibraryClient for IpcLibraryClient {
+    fn api(
+        &self,
+        command: crate::api::ApiCommand,
+        complete: crate::library::Reply<crate::api::ApiReply>,
+    ) -> Result<(), ServiceError> {
+        self.typed(Command::Api(command), None, None, complete, |r| match r {
+            Reply::Api(reply) => Some(reply),
+            _ => None,
+        })
+    }
     fn submit(&self, request: LibraryRequest, complete: Completion) -> Result<(), ServiceError> {
         self.typed(
             Command::Library(request),

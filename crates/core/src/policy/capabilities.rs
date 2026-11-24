@@ -34,9 +34,28 @@ pub enum Capability {
     JobsControl,
     /// Issue/list/revoke grants. Never implied by any other capability.
     GrantAdmin,
+    // #26 fine-grained capabilities behind the API/MCP/CLI scopes (`policy::scopes`).
+    // `LibraryRead` stays the #25 read bundle and still satisfies every read below.
+    /// Bibliographic metadata, collections/tags, library queries, attachment lists and
+    /// extraction status (`papers:read`). No page text, annotations or rendered pages.
+    MetadataRead,
+    /// Extracted PDF page text and rendered pages (`files:read`).
+    ContentRead,
+    /// Highlights, comments and notes (`annotations:read`).
+    AnnotationsRead,
+    /// Create/update/delete annotations (`annotations:write`). Required for every holder,
+    /// the owner's grant included: `LibraryWrite` alone no longer writes annotations.
+    AnnotationsWrite,
+    /// Export a bibliography only into a directory the user allowed in the API settings
+    /// (`exports:write`). Arbitrary paths stay `LocalFileWrite` (desktop only).
+    ExportAllowedDir,
+    /// Bulk delete/move beyond the per-grant burst limit (`policy::elevation`). Held
+    /// permanently only by the owner's bootstrap grant; other grants get it only through a
+    /// time-limited, user-approved elevation (`Grant::elevated_until_ms`).
+    BulkElevated,
 }
 impl Capability {
-    pub const ALL: [Capability; 12] = [
+    pub const ALL: [Capability; 18] = [
         Self::LibraryRead,
         Self::LibraryWrite,
         Self::LibraryDelete,
@@ -49,6 +68,12 @@ impl Capability {
         Self::JobsRead,
         Self::JobsControl,
         Self::GrantAdmin,
+        Self::MetadataRead,
+        Self::ContentRead,
+        Self::AnnotationsRead,
+        Self::AnnotationsWrite,
+        Self::ExportAllowedDir,
+        Self::BulkElevated,
     ];
 }
 pub type CapabilitySet = BTreeSet<Capability>;
@@ -122,6 +147,17 @@ pub enum Operation {
     AnnotationRead,
     /// #19 create/update/delete/undo/confirm/carry-over/resolve annotations.
     AnnotationWrite,
+    /// #26 more than the burst limit of trash/restore/delete operations in the window.
+    BulkTrash,
+    /// #26 more than the burst limit of collection/tag membership changes in the window.
+    BulkMove,
+    /// #26 API listener settings (enabled flag, loopback address, port, export dirs).
+    ApiSettingsRead,
+    ApiSettingsWrite,
+    /// #26 change the scopes or elevation of an existing grant in place.
+    GrantUpdate,
+    /// #26 bounded audit log (who/what/when/result; never content or secrets).
+    AuditRead,
     /// Daemon version/limits/session diagnostics; still requires an authenticated live grant.
     Status,
 }
@@ -132,12 +168,18 @@ pub enum Requirement {
     All(&'static [Capability]),
     /// Any one of the listed capabilities is enough.
     Any(&'static [Capability]),
+    /// Any one alternative, each needing all of its capabilities (#26: the #25 bundle or
+    /// the fine-grained scope capabilities).
+    AnyOf(&'static [&'static [Capability]]),
 }
 impl Requirement {
     pub fn satisfied_by(self, held: &CapabilitySet) -> bool {
         match self {
             Self::All(needed) => needed.iter().all(|c| held.contains(c)),
             Self::Any(options) => options.iter().any(|c| held.contains(c)),
+            Self::AnyOf(alternatives) => alternatives
+                .iter()
+                .any(|needed| needed.iter().all(|c| held.contains(c))),
         }
     }
 }
@@ -146,17 +188,24 @@ impl Operation {
     pub fn requirement(self) -> Requirement {
         use Capability::*;
         use Operation::*;
-        use Requirement::{All, Any};
+        use Requirement::{All, Any, AnyOf};
         match self {
-            PaperList | PaperGet | LibraryQuery | OrganizationForPaper | AttachmentList => {
-                All(&[LibraryRead])
-            }
-            FulltextSearch | FulltextStatus | FulltextRead => All(&[LibraryRead]),
-            PdfRender | AnnotationRead => All(&[LibraryRead]),
-            AnnotationWrite => All(&[LibraryWrite]),
-            OrganizationList => Any(&[LibraryRead, DestinationRead]),
+            PaperList | PaperGet | LibraryQuery | OrganizationForPaper | AttachmentList
+            | FulltextStatus => AnyOf(&[&[LibraryRead], &[MetadataRead]]),
+            // Search spans metadata, annotation text and page text: a fine-grained holder
+            // needs all three read scopes (otherwise snippets would leak page/annotation text).
+            FulltextSearch => AnyOf(&[
+                &[LibraryRead],
+                &[MetadataRead, ContentRead, AnnotationsRead],
+            ]),
+            FulltextRead | PdfRender => AnyOf(&[&[LibraryRead], &[ContentRead]]),
+            AnnotationRead => AnyOf(&[&[LibraryRead], &[AnnotationsRead]]),
+            AnnotationWrite => All(&[AnnotationsWrite]),
+            OrganizationList => AnyOf(&[&[LibraryRead], &[DestinationRead], &[MetadataRead]]),
             PaperCreate | PaperUpdate | OrganizationWrite => All(&[LibraryWrite]),
             PaperTrash | PaperRestore | OrganizationDelete => All(&[LibraryDelete]),
+            BulkTrash => All(&[LibraryDelete, BulkElevated]),
+            BulkMove => All(&[LibraryWrite, BulkElevated]),
             SettingsRead | SettingsWrite => All(&[UiSettings]),
             ImportParseFile | PdfInspect => All(&[LocalFileRead]),
             // Preview never persists. Its duplicate matches are redacted without LibraryRead.
@@ -165,10 +214,16 @@ impl Operation {
             PdfPreviewNew => All(&[LibraryWrite, LocalFileRead]),
             PdfAttach | PdfCommitNew | PdfRetryAttachment => All(&[LibraryWrite, LocalFileRead]),
             MetadataResolve => All(&[NetworkLookup]),
-            Export => All(&[LibraryRead, LocalFileWrite]),
+            // ExportAllowedDir additionally restricts the destination (daemon, `policy::export`).
+            Export => AnyOf(&[
+                &[LibraryRead, LocalFileWrite],
+                &[MetadataRead, LocalFileWrite],
+                &[MetadataRead, ExportAllowedDir],
+            ]),
             JobSubmit | JobCancel | JobRetry => All(&[JobsControl]),
             JobRead => All(&[JobsRead]),
-            GrantIssue | GrantList | GrantRevoke => All(&[GrantAdmin]),
+            GrantIssue | GrantList | GrantRevoke | GrantUpdate => All(&[GrantAdmin]),
+            ApiSettingsRead | ApiSettingsWrite | AuditRead => All(&[GrantAdmin]),
             Status => All(&[]),
         }
     }

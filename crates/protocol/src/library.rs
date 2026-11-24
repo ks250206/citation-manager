@@ -56,6 +56,14 @@ pub trait LibraryClient: Send + Sync + 'static {
     ) -> Result<(), ServiceError> {
         Err(ServiceError::Unavailable)
     }
+    /// #26 tokens and API settings. Clients without daemon support report Unavailable.
+    fn api(
+        &self,
+        _command: crate::api::ApiCommand,
+        _complete: Reply<crate::api::ApiReply>,
+    ) -> Result<(), ServiceError> {
+        Err(ServiceError::Unavailable)
+    }
     fn load_settings(
         &self,
         _complete: Reply<crate::settings::SettingsLoaded>,

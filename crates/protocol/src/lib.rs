@@ -12,6 +12,8 @@ pub use cm_domain as domain;
 pub mod library;
 
 pub mod annotations;
+/// #26 token/grant management and local API settings.
+pub mod api;
 pub mod client;
 pub mod ipc;
 pub mod jobs;

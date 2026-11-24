@@ -132,6 +132,8 @@ pub enum Command {
     Fulltext(FulltextRequest),
     /// #19 highlights, comments and notes.
     Annotations(crate::annotations::AnnotationRequest),
+    /// #26 tokens, MCP profiles, elevation, API settings and audit (GrantAdmin only).
+    Api(crate::api::ApiCommand),
 }
 impl Command {
     pub fn operation(&self) -> Operation {
@@ -186,6 +188,7 @@ impl Command {
                 GrantCommand::List => O::GrantList,
                 GrantCommand::Revoke(_) => O::GrantRevoke,
             },
+            Self::Api(c) => c.operation(),
             Self::Search(_) => O::FulltextSearch,
             Self::Fulltext(r) => match r {
                 FulltextRequest::Status(_) | FulltextRequest::AttachmentStatus(_) => {
@@ -216,6 +219,7 @@ pub enum Reply {
     Search(SearchReply),
     Fulltext(FulltextReply),
     Annotations(crate::annotations::AnnotationReply),
+    Api(crate::api::ApiReply),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -75,6 +75,20 @@ impl DaemonPaths {
         })
     }
 }
+impl DaemonPaths {
+    /// Stable per-library key (the socket name hash); prefixes #26 secret store accounts.
+    pub fn library_key(&self) -> String {
+        endpoint_name(&self.library)
+    }
+    /// #26 weaker file fallback for token plaintext (0700, inside the private state dir).
+    pub fn secrets_dir(&self) -> PathBuf {
+        self.state_dir.join("secrets")
+    }
+    /// #26 bounded audit log (JSON lines, rotated).
+    pub fn audit_log(&self) -> PathBuf {
+        self.state_dir.join("audit.jsonl")
+    }
+}
 fn default_runtime_dir(uid: u32) -> PathBuf {
     runtime_dir_from(
         std::env::var_os("XDG_RUNTIME_DIR"),
