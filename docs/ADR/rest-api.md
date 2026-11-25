@@ -99,7 +99,7 @@ write. None of them returns stored content.
 | `PATCH /annotations/{id}`, `DELETE /annotations/{id}` | annotations:write | color/comment |
 | `GET /collections`, `GET /tags` | papers:read | |
 | `POST /collections`, `PATCH /collections/{id}`, `POST /collections/{id}/papers`, `POST /tags` | papers:write | |
-| `POST /collections/{id}/papers/bulk-move` | papers:write + bulk:elevated | add, optional `from` removal |
+| `POST /collections/{id}/papers/bulk-move` | papers:write + bulk:elevated | add, optional `from` removal (one transaction per paper: a failed item changes nothing) |
 | `DELETE /collections/{id}`, `DELETE /tags/{id}` | papers:delete | |
 | `POST /imports` | papers:write | BibTeX/RIS text ≤2 MiB, ≤100 records per call (`start`/`next_start`), `dry_run`; exact duplicates skipped |
 | `POST /exports` | papers:read + exports:write | only into an owner-configured export folder |
@@ -147,6 +147,10 @@ retained preview; same `papers:write` requirement, core tests cover it).
 - Bulk endpoints run item by item and stop at a denial (token revoked, elevation ended), the
   deadline or a client disconnect (a shared cancel flag checked before every command); the
   `200` reply lists every id (`not_attempted` after the stop) and `stopped` names the reason.
+  Before every item the row's bulk operation is authorized again (`Calls::reauthorize`, the
+  same check as step 3), so an elevation that expired or was ended after admission (e.g.
+  while the body was uploading) stops the batch with `elevation_required` instead of
+  letting items run on the ordinary per-command burst allowance.
 - Every error: `{"error":{"code","message","details"?,"request_id"}}`; the server-generated
   request id is also in `X-Request-Id`. Responses carry `Cache-Control: no-store` and
   `X-Content-Type-Options: nosniff`; 401 carries `WWW-Authenticate: Bearer`.

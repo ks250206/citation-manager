@@ -161,6 +161,23 @@ impl CollectionLibrary for SqliteCollections<'_> {
         membership(&tx, paper, collection, present)?;
         tx.commit().map_err(service_error)
     }
+    fn move_membership(
+        &mut self,
+        paper: PaperId,
+        from: CollectionId,
+        to: CollectionId,
+    ) -> Result<(), ServiceError> {
+        let tx = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(service_error)?;
+        active_paper(&tx, paper)?;
+        require_collection(&tx, from)?;
+        require_collection(&tx, to)?;
+        membership(&tx, paper, to, true)?;
+        membership(&tx, paper, from, false)?;
+        tx.commit().map_err(service_error)
+    }
     fn for_paper(&self, paper: PaperId) -> Result<Vec<Collection>, ServiceError> {
         let tx = self
             .connection

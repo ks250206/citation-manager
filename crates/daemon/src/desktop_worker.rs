@@ -364,6 +364,9 @@ impl LibraryClient for InProcessLibraryClient {
                         s.remove_paper(p, c)?;
                     }
                 }
+                OrganizationRequest::MoveCollectionMember(p, from, to) => {
+                    CollectionService::new(w.db.collections()).move_paper(p, from, to)?;
+                }
                 OrganizationRequest::CreateTag(v) => {
                     item = Some(OrganizationItem::Tag(
                         TagService::new(w.db.tags()).create(v)?,

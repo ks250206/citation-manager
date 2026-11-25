@@ -159,6 +159,7 @@ impl Command {
                 OrganizationRequest::CreateCollection(_)
                 | OrganizationRequest::UpdateCollection(..)
                 | OrganizationRequest::CollectionMember(..)
+                | OrganizationRequest::MoveCollectionMember(..)
                 | OrganizationRequest::CreateTag(_)
                 | OrganizationRequest::UpdateTag(..)
                 | OrganizationRequest::TagMember(..) => O::OrganizationWrite,
