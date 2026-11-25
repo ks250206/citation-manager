@@ -132,3 +132,28 @@ API check: find-docs/Context7 `/rusqlite/rusqlite/v0.41.1` and locally pinned
 transactions and checkpoint support. See the
 [upstream pinned README](https://github.com/rusqlite/rusqlite/blob/v0.41.1/README.md)
 and [SQLite checkpoint documentation](https://sqlite.org/pragma.html#pragma_wal_checkpoint).
+
+# #30 representative load (10,000 papers / 1,000 PDFs / 20,000 pages)
+
+`representative.py` measures the whole headless stack through the real release `papersd`
+and its authenticated IPC, plus (Linux/Xvfb, opt-in) the real GUI. Results and the exact
+method, parameters and limits are in [ISSUE_30](../../docs/validation/ISSUE_30.md).
+
+```sh
+python3 scripts/benchmarks/representative.py --out NAME            # full scale
+python3 scripts/benchmarks/representative.py --small --out NAME    # 200/20/80 smoke
+DISPLAY=:99 python3 scripts/benchmarks/representative.py --gui --out NAME   # + GUI RSS
+DISPLAY=:99 python3 scripts/benchmarks/representative.py --out x --reuse NAME --label L  # GUI rerun
+```
+
+It never runs in `cargo test` or PR CI; `.github/workflows/benchmark.yml` runs it manually on
+a GitHub macOS arm64 runner (not the DESIGN §16.1 machine). Steps: release builds
+(`papersd --features pdf-metadata`, the `bench_representative_ipc` and
+`bench_representative_seed` examples), the pinned PDFium (`scripts/pdfium/fetch.py`, or
+`--pdfium`) staged in the installed layout, `pdfgen.write_corpus` (seed 30, stdlib-only PDFs
+with planted English/Japanese terms and a literal per-line oracle), direct-SQL seeding of the
+papers plus `ManagedAttachments::import` of every PDF, automatic extraction by `papersd`
+(sampled RSS/CPU, `/proc/<pid>/io` on Linux, `wait4` rusage), lazy-start warm starts through
+the GUI/CLI `Launch` path, IPC query workload and exact recall, optional GUI phases.
+Output: `target/representative-benchmark/<NAME>/{environment,seed,stats,index,warm,queries,summary}.json`.
+Quantiles are nearest rank. Only self-created libraries under that directory are touched.

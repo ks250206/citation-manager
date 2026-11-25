@@ -664,6 +664,11 @@ papers mcp
 
 > 数値は保証値ではなく、Zotero より軽量にするという設計目標。PDF の解像度、文書構造、フォント、OS のメモリ計測方法で変動する。PDFium を含む総プロセス RSS を計測する。
 
+> #30 実測（[ISSUE_30](docs/validation/ISSUE_30.md)、Linux コンテナと GitHub macOS VM runner。§16.1 の 16 GB 実機ではない）:
+> headless の温かい起動・切り替え・メタデータ/全文検索 p95 は目標内。Linux Xvfb の GUI アイドル RSS は目標内だが、
+> PDF 1本閲覧時の GUI+`papersd` 総 RSS は 410 MiB で未達。描画キャッシュは表示ビットマップと GPU テクスチャの
+> 二重保持を実測し 192 MB → 64 MB に調整した。フレーム落ちと Apple Silicon 16 GB の値は未測定。
+
 ### 16.3 省メモリ戦略
 
 - 文献テーブルは virtual scrolling と部分取得（pagination）。

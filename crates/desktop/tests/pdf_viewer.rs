@@ -325,3 +325,23 @@ fn selection_hits_characters_and_spans_lines_and_pages() {
         "a"
     );
 }
+
+/// #30: the default budget stays inside DESIGN §16.2's 64–128 MB, still holds two visible
+/// pages plus `PREFETCH` on each side at the 4 Mpx render cap, and a whole 20-page document
+/// at that size never exceeds it (the GUI also holds a GPU copy of each cached bitmap).
+#[test]
+fn default_render_cache_budget_is_within_the_design_range() {
+    const MIB: usize = 1024 * 1024;
+    assert!((64 * MIB..=128 * MIB).contains(&CACHE_BUDGET_BYTES));
+    let page = cm_protocol::geometry::MAX_RENDER_PIXELS * 4;
+    assert!(CACHE_BUDGET_BYTES >= (2 + 2 * PREFETCH as usize) * page);
+    let a = attachment(1);
+    let mut cache: RenderCache<u32> = RenderCache::default();
+    let mut evicted = 0;
+    for p in 0..20 {
+        evicted += cache.insert(RenderKey::new(a, p, 2.18), p, page).len();
+        assert!(cache.bytes() <= CACHE_BUDGET_BYTES);
+    }
+    assert_eq!(cache.len(), CACHE_BUDGET_BYTES / page);
+    assert_eq!(evicted, 20 - cache.len());
+}

@@ -7,6 +7,8 @@ import hashlib
 import json
 from pathlib import Path
 
+from benchmarks.pdfgen import layouts_pdf
+
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'fixtures/library'
 
@@ -45,6 +47,8 @@ def main():
                stream(b'/Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceRGB /BitsPerComponent 8', b'\x00\x00\xff'),
                b'<< /Producer (Original CC0 synthetic image-only fixture) >>']
     (OUT / 'scanned.pdf').write_bytes(document(scanned))
+    # #30 hard layouts: two columns, math, table, vertical Japanese, rotated page.
+    (OUT / 'layouts.pdf').write_bytes(layouts_pdf())
     manifest = {'license': 'CC0-1.0 original generated content', 'generator': 'scripts/generate_library_fixtures.py',
                 'files': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(OUT.glob('*.pdf'))}}
     (OUT / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
