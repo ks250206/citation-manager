@@ -1,7 +1,7 @@
 # MVP acceptance (#32): DESIGN §24 traceability
 
-Status on 2026-11-25, branch `claude/issue-32-acceptance` (stacked on PR #79; main includes
-#30 (PR #77), #34 (PR #78) and the MIT license (PR #80)). **The MVP is not complete.** Seven of the 17 §24 criteria are
+Status on 2026-11-25, branch `claude/issue-32-acceptance` (main includes #30 (PR #77), #34 (PR #78),
+#31 (PR #79, signing gated and still unverified), the MIT license (PR #80) and #82). **The MVP is not complete.** Seven of the 17 §24 criteria are
 passed with evidence; the other ten are partial, mostly because the macOS release itself (real
 Mac, Developer ID signing, store-published extensions, the 16 GB reference machine) has never
 been exercised. Nothing below is marked passed without a test, script, workflow run or
@@ -113,7 +113,7 @@ Mac remains unverified (#26).
 | 12 | 「ローカル REST API が認証付きで読み書きできる。」 | #26 (PR #69), #27 (PR #71) | `daemon_rest` (every endpoint's 401/403/revoked/Host/Origin), `daemon_api`, OpenAPI contract test; release E2E REST read/write/scope/Host/disable | Linux automated; Linux release E2E; macOS VM (bundle smoke: REST render; release E2E) | **passed** | [ISSUE_26](ISSUE_26.md), [ISSUE_27](ISSUE_27.md), [openapi.json](../openapi.json), release E2E `rest.*` |
 | 13 | 「MCP から文献検索・本文取得・書き込みが権限に応じ実行できる。」 | #29 (PR #70), #26 | `cm-mcp` unit + stdio subprocess tests (read-only default, write grant, stdout purity); release E2E with a raw JSON-RPC client: search/full text with sources, write refused then allowed after the owner's grant | Linux automated; Linux release E2E; macOS VM release E2E | **passed** | [mcp-server ADR](../ADR/mcp-server.md), PR #70, release E2E `privacy.mcp_*`, `mcp.*`. Not verified: a third-party desktop MCP client application |
 | 14 | 「CLI から文献の追加・検索・エクスポートを行える。」 | #28 (PR #68) | `crates/cli/tests` subprocess tests against real `papersd`; release E2E `add file`, `import`, `search`, `fulltext`, `export`, `server stop` | Linux automated; Linux and macOS VM release E2E; macOS VM smoke (CLI via PATH symlink) | **passed** | [ISSUE_28](ISSUE_28.md), [APP_LAYOUT_POC](APP_LAYOUT_POC.md), release E2E `cli.*`. `add doi` with a live provider: see #4 |
-| 15 | 「バックアップ・リカバリ手段が明示されている。」 | #9 (PR #38), #50 (PR #51), #30, #31 (PR #79) | storage `recovery` tests (WAL backup → restore), `crash_recovery` SIGKILL, `daemon_recovery` (#30); documented procedures; release E2E backup by copy → restore elsewhere | Linux/macOS automated; Linux and macOS VM release E2E (`cp -a` / `ditto`) | **passed** | [INSTALL §6](../INSTALL.md#6-backup-and-restore), [RECOVERY](../RECOVERY.md), [ISSUE_9](ISSUE_9.md), [CRASH_RECOVERY](CRASH_RECOVERY.md), [ISSUE_30](ISSUE_30.md). The guides arrive with PR #79. The verified portable bundle backup of the storage layer has no app/CLI command yet (copy of a stopped library is the documented route) |
+| 15 | 「バックアップ・リカバリ手段が明示されている。」 | #9 (PR #38), #50 (PR #51), #30, #31 (PR #79) | storage `recovery` tests (WAL backup → restore), `crash_recovery` SIGKILL, `daemon_recovery` (#30); documented procedures; release E2E backup by copy → restore elsewhere | Linux/macOS automated; Linux and macOS VM release E2E (`cp -a` / `ditto`) | **passed** | [INSTALL §6](../INSTALL.md#6-backup-and-restore), [RECOVERY](../RECOVERY.md), [ISSUE_9](ISSUE_9.md), [CRASH_RECOVERY](CRASH_RECOVERY.md), [ISSUE_30](ISSUE_30.md). The verified portable bundle backup of the storage layer has no app/CLI command yet (copy of a stopped library is the documented route) |
 | 16 | 「PDFium 同梱・署名・配布ライセンスを確認済みである。」 | #11, #34, #31, PR #80 | fetch with pinned checksums; bundle layout/`otool`; notices generator (423 crates) + PDFium notices bundled; `release_sign.py preflight` | macOS VM | **partial** | [PDFIUM_POC](PDFIUM_POC.md), [ISSUE_31](ISSUE_31.md), [LICENSES](../LICENSES.md). Bundling and third-party notices: verified. Project license: MIT (PR #80, merged; bundled as `Resources/licenses/LICENSE` by PR #79). Missing: Developer ID signature and notarization (`UNVERIFIED: no Developer ID`; pending on the owner's side) |
 | 17 | 「RSS / 起動時間 / 検索速度を計測し、測定結果を公開できる。」 | #47, #30 | `representative.py --gui`, `benchmark.yml`; raw JSON committed | Linux; macOS VM 7 GB; real Mac M4 Max (#47 headless only) | **partial** | [ISSUE_30](ISSUE_30.md) and [ISSUE_30/](ISSUE_30/): measured and published, but not on the 16 GB Apple Silicon reference machine, macOS GUI RSS and frame drops unmeasured, and the measured PDF-view RSS (409.7 MiB, Linux) is above the §16.2 target of 350 MB |
 
@@ -153,7 +153,7 @@ open while a child is open or a gate below remains.
 | #25 papersd/IPC, #26 tokens/grants, #27 REST, #28 CLI, #29 MCP | closed | met ([ISSUE_25](ISSUE_25.md) … PR #70); macOS Keychain storage not verified (#26) | Keychain on a real Mac |
 | **#6 M5** 安定化と配布 | open | Exit **partly** met: new install → browser save → PDF annotation → MCP is reproducible by `tests/e2e/release` on Linux (passed) and, without a browser, on the macOS VM; not on a real Mac, not with a signed build | all blockers below |
 | #30 recovery/security/10k | open (PR #77 merged) | recovery, hostile-input and layout regressions met; benchmark partial ([ISSUE_30](ISSUE_30.md)) | 16 GB reference machine; PDF-view RSS above target; frame time unmeasured |
-| #31 `.app`/`.dmg`/signing | open (PR #79) | partial ([ISSUE_31](ISSUE_31.md)) | Developer ID, notarization, real Mac |
+| #31 `.app`/`.dmg`/signing | open (PR #79 merged; signing on hold) | partial ([ISSUE_31](ISSUE_31.md)) | Developer ID, notarization, real Mac |
 | #32 MVP acceptance | open (this branch) | traceability table and release E2E delivered; MVP completion **not** declared | everything listed here; independent different-model review and CI on the PR |
 | #47 headless benchmark, #50 SIGKILL recovery | closed | met ([BACKEND_BENCHMARK](BACKEND_BENCHMARK.md), [CRASH_RECOVERY](CRASH_RECOVERY.md)) | — |
 
@@ -172,8 +172,7 @@ open while a child is open or a gate below remains.
 5. **#15 native gates** listed in its README: offline DOI fallback, failed-page retry, native
    queued-late-arrival.
 6. **Live DOI providers**: no lane has ever resolved a DOI against Crossref/DataCite.
-7. **Merges**: PR #79 (#31) is not merged yet; this branch stacks on it (PR #78 is merged).
-8. **Process**: CI on the #32 PR and the independent different-model review required by
+7. **Process**: CI on the #32 PR and the independent different-model review required by
    CONTRIBUTING have not run for this branch.
 
 ## Product defects found by the release E2E
