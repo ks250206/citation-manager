@@ -227,3 +227,13 @@ impl Library {
         }
     }
 }
+/// The loaded page's version of the paper the editor shows, when it differs from the
+/// editor's copy (changed by another client or a background job since the editor loaded
+/// it). None for a new draft, a paper not on this page, or an unchanged paper. Callers
+/// refresh a clean editor from it and leave unsaved local edits alone (#84 review).
+pub fn newer_row<'a>(editor: Option<&Paper>, page: &'a [Paper]) -> Option<&'a Paper> {
+    let editor = editor?;
+    page.iter()
+        .find(|p| p.id == editor.id)
+        .filter(|p| *p != editor)
+}

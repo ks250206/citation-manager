@@ -45,6 +45,23 @@ xdotool; every result below was checked on a screenshot.
 | Bug: Expand, scroll to the end of page 4, Notes › Place in PDF… showed a blank page | reproduced before, fixed after (opens at the top of p. 4, "Place on p. 4") | [10](issue-84/10-before-place-expand.png) → [11](issue-84/11-after-place-expand.png) |
 | Exit reading after that: the viewer stays on the top of p. 4 at the narrower width | pass | (not kept) |
 
+## Review follow-up (PR #99)
+
+Three findings from the review were fixed with tests on the pure logic. Each new test failed when
+the function was given the pre-fix behaviour and passes now (`cm-desktop` `library_list`):
+
+| Finding | Fix | Test |
+|---|---|---|
+| Re-selecting the open paper kept a stale editor after another client changed it; a later Save would send the old bibliography back | `library::newer_row`: a clean editor is refreshed from the newer page row, on re-selection and whenever a page loads (attachments, viewer and notes are kept). Unsaved local edits are never replaced | `the_page_version_of_a_changed_open_paper_is_detected` |
+| A tag/collection bulk run and a Trash bulk run could overlap and share state, so one run's follow-up read replaced the other's ticket | `bulk::BulkSlot`: one bulk run at a time (a second one, or a single membership change, is refused with "Wait until … finishes"); each completion takes its own verb and refetch flag from its lane and ticket | `bulk_runs_are_serialized_and_completions_keep_their_own_state` |
+| The Tags submenu was built before the right-clicked paper's memberships had loaded, offering existing tags as "add" | `bulk::tag_choice`: for one paper, tags are disabled ("loading…") until that paper's memberships arrive, and the open menu is rebuilt when they do | `tag_entries_wait_for_the_selected_papers_memberships` |
+
+In the app: with one paper open, right-clicking another paper tagged #battery showed "✓ #battery";
+choosing it reported "Removed #battery from 1 paper" and the menu then showed it unchecked. A
+three-paper bulk add to a collection with Delete pressed straight after it left the three papers
+in place (the Trash run was refused while the first run was active) and ended with that run's own
+status, "Added to Reading list: 3 papers".
+
 ## Not covered
 
 - Import BibTeX… / Import RIS… from the ＋ Add menu open the XDG portal file chooser, which is

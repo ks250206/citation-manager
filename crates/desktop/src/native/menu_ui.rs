@@ -113,23 +113,27 @@ impl LibraryView {
             .filter(|c| Some(c.id) != viewing)
             .map(|c| Entry::item(format!("📁 {}", c.name), MenuAction::Collection(c.id)))
             .collect();
-        // Membership is known for the open paper; with several papers a tag is added to all.
-        let single = (n == 1)
-            .then(|| self.editor.as_ref().filter(|p| p.id == selected[0]))
-            .flatten()
-            .is_some();
+        // One paper: check boxes from its loaded memberships (disabled until they arrive;
+        // the open menu is rebuilt then). Several papers: a tag is added to all of them.
+        let member_tags: Vec<TagId> = self.membership.tags.iter().map(|t| t.id).collect();
+        let membership = self.membership_for.map(|p| (p, member_tags.as_slice()));
         let tags: Vec<Entry<MenuAction>> = self
             .organization
             .tags
             .iter()
-            .map(|t| {
-                if single {
-                    let present = self.membership.tags.iter().any(|m| m.id == t.id);
+            .map(|t| match bulk::tag_choice(t.id, &selected, membership) {
+                bulk::TagChoice::Toggle { present } => {
                     Entry::item(format!("#{}", t.name), MenuAction::Tag(t.id, !present))
                         .checked(present)
-                } else {
+                }
+                bulk::TagChoice::AddToAll => {
                     Entry::item(format!("Add #{}", t.name), MenuAction::Tag(t.id, true))
                 }
+                bulk::TagChoice::Loading => Entry::item(
+                    format!("#{} (loading…)", t.name),
+                    MenuAction::Tag(t.id, true),
+                )
+                .enabled(false),
             })
             .collect();
         let mut entries = vec![
@@ -171,6 +175,33 @@ impl LibraryView {
             .enabled(n >= 1),
         );
         entries
+    }
+    /// Rebuild an open menu from the current state (e.g. memberships arrived), keeping the
+    /// highlighted row when it is still selectable.
+    pub(super) fn refresh_open_menu(&mut self, cx: &mut Context<Self>) {
+        let Some(kind) = self.menu.as_ref().map(|m| m.kind) else {
+            return;
+        };
+        let entries = self.menu_entries(kind);
+        if let Some(open) = &mut self.menu {
+            let (index, sub) = (open.menu.index, open.menu.sub);
+            let mut menu = Menu::new(entries);
+            if menu.entries.get(index).is_some_and(Entry::selectable) {
+                menu.index = index;
+                if sub.is_some() && menu.open_submenu() {
+                    menu.sub = sub
+                        .filter(|s| match &menu.entries[index] {
+                            Entry::Submenu { entries, .. } => {
+                                entries.get(*s).is_some_and(Entry::selectable)
+                            }
+                            _ => false,
+                        })
+                        .or(menu.sub);
+                }
+            }
+            open.menu = menu;
+        }
+        cx.notify();
     }
     pub(super) fn open_menu(
         &mut self,
@@ -316,37 +347,70 @@ impl LibraryView {
             self.status("Nothing to change", false, cx);
             return;
         }
+        // One bulk run at a time, whatever its lane: runs share the status line and the
+        // follow-up reads, and a second run must never replace another run's ticket.
+        if let Some(running) = self.active_bulk() {
+            let text = format!(
+                "Wait until “{}” finishes",
+                running.verb.trim_end_matches(':')
+            );
+            self.status(text, true, cx);
+            return;
+        }
         if self.locked() || self.busy(lane) {
             self.status("Wait for the current operation", true, cx);
             return;
         }
-        self.bulk_verb = verb;
-        // Trash / restore changes the open paper itself; memberships do not.
-        self.bulk_refetch = lane == Lane::Editor;
         self.call(lane, Event::Bulk, |client, done| {
             bulk::run(client, steps, done);
             Ok(())
         });
+        if let Some(&ticket) = self.pending.get(&lane) {
+            self.bulk.start(
+                lane,
+                ticket,
+                bulk::BulkRun {
+                    verb,
+                    // Trash / restore changes the open paper itself; memberships do not.
+                    refetch: lane == Lane::Editor,
+                },
+            );
+        }
         cx.notify();
+    }
+    /// The bulk run still in progress, if any.
+    pub(super) fn active_bulk(&self) -> Option<&bulk::BulkRun> {
+        self.bulk.active(|lane| self.pending.get(&lane).copied())
     }
     pub(super) fn bulk_reply(
         &mut self,
+        lane: Lane,
+        ticket: u64,
         result: Result<bulk::BulkReport, ServiceError>,
         cx: &mut Context<Self>,
     ) {
+        // The verb and follow-up belong to this run, never to another one.
+        let run = self.bulk.finish(lane, ticket).unwrap_or(bulk::BulkRun {
+            verb: "Bulk change:".into(),
+            refetch: lane == Lane::Editor,
+        });
         match result {
             Ok(report) => {
                 let failed = report.error.is_some();
-                self.status(report.summary(&self.bulk_verb), failed, cx);
+                self.status(report.summary(&run.verb), failed, cx);
             }
-            Err(e) => self.status(format!("{} failed: {e}", self.bulk_verb), true, cx),
+            Err(e) => self.status(
+                format!("{} failed: {e}", run.verb.trim_end_matches(':')),
+                true,
+                cx,
+            ),
         }
         self.reload(cx);
         self.load_membership();
         // The open paper may have moved to or from Trash: show its stored state. (This makes
         // it the whole selection; after a collection or tag change the selection is kept.)
         if let Some(id) = self.editor.as_ref().map(|p| p.id)
-            && self.bulk_refetch
+            && run.refetch
             && !self.dirty
         {
             self.call(Lane::Editor, Event::Loaded, |c, done| {

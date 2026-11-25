@@ -529,3 +529,87 @@ fn rescaling_keeps_the_same_page_position_in_view() {
     let same = rescale_offset(&narrow, &narrow, 321.0);
     assert!((same - 321.0).abs() < 0.01);
 }
+
+/// Review finding 1: re-selecting the open paper after it changed elsewhere must show the
+/// stored version, so a later Save cannot send the old bibliography back.
+#[test]
+fn the_page_version_of_a_changed_open_paper_is_detected() {
+    use cm_desktop::library::newer_row;
+    let page: Vec<Paper> = (1..=3).map(paper).collect();
+    let open = paper(2);
+    assert_eq!(newer_row(Some(&open), &page), None, "unchanged");
+    assert_eq!(newer_row(None, &page), None, "new draft");
+    assert_eq!(newer_row(Some(&paper(9)), &page), None, "not on this page");
+    let mut changed = page.clone();
+    changed[1].bibliography.journal = Some("Changed elsewhere".into());
+    changed[1].updated_at = Some("2026-11-26T00:00:00.000Z".into());
+    assert_eq!(newer_row(Some(&open), &changed), Some(&changed[1]));
+}
+
+/// Review finding 2: one bulk run at a time, each completion matched to its own run.
+#[test]
+fn bulk_runs_are_serialized_and_completions_keep_their_own_state() {
+    use cm_desktop::bulk::{BulkRun, BulkSlot};
+    #[derive(Debug, Clone, Copy, PartialEq)]
+    enum Lane {
+        Organization,
+        Editor,
+    }
+    let tag = BulkRun {
+        verb: "Tagged #x:".into(),
+        refetch: false,
+    };
+    let mut pending: HashMap<&str, u64> = HashMap::new();
+    fn key(lane: Lane) -> &'static str {
+        match lane {
+            Lane::Organization => "org",
+            Lane::Editor => "editor",
+        }
+    }
+    let mut slot = BulkSlot::default();
+    assert!(slot.active(|l| pending.get(key(l)).copied()).is_none());
+    pending.insert("org", 7);
+    slot.start(Lane::Organization, 7, tag.clone());
+    // While it runs, a Trash run on another lane sees it and must not start.
+    assert_eq!(slot.active(|l| pending.get(key(l)).copied()), Some(&tag));
+    // A completion for another lane/ticket (e.g. the editor's Get) is not this run's.
+    assert_eq!(slot.finish(Lane::Editor, 7), None);
+    assert_eq!(slot.finish(Lane::Organization, 6), None);
+    assert_eq!(slot.finish(Lane::Organization, 7), Some(tag.clone()));
+    assert!(slot.active(|l| pending.get(key(l)).copied()).is_none());
+    assert_eq!(slot.finish(Lane::Organization, 7), None, "reported once");
+    // A run whose ticket was replaced (or whose reply was lost) never blocks later runs.
+    slot.start(Lane::Organization, 8, tag);
+    pending.insert("org", 9);
+    assert!(slot.active(|l| pending.get(key(l)).copied()).is_none());
+}
+
+/// Review finding 3: before the paper's memberships arrive, tags are not offered as
+/// "add" (which would re-add an existing tag); they are disabled until then.
+#[test]
+fn tag_entries_wait_for_the_selected_papers_memberships() {
+    use cm_desktop::bulk::{TagChoice, tag_choice};
+    let (a, b) = (
+        TagId(uuid::Uuid::from_u128(20)),
+        TagId(uuid::Uuid::from_u128(21)),
+    );
+    let one = ids(&[1]);
+    // Memberships still loading, or loaded for the previously open paper.
+    assert_eq!(tag_choice(a, &one, None), TagChoice::Loading);
+    assert_eq!(
+        tag_choice(a, &one, Some((id(2), &[a][..]))),
+        TagChoice::Loading
+    );
+    // Loaded for this paper: real check boxes.
+    let tags = [a];
+    assert_eq!(
+        tag_choice(a, &one, Some((id(1), &tags[..]))),
+        TagChoice::Toggle { present: true }
+    );
+    assert_eq!(
+        tag_choice(b, &one, Some((id(1), &tags[..]))),
+        TagChoice::Toggle { present: false }
+    );
+    // Several papers: "Add #tag" to all, whatever is loaded.
+    assert_eq!(tag_choice(a, &ids(&[1, 2]), None), TagChoice::AddToAll);
+}

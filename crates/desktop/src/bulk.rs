@@ -134,3 +134,75 @@ fn next(
         }));
     }
 }
+
+/// What a bulk run reports when it ends, kept with the run rather than in shared state.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BulkRun {
+    /// Status verb, e.g. "Moved to Trash:".
+    pub verb: String,
+    /// The run changed the papers themselves (Trash / restore): re-read the open one.
+    pub refetch: bool,
+}
+
+/// At most one bulk run at a time. A run is identified by its request lane and ticket;
+/// it counts as active only while that lane still waits for that ticket, so a run whose
+/// ticket was replaced (or whose reply was lost) never blocks later runs.
+#[derive(Debug)]
+pub struct BulkSlot<L> {
+    run: Option<(L, u64, BulkRun)>,
+}
+
+impl<L> Default for BulkSlot<L> {
+    fn default() -> Self {
+        Self { run: None }
+    }
+}
+
+impl<L: Copy + PartialEq> BulkSlot<L> {
+    /// The run in progress, if any. `pending` reports the ticket each lane waits for.
+    pub fn active(&self, pending: impl Fn(L) -> Option<u64>) -> Option<&BulkRun> {
+        self.run
+            .as_ref()
+            .filter(|(lane, ticket, _)| pending(*lane) == Some(*ticket))
+            .map(|(_, _, run)| run)
+    }
+    /// Record a run that was just submitted with this lane/ticket.
+    pub fn start(&mut self, lane: L, ticket: u64, run: BulkRun) {
+        self.run = Some((lane, ticket, run));
+    }
+    /// The run a completion belongs to; None for any other lane/ticket.
+    pub fn finish(&mut self, lane: L, ticket: u64) -> Option<BulkRun> {
+        match &self.run {
+            Some((l, t, _)) if *l == lane && *t == ticket => self.run.take().map(|(_, _, r)| r),
+            _ => None,
+        }
+    }
+}
+
+/// One entry of the context menu's Tags submenu.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TagChoice {
+    /// One paper whose memberships are known: check box, choosing it flips membership.
+    Toggle { present: bool },
+    /// Several papers: choosing it adds the tag to all of them.
+    AddToAll,
+    /// One paper whose memberships have not arrived yet: shown disabled, so an existing
+    /// tag can never be offered as "add" (the menu is rebuilt when they arrive).
+    Loading,
+}
+
+/// Tags submenu state for `selected`. `membership` is the paper the loaded memberships
+/// belong to and its tags (None while they load).
+pub fn tag_choice(
+    tag: TagId,
+    selected: &[PaperId],
+    membership: Option<(PaperId, &[TagId])>,
+) -> TagChoice {
+    match (selected, membership) {
+        ([one], Some((paper, tags))) if *one == paper => TagChoice::Toggle {
+            present: tags.contains(&tag),
+        },
+        ([_], _) => TagChoice::Loading,
+        _ => TagChoice::AddToAll,
+    }
+}

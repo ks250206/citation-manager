@@ -220,11 +220,10 @@ struct LibraryView {
     /// #84 open popup menu (row context menu, ＋ Add, ⚙, columns) and its key focus.
     menu: Option<menu_ui::OpenMenu>,
     menu_focus: FocusHandle,
-    /// Status verb of the running bulk action ("Moved to Trash:").
-    bulk_verb: String,
-    /// Whether the bulk action changed the papers themselves (Trash), so the open one is
-    /// re-read when it ends.
-    bulk_refetch: bool,
+    /// The bulk action in progress (one at a time) and what it reports when it ends.
+    bulk: crate::bulk::BulkSlot<Lane>,
+    /// The paper `membership` was loaded for; None while it loads.
+    membership_for: Option<PaperId>,
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Screen {
@@ -323,8 +322,8 @@ impl LibraryView {
             api_inputs: api_ui::ApiInputs::new(cx),
             menu: None,
             menu_focus: cx.focus_handle(),
-            bulk_verb: String::new(),
-            bulk_refetch: false,
+            bulk: Default::default(),
+            membership_for: None,
         };
         view.subscribe_viewer_inputs(window, cx);
         // The resolver belongs to the table focus owner: a prefix never survives focus loss.
@@ -535,6 +534,15 @@ impl LibraryView {
             Event::Query(result) => match result {
                 Ok(page) => {
                     self.library.complete(self.library.generation, page);
+                    // Another client may have changed the open paper: show the stored
+                    // version unless the form holds unsaved edits (never clobber those).
+                    if !self.dirty
+                        && let Some(row) =
+                            crate::library::newer_row(self.editor.as_ref(), &self.library.papers)
+                    {
+                        let row = row.clone();
+                        self.refresh_editor(row, cx);
+                    }
                     if self.message == "Loading library…" {
                         self.status("Library loaded", false, cx);
                     }
@@ -596,7 +604,12 @@ impl LibraryView {
                 Err(e) => self.status(format!("Organization failed: {e}"), true, cx),
             },
             Event::Membership(result) => match result {
-                Ok(org) => self.membership = org,
+                Ok(org) => {
+                    self.membership = org;
+                    // Stale replies were dropped above, so this is the open paper's.
+                    self.membership_for = self.editor.as_ref().map(|p| p.id);
+                    self.refresh_open_menu(cx);
+                }
                 Err(e) => self.status(format!("Membership read failed: {e}"), true, cx),
             },
             Event::LoadSettings(result) => match result {
@@ -642,7 +655,7 @@ impl LibraryView {
                 Ok(_) => (),
                 Err(e) => self.status(format!("Attachment read failed: {e}"), true, cx),
             },
-            Event::Bulk(result) => self.bulk_reply(result, cx),
+            Event::Bulk(result) => self.bulk_reply(message.lane, message.ticket, result, cx),
             Event::Export(result) => match result {
                 Ok(report) => {
                     self.diagnostics = vec![
@@ -681,6 +694,12 @@ impl LibraryView {
     }
     fn organize(&mut self, request: OrganizationRequest, cx: &mut Context<Self>) {
         if self.locked() {
+            return;
+        }
+        // A single change would replace the running bulk run's ticket on this lane.
+        if let Some(run) = self.active_bulk() {
+            let text = format!("Wait until “{}” finishes", run.verb.trim_end_matches(':'));
+            self.status(text, true, cx);
             return;
         }
         self.call(Lane::Organization, Event::Organization, |c, done| {
@@ -775,6 +794,7 @@ impl LibraryView {
         self.editor = paper;
         self.dirty = false;
         self.membership = Organization::default();
+        self.membership_for = None;
         self.host = AttachmentHost::default();
         self.load_membership();
         self.reset_annotations();
@@ -927,19 +947,45 @@ impl LibraryView {
             return;
         }
         let shown = change(&mut self.library);
-        if let Some(id) = shown
-            && self.editor.as_ref().map(|p| p.id) != Some(id)
-        {
-            self.set_editor(
-                self.library.papers.iter().find(|p| p.id == id).cloned(),
-                None,
-                cx,
-            );
+        if let Some(id) = shown {
+            if self.editor.as_ref().map(|p| p.id) != Some(id) {
+                self.set_editor(
+                    self.library.papers.iter().find(|p| p.id == id).cloned(),
+                    None,
+                    cx,
+                );
+            } else if let Some(row) =
+                crate::library::newer_row(self.editor.as_ref(), &self.library.papers)
+            {
+                // Same paper, changed elsewhere: the editor is clean here (checked above),
+                // so show the stored version; a later Save must not send the old one back.
+                let row = row.clone();
+                self.refresh_editor(row, cx);
+            }
         }
         if let Some(index) = shown.and_then(|id| self.library.index_of(id)) {
             self.rows.scroll_to_item(index, ScrollStrategy::Nearest);
         }
         self.screen = Screen::Library;
+        cx.notify();
+    }
+    /// Replace a clean editor's paper and form with a newer stored version of the same
+    /// paper, keeping its attachments, viewer, notes and memberships.
+    fn refresh_editor(&mut self, paper: Paper, cx: &mut Context<Self>) {
+        if self.dirty || self.editor.as_ref().map(|p| p.id) != Some(paper.id) {
+            return;
+        }
+        self.draft = PaperDraft {
+            title: paper.title.clone(),
+            external_ids: paper.external_ids.clone(),
+            bibliography: paper.bibliography.clone(),
+            ..Default::default()
+        };
+        let values = crate::details::values(&self.draft);
+        for (field, value) in self.fields.iter().zip(values) {
+            field.update(cx, |f, cx| f.set_text(value, cx));
+        }
+        self.editor = Some(paper);
         cx.notify();
     }
     fn persist(&mut self, cx: &mut Context<Self>) {
