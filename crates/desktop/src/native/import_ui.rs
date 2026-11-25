@@ -434,7 +434,9 @@ impl LibraryView {
                                                 .h(px(36.))
                                                 .flex()
                                                 .items_center()
-                                                .when(has_error, |el| el.text_color(rgb(0xb42318)))
+                                                .when(has_error, |el| {
+                                                    el.text_color(rgb(tok().danger))
+                                                })
                                                 .on_click(cx.listener(move |this, _, _, cx| {
                                                     this.reviews.active.row = index;
                                                     this.merge_target = 0;
@@ -563,7 +565,7 @@ impl LibraryView {
                 div()
                     .mt_3()
                     .p_3()
-                    .bg(rgb(0xf0e9dc))
+                    .bg(rgb(tok().merge_bg))
                     .child(
                         button(
                             ("merge-target", index),
@@ -589,26 +591,22 @@ impl LibraryView {
                     .children(duplicate.differences.iter().enumerate().map(|(n, diff)| {
                         let field = diff.field.clone();
                         let active = self.merge_target == index;
-                        button(
+                        icon_button(
                             ("diff", index * 64 + n),
+                            crate::ui::icons::checkbox(
+                                active && self.merge_fields.contains(&field),
+                            ),
                             format!(
-                                "{} {}\nBEFORE: {}\nAFTER: {}",
-                                if active && self.merge_fields.contains(&field) {
-                                    "☑"
-                                } else {
-                                    "☐"
-                                },
-                                diff.field,
-                                diff.before,
-                                diff.after
+                                "{}\nBEFORE: {}\nAFTER: {}",
+                                diff.field, diff.before, diff.after
                             ),
                             enabled && active,
                         )
                         .w_full()
                         .bg(rgb(if active && self.merge_fields.contains(&field) {
-                            0xffe3ad
+                            tok().merge_field_active
                         } else {
-                            0xf5eee3
+                            tok().merge_field
                         }))
                         .on_click(cx.listener(move |this, _, _, cx| {
                             if this.merge_target != index || this.locked() {

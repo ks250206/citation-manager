@@ -29,6 +29,12 @@ SHIPPED = ('cm-daemon', 'cm-cli', 'cm-mcp', 'cm-native-host')
 FEATURES = ('cm-daemon/desktop-bootstrap',)
 LICENSE_FILE = re.compile(r'^(LICEN[CS]E|COPYING|NOTICE|UNLICENSE|COPYRIGHT|AUTHORS)([-_.].*)?$', re.I)
 DENIED = re.compile(r'\b(A?GPL|LGPL)-')
+# Non-crate assets compiled into the shipped executables (#87): name, version, SPDX
+# expression, upstream, and the license file in this repository that must ship with them.
+VENDORED = (
+    ('Lucide icons', 'lucide-static 0.460.0', 'ISC', 'https://github.com/lucide-icons/lucide',
+     'crates/desktop/assets/icons/lucide/LICENSE'),
+)
 
 
 def cargo_metadata(target):
@@ -95,7 +101,20 @@ def source_of(package):
     return package.get('repository') or source or 'local'
 
 
-def render(packages):
+def vendored_assets(vendored=VENDORED, root=ROOT):
+    """Vendored assets with their license text; fail when a listed license file is missing."""
+    assets = []
+    for name, version, license, upstream, path in vendored:
+        file = Path(root) / path
+        if not file.is_file():
+            raise ValueError(f'{name}: license file {path} is missing')
+        assets.append({'name': name, 'version': version, 'license': license, 'source': upstream,
+                       'license_file': path, 'text': file.read_text(encoding='utf-8').strip() + '\n'})
+    return assets
+
+
+def render(packages, vendored=None):
+    vendored = vendored_assets() if vendored is None else vendored
     texts = {}   # sha256 -> (text, [crate labels])
     rows, without_file, violations = [], [], []
     for package in packages:
@@ -129,11 +148,19 @@ def render(packages):
                   'These crates declare the SPDX license above but ship no license text. The standard',
                   'text of that license applies; it is reproduced below where another crate ships it.', '']
         lines += [f"- {p['name']} {p['version']}: {p.get('license') or '(none declared)'}" for p in without_file]
+    if vendored:
+        lines += ['', f'## Vendored assets ({len(vendored)})', '',
+                  'Compiled into the executables from this repository (not crates).', '']
+        for asset in vendored:
+            lines += [f"### {asset['name']} ({asset['version']}, {asset['license']}, {asset['source']})", '',
+                      '```text', asset['text'].rstrip('\n').replace('```', "'''"), '```']
     lines += ['', '## License texts', '']
     for digest, (text, users) in sorted(texts.items(), key=lambda item: item[1][1][0]):
         lines += [f'### Used by: {", ".join(users)}', '', '```text', text.rstrip('\n').replace('```', "'''"), '```', '']
     summary = {'crates': rows, 'without_license_file': [f"{p['name']} {p['version']}" for p in without_file],
-               'copyleft_only': violations, 'distinct_texts': len(texts)}
+               'copyleft_only': violations, 'distinct_texts': len(texts),
+               'vendored': [{k: a[k] for k in ('name', 'version', 'license', 'source', 'license_file')}
+                            for a in vendored]}
     return '\n'.join(lines) + '\n', summary
 
 

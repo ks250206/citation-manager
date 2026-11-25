@@ -657,10 +657,10 @@ impl LibraryView {
             .mx_3()
             .mb_2()
             .p_2()
-            .rounded_md()
+            .rounded(px(RADIUS.md))
             .border_1()
-            .border_color(rgb(BORDER))
-            .bg(rgb(SURFACE))
+            .border_color(rgb(tok().border))
+            .bg(rgb(tok().surface))
             .overflow_y_scroll()
             .flex()
             .flex_col()
@@ -672,13 +672,17 @@ impl LibraryView {
             list = list.child(
                 div()
                     .p_2()
-                    .rounded_md()
-                    .bg(rgb(0xffe5e5))
+                    .rounded(px(RADIUS.md))
+                    .bg(rgb(tok().error_bg))
                     .flex()
                     .flex_wrap()
                     .items_center()
                     .gap_2()
-                    .child(div().text_color(rgb(0x9b1c1c)).child(message.clone()))
+                    .child(
+                        div()
+                            .text_color(rgb(tok().error_text))
+                            .child(message.clone()),
+                    )
                     .children(corrections.iter().enumerate().map(|(j, (s, e, r))| {
                         let (s, e, r) = (*s, *e, r.clone());
                         button(("search-fix", i * 100 + j), format!("Use “{r}”"), true).on_click(
@@ -695,9 +699,9 @@ impl LibraryView {
                     div()
                         .px_2()
                         .py_1()
-                        .rounded_md()
-                        .bg(rgb(0xfff4d6))
-                        .text_size(px(12.))
+                        .rounded(px(RADIUS.md))
+                        .bg(rgb(tok().warn_bg))
+                        .text_size(px(dims().font_small))
                         .child(note),
                 );
             }
@@ -734,11 +738,11 @@ impl LibraryView {
                 div()
                     .id(("search-hit", i))
                     .p_2()
-                    .rounded_md()
+                    .rounded(px(RADIUS.md))
                     .border_1()
-                    .border_color(rgb(BORDER))
+                    .border_color(rgb(tok().border))
                     .cursor_pointer()
-                    .hover(|s| s.bg(rgb(0xf0f4fa)))
+                    .hover(|s| s.bg(rgb(tok().hover)))
                     .flex()
                     .flex_col()
                     .gap_1()
@@ -761,9 +765,9 @@ impl LibraryView {
                             .child(
                                 div()
                                     .px_2()
-                                    .rounded_md()
-                                    .bg(rgb(SIDEBAR))
-                                    .text_size(px(11.))
+                                    .rounded(px(RADIUS.md))
+                                    .bg(rgb(tok().sidebar))
+                                    .text_size(px(dims().font_caption))
                                     .child(source_label(hit)),
                             )
                             .when(hit.deleted, |el| el.child(hint("in Trash")))
@@ -779,13 +783,13 @@ impl LibraryView {
                         div()
                             .flex()
                             .flex_wrap()
-                            .text_size(px(12.))
-                            .text_color(rgb(MUTED))
+                            .text_size(px(dims().font_small))
+                            .text_color(rgb(tok().muted))
                             .children(snippet_runs(&hit.snippet, &hit.highlights).into_iter().map(
                                 |(text, marked)| {
                                     div()
                                         .when(marked, |el| {
-                                            el.bg(rgb(0xffe38a)).text_color(rgb(TEXT))
+                                            el.bg(rgb(tok().match_bg)).text_color(rgb(tok().text))
                                         })
                                         .child(text.replace(['\r', '\n'], " "))
                                 },

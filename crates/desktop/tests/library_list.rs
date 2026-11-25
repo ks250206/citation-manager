@@ -114,7 +114,7 @@ fn cells_columns_and_header_sorting() {
     assert_eq!(ColumnKind::Title.cell(&p, false), "Line break");
     assert_eq!(ColumnKind::Journal.cell(&p, false), "Nature Energy");
     assert_eq!(ColumnKind::Year.cell(&paper(2), false), "—");
-    assert_eq!(ColumnKind::Pdf.cell(&p, true), "📄");
+    assert_eq!(ColumnKind::Pdf.cell(&p, true), "PDF");
     assert_eq!(ColumnKind::Pdf.cell(&p, false), "");
     assert_eq!(ColumnKind::Added.cell(&p, false), "2026-11-20");
     assert_eq!(ColumnKind::Doi.cell(&p, false), "10.1/x");
@@ -166,6 +166,11 @@ fn cells_columns_and_header_sorting() {
         (SortField::Author, SortDirection::Desc)
     );
     assert_eq!(columns::sort_arrow(Author, flipped), " ▼");
+    assert_eq!(
+        columns::sort_direction(Author, flipped),
+        Some(cm_protocol::library_query::SortDirection::Desc)
+    );
+    assert_eq!(columns::sort_direction(Title, flipped), None);
     assert_eq!(
         columns::next_sort(flipped, SortField::Author).direction,
         SortDirection::Asc

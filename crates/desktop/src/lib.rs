@@ -36,3 +36,5 @@ pub mod library;
 /// #20 Save Current PDF: request/status logic shared by the native host and tests.
 pub mod pdf_export;
 pub mod settings;
+/// #87 design tokens (colour, spacing, radius, font size, shadow), contrast checks and icons.
+pub mod ui;

@@ -13,8 +13,8 @@ impl LibraryView {
                     .flex()
                     .gap_1()
                     .p(px(2.))
-                    .rounded_md()
-                    .bg(rgb(SIDEBAR))
+                    .rounded(px(RADIUS.md))
+                    .bg(rgb(tok().sidebar))
                     .child(
                         nav_item(
                             "switch-organize",
@@ -44,17 +44,17 @@ impl LibraryView {
         let card = || {
             div()
                 .p_4()
-                .rounded_lg()
+                .rounded(px(RADIUS.lg))
                 .border_1()
-                .border_color(rgb(BORDER))
-                .bg(rgb(SURFACE))
+                .border_color(rgb(tok().border))
+                .bg(rgb(tok().surface))
                 .flex()
                 .flex_col()
                 .gap_2()
         };
         let title = |text: &'static str| {
             div()
-                .text_size(px(15.))
+                .text_size(px(dims().font_title))
                 .font_weight(FontWeight::SEMIBOLD)
                 .child(text)
         };
@@ -229,7 +229,7 @@ impl LibraryView {
                             )
                             .child(
                                 button(("delete-collection", i), "Delete", enabled)
-                                    .when(enabled, |b| b.text_color(rgb(0xb42318)))
+                                    .when(enabled, |b| b.text_color(rgb(tok().danger)))
                                     .on_click(cx.listener(move |this, _, _, cx| {
                                         this.organize(OrganizationRequest::DeleteCollection(id), cx)
                                     })),
@@ -265,7 +265,7 @@ impl LibraryView {
                             ))
                             .child(
                                 button(("delete-tag", i), "Delete", enabled)
-                                    .when(enabled, |b| b.text_color(rgb(0xb42318)))
+                                    .when(enabled, |b| b.text_color(rgb(tok().danger)))
                                     .on_click(cx.listener(move |this, _, _, cx| {
                                         this.organize(OrganizationRequest::DeleteTag(id), cx)
                                     })),
@@ -320,10 +320,52 @@ impl LibraryView {
             )
             .child(
                 card()
+                    .id("appearance")
+                    .child(title("Appearance"))
+                    .child(hint(
+                        "Saved with the other settings of this private library. System follows the light or dark appearance of the OS.",
+                    ))
+                    .child(
+                        row()
+                            .child(label("Theme".into()))
+                            .children(ThemeMode::ALL.into_iter().map(|mode| {
+                                nav_item(
+                                    SharedString::from(format!("theme-{}", mode.label())),
+                                    mode.label(),
+                                    self.settings.theme == mode,
+                                )
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    if this.settings.theme != mode {
+                                        this.settings.theme = mode;
+                                        this.persist(cx);
+                                    }
+                                }))
+                            })),
+                    )
+                    .child(
+                        row()
+                            .child(label("Density".into()))
+                            .children(Density::ALL.into_iter().map(|density| {
+                                nav_item(
+                                    SharedString::from(format!("density-{}", density.label())),
+                                    density.label(),
+                                    self.settings.density == density,
+                                )
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    if this.settings.density != density {
+                                        this.settings.density = density;
+                                        this.persist(cx);
+                                    }
+                                }))
+                            })),
+                    ),
+            )
+            .child(
+                card()
                     .child(title("Table & panes"))
                     .child(hint("Saved automatically in this private library."))
                     .child(hint(
-                        "Columns: also from ⚙ Settings › Table columns or by right-clicking a column header. Click a header to sort.",
+                        "Columns: also from Settings › Table columns or by right-clicking a column header. Click a header to sort.",
                     ))
                     .children(self.settings.columns.iter().enumerate().map(|(i, c)| {
                         let kind = crate::columns::ColumnKind::from_name(&c.name);
@@ -331,13 +373,9 @@ impl LibraryView {
                         row()
                             .child(
                                 div().w(px(150.)).child(
-                                    nav_item(
-                                        ("visible", i),
-                                        format!("{} {}", if c.visible { "☑" } else { "☐" }, c.name),
-                                        false,
-                                    )
+                                    check_item(("visible", i), c.visible, c.name.clone())
                                     // Title stays visible so rows remain identifiable.
-                                    .when(fixed, |el| el.cursor_default().text_color(rgb(MUTED)))
+                                    .when(fixed, |el| el.cursor_default().text_color(rgb(tok().muted)))
                                     .on_click(cx.listener(move |this, _, _, cx| {
                                         if let Some(kind) = kind
                                             && crate::columns::toggle(&mut this.settings.columns, kind)
@@ -347,7 +385,7 @@ impl LibraryView {
                                     })),
                                 ),
                             )
-                            .child(button(("narrow", i), "−", c.width > 50).on_click(cx.listener(
+                            .child(icon_button(("narrow", i), Icon::Minus, "", c.width > 50).on_click(cx.listener(
                                 move |this, _, _, cx| {
                                     this.settings.columns[i].width =
                                         this.settings.columns[i].width.saturating_sub(20).max(50);
@@ -355,7 +393,7 @@ impl LibraryView {
                                 },
                             )))
                             .child(div().w(px(64.)).text_center().child(format!("{} px", c.width)))
-                            .child(button(("wide", i), "+", c.width < 800).on_click(cx.listener(
+                            .child(icon_button(("wide", i), Icon::Plus, "", c.width < 800).on_click(cx.listener(
                                 move |this, _, _, cx| {
                                     this.settings.columns[i].width =
                                         (this.settings.columns[i].width + 20).min(800);
@@ -367,7 +405,7 @@ impl LibraryView {
                         row()
                             .child(label("Sidebar width".into()))
                             .child(
-                                button("navigation-narrow", "−", self.settings.navigation_width > 160)
+                                icon_button("navigation-narrow", Icon::Minus, "", self.settings.navigation_width > 160)
                                     .on_click(cx.listener(|this, _, _, cx| {
                                         this.settings.navigation_width =
                                             this.settings.navigation_width.saturating_sub(20).max(160);
@@ -381,7 +419,7 @@ impl LibraryView {
                                     .child(format!("{} px", self.settings.navigation_width)),
                             )
                             .child(
-                                button("navigation-wide", "+", self.settings.navigation_width < 340)
+                                icon_button("navigation-wide", Icon::Plus, "", self.settings.navigation_width < 340)
                                     .on_click(cx.listener(|this, _, _, cx| {
                                         this.settings.navigation_width =
                                             (this.settings.navigation_width + 20).min(340);
@@ -393,7 +431,7 @@ impl LibraryView {
                         row()
                             .child(label("Details width".into()))
                             .child(
-                                button("details-narrow", "−", self.settings.details_width > 300)
+                                icon_button("details-narrow", Icon::Minus, "", self.settings.details_width > 300)
                                     .on_click(cx.listener(|this, _, _, cx| {
                                         this.settings.details_width =
                                             this.settings.details_width.saturating_sub(40).max(300);
@@ -407,7 +445,7 @@ impl LibraryView {
                                     .child(format!("{} px", self.settings.details_width)),
                             )
                             .child(
-                                button("details-wide", "+", self.settings.details_width < 660)
+                                icon_button("details-wide", Icon::Plus, "", self.settings.details_width < 660)
                                     .on_click(cx.listener(|this, _, _, cx| {
                                         this.settings.details_width =
                                             (this.settings.details_width + 40).min(660);
@@ -440,12 +478,17 @@ impl LibraryView {
                                 }),
                             )
                             .child(
-                                button(
+                                icon_button(
                                     "direction",
                                     if self.settings.sort.direction == SortDirection::Asc {
-                                        "▲ Ascending"
+                                        Icon::ChevronUp
                                     } else {
-                                        "▼ Descending"
+                                        Icon::ChevronDown
+                                    },
+                                    if self.settings.sort.direction == SortDirection::Asc {
+                                        "Ascending"
+                                    } else {
+                                        "Descending"
                                     },
                                     true,
                                 )
@@ -466,7 +509,12 @@ impl LibraryView {
                         row().child(
                             button("reset-layout", "Reset layout to defaults", true).on_click(
                                 cx.listener(|this, _, _, cx| {
-                                    this.settings = Settings::default();
+                                    // #87 the layout reset keeps the chosen theme and density.
+                                    this.settings = Settings {
+                                        theme: this.settings.theme,
+                                        density: this.settings.density,
+                                        ..Settings::default()
+                                    };
                                     this.library.query.sort = this.settings.sort;
                                     this.persist(cx);
                                     this.reload(cx);
@@ -487,16 +535,16 @@ impl LibraryView {
         };
         div()
             .p_4()
-            .rounded_lg()
+            .rounded(px(RADIUS.lg))
             .border_1()
-            .border_color(rgb(BORDER))
-            .bg(rgb(SURFACE))
+            .border_color(rgb(tok().border))
+            .bg(rgb(tok().surface))
             .flex()
             .flex_col()
             .gap_2()
             .child(
                 div()
-                    .text_size(px(15.))
+                    .text_size(px(dims().font_title))
                     .font_weight(FontWeight::SEMIBOLD)
                     .child("Keyboard"),
             )
@@ -568,10 +616,10 @@ impl LibraryView {
                 el.child(
                     div()
                         .p_2()
-                        .rounded_md()
-                        .bg(rgb(0xffe5e5))
-                        .text_color(rgb(0x9b1c1c))
-                        .text_size(px(12.))
+                        .rounded(px(RADIUS.md))
+                        .bg(rgb(tok().error_bg))
+                        .text_color(rgb(tok().error_text))
+                        .text_size(px(dims().font_small))
                         .child(
                             "The whole keymap.json was ignored; fix these and Reload. \
                              Unknown commands, duplicate keys and prefix conflicts are rejected.",

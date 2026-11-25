@@ -26,6 +26,10 @@ mod search_ui;
 mod settings_ui;
 mod text_input;
 use self::text_input::TextInput;
+use crate::ui::{
+    icons::Icon,
+    theme::{self, Metrics, Palette, RADIUS, Scheme},
+};
 use crate::{
     attachments::{AttachmentHost, OperationCancels, PdfForm},
     import_dialogs::ReviewSessions,
@@ -425,6 +429,9 @@ impl LibraryView {
             }
         })
         .detach();
+        // #87 "System" follows the OS appearance while the app runs.
+        cx.observe_window_appearance(window, |_, _, cx| cx.notify())
+            .detach();
         view
     }
     fn call<T: Send + 'static>(
@@ -623,7 +630,7 @@ impl LibraryView {
                     } else if !self.keymap_diagnostics.is_empty() {
                         self.status(
                             format!(
-                                "keymap.json ignored ({} problem(s)); using built-in keys. Details: ⚙ Settings › Organize & export › Keyboard",
+                                "keymap.json ignored ({} problem(s)); using built-in keys. Details: Settings › Organize & export › Keyboard",
                                 self.keymap_diagnostics.len()
                             ),
                             true,
@@ -997,23 +1004,86 @@ impl LibraryView {
         cx.notify();
     }
 }
-// Shared palette. Kept in one place so screens read as one app.
-const ACCENT: u32 = 0x3b73d9;
-const ACCENT_SOFT: u32 = 0xdde8fb;
-const ACCENT_TEXT: u32 = 0x163c80;
-const SURFACE: u32 = 0xffffff;
-const CANVAS: u32 = 0xf5f6f8;
-const SIDEBAR: u32 = 0xeef1f5;
-const BORDER: u32 = 0xd5dce5;
-const MUTED: u32 = 0x5f6b7c;
-const TEXT: u32 = 0x1c2533;
+// #87 design tokens. The scheme and density are chosen once per frame in `render` (from the
+// settings and the window appearance) and read by every helper below, so a theme switch is
+// one re-render. GPUI renders on the main thread only.
+thread_local! {
+    static ACTIVE_THEME: std::cell::Cell<(Scheme, Density)> =
+        const { std::cell::Cell::new((Scheme::Light, Density::Comfortable)) };
+}
+/// Colour tokens of the active scheme.
+fn tok() -> &'static Palette {
+    ACTIVE_THEME.with(|t| t.get().0.palette())
+}
+/// Spacing and font-size tokens of the active density.
+fn dims() -> Metrics {
+    theme::metrics(ACTIVE_THEME.with(|t| t.get().1))
+}
+fn activate_theme(settings: &Settings, window: &Window) {
+    let dark = matches!(
+        window.appearance(),
+        WindowAppearance::Dark | WindowAppearance::VibrantDark
+    );
+    let scheme = theme::resolve(settings.theme, dark);
+    ACTIVE_THEME.with(|t| t.set((scheme, settings.density)));
+}
+/// Shadow of floating surfaces (menus, palette, PDF pages).
+fn floating_shadow() -> Vec<BoxShadow> {
+    let s = theme::shadow(ACTIVE_THEME.with(|t| t.get().0));
+    vec![BoxShadow {
+        color: rgba(s.color_rgba).into(),
+        offset: point(px(0.), px(s.offset_y)),
+        blur_radius: px(s.blur),
+        spread_radius: px(0.),
+        inset: false,
+    }]
+}
+/// The vendored SVG icons, compiled in and served to GPUI's `svg()` element.
+struct IconAssets;
+impl AssetSource for IconAssets {
+    fn load(&self, path: &str) -> Result<Option<std::borrow::Cow<'static, [u8]>>> {
+        Ok(crate::ui::icons::load(path).map(std::borrow::Cow::Borrowed))
+    }
+    fn list(&self, path: &str) -> Result<Vec<SharedString>> {
+        Ok(Icon::ALL
+            .iter()
+            .map(|i| i.path())
+            .filter(|p| p.starts_with(path))
+            .map(SharedString::from)
+            .collect())
+    }
+}
+/// An icon tinted with `color` (an opaque token), sized for the active density.
+fn icon(which: Icon, color: u32) -> Svg {
+    svg()
+        .path(which.path())
+        .flex_none()
+        .size(px(dims().icon))
+        .text_color(rgb(color))
+}
 /// Secondary action. Disabled buttons look inert and do not show a pointer.
 fn button(
     id: impl Into<ElementId>,
     label: impl Into<SharedString>,
     enabled: bool,
 ) -> Stateful<Div> {
-    styled_button(id, label.into(), enabled, false)
+    styled_button(id, None, Some(label.into()), enabled, false)
+}
+/// Secondary action led by an icon (`label` may be empty for an icon-only button).
+fn icon_button(
+    id: impl Into<ElementId>,
+    which: Icon,
+    label: impl Into<SharedString>,
+    enabled: bool,
+) -> Stateful<Div> {
+    let label: SharedString = label.into();
+    styled_button(
+        id,
+        Some(which),
+        (!label.is_empty()).then_some(label),
+        enabled,
+        false,
+    )
 }
 /// The main action of a screen.
 fn primary_button(
@@ -1021,25 +1091,56 @@ fn primary_button(
     label: impl Into<SharedString>,
     enabled: bool,
 ) -> Stateful<Div> {
-    styled_button(id, label.into(), enabled, true)
+    styled_button(id, None, Some(label.into()), enabled, true)
+}
+/// The main action of a screen, led by an icon.
+fn primary_icon_button(
+    id: impl Into<ElementId>,
+    which: Icon,
+    label: impl Into<SharedString>,
+    enabled: bool,
+) -> Stateful<Div> {
+    styled_button(id, Some(which), Some(label.into()), enabled, true)
 }
 // GPUI accepts one hover/active refinement per element, so pick the variant once.
 fn styled_button(
     id: impl Into<ElementId>,
-    label: SharedString,
+    which: Option<Icon>,
+    label: Option<SharedString>,
     enabled: bool,
     primary: bool,
 ) -> Stateful<Div> {
+    let t = tok();
     let (bg, border, text, hover, active) = match (enabled, primary) {
-        (false, _) => (0xf2f3f5, 0xe1e5ea, 0x9aa3af, 0, 0),
-        (true, false) => (SURFACE, 0xc3cfe0, ACCENT_TEXT, 0xeef3fd, ACCENT_SOFT),
-        (true, true) => (ACCENT, ACCENT, SURFACE, 0x2f62c2, 0x2654a8),
+        (false, _) => (t.disabled_bg, t.disabled_border, t.disabled_text, 0, 0),
+        (true, false) => (
+            t.surface,
+            t.button_border,
+            t.accent_text,
+            t.button_hover,
+            t.accent_soft,
+        ),
+        (true, true) => (
+            t.accent,
+            t.accent,
+            t.on_accent,
+            t.accent_hover,
+            t.accent_pressed,
+        ),
     };
+    let m = dims();
     div()
         .id(id)
-        .px_3()
-        .py_1()
-        .rounded_md()
+        .flex()
+        .items_center()
+        .gap_1()
+        .px(px(if label.is_some() {
+            m.control_px
+        } else {
+            m.control_py + 4.
+        }))
+        .py(px(m.control_py))
+        .rounded(px(RADIUS.md))
         .border_1()
         .whitespace_nowrap()
         .border_color(rgb(border))
@@ -1050,7 +1151,8 @@ fn styled_button(
                 .hover(move |s| s.bg(rgb(hover)))
                 .active(move |s| s.bg(rgb(active)))
         })
-        .child(label)
+        .when_some(which, |b, which| b.child(icon(which, text)))
+        .children(label)
 }
 /// Selectable list/tab item: flat until hovered, filled when active.
 fn nav_item(
@@ -1061,19 +1163,50 @@ fn nav_item(
     div()
         .id(id)
         .px_2()
-        .py_1()
-        .rounded_md()
+        .py(px(dims().item_py))
+        .rounded(px(RADIUS.md))
         .cursor_pointer()
         .overflow_hidden()
         .text_ellipsis()
         .whitespace_nowrap()
         .when(active, |b| {
-            b.bg(rgb(ACCENT_SOFT))
-                .text_color(rgb(ACCENT_TEXT))
+            b.bg(rgb(tok().accent_soft))
+                .text_color(rgb(tok().accent_text))
                 .font_weight(FontWeight::SEMIBOLD)
         })
-        .when(!active, |b| b.hover(|s| s.bg(rgb(0xe2e7ee))))
+        .when(!active, |b| b.hover(|s| s.bg(rgb(tok().nav_hover))))
         .child(label.into())
+}
+/// A navigation item led by an icon.
+fn nav_icon_item(
+    id: impl Into<ElementId>,
+    which: Icon,
+    label: impl Into<SharedString>,
+    active: bool,
+) -> Stateful<Div> {
+    let color = if active {
+        tok().accent_text
+    } else {
+        tok().muted
+    };
+    nav_item(id, "", active).child(
+        div()
+            .flex()
+            .items_center()
+            .gap_2()
+            .child(icon(which, color))
+            .child(
+                div()
+                    .min_w_0()
+                    .overflow_hidden()
+                    .text_ellipsis()
+                    .child(label.into()),
+            ),
+    )
+}
+/// A checkbox-style toggle row: square / checked square icon and a label.
+fn check_item(id: impl Into<ElementId>, on: bool, label: impl Into<SharedString>) -> Stateful<Div> {
+    nav_icon_item(id, crate::ui::icons::checkbox(on), label, false)
 }
 /// Small uppercase group heading.
 fn section(text: impl Into<SharedString>) -> Div {
@@ -1081,9 +1214,9 @@ fn section(text: impl Into<SharedString>) -> Div {
         .mt_3()
         .mb_1()
         .px_2()
-        .text_size(px(11.))
+        .text_size(px(dims().font_caption))
         .font_weight(FontWeight::SEMIBOLD)
-        .text_color(rgb(MUTED))
+        .text_color(rgb(tok().muted))
         .child(text.into())
 }
 /// Shortcut label for the primary modifier: ⌘ on macOS, Ctrl elsewhere.
@@ -1098,8 +1231,8 @@ fn shortcut(key: &str) -> String {
 /// Secondary explanatory text.
 fn hint(text: impl Into<SharedString>) -> Div {
     div()
-        .text_size(px(12.))
-        .text_color(rgb(MUTED))
+        .text_size(px(dims().font_small))
+        .text_color(rgb(tok().muted))
         .child(text.into())
 }
 fn line(text: impl Into<SharedString>) -> Div {
@@ -1180,33 +1313,36 @@ impl LibraryView {
         .into_iter()
         .any(|lane| self.busy(lane));
         let (bg, fg) = if self.error {
-            (0xffe5e5, 0x9b1c1c)
+            (tok().error_bg, tok().error_text)
         } else if self.dirty {
-            (0xfff4d6, 0x6b4e00)
+            (tok().warn_bg, tok().warn_text)
         } else {
-            (SIDEBAR, TEXT)
+            (tok().sidebar, tok().text)
         };
         div()
-            .h(px(34.))
+            .h(px(dims().bar_height))
             .flex_shrink_0()
             .flex()
             .items_center()
             .gap_2()
             .px_4()
             .border_t_1()
-            .border_color(rgb(BORDER))
+            .border_color(rgb(tok().border))
             .bg(rgb(bg))
             .text_color(rgb(fg))
-            .text_size(px(12.))
-            .child(if self.error {
-                "⚠"
-            } else if busy {
-                "⏳"
-            } else if self.dirty {
-                "✎"
-            } else {
-                "●"
-            })
+            .text_size(px(dims().font_small))
+            .child(icon(
+                if self.error {
+                    Icon::TriangleAlert
+                } else if busy {
+                    Icon::Hourglass
+                } else if self.dirty {
+                    Icon::Pencil
+                } else {
+                    Icon::CircleDot
+                },
+                fg,
+            ))
             .child(
                 div()
                     .flex_1()
@@ -1233,7 +1369,7 @@ impl LibraryView {
             .when(!self.dirty, |el| {
                 el.child(
                     div()
-                        .text_color(rgb(MUTED))
+                        .text_color(rgb(tok().muted))
                         .whitespace_nowrap()
                         .child(format!(
                             "{} commands · {} new · {} search · ↑↓ select (⇧ extends) · ⇧F10 actions · ↩ edit · {} save",
@@ -1248,6 +1384,7 @@ impl LibraryView {
 }
 impl Render for LibraryView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        activate_theme(&self.settings, window);
         // Switching screen/tab unmounts whatever field had focus; with no focused
         // descendant no "Library" binding (Esc, shortcuts) would fire. Hand focus
         // to the table on Library, else to the root. Find opts out by updating
@@ -1305,11 +1442,14 @@ impl Render for LibraryView {
                     .flex_1()
                     .overflow_y_scroll()
                     .p_4()
-                    .child(div().mb_3().child(
-                        button("report-back", "← Back to library", true).on_click(
-                            cx.listener(|this, _, w, cx| this.show(Screen::Library, w, cx)),
+                    .child(
+                        div().mb_3().child(
+                            icon_button("report-back", Icon::ArrowLeft, "Back to library", true)
+                                .on_click(
+                                    cx.listener(|this, _, w, cx| this.show(Screen::Library, w, cx)),
+                                ),
                         ),
-                    ))
+                    )
                     .children(self.diagnostics.iter().cloned().map(line))
                     .into_any_element(),
             })
@@ -1322,29 +1462,31 @@ impl Render for LibraryView {
         div()
             .size_full()
             .relative()
-            .bg(rgb(CANVAS))
-            .text_color(rgb(TEXT))
+            .bg(rgb(tok().canvas))
+            .text_color(rgb(tok().text))
             .font_family(".SystemUIFont")
-            .text_size(px(13.))
+            .text_size(px(dims().font_body))
             .child(workbench)
             .when(self.palette_open, |el| el.child(self.palette_overlay(cx)))
             .children(menu)
     }
 }
 pub fn run(client: Arc<dyn LibraryClient>) {
-    gpui_platform::application().run(move |cx: &mut App| {
-        cx.bind_keys(text_input::key_bindings());
-        cx.bind_keys(key_bindings());
-        cx.on_action(|_: &Quit, cx| cx.quit());
-        cx.on_window_closed(|cx, _| {
-            if cx.windows().is_empty() {
-                cx.quit();
-            }
-        })
-        .detach();
-        let bounds = Bounds::centered(None, size(px(1320.), px(860.)), cx);
-        open_main_window(client, bounds, cx);
-    });
+    gpui_platform::application()
+        .with_assets(IconAssets)
+        .run(move |cx: &mut App| {
+            cx.bind_keys(text_input::key_bindings());
+            cx.bind_keys(key_bindings());
+            cx.on_action(|_: &Quit, cx| cx.quit());
+            cx.on_window_closed(|cx, _| {
+                if cx.windows().is_empty() {
+                    cx.quit();
+                }
+            })
+            .detach();
+            let bounds = Bounds::centered(None, size(px(1320.), px(860.)), cx);
+            open_main_window(client, bounds, cx);
+        });
 }
 fn key_bindings() -> Vec<KeyBinding> {
     vec![

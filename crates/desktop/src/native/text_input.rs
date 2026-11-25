@@ -7,10 +7,12 @@ use gpui::{
     App, Bounds, ClipboardItem, Context, CursorStyle, ElementId, ElementInputHandler, Entity,
     EntityInputHandler, FocusHandle, Focusable, GlobalElementId, KeyBinding, LayoutId, MouseButton,
     MouseDownEvent, MouseMoveEvent, MouseUpEvent, PaintQuad, Pixels, Point, ShapedLine,
-    SharedString, Style, TextRun, UTF16Selection, UnderlineStyle, Window, actions, div, fill, hsla,
+    SharedString, Style, TextRun, UTF16Selection, UnderlineStyle, Window, actions, div, fill,
     point, prelude::*, px, relative, rgb, rgba, size,
 };
 use unicode_segmentation::*;
+
+use super::{RADIUS, dims, tok};
 
 /// Preserve byte/UTF-16 offsets and stored content while drawing a single line.
 fn display_line(content: &str) -> SharedString {
@@ -586,7 +588,10 @@ impl Element for TextElement {
         let style = window.text_style();
 
         let (display_text, text_color) = if content.is_empty() {
-            (input.placeholder.clone(), hsla(0., 0., 0., 0.2))
+            (
+                input.placeholder.clone(),
+                rgba(tok().placeholder_rgba).into(),
+            )
         } else {
             (content, style.color)
         };
@@ -649,7 +654,7 @@ impl Element for TextElement {
                         point(bounds.left() + cursor_pos, bounds.top()),
                         size(px(2.), bounds.bottom() - bounds.top()),
                     ),
-                    gpui::blue(),
+                    rgb(tok().accent),
                 )),
             )
         } else {
@@ -665,7 +670,7 @@ impl Element for TextElement {
                             bounds.bottom(),
                         ),
                     ),
-                    rgba(0x3311ff30),
+                    rgba(tok().text_selection_rgba),
                 )),
                 None,
             )
@@ -752,19 +757,31 @@ impl Render for TextInput {
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_mouse_up_out(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_mouse_move(cx.listener(Self::on_mouse_move))
-            .line_height(px(22.))
-            .text_size(px(14.))
+            .line_height(px(dims().field_height - 10.))
+            .text_size(px(dims().font_body + 1.))
             .child(
                 div()
-                    .h(px(32.))
+                    .h(px(dims().field_height))
                     .w_full()
                     .px(px(8.))
                     .py(px(4.))
-                    .rounded_md()
+                    .rounded(px(RADIUS.md))
                     .border_1()
-                    .border_color(rgb(if focused { 0x3b73d9 } else { 0xc9d1dc }))
-                    .bg(rgb(if self.enabled { 0xffffff } else { 0xf0f2f5 }))
-                    .text_color(rgb(if self.enabled { 0x1c2533 } else { 0x7a8494 }))
+                    .border_color(rgb(if focused {
+                        tok().accent
+                    } else {
+                        tok().input_border
+                    }))
+                    .bg(rgb(if self.enabled {
+                        tok().surface
+                    } else {
+                        tok().input_disabled_bg
+                    }))
+                    .text_color(rgb(if self.enabled {
+                        tok().text
+                    } else {
+                        tok().input_disabled_text
+                    }))
                     .child(TextElement { input: cx.entity() }),
             )
     }

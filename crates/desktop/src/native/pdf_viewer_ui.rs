@@ -544,8 +544,8 @@ impl LibraryView {
             .px_2()
             .py_1()
             .border_b_1()
-            .border_color(rgb(BORDER))
-            .bg(rgb(0xf8f9fb))
+            .border_color(rgb(tok().border))
+            .bg(rgb(tok().surface_alt))
             .child(button("pdf-prev", "‹", current > 0).on_click(
                 cx.listener(move |this, _, _, cx| this.viewer_jump(current.saturating_sub(1), cx)),
             ))
@@ -560,11 +560,15 @@ impl LibraryView {
                     .on_click(cx.listener(move |this, _, _, cx| this.viewer_jump(current + 1, cx))),
             )
             .child(
-                button("pdf-zoom-out", "−", scale > pdf_viewer::MIN_SCALE).on_click(cx.listener(
-                    move |this, _, _, cx| {
-                        this.viewer_zoom(ZoomMode::Scale(step_zoom(scale, false)), cx)
-                    },
-                )),
+                icon_button(
+                    "pdf-zoom-out",
+                    Icon::Minus,
+                    "",
+                    scale > pdf_viewer::MIN_SCALE,
+                )
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.viewer_zoom(ZoomMode::Scale(step_zoom(scale, false)), cx)
+                })),
             )
             .child(
                 hint(format!("{:.0}%", scale * 100.0))
@@ -572,11 +576,11 @@ impl LibraryView {
                     .text_center(),
             )
             .child(
-                button("pdf-zoom-in", "+", scale < pdf_viewer::MAX_SCALE).on_click(cx.listener(
-                    move |this, _, _, cx| {
+                icon_button("pdf-zoom-in", Icon::Plus, "", scale < pdf_viewer::MAX_SCALE).on_click(
+                    cx.listener(move |this, _, _, cx| {
                         this.viewer_zoom(ZoomMode::Scale(step_zoom(scale, true)), cx)
-                    },
-                )),
+                    }),
+                ),
             )
             .child(
                 nav_item("pdf-fit-width", "Width", v.mode == ZoomMode::FitWidth).on_click(
@@ -589,7 +593,7 @@ impl LibraryView {
                 ),
             )
             .child(
-                button("pdf-rotate", "⟳", true)
+                icon_button("pdf-rotate", Icon::RotateCw, "", true)
                     .on_click(cx.listener(|this, _, _, cx| this.viewer_rotate(cx))),
             )
             .child(
@@ -615,7 +619,11 @@ impl LibraryView {
                         .flex()
                         .flex_col()
                         .gap_2()
-                        .child(div().text_color(rgb(0x9b1c1c)).child(failure.to_string()))
+                        .child(
+                            div()
+                                .text_color(rgb(tok().error_text))
+                                .child(failure.to_string()),
+                        )
                         .child(hint(
                             "The paper's bibliographic data and other attachments are unaffected.",
                         )),
@@ -656,9 +664,9 @@ impl LibraryView {
                                         .w(px(b.width().abs()))
                                         .h(px(b.height().abs()))
                                         .bg(rgba(if find_current_page == Some(page) {
-                                            0xff8c0088
+                                            tok().find_current_rgba
                                         } else {
-                                            0xffb34755
+                                            tok().find_hit_rgba
                                         }))
                                 })
                                 .collect(),
@@ -706,7 +714,7 @@ impl LibraryView {
                                                 .h(px(b.height().abs()))
                                                 .bg(rgba((color << 8) | 0x66))
                                                 .when(chosen, |el| {
-                                                    el.border_b_2().border_color(rgb(ACCENT))
+                                                    el.border_b_2().border_color(rgb(tok().accent))
                                                 })
                                         })
                                         .collect::<Vec<_>>()
@@ -724,13 +732,17 @@ impl LibraryView {
                                         .flex()
                                         .items_center()
                                         .justify_center()
-                                        .rounded_md()
-                                        .bg(rgb(0xfff4d6))
+                                        .rounded(px(RADIUS.md))
+                                        .bg(rgb(tok().warn_bg))
                                         .border_1()
-                                        .border_color(rgb(if chosen { ACCENT } else { 0xf0d58a }))
-                                        .text_size(px(11.))
+                                        .border_color(rgb(if chosen {
+                                            tok().accent
+                                        } else {
+                                            tok().note_border
+                                        }))
+                                        .text_size(px(dims().font_caption))
                                         .cursor_pointer()
-                                        .child("📝")
+                                        .child(icon(Icon::StickyNote, tok().warn_text))
                                 },
                             );
                             highlights.chain(markers).collect()
@@ -755,7 +767,7 @@ impl LibraryView {
                                             .top(px(b.bottom.min(b.top)))
                                             .w(px(b.width().abs()))
                                             .h(px(b.height().abs()))
-                                            .bg(rgba(0x3b73d955))
+                                            .bg(rgba(tok().pdf_selection_rgba))
                                     })
                                     .collect(),
                                 _ => vec![],
@@ -769,10 +781,10 @@ impl LibraryView {
                     .left(px(((pane_w - width) / 2.0).max(0.0)))
                     .w(px(width))
                     .h(px(height))
-                    .bg(rgb(SURFACE))
+                    .bg(rgb(tok().surface))
                     .border_1()
-                    .border_color(rgb(BORDER))
-                    .shadow_sm()
+                    .border_color(rgb(tok().border))
+                    .shadow(floating_shadow())
                     .child(match image {
                         Some(image) => img(ImageSource::Render(image))
                             .w(px(width))
@@ -798,10 +810,10 @@ impl LibraryView {
                                 .top_1()
                                 .right_1()
                                 .px_2()
-                                .rounded_md()
-                                .bg(rgba(0x1c253399))
-                                .text_color(rgb(SURFACE))
-                                .text_size(px(11.))
+                                .rounded(px(RADIUS.md))
+                                .bg(rgba(tok().badge_rgba))
+                                .text_color(rgb(tok().on_accent))
+                                .text_size(px(dims().font_caption))
                                 .child("Image-only page: no selectable text"),
                         )
                     })
@@ -836,7 +848,7 @@ impl LibraryView {
                     .min_h_0()
                     .overflow_scroll()
                     .track_scroll(&v.scroll)
-                    .bg(rgb(0xe7e9ed))
+                    .bg(rgb(tok().pdf_canvas))
                     .on_scroll(cx.listener(|_, _, _, cx| cx.notify()))
                     .on_mouse_down(
                         MouseButton::Left,
@@ -957,7 +969,7 @@ impl LibraryView {
                 .px_2()
                 .py_1()
                 .border_b_1()
-                .border_color(rgb(BORDER))
+                .border_color(rgb(tok().border))
                 .child(self.color_swatches(
                     "pdf-hl-color",
                     Some(self.ann.color),
@@ -971,22 +983,24 @@ impl LibraryView {
                     primary_button("pdf-highlight", "Highlight", has_selection)
                         .on_click(cx.listener(|this, _, _, cx| this.highlight_selection(cx))),
                 )
-                .child(button("pdf-note", "＋ Note", true).on_click(cx.listener(
-                    |this, _, window, cx| {
-                        this.ann.note_open = !this.ann.note_open;
-                        if this.ann.note_open {
-                            this.ann.note.focus_handle(cx).focus(window, cx);
-                        }
-                        cx.notify();
-                    },
-                )))
+                .child(
+                    icon_button("pdf-note", Icon::Plus, "Note", true).on_click(cx.listener(
+                        |this, _, window, cx| {
+                            this.ann.note_open = !this.ann.note_open;
+                            if this.ann.note_open {
+                                this.ann.note.focus_handle(cx).focus(window, cx);
+                            }
+                            cx.notify();
+                        },
+                    )),
+                )
                 .child(div().flex_1())
                 .child(
-                    button("pdf-undo", "↶", self.ann_can_undo())
+                    icon_button("pdf-undo", Icon::Undo, "", self.ann_can_undo())
                         .on_click(cx.listener(|this, _, _, cx| this.ann_undo(cx))),
                 )
                 .child(
-                    button("pdf-redo", "↷", self.ann_can_redo())
+                    icon_button("pdf-redo", Icon::Redo, "", self.ann_can_redo())
                         .on_click(cx.listener(|this, _, _, cx| this.ann_redo(cx))),
                 ),
         ];
@@ -999,7 +1013,7 @@ impl LibraryView {
                     .px_2()
                     .py_1()
                     .border_b_1()
-                    .border_color(rgb(BORDER))
+                    .border_color(rgb(tok().border))
                     .child(hint(format!("Note on p. {}", current + 1)))
                     .child(div().flex_1().child(self.ann.note.clone()))
                     .child(primary_button("pdf-note-save", "Add", true).on_click(
@@ -1022,8 +1036,8 @@ impl LibraryView {
                     .px_2()
                     .py_1()
                     .border_b_1()
-                    .border_color(rgb(BORDER))
-                    .bg(rgb(0xfffbea))
+                    .border_color(rgb(tok().border))
+                    .bg(rgb(tok().note_bg))
                     .child(hint(match page_of(a) {
                         Some(p) => format!("Selected · p. {}", p + 1),
                         None => "Selected · unresolved".into(),
@@ -1076,11 +1090,11 @@ impl LibraryView {
                     )
                     .child(
                         button("pdf-ann-delete", "Delete", true)
-                            .text_color(rgb(0xb42318))
+                            .text_color(rgb(tok().danger))
                             .on_click(cx.listener(move |this, _, _, _| this.ann_delete(id))),
                     )
                     .child(
-                        button("pdf-ann-close", "✕", true)
+                        icon_button("pdf-ann-close", Icon::X, "", true)
                             .on_click(cx.listener(|this, _, _, cx| this.ann_select(None, cx))),
                     ),
             );
@@ -1095,23 +1109,30 @@ impl LibraryView {
             .px_2()
             .py_1()
             .border_b_1()
-            .border_color(rgb(BORDER))
+            .border_color(rgb(tok().border))
             .child(div().w(px(200.)).child(self.find.input.clone()))
             .child(
-                button("find-prev", "↑", !self.find.pages.is_empty())
+                icon_button("find-prev", Icon::ArrowUp, "", !self.find.pages.is_empty())
                     .on_click(cx.listener(|this, _, _, cx| this.find_step(false, cx))),
             )
             .child(
-                button("find-next", "↓", !self.find.pages.is_empty())
-                    .on_click(cx.listener(|this, _, _, cx| this.find_step(true, cx))),
+                icon_button(
+                    "find-next",
+                    Icon::ArrowDown,
+                    "",
+                    !self.find.pages.is_empty(),
+                )
+                .on_click(cx.listener(|this, _, _, cx| this.find_step(true, cx))),
             )
             .child(hint(self.find.status.clone()).flex_1())
             .child(
-                button("find-close", "✕", true).on_click(cx.listener(|this, _, _, cx| {
-                    this.find.open = false;
-                    this.reset_find();
-                    cx.notify();
-                })),
+                icon_button("find-close", Icon::X, "", true).on_click(cx.listener(
+                    |this, _, _, cx| {
+                        this.find.open = false;
+                        this.reset_find();
+                        cx.notify();
+                    },
+                )),
             )
     }
     pub(super) fn show_pdf_tab(&mut self, cx: &mut Context<Self>) {

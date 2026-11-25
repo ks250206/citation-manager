@@ -78,6 +78,16 @@ class Notices(unittest.TestCase):
         self.assertIn('| no-file | 1.0.0 | Zlib | crates.io |', document)
         self.assertIn('licenses/pdfium/', document)
         self.assertNotIn('dev-only', document)
+        # #87: the vendored Lucide icons ship their ISC license in the same document.
+        self.assertIn('## Vendored assets (1)', document)
+        self.assertIn('### Lucide icons (lucide-static 0.460.0, ISC,', document)
+        self.assertIn('ISC License', document)
+        self.assertEqual(summary['vendored'][0]['license_file'], 'crates/desktop/assets/icons/lucide/LICENSE')
+
+    def test_a_vendored_asset_without_its_license_file_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ValueError, 'license file'):
+                notices.vendored_assets((('Icons', '1', 'ISC', 'x', 'missing/LICENSE'),), Path(directory))
 
     def test_copyleft_only_or_undeclared_licenses_are_flagged(self):
         self.assertTrue(notices.only_copyleft('GPL-3.0-only'))

@@ -65,6 +65,8 @@ pub(super) const CONNECTED: &[&str] = &[
     wb::READING,
     wb::EXPORT,
     wb::TOGGLE_VIM,
+    wb::CYCLE_THEME,
+    wb::TOGGLE_DENSITY,
     wb::RELOAD_KEYMAP,
     wb::COPY_DEFAULT_KEYMAP,
     api_ids::OPEN_SETTINGS,
@@ -381,6 +383,20 @@ impl LibraryView {
                     cx,
                 );
             }
+            wb::CYCLE_THEME => {
+                self.settings.theme = crate::ui::theme::next_theme(self.settings.theme);
+                self.persist(cx);
+                self.status(format!("Theme: {}", self.settings.theme.label()), false, cx);
+            }
+            wb::TOGGLE_DENSITY => {
+                self.settings.density = crate::ui::theme::other_density(self.settings.density);
+                self.persist(cx);
+                self.status(
+                    format!("Density: {}", self.settings.density.label()),
+                    false,
+                    cx,
+                );
+            }
             wb::TOGGLE_VIM => {
                 self.settings.vim = !self.settings.vim;
                 self.persist(cx);
@@ -569,7 +585,7 @@ impl LibraryView {
             .top_0()
             .left_0()
             .size_full()
-            .bg(rgba(0x0f172a40))
+            .bg(rgba(tok().scrim_rgba))
             .flex()
             .justify_center()
             .items_start()
@@ -594,17 +610,17 @@ impl LibraryView {
                     .w(px(620.))
                     .flex()
                     .flex_col()
-                    .rounded_lg()
+                    .rounded(px(RADIUS.lg))
                     .border_1()
-                    .border_color(rgb(BORDER))
-                    .bg(rgb(SURFACE))
-                    .shadow_lg()
+                    .border_color(rgb(tok().border))
+                    .bg(rgb(tok().surface))
+                    .shadow(floating_shadow())
                     .overflow_hidden()
                     .child(
                         div()
                             .p_2()
                             .border_b_1()
-                            .border_color(rgb(BORDER))
+                            .border_color(rgb(tok().border))
                             .child(self.palette_query.clone()),
                     )
                     .child(
@@ -626,13 +642,13 @@ impl LibraryView {
                                     .mx_1()
                                     .px_3()
                                     .py_1()
-                                    .rounded_md()
+                                    .rounded(px(RADIUS.md))
                                     .flex()
                                     .items_center()
                                     .gap_3()
                                     .cursor_pointer()
-                                    .when(i == selected, |el| el.bg(rgb(ACCENT_SOFT)))
-                                    .when(i != selected, |el| el.hover(|s| s.bg(rgb(0xf0f4fa))))
+                                    .when(i == selected, |el| el.bg(rgb(tok().accent_soft)))
+                                    .when(i != selected, |el| el.hover(|s| s.bg(rgb(tok().hover))))
                                     .child(
                                         div()
                                             .flex_1()
@@ -642,9 +658,9 @@ impl LibraryView {
                                             .child(
                                                 div()
                                                     .text_color(rgb(if disabled.is_some() {
-                                                        0x9aa3af
+                                                        tok().disabled_text
                                                     } else {
-                                                        TEXT
+                                                        tok().text
                                                     }))
                                                     .font_weight(if i == selected {
                                                         FontWeight::SEMIBOLD
@@ -666,10 +682,10 @@ impl LibraryView {
                                         el.child(
                                             div()
                                                 .px_2()
-                                                .rounded_md()
-                                                .bg(rgb(SIDEBAR))
-                                                .text_size(px(11.))
-                                                .text_color(rgb(MUTED))
+                                                .rounded(px(RADIUS.md))
+                                                .bg(rgb(tok().sidebar))
+                                                .text_size(px(dims().font_caption))
+                                                .text_color(rgb(tok().muted))
                                                 .whitespace_nowrap()
                                                 .child(keys),
                                         )
@@ -689,7 +705,7 @@ impl LibraryView {
                             .px_3()
                             .py_1()
                             .border_t_1()
-                            .border_color(rgb(BORDER))
+                            .border_color(rgb(tok().border))
                             .child(hint(
                                 "↑↓ choose · ↩ run · esc close · recent commands first",
                             )),
