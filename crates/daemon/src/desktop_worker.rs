@@ -470,6 +470,16 @@ impl Worker<'_> {
             }
             Format::Ris => service.export(request.selection, &cm_metadata::ris::RisSerializer)?,
         };
+        // #26: bounded exports; nothing is created when a cap is exceeded.
+        if report.records > cm_core::policy::export::MAX_EXPORT_RECORDS
+            || report.text.len() > cm_core::policy::export::MAX_EXPORT_BYTES
+        {
+            return Err(ServiceError::InvalidInput(format!(
+                "export exceeds {} records or {} MiB; export a collection or selection instead",
+                cm_core::policy::export::MAX_EXPORT_RECORDS,
+                cm_core::policy::export::MAX_EXPORT_BYTES / (1024 * 1024)
+            )));
+        }
         files::write_new(&request.path, report.text.as_bytes())?;
         Ok(Exported {
             path: request.path,

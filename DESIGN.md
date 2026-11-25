@@ -184,7 +184,7 @@ Infrastructure
 | `fulltext_pages` | id, attachment_id, page_index, text, extraction_status, updated_at |
 | `annotations` | id, attachment_id, page_index, type, quote_text, context_before, context_after, quads_json, color, comment, created_at, updated_at |
 | `jobs` | id, type, payload_json, state, progress, attempts, last_error, created_at, updated_at |
-| `api_tokens` | id, name, token_hash, scopes_json, created_at, revoked_at |
+| `daemon_grants` | id, token_sha256, label, capabilities_json, client_kind, scopes_json, expires_at_ms, revoked_at_ms（#26: 当初案の `api_tokens` は廃止し #25 の grant に統合） |
 | `schema_migrations` | version, applied_at |
 
 ### 6.2 主要な制約

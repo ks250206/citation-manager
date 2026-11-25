@@ -27,19 +27,19 @@ use std::{
 pub struct App {
     pub gateway: Gateway,
     pub config: Arc<RestConfig>,
-    /// The bound port (the only one the Host check accepts).
-    pub port: u16,
+    /// The bound address (the Host check accepts only it and `localhost` with its port).
+    pub addr: std::net::SocketAddr,
     pub in_flight: Arc<tokio::sync::Semaphore>,
     pub log: LogSink,
 }
 impl App {
-    pub fn new(gateway: Gateway, config: &RestConfig, port: u16) -> Self {
+    pub fn new(gateway: Gateway, config: &RestConfig, addr: std::net::SocketAddr) -> Self {
         Self {
             gateway,
             in_flight: Arc::new(tokio::sync::Semaphore::new(config.limits.max_in_flight)),
             log: config.sink(),
             config: Arc::new(config.clone()),
-            port,
+            addr,
         }
     }
 }

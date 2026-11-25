@@ -2,6 +2,7 @@
 //! (DNS rebinding, browser origins), optional CORS for configured origins, URI limit,
 //! concurrency limit, per-request timeout, uniform JSON errors and the content-free log line.
 use super::{
+    LogSink,
     ctx::{App, Deadline, RequestId},
     error::ApiError,
 };
@@ -12,7 +13,58 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
-use std::time::{Duration, Instant};
+use std::{
+    future::Future,
+    net::SocketAddr,
+    panic::AssertUnwindSafe,
+    pin::Pin,
+    task::{Context, Poll},
+    time::{Duration, Instant},
+};
+
+/// Polls a future and turns a panic into `Err` (no extra dependency for `catch_unwind`).
+struct CatchUnwind<F>(Pin<Box<F>>);
+impl<F: Future> Future for CatchUnwind<F> {
+    type Output = Result<F::Output, ()>;
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let inner = self.0.as_mut();
+        match std::panic::catch_unwind(AssertUnwindSafe(|| inner.poll(cx))) {
+            Ok(Poll::Ready(output)) => Poll::Ready(Ok(output)),
+            Ok(Poll::Pending) => Poll::Pending,
+            Err(_) => Poll::Ready(Err(())),
+        }
+    }
+}
+fn catch_unwind<F: Future>(future: F) -> CatchUnwind<F> {
+    CatchUnwind(Box::pin(future))
+}
+fn panic_error() -> ApiError {
+    ApiError::new(
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "internal",
+        "internal error while handling the request",
+    )
+}
+
+/// Outermost layer: a panic anywhere below (the edge itself included) becomes a standard
+/// 500 JSON error with a request id and one log line, instead of a dropped connection.
+pub async fn catch_panic(State(log): State<LogSink>, request: Request, next: Next) -> Response {
+    let started = Instant::now();
+    match catch_unwind(next.run(request)).await {
+        Ok(response) => response,
+        Err(()) => {
+            let request_id = RequestId::new();
+            let mut response = panic_error().into_response();
+            finalize(&mut response, &request_id);
+            log(&format!(
+                "request_id={} panic status=500 duration_ms={}",
+                request_id.0,
+                started.elapsed().as_millis()
+            ));
+            response
+        }
+    }
+}
 
 /// Routes that may run longer than the default request timeout.
 fn long_route(route: &str) -> bool {
@@ -36,16 +88,21 @@ fn method_label(method: &Method) -> &'static str {
     }
 }
 
-/// `Host` must name the bound port on a loopback literal or `localhost` (case-insensitive).
-/// Anything else, including a rebinding attacker's own host name, is refused.
-pub fn host_allowed(host: &str, port: u16) -> bool {
+/// `Host` must name the bound address: its loopback literal (`127.0.0.1` or `[::1]`, the
+/// one actually bound) or `localhost`, with the bound port (case-insensitive; the port may
+/// be omitted only when it is 80). Anything else, including a rebinding attacker's own host
+/// name, is refused.
+pub fn host_allowed(host: &str, bound: SocketAddr) -> bool {
     let host = host.to_ascii_lowercase();
-    [
-        format!("127.0.0.1:{port}"),
-        format!("localhost:{port}"),
-        format!("[::1]:{port}"),
-    ]
-    .contains(&host)
+    let literal = match bound {
+        SocketAddr::V4(a) if a.ip().is_loopback() => "127.0.0.1".to_owned(),
+        SocketAddr::V6(a) if a.ip().is_loopback() => "[::1]".to_owned(),
+        _ => return false,
+    };
+    let port = bound.port();
+    [literal, "localhost".to_owned()]
+        .iter()
+        .any(|name| host == format!("{name}:{port}") || (port == 80 && host == *name))
 }
 
 enum Admission {
@@ -80,12 +137,12 @@ fn admit(app: &App, request: &Request) -> Result<Admission, ApiError> {
         )
     };
     let host = single(headers, header::HOST).map_err(|()| bad_host())?;
-    if !host.is_some_and(|h| host_allowed(h, app.port)) {
+    if !host.is_some_and(|h| host_allowed(h, app.addr)) {
         return Err(bad_host());
     }
     // An absolute-form request target must name the same authority.
     if let Some(authority) = request.uri().authority()
-        && !host_allowed(authority.as_str(), app.port)
+        && !host_allowed(authority.as_str(), app.addr)
     {
         return Err(bad_host());
     }
@@ -142,50 +199,64 @@ pub async fn edge(State(app): State<App>, mut request: Request, next: Next) -> R
         .get::<MatchedPath>()
         .map(|m| m.as_str().to_owned());
     let mut cors_origin = None;
-    let mut response = match admit(&app, &request) {
-        Err(error) => error.into_response(),
-        Ok(Admission::Preflight(origin)) => {
-            let mut r = StatusCode::NO_CONTENT.into_response();
-            let h = r.headers_mut();
-            h.insert(
-                header::ACCESS_CONTROL_ALLOW_METHODS,
-                HeaderValue::from_static("GET, POST, PATCH, DELETE"),
-            );
-            h.insert(
-                header::ACCESS_CONTROL_ALLOW_HEADERS,
-                HeaderValue::from_static("authorization, content-type"),
-            );
-            h.insert(
-                header::ACCESS_CONTROL_MAX_AGE,
-                HeaderValue::from_static("600"),
-            );
-            cors_origin = Some(origin);
-            r
-        }
-        Ok(Admission::Pass { cors }) => {
-            cors_origin = cors;
-            match app.in_flight.clone().try_acquire_owned() {
-                Err(_) => ApiError::busy().into_response(),
-                Ok(permit) => {
-                    let limits = &app.config.limits;
-                    let timeout = if route.as_deref().is_some_and(long_route) {
-                        limits.long_timeout
-                    } else {
-                        limits.request_timeout
-                    };
-                    // Blocking calls give up slightly earlier so they can answer themselves.
-                    let deadline = started + timeout.saturating_sub(Duration::from_millis(250));
-                    request.extensions_mut().insert(request_id.clone());
-                    request.extensions_mut().insert(Deadline(deadline));
-                    let response = tokio::time::timeout(timeout, next.run(request))
-                        .await
-                        .unwrap_or_else(|_| ApiError::timeout().into_response());
-                    drop(permit);
-                    response
+    let mut response =
+        match admit(&app, &request) {
+            Err(error) => error.into_response(),
+            Ok(Admission::Preflight(origin)) => {
+                let mut r = StatusCode::NO_CONTENT.into_response();
+                let h = r.headers_mut();
+                h.insert(
+                    header::ACCESS_CONTROL_ALLOW_METHODS,
+                    HeaderValue::from_static("GET, POST, PATCH, DELETE"),
+                );
+                h.insert(
+                    header::ACCESS_CONTROL_ALLOW_HEADERS,
+                    HeaderValue::from_static("authorization, content-type"),
+                );
+                h.insert(
+                    header::ACCESS_CONTROL_MAX_AGE,
+                    HeaderValue::from_static("600"),
+                );
+                // Chrome's Private Network Access: a configured (public) origin may reach loopback.
+                h.insert(
+                    header::HeaderName::from_static("access-control-allow-private-network"),
+                    HeaderValue::from_static("true"),
+                );
+                cors_origin = Some(origin);
+                r
+            }
+            Ok(Admission::Pass { cors }) => {
+                cors_origin = cors;
+                match app.in_flight.clone().try_acquire_owned() {
+                    Err(_) => ApiError::busy().into_response(),
+                    Ok(permit) => {
+                        let limits = &app.config.limits;
+                        let timeout = if route.as_deref().is_some_and(long_route) {
+                            limits.long_timeout
+                        } else {
+                            limits.request_timeout
+                        };
+                        // Blocking calls give up slightly earlier so they can answer themselves.
+                        let deadline = started + timeout.saturating_sub(Duration::from_millis(250));
+                        request.extensions_mut().insert(request_id.clone());
+                        request.extensions_mut().insert(Deadline(deadline));
+                        let response =
+                            match tokio::time::timeout(timeout, catch_unwind(next.run(request)))
+                                .await
+                            {
+                                Ok(Ok(response)) => response,
+                                Ok(Err(())) => {
+                                    (app.log)(&format!("request_id={} panic", request_id.0));
+                                    panic_error().into_response()
+                                }
+                                Err(_) => ApiError::timeout().into_response(),
+                            };
+                        drop(permit);
+                        response
+                    }
                 }
             }
-        }
-    };
+        };
     finalize(&mut response, &request_id);
     if let Some(origin) = cors_origin {
         add_cors(&mut response, origin);
@@ -247,18 +318,30 @@ fn finalize(response: &mut Response, request_id: &RequestId) {
 
 #[cfg(test)]
 mod tests {
-    use super::host_allowed;
+    use super::*;
+    use std::{
+        io::{Read, Write},
+        sync::{Arc, Mutex},
+    };
+
+    fn v4(port: u16) -> SocketAddr {
+        SocketAddr::from(([127, 0, 0, 1], port))
+    }
+    fn v6(port: u16) -> SocketAddr {
+        SocketAddr::from((std::net::Ipv6Addr::LOCALHOST, port))
+    }
 
     #[test]
-    fn host_allowlist_is_exact() {
-        for ok in [
-            "127.0.0.1:4000",
-            "localhost:4000",
-            "LOCALHOST:4000",
-            "[::1]:4000",
-        ] {
-            assert!(host_allowed(ok, 4000), "{ok}");
+    fn host_allowlist_is_exact_and_follows_the_bound_address() {
+        for ok in ["127.0.0.1:4000", "localhost:4000", "LOCALHOST:4000"] {
+            assert!(host_allowed(ok, v4(4000)), "{ok}");
         }
+        for ok in ["[::1]:4000", "localhost:4000"] {
+            assert!(host_allowed(ok, v6(4000)), "{ok}");
+        }
+        // The other family's literal is not the bound address.
+        assert!(!host_allowed("[::1]:4000", v4(4000)));
+        assert!(!host_allowed("127.0.0.1:4000", v6(4000)));
         for bad in [
             "127.0.0.1",
             "localhost",
@@ -271,7 +354,74 @@ mod tests {
             " localhost:4000",
             "",
         ] {
-            assert!(!host_allowed(bad, 4000), "{bad}");
+            assert!(!host_allowed(bad, v4(4000)), "{bad}");
         }
+        // Only port 80 may be omitted.
+        assert!(host_allowed("localhost", v4(80)));
+        assert!(host_allowed("127.0.0.1", v4(80)));
+        assert!(host_allowed("[::1]", v6(80)));
+        assert!(!host_allowed("evil.example", v4(80)));
+        assert!(!host_allowed(
+            "0.0.0.0:4000",
+            SocketAddr::from(([0, 0, 0, 0], 4000))
+        ));
+    }
+
+    /// A panicking handler answers 500 with the standard JSON error and one log line.
+    #[test]
+    fn a_handler_panic_becomes_a_standard_500() {
+        let lines: Arc<Mutex<Vec<String>>> = Arc::default();
+        let sink: LogSink = {
+            let lines = lines.clone();
+            Arc::new(move |l: &str| lines.lock().unwrap().push(l.to_owned()))
+        };
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let listener = runtime
+            .block_on(tokio::net::TcpListener::bind("127.0.0.1:0"))
+            .unwrap();
+        let port = listener.local_addr().unwrap().port();
+        async fn boom() -> &'static str {
+            panic!("handler bug")
+        }
+        let router = axum::Router::new()
+            .route("/boom", axum::routing::get(boom))
+            .layer(axum::middleware::from_fn_with_state(sink, catch_panic));
+        runtime.spawn(async move {
+            let _ = axum::serve(listener, router).await;
+        });
+        let mut stream = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
+        stream
+            .write_all(b"GET /boom HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n")
+            .unwrap();
+        let mut answer = String::new();
+        // Drive the server while reading.
+        let reader = std::thread::spawn(move || {
+            let _ = stream.read_to_string(&mut answer);
+            answer
+        });
+        runtime.block_on(async {
+            for _ in 0..200 {
+                if reader.is_finished() {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        });
+        let answer = reader.join().unwrap();
+        assert!(answer.starts_with("HTTP/1.1 500"), "{answer}");
+        assert!(answer.contains("\"code\":\"internal\""), "{answer}");
+        assert!(answer.contains("\"request_id\":\"req_"), "{answer}");
+        assert!(!answer.contains("handler bug"), "{answer}");
+        let lines = lines.lock().unwrap();
+        assert!(
+            lines.iter().any(|l| l.contains("panic status=500")),
+            "{lines:?}"
+        );
     }
 }

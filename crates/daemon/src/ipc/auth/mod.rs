@@ -11,6 +11,7 @@ use cm_core::{
     ServiceError,
     policy::{
         self, Capability, CapabilitySet, ClientKind, Denial, Grant, GrantId, Operation, ScopeSet,
+        elevation::BulkKind,
     },
 };
 use cm_protocol::ipc::{Credential, GrantInfo};
@@ -23,6 +24,7 @@ use std::{
     os::unix::fs::OpenOptionsExt,
     path::Path,
     sync::{Arc, Mutex, RwLock},
+    time::{Duration, Instant},
 };
 
 /// Label of the owner's bootstrap grant. A label is diagnostic; this one is only used to
@@ -84,25 +86,56 @@ impl Cache {
     }
 }
 
+/// A running elevation: monotonic deadline (authoritative) and the one kind it lifts.
+#[derive(Debug, Clone, Copy)]
+struct Elevation {
+    until: Instant,
+    kind: BulkKind,
+}
+
 pub struct Authenticator {
     control: Arc<Mutex<LibraryDb>>,
     cache: RwLock<Cache>,
+    /// #26 elevations on the monotonic clock. Not persisted: a daemon restart ends them
+    /// (the stored wall-clock end is display only and is cleared at load).
+    elevations: Mutex<HashMap<GrantId, Elevation>>,
 }
 impl Authenticator {
     pub fn load(control: Arc<Mutex<LibraryDb>>) -> Result<Self, ServiceError> {
         let mut cache = Cache::default();
-        for stored in control
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .daemon_grants()
-            .all()?
         {
-            cache.insert(stored);
+            let db = control.lock().unwrap_or_else(|e| e.into_inner());
+            for mut stored in db.daemon_grants().all()? {
+                if stored.grant.elevated_until_ms.take().is_some() {
+                    db.daemon_grants().set_elevation(stored.grant.id, None)?;
+                }
+                cache.insert(stored);
+            }
         }
         Ok(Self {
             control,
             cache: RwLock::new(cache),
+            elevations: Mutex::new(HashMap::new()),
         })
+    }
+    /// The running elevation's kind, if any (expired ones are dropped).
+    pub fn elevation_of(&self, grant: GrantId) -> Option<BulkKind> {
+        let mut map = self.elevations.lock().unwrap_or_else(|e| e.into_inner());
+        match map.get(&grant) {
+            Some(e) if Instant::now() < e.until => Some(e.kind),
+            Some(_) => {
+                map.remove(&grant);
+                None
+            }
+            None => None,
+        }
+    }
+    /// The grant as the policy sees it: elevation from the monotonic map, never from the
+    /// stored wall-clock value.
+    fn policy_view(&self, grant: &Grant) -> Grant {
+        let mut grant = grant.clone();
+        grant.elevated_until_ms = self.elevation_of(grant.id).map(|_| i64::MAX);
+        grant
     }
     fn read(&self) -> std::sync::RwLockReadGuard<'_, Cache> {
         self.cache.read().unwrap_or_else(|e| e.into_inner())
@@ -118,7 +151,8 @@ impl Authenticator {
                 .get(&digest)
                 .and_then(|id| cache.by_id.get(id))
                 .filter(|s| digest_eq(&s.token_sha256, &digest));
-            policy::check_live(stored.map(|s| &s.grant), now)
+            let view = stored.map(|s| self.policy_view(&s.grant));
+            policy::check_live(view.as_ref(), now)
                 .cloned()
                 .map_err(|_| Denial::Unauthenticated)?
         };
@@ -174,9 +208,12 @@ impl Authenticator {
         requested: Option<&CapabilitySet>,
         now: i64,
     ) -> Result<CapabilitySet, Denial> {
-        let cache = self.read();
-        policy::check_live(cache.by_id.get(&grant).map(|s| &s.grant), now)
-            .map(|g| policy::effective_at(g, requested, now))
+        let view = self
+            .read()
+            .by_id
+            .get(&grant)
+            .map(|s| self.policy_view(&s.grant));
+        policy::check_live(view.as_ref(), now).map(|g| policy::effective_at(g, requested, now))
     }
     pub fn kind_of(&self, grant: GrantId) -> Option<ClientKind> {
         self.read().by_id.get(&grant).map(|s| s.client_kind)
@@ -224,29 +261,53 @@ impl Authenticator {
         }
         Ok(stored || narrowing)
     }
-    /// #26 time-limited elevation (`None` ends it; ending is applied in memory first).
-    pub fn set_elevation(&self, id: GrantId, until_ms: Option<i64>) -> Result<bool, ServiceError> {
-        let apply = |cache: &mut Cache| {
-            cache
-                .by_id
-                .get_mut(&id)
-                .filter(|s| !s.grant.revoked)
-                .map(|s| s.grant.elevated_until_ms = until_ms)
-                .is_some()
-        };
-        if until_ms.is_none() {
-            apply(&mut self.cache.write().unwrap_or_else(|e| e.into_inner()));
+    /// #26 time-limited elevation of one kind for `length` on the monotonic clock
+    /// (`None` ends it at once). The wall-clock end is stored for display only.
+    pub fn set_elevation(
+        &self,
+        id: GrantId,
+        elevation: Option<(Duration, BulkKind)>,
+        now_ms: i64,
+    ) -> Result<bool, ServiceError> {
+        let live = self.read().by_id.get(&id).is_some_and(|s| !s.grant.revoked);
+        if !live {
+            return Ok(false);
         }
-        let stored = self
+        let display = elevation.map(|(length, _)| now_ms.saturating_add(length.as_millis() as i64));
+        {
+            let mut map = self.elevations.lock().unwrap_or_else(|e| e.into_inner());
+            match elevation {
+                Some((length, kind)) => {
+                    map.insert(
+                        id,
+                        Elevation {
+                            until: Instant::now() + length,
+                            kind,
+                        },
+                    );
+                }
+                None => {
+                    map.remove(&id);
+                }
+            }
+        }
+        if let Some(s) = self
+            .cache
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .by_id
+            .get_mut(&id)
+        {
+            s.grant.elevated_until_ms = display;
+        }
+        // Display value only; a failed write never extends an elevation.
+        let _ = self
             .control
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .daemon_grants()
-            .set_elevation(id, until_ms)?;
-        if until_ms.is_some() && stored {
-            apply(&mut self.cache.write().unwrap_or_else(|e| e.into_inner()));
-        }
-        Ok(stored)
+            .set_elevation(id, display);
+        Ok(true)
     }
     /// Per-request decision against the *current* stored grant.
     pub fn authorize(
@@ -256,13 +317,12 @@ impl Authenticator {
         operation: Operation,
         now: i64,
     ) -> Result<CapabilitySet, Denial> {
-        let cache = self.read();
-        policy::authorize(
-            cache.by_id.get(&grant).map(|s| &s.grant),
-            requested,
-            operation,
-            now,
-        )
+        let view = self
+            .read()
+            .by_id
+            .get(&grant)
+            .map(|s| self.policy_view(&s.grant));
+        policy::authorize(view.as_ref(), requested, operation, now)
     }
     pub fn issue(
         &self,
@@ -331,9 +391,35 @@ impl Authenticator {
                 "bulk elevation is only granted for a limited time",
             ));
         }
+        // #26 review: a delegate can never become an admin (mint grants, change API settings
+        // or approve elevations); only the owner's bootstrap grant holds these.
+        if issuer.is_some()
+            && Capability::OWNER_ONLY
+                .iter()
+                .any(|c| capabilities.contains(c))
+        {
+            return Err(IssueError::Invalid(
+                "owner-only capabilities (grant admin, API settings, elevation) cannot be delegated",
+            ));
+        }
         if expires_at_ms.is_some_and(|at| at <= now) {
             return Err(IssueError::Invalid("expiry must be in the future"));
         }
+        // #26 review: every delegated grant expires (scoped-token lifetime policy); only the
+        // owner's bootstrap grant lives until revoked.
+        let expires_at_ms = match (issuer, expires_at_ms) {
+            (None, at) => at,
+            (Some(_), at) => {
+                let life = cm_core::policy::scopes::lifetime_for_capabilities(&capabilities);
+                let at = at.unwrap_or(now.saturating_add(life.default_ms));
+                if at > now.saturating_add(life.max_ms) {
+                    return Err(IssueError::Invalid(
+                        "expiry exceeds the maximum lifetime for these capabilities",
+                    ));
+                }
+                Some(at)
+            }
+        };
         let credential = new_credential().map_err(|_| IssueError::Unavailable)?;
         let stored = StoredGrant {
             grant: Grant {

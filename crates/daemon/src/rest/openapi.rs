@@ -5,7 +5,7 @@ use super::{
     BASE_PATH, Limits,
     handlers::{
         DEFAULT_FULLTEXT_CHARS, DEFAULT_FULLTEXT_PAGES, DEFAULT_PAGE_LIMIT, MAX_BULK_IDS,
-        MAX_DOI_BYTES, MAX_FILE_NAME_BYTES, MAX_QUERY_BYTES,
+        MAX_DOI_BYTES, MAX_FILE_NAME_BYTES, MAX_IDEMPOTENCY_KEY, MAX_QUERY_BYTES,
     },
 };
 use cm_core::policy::scopes::{Access, Surface, endpoint};
@@ -551,6 +551,28 @@ const OPS: &[Op] = &[
         ok_also: None,
         response: Some("JobEnvelope"),
         extra: &[404],
+    },
+    Op {
+        name: "POST /jobs",
+        id: "submitJob",
+        summary: "Submit a job owned by this token (idempotent on kind + key; kinds add their own requirements)",
+        params: &[],
+        body: Some("JobSubmit"),
+        ok: 201,
+        ok_also: None,
+        response: Some("JobEnvelope"),
+        extra: &[409],
+    },
+    Op {
+        name: "POST /jobs/{id}/retry",
+        id: "retryJob",
+        summary: "Retry one of this token's failed or cancelled jobs",
+        params: &[ID],
+        body: None,
+        ok: 200,
+        ok_also: None,
+        response: Some("JobEnvelope"),
+        extra: &[404, 409],
     },
 ];
 
@@ -1316,6 +1338,25 @@ fn schemas(limits: &Limits) -> Value {
         ),
         ("JobStatus", job),
         ("JobEnvelope", obj(&["job"], vec![("job", r("JobStatus"))])),
+        (
+            "JobSubmit",
+            strict(
+                &["kind", "idempotency_key"],
+                vec![
+                    (
+                        "kind",
+                        json!({"type": "string", "minLength": 1, "maxLength": 64}),
+                    ),
+                    (
+                        "idempotency_key",
+                        json!({"type": "string", "minLength": 1, "maxLength": MAX_IDEMPOTENCY_KEY}),
+                    ),
+                    ("payload", any()),
+                    ("max_attempts", nint()),
+                    ("deadline_at_ms", nint()),
+                ],
+            ),
+        ),
     ];
     Value::Object(
         entries

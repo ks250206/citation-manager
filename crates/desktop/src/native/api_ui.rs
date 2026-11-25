@@ -1,11 +1,14 @@
 //! #26 "API & Integrations" screen: local API settings, tokens, MCP profiles and paired
 //! browser hosts. Every change is a `Command::Api` decided by the daemon; this view only
-//! renders replies. A new secret is shown once and dropped when leaving the screen.
+//! renders replies. A new secret is shown once, masked until "Reveal", and dropped (and
+//! cleared from the clipboard if it is still there) on Done, on leaving the screen, or 30 s
+//! after Copy. An `Issued` reply that arrives after the person left the screen is never
+//! shown: that token is revoked at once (nobody received its secret).
 use super::*;
 use crate::api_settings::{
     ApiSettingsState, Confirm, ELEVATE_WARNING, ELEVATION_MINUTES, FILE_STORE_WARNING, Group,
-    ISSUABLE, RevealedSecret, allows_writes, format_date, format_time, scope_list, status,
-    toggled_mcp_scopes,
+    ISSUABLE, ReplyKind, RevealedSecret, SecretText, allows_writes, format_date, format_time,
+    scope_list, status, toggled_mcp_scopes,
 };
 use cm_protocol::api::{
     ApiCommand, ApiReply, BindAddress, ClientKind, IssueToken, ListenerState, SecretBackend,
@@ -14,9 +17,8 @@ use cm_protocol::api::{
 
 /// What a reply belongs to; replies bypass the single-ticket lanes like annotations.
 pub(super) enum ApiOp {
-    Overview,
-    Tokens,
-    Audit,
+    /// List replies carry their request sequence number; only the latest is applied.
+    List(ReplyKind, u64),
     Issued,
     Changed,
 }
@@ -72,10 +74,67 @@ impl LibraryView {
             self.api.notice = Some(("Library service unavailable".into(), true));
         }
     }
+    fn api_list(&mut self, kind: ReplyKind) {
+        let seq = self.api.begin(Some(kind));
+        let command = match kind {
+            ReplyKind::Overview => ApiCommand::Overview,
+            ReplyKind::Tokens => ApiCommand::ListTokens,
+            ReplyKind::Audit => ApiCommand::Audit { limit: 20 },
+        };
+        self.api_send(command, ApiOp::List(kind, seq));
+    }
     fn api_refresh(&mut self) {
-        self.api_send(ApiCommand::Overview, ApiOp::Overview);
-        self.api_send(ApiCommand::ListTokens, ApiOp::Tokens);
-        self.api_send(ApiCommand::Audit { limit: 20 }, ApiOp::Audit);
+        self.api_list(ReplyKind::Overview);
+        self.api_list(ReplyKind::Tokens);
+        self.api_list(ReplyKind::Audit);
+    }
+    /// Drops the shown secret; clears the clipboard if it still holds that secret.
+    pub(super) fn api_conceal(&mut self, cx: &mut Context<Self>) {
+        if let Some(revealed) = self.api.revealed.take()
+            && revealed.copied
+            && cx
+                .read_from_clipboard()
+                .and_then(|item| item.text())
+                .is_some_and(|text| revealed.secret == *text.as_str())
+        {
+            cx.write_to_clipboard(ClipboardItem::new_string(String::new()));
+        }
+    }
+    fn api_copy_secret(&mut self, cx: &mut Context<Self>) {
+        let Some(revealed) = self.api.revealed.as_mut() else {
+            return;
+        };
+        cx.write_to_clipboard(ClipboardItem::new_string(
+            revealed.secret.as_str().to_owned(),
+        ));
+        revealed.copied = true;
+        let token = revealed.token.id;
+        cx.spawn(async move |view, cx| {
+            cx.background_executor()
+                .timer(crate::api_settings::CLIPBOARD_CLEAR_AFTER)
+                .await;
+            let _ = view.update(cx, |this, cx| {
+                // Only the secret this timer was started for, and only if still copied.
+                let Some(revealed) = this.api.revealed.as_mut() else {
+                    return;
+                };
+                if revealed.token.id == token
+                    && cx
+                        .read_from_clipboard()
+                        .and_then(|item| item.text())
+                        .is_some_and(|text| revealed.secret == *text.as_str())
+                {
+                    cx.write_to_clipboard(ClipboardItem::new_string(String::new()));
+                    revealed.copied = false;
+                    this.api.notice = Some((
+                        "Clipboard cleared (30 s after copying the token).".into(),
+                        false,
+                    ));
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
     }
     pub(super) fn open_api(
         &mut self,
@@ -112,15 +171,31 @@ impl LibraryView {
                 self.api.notice = Some((format!("Not changed: {e}"), true));
                 self.status(format!("API settings: {e}"), true, cx);
             }
-            (ApiOp::Overview, Ok(ApiReply::Overview(overview))) => {
-                let port = overview.settings.port.to_string();
-                self.api_inputs
-                    .port
-                    .update(cx, |f, cx| f.set_text(port, cx));
-                self.api.set_overview(overview);
+            (ApiOp::List(kind, seq), Ok(_)) if !self.api.current(kind, seq) => {}
+            (ApiOp::List(_, _), Ok(ApiReply::Overview(overview))) => {
+                // A refresh never overwrites an unsaved draft (port included).
+                if !self.api.dirty {
+                    let port = overview.settings.port.to_string();
+                    self.api_inputs
+                        .port
+                        .update(cx, |f, cx| f.set_text(port, cx));
+                }
+                self.api.set_overview(overview, false);
             }
-            (ApiOp::Tokens, Ok(ApiReply::Tokens(tokens))) => self.api.tokens = tokens,
-            (ApiOp::Audit, Ok(ApiReply::Audit(entries))) => self.api.audit = entries,
+            (ApiOp::List(_, _), Ok(ApiReply::Tokens(tokens))) => self.api.tokens = tokens,
+            (ApiOp::List(_, _), Ok(ApiReply::Audit(entries))) => self.api.audit = entries,
+            (ApiOp::Issued, Ok(ApiReply::Issued { token, .. })) if self.screen != Screen::Api => {
+                // Never shown, never delivered: revoke rather than keep a live unknown token.
+                self.api_send(ApiCommand::Revoke(token.id), ApiOp::Changed);
+                self.status(
+                    format!(
+                        "Token “{}” was revoked because the API screen was closed before it could be shown",
+                        token.label
+                    ),
+                    true,
+                    cx,
+                );
+            }
             (
                 ApiOp::Issued,
                 Ok(ApiReply::Issued {
@@ -141,14 +216,16 @@ impl LibraryView {
                     false,
                 ));
                 self.api.upsert(token.clone());
+                self.api_conceal(cx);
                 self.api.revealed = Some(RevealedSecret {
                     token,
-                    secret: credential.0,
+                    secret: SecretText::new(credential.0),
                     stored_in,
                     copied: false,
+                    shown: false,
                 });
-                self.api_send(ApiCommand::ListTokens, ApiOp::Tokens);
-                self.api_send(ApiCommand::Audit { limit: 20 }, ApiOp::Audit);
+                self.api_list(ReplyKind::Tokens);
+                self.api_list(ReplyKind::Audit);
             }
             (ApiOp::Changed, Ok(reply)) => {
                 let text = match &reply {
@@ -166,7 +243,7 @@ impl LibraryView {
                 };
                 self.api.notice = Some((text.into(), false));
                 if let ApiReply::Overview(overview) = reply {
-                    self.api.set_overview(overview);
+                    self.api.set_overview(overview, true);
                 }
                 self.api_refresh();
             }
@@ -180,7 +257,7 @@ impl LibraryView {
         let label = self.api_inputs.label.read(cx).content.to_string();
         match self.api.form.request(&label, now_ms()) {
             Ok(request) => {
-                self.api.conceal();
+                self.api_conceal(cx);
                 self.api_send(ApiCommand::IssueToken(request), ApiOp::Issued);
             }
             Err(e) => self.api.notice = Some((e, true)),
@@ -194,7 +271,7 @@ impl LibraryView {
         } else {
             label
         };
-        self.api.conceal();
+        self.api_conceal(cx);
         self.api_send(
             ApiCommand::IssueToken(IssueToken {
                 label,
@@ -242,7 +319,7 @@ impl LibraryView {
         let command = match confirm {
             Confirm::Revoke(id) => ApiCommand::Revoke(id),
             Confirm::Reissue(id) => {
-                self.api.conceal();
+                self.api_conceal(cx);
                 self.api_send(ApiCommand::Reissue(id), ApiOp::Issued);
                 cx.notify();
                 return;
@@ -254,9 +331,18 @@ impl LibraryView {
                 },
                 None => return,
             },
-            Confirm::Elevate(id) => ApiCommand::Elevate {
-                grant: id,
-                duration_ms: ELEVATION_MINUTES * 60_000,
+            Confirm::Elevate(id) => match self.api.token(id) {
+                // One kind per elevation: delete when the token may delete, else move.
+                Some(t) => ApiCommand::Elevate {
+                    grant: id,
+                    kind: if t.scopes.contains(&cm_protocol::api::Scope::PapersDelete) {
+                        cm_protocol::api::BulkKind::Delete
+                    } else {
+                        cm_protocol::api::BulkKind::Move
+                    },
+                    duration_ms: ELEVATION_MINUTES * 60_000,
+                },
+                None => return,
             },
         };
         self.api_send(command, ApiOp::Changed);
@@ -305,7 +391,7 @@ impl LibraryView {
                         .child(text),
                 )
             })
-            .when_some(state.revealed.clone(), |el, revealed| {
+            .when_some(state.revealed.as_ref(), |el, revealed| {
                 el.child(self.api_secret_box(revealed, cx))
             })
             // 1. Local REST API.
@@ -562,8 +648,13 @@ impl LibraryView {
             )
     }
 
-    fn api_secret_box(&self, revealed: RevealedSecret, cx: &mut Context<Self>) -> Div {
-        let secret = revealed.secret.clone();
+    fn api_secret_box(&self, revealed: &RevealedSecret, cx: &mut Context<Self>) -> Div {
+        // The plaintext is only materialised for rendering while "Reveal" is on.
+        let text = if revealed.shown {
+            revealed.secret.as_str().to_owned()
+        } else {
+            revealed.secret.masked()
+        };
         div()
             .p_3()
             .rounded_lg()
@@ -587,7 +678,7 @@ impl LibraryView {
                     .bg(rgb(SURFACE))
                     .text_color(rgb(TEXT))
                     .font_family("monospace")
-                    .child(secret.clone()),
+                    .child(text),
             )
             .child(
                 div()
@@ -601,30 +692,42 @@ impl LibraryView {
                             if revealed.copied { "Copied" } else { "Copy" },
                             true,
                         )
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            cx.write_to_clipboard(ClipboardItem::new_string(secret.clone()));
-                            if let Some(r) = &mut this.api.revealed {
-                                r.copied = true;
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.api_copy_secret(cx);
+                            cx.notify();
+                        })),
+                    )
+                    .child(
+                        button(
+                            "secret-reveal",
+                            if revealed.shown { "Hide" } else { "Reveal" },
+                            true,
+                        )
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            if let Some(r) = this.api.revealed.as_mut() {
+                                r.shown = !r.shown;
                             }
                             cx.notify();
                         })),
                     )
                     .child(button("secret-done", "Done", true).on_click(cx.listener(
                         |this, _, _, cx| {
-                            this.api.conceal();
+                            this.api_conceal(cx);
                             this.api.notice = None;
                             cx.notify();
                         },
-                    )))
-                    .child(hint(format!(
-                        "Grant {} · scopes {} · expires {} · stored in {}",
+                    ))),
+            )
+            .child(
+                div().child(hint(format!(
+                        "Grant {} · scopes {} · expires {} · stored in {} · copied tokens are cleared from the clipboard after 30 s",
                         revealed.token.id,
                         scope_list(&revealed.token.scopes),
                         format_date(revealed.token.expires_at_ms),
                         revealed
                             .stored_in
                             .map_or("nowhere (copy it now)", |b| b.describe())
-                    ))),
+                ))),
             )
     }
 

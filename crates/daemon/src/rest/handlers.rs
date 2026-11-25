@@ -6,7 +6,7 @@
 pub use super::ctx::App;
 use super::{
     BASE_PATH,
-    ctx::{Calls, Ctx, decode_cursor, encode_cursor, json_body, present, query, uuid, uuid_list},
+    ctx::{Ctx, decode_cursor, encode_cursor, json_body, present, query, uuid, uuid_list},
     edge,
     error::ApiError,
 };
@@ -35,7 +35,7 @@ use cm_protocol::{
     geometry::Quad,
     import::{ImportAction, ImportCommit, ImportDecision, ImportDestination, ImportPreview},
     ipc::{Command, PdfCommand, Reply},
-    jobs::{JobCommand, JobId, JobReply},
+    jobs::{JobCommand, JobId, JobReply, JobSubmit},
     library::{LibraryReply, LibraryRequest},
     library_query::{
         LibraryCursor, LibraryFilter, LibraryQuery, LibrarySort, SortDirection, SortField, TagMatch,
@@ -61,6 +61,7 @@ pub const MAX_FILE_NAME_BYTES: usize = 255;
 pub const MAX_IMPORT_DIAGNOSTICS: usize = 200;
 /// Pixels of one REST page render (RGBA, base64 in JSON: about 21 MB at the cap).
 pub const MAX_RENDER_PIXELS: u64 = 4_000_000;
+pub const MAX_IDEMPOTENCY_KEY: usize = 256;
 
 /// Every route, keyed by its `ENDPOINTS` name. The router is built only from this list and
 /// the contract tests compare it with `ENDPOINTS` and docs/openapi.json.
@@ -99,6 +100,8 @@ pub fn routes() -> Vec<(&'static str, MethodRouter<App>)> {
         ("POST /exports", post(export)),
         ("GET /jobs/{id}", get(get_job)),
         ("POST /jobs/{id}/cancel", post(cancel_job)),
+        ("POST /jobs", post(submit_job)),
+        ("POST /jobs/{id}/retry", post(retry_job)),
     ]
 }
 
@@ -108,9 +111,11 @@ pub fn router(app: App) -> Router {
         let (_, path) = name.split_once(' ').expect("METHOD /path");
         router = router.route(&format!("{BASE_PATH}{path}"), method_router);
     }
+    let log = app.log.clone();
     router
         .fallback(fallback)
         .layer(middleware::from_fn_with_state(app.clone(), edge::edge))
+        .layer(middleware::from_fn_with_state(log, edge::catch_panic))
         .with_state(app)
 }
 
@@ -390,10 +395,10 @@ fn bulk_ids(ids: &[PaperId]) -> Result<(), ApiError> {
 /// Runs a batch one item at a time. A denial (token revoked, elevation ended), the request
 /// deadline or a client disconnect stops it; the response still lists every id (later ones
 /// as `not_attempted`) and `stopped` names the reason, so a caller sees what was done.
-fn run_batch(
-    c: &mut Calls,
+fn run_batch<C>(
+    c: &mut C,
     ids: Vec<PaperId>,
-    mut item: impl FnMut(&mut Calls, PaperId) -> Result<(), ApiError>,
+    mut item: impl FnMut(&mut C, PaperId) -> Result<(), ApiError>,
 ) -> Value {
     let mut results = Vec::with_capacity(ids.len());
     let mut stopped: Option<&'static str> = None;
@@ -1444,10 +1449,89 @@ async fn cancel_job(ctx: Ctx, Path(id): Path<String>) -> Result<Response, ApiErr
     let id = job_id(&id)?;
     job(&ctx, JobCommand::Cancel(id)).await
 }
+async fn retry_job(ctx: Ctx, Path(id): Path<String>) -> Result<Response, ApiError> {
+    let id = job_id(&id)?;
+    job(&ctx, JobCommand::Retry(id)).await
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct JobBody {
+    kind: String,
+    idempotency_key: String,
+    #[serde(default)]
+    payload: Value,
+    #[serde(default)]
+    max_attempts: Option<u32>,
+    #[serde(default)]
+    deadline_at_ms: Option<i64>,
+}
+/// Submits a job owned by this token. Each kind adds its own capability requirements in the
+/// daemon (`attachment.import` needs a local-file capability no scope grants: 403).
+/// Resubmitting the same kind and key returns the existing job (idempotent).
+async fn submit_job(ctx: Ctx, headers: HeaderMap, body: Body) -> Result<Response, ApiError> {
+    let body: JobBody = json_body(&headers, body, ctx.limits().json_body).await?;
+    if body.kind.is_empty() || body.kind.len() > 64 {
+        return Err(ApiError::invalid("kind must be 1..=64 bytes"));
+    }
+    if body.idempotency_key.is_empty() || body.idempotency_key.len() > MAX_IDEMPOTENCY_KEY {
+        return Err(ApiError::invalid(format!(
+            "idempotency_key must be 1..={MAX_IDEMPOTENCY_KEY} bytes"
+        )));
+    }
+    let submit = JobSubmit {
+        kind: body.kind,
+        idempotency_key: body.idempotency_key,
+        payload: if body.payload.is_null() {
+            json!({})
+        } else {
+            body.payload
+        },
+        max_attempts: body.max_attempts,
+        deadline_at_ms: body.deadline_at_ms,
+    };
+    let job = ctx
+        .run(
+            move |c| match c.call(Command::Jobs(JobCommand::Submit(submit)))? {
+                Reply::Jobs(JobReply::Job(job)) => Ok(*job),
+                other => unexpected(other),
+            },
+        )
+        .await?;
+    Ok(created(
+        format!("{BASE_PATH}/jobs/{}", job.id.0),
+        json!({ "job": job }),
+    ))
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_denied_batch_reports_what_was_done_and_what_was_not() {
+        let ids: Vec<PaperId> = (1..=4).map(|i| PaperId(uuid::Uuid::from_u128(i))).collect();
+        let mut calls = 0;
+        let reply = run_batch(&mut calls, ids.clone(), |n, id| {
+            *n += 1;
+            match id.0.as_u128() {
+                1 => Ok(()),
+                2 => Err(ApiError::not_found()),
+                3 => Err(ApiError::unauthenticated()),
+                _ => unreachable!("stopped before the fourth item"),
+            }
+        });
+        assert_eq!(calls, 3);
+        assert_eq!(reply["stopped"], "unauthenticated");
+        let results = reply["results"].as_array().unwrap();
+        assert_eq!(results.len(), 4);
+        assert_eq!(results[0]["ok"], true);
+        assert_eq!(results[1]["error"], "not_found");
+        assert_eq!(results[2]["error"], "unauthenticated");
+        assert_eq!(results[3]["error"], "not_attempted");
+        let done = run_batch(&mut (), ids, |_, _| Ok(()));
+        assert_eq!(done["stopped"], Value::Null);
+    }
 
     #[test]
     fn export_file_names_are_plain() {

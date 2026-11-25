@@ -80,14 +80,40 @@ impl DaemonPaths {
     pub fn library_key(&self) -> String {
         endpoint_name(&self.library)
     }
-    /// #26 weaker file fallback for token plaintext (0700, inside the private state dir).
+    /// #26 weaker file fallback for token plaintext: a 0700 per-library directory outside
+    /// the library (so syncing or copying the library folder does not carry token copies):
+    /// `$XDG_DATA_HOME` (absolute) or `~/.local/share`, on macOS
+    /// `~/Library/Application Support`, then `citation-manager/secrets/<library key>`.
+    /// Without a usable home directory it falls back to `<library>/daemon/secrets`.
     pub fn secrets_dir(&self) -> PathBuf {
-        self.state_dir.join("secrets")
+        secrets_root(
+            std::env::var_os("XDG_DATA_HOME"),
+            std::env::var_os("HOME"),
+            cfg!(target_os = "macos"),
+        )
+        .map(|root| root.join(self.library_key()))
+        .unwrap_or_else(|| self.state_dir.join("secrets"))
     }
     /// #26 bounded audit log (JSON lines, rotated).
     pub fn audit_log(&self) -> PathBuf {
         self.state_dir.join("audit.jsonl")
     }
+}
+fn secrets_root(
+    xdg_data: Option<OsString>,
+    home: Option<OsString>,
+    macos: bool,
+) -> Option<PathBuf> {
+    let home = home.map(PathBuf::from).filter(|h| h.is_absolute());
+    let base = if macos {
+        home?.join("Library/Application Support")
+    } else {
+        match xdg_data.map(PathBuf::from).filter(|d| d.is_absolute()) {
+            Some(dir) => dir,
+            None => home?.join(".local/share"),
+        }
+    };
+    Some(base.join("citation-manager/secrets"))
 }
 fn default_runtime_dir(uid: u32) -> PathBuf {
     runtime_dir_from(
@@ -378,6 +404,27 @@ mod tests {
         let name = canonical.socket.file_name().unwrap().to_str().unwrap();
         assert_eq!(name.len(), ENDPOINT_NAME_LEN + ".sock".len());
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn secret_fallback_lives_outside_the_library() {
+        assert_eq!(
+            secrets_root(None, Some("/home/u".into()), false),
+            Some(PathBuf::from(
+                "/home/u/.local/share/citation-manager/secrets"
+            ))
+        );
+        assert_eq!(
+            secrets_root(Some("/data".into()), Some("/home/u".into()), false),
+            Some(PathBuf::from("/data/citation-manager/secrets"))
+        );
+        assert_eq!(
+            secrets_root(Some("/data".into()), Some("/Users/u".into()), true),
+            Some(PathBuf::from(
+                "/Users/u/Library/Application Support/citation-manager/secrets"
+            ))
+        );
+        assert_eq!(secrets_root(Some("rel".into()), None, false), None);
     }
 
     #[test]

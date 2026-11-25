@@ -12,9 +12,19 @@ use cm_core::{
 };
 use cm_daemon::{ipc::start, rest::RestConfig};
 use cm_protocol::{
+    annotations::{
+        Anchor, AnnotationId, AnnotationKind, AnnotationRequest, NewAnnotation,
+        Source as AnnotationSource,
+    },
+    exchange::{ImportReply, ImportRequestUi},
+    import::{
+        ImportAction, ImportCommit, ImportDecision, ImportDestination, ImportRequest, PaperDraft,
+    },
+};
+use cm_protocol::{
     api::{
-        Access, ApiCommand, ApiReply, ApiSettings, BindAddress, ClientKind, ENDPOINTS, IssueToken,
-        ListenerState, Scope, ScopeSet, Surface,
+        Access, ApiCommand, ApiReply, ApiSettings, BindAddress, BulkKind, ClientKind, ENDPOINTS,
+        IssueToken, ListenerState, Scope, ScopeSet, Surface,
     },
     client::{Session, secrets::MemorySecretStore},
     domain::PaperId,
@@ -500,6 +510,18 @@ impl Drop for Api {
         }
     }
 }
+fn elevate(a: &mut Api, grant: cm_protocol::ipc::GrantId, kind: BulkKind) {
+    api(
+        &mut a.admin,
+        ApiCommand::Elevate {
+            grant,
+            kind,
+            duration_ms: 60_000,
+        },
+    )
+    .unwrap();
+}
+
 fn issuable() -> Vec<Scope> {
     Scope::ALL.into_iter().filter(|s| s.issuable()).collect()
 }
@@ -549,6 +571,10 @@ fn probes() -> Vec<(&'static str, Req)> {
                     Some(json!({"format": "bibtex", "content": "@article{a,title={A}}"}))
                 }
                 "POST /exports" => Some(json!({"format": "bibtex", "file_name": "probe.bib"})),
+                "POST /jobs" => Some(
+                    json!({"kind": "diagnostic.wait", "idempotency_key": "probe",
+                    "payload": {"millis": 0}}),
+                ),
                 _ => None,
             };
             if let Some(body) = body {
@@ -560,7 +586,10 @@ fn probes() -> Vec<(&'static str, Req)> {
 }
 fn has_body(name: &str) -> bool {
     matches!(name.split_once(' ').unwrap().0, "POST" | "PATCH")
-        && !matches!(name, "POST /papers/{id}/restore" | "POST /jobs/{id}/cancel")
+        && !matches!(
+            name,
+            "POST /papers/{id}/restore" | "POST /jobs/{id}/cancel" | "POST /jobs/{id}/retry"
+        )
 }
 
 // ------------------------------------------------------------------ tests
@@ -653,14 +682,12 @@ fn every_endpoint_enforces_exactly_its_scopes() {
         let exact: Vec<Scope> = required.iter().copied().filter(|s| s.issuable()).collect();
         let (grant, token) = a.token("exact", &exact);
         if required.contains(&Scope::BulkElevated) {
-            api(
-                &mut a.admin,
-                ApiCommand::Elevate {
-                    grant,
-                    duration_ms: 60_000,
-                },
-            )
-            .unwrap();
+            let kind = if row.name.contains("bulk-delete") {
+                BulkKind::Delete
+            } else {
+                BulkKind::Move
+            };
+            elevate(&mut a, grant, kind);
         }
         let resp = a.call(row.name, req.clone().token(&token));
         assert!(
@@ -722,41 +749,39 @@ fn revoked_tokens_are_refused_everywhere_including_live_keep_alive_connections()
 fn invalid_bodies_are_rejected_on_every_body_endpoint() {
     let mut a = Api::start();
     let (grant, token) = a.token("all", &issuable());
-    api(
-        &mut a.admin,
-        ApiCommand::Elevate {
-            grant,
-            duration_ms: 60_000,
-        },
-    )
-    .unwrap();
-    for (name, req) in probes() {
-        if !has_body(name) {
-            continue;
+    // Body checks happen after authorization, and elevation is per kind: first everything
+    // but bulk-delete under a Move elevation, then bulk-delete under a Delete elevation.
+    for kind in [BulkKind::Move, BulkKind::Delete] {
+        elevate(&mut a, grant, kind);
+        for (name, req) in probes() {
+            if !has_body(name) || (name == "POST /papers/bulk-delete") != (kind == BulkKind::Delete)
+            {
+                continue;
+            }
+            let bad = req
+                .clone()
+                .token(&token)
+                .raw("application/json", "{\"title\": ");
+            let resp = a.call(name, bad);
+            assert_eq!(
+                (resp.status, resp.code().as_str()),
+                (400, "invalid_json"),
+                "{name}"
+            );
+            let wrong_type = req.clone().token(&token).raw("text/plain", "{}");
+            let resp = a.call(name, wrong_type);
+            assert_eq!(resp.status, 415, "{name}");
+            let unknown = req
+                .clone()
+                .token(&token)
+                .json(&json!({"unexpected_field": 1}));
+            let resp = a.call(name, unknown);
+            assert_eq!(resp.status, 400, "{name}: {}", resp.text());
+            // Unauthenticated invalid JSON is a 401, not a parse error: bodies are only read
+            // after authentication.
+            let resp = a.call(name, req.clone().raw("application/json", "{"));
+            assert_eq!(resp.status, 401, "{name}");
         }
-        let bad = req
-            .clone()
-            .token(&token)
-            .raw("application/json", "{\"title\": ");
-        let resp = a.call(name, bad);
-        assert_eq!(
-            (resp.status, resp.code().as_str()),
-            (400, "invalid_json"),
-            "{name}"
-        );
-        let wrong_type = req.clone().token(&token).raw("text/plain", "{}");
-        let resp = a.call(name, wrong_type);
-        assert_eq!(resp.status, 415, "{name}");
-        let unknown = req
-            .clone()
-            .token(&token)
-            .json(&json!({"unexpected_field": 1}));
-        let resp = a.call(name, unknown);
-        assert_eq!(resp.status, 400, "{name}: {}", resp.text());
-        // Unauthenticated invalid JSON is a 401, not a parse error: bodies are only read
-        // after authentication.
-        let resp = a.call(name, req.clone().raw("application/json", "{"));
-        assert_eq!(resp.status, 401, "{name}");
     }
 }
 
@@ -832,6 +857,10 @@ fn a_configured_origin_gets_cors_and_others_do_not() {
     assert_eq!(
         resp.header("access-control-allow-origin"),
         Some("https://app.example")
+    );
+    assert_eq!(
+        resp.header("access-control-allow-private-network"),
+        Some("true")
     );
     let resp =
         a.send(&Req::new("GET", format!("{API}/papers")).header("Origin", "https://app.example"));
@@ -1178,7 +1207,7 @@ fn every_endpoint_normal_case_matches_the_contract() {
         "POST /exports",
         post(
             "/exports",
-            json!({"format": "ris", "file_name": "refs.bib",
+            json!({"format": "bibtex", "file_name": "refs.bib",
         "selection": {"kind": "ids", "ids": [paper]}}),
         ),
         400,
@@ -1213,6 +1242,49 @@ fn every_endpoint_normal_case_matches_the_contract() {
         cancelled["job"]["cancel_requested"] == json!(true)
             || cancelled["job"]["state"] == "cancelled"
     );
+    // Once cancelled, the token may retry its own job; then cancel it again.
+    assert!(wait_until(Duration::from_secs(10), || {
+        a.send(&get(&format!("/jobs/{}", job.0))).json()["job"]["state"] == "cancelled"
+    }));
+    let retried = call(
+        &a,
+        "POST /jobs/{id}/retry",
+        Req::new("POST", format!("{API}/jobs/{}/retry", job.0)).token(&full),
+        200,
+    );
+    assert!(retried["job"]["state"] == "queued" || retried["job"]["state"] == "running");
+    a.send(&Req::new("POST", format!("{API}/jobs/{}/cancel", job.0)).token(&full));
+    // Submitted over REST: owned by the token, visible over IPC with the same credential.
+    let submitted = call(
+        &a,
+        "POST /jobs",
+        post(
+            "/jobs",
+            json!({"kind": kinds::DIAGNOSTIC_WAIT, "idempotency_key": "rest-submitted",
+                "payload": {"millis": 0}}),
+        ),
+        201,
+    );
+    let submitted_id = submitted["job"]["id"].as_str().unwrap().to_owned();
+    match ipc
+        .call(Command::Jobs(JobCommand::Get(cm_protocol::jobs::JobId(
+            submitted_id.parse().unwrap(),
+        ))))
+        .unwrap()
+    {
+        Ok(Reply::Jobs(JobReply::Job(j))) => assert_eq!(j.idempotency_key, "rest-submitted"),
+        other => panic!("{other:?}"),
+    }
+    // Kinds that need a local-file capability stay owner-only.
+    let local = a.call(
+        "POST /jobs",
+        post(
+            "/jobs",
+            json!({"kind": kinds::ATTACHMENT_IMPORT, "idempotency_key": "nope",
+                "payload": {"paper": paper, "path": "/etc/passwd"}}),
+        ),
+    );
+    assert_eq!(local.status, 403, "{}", local.text());
     // Another owner's job is invisible (404, not 403).
     let (_, other_token) = a.token("other jobs", &[Scope::JobsRead]);
     let hidden = a.call(
@@ -1221,14 +1293,7 @@ fn every_endpoint_normal_case_matches_the_contract() {
     );
     assert_eq!(hidden.status, 404);
 
-    api(
-        &mut a.admin,
-        ApiCommand::Elevate {
-            grant,
-            duration_ms: 60_000,
-        },
-    )
-    .unwrap();
+    elevate(&mut a, grant, BulkKind::Move);
     let moved = call(
         &a,
         "POST /collections/{id}/papers/bulk-move",
@@ -1239,6 +1304,17 @@ fn every_endpoint_normal_case_matches_the_contract() {
         200,
     );
     assert_eq!(moved["results"][0]["ok"], true);
+    assert_eq!(moved["stopped"], Value::Null);
+    // Elevation is per kind: a Move elevation does not lift the delete limit.
+    let refused = a.call(
+        "POST /papers/bulk-delete",
+        post("/papers/bulk-delete", json!({"paper_ids": imported_ids})),
+    );
+    assert_eq!(
+        (refused.status, refused.code().as_str()),
+        (403, "elevation_required")
+    );
+    elevate(&mut a, grant, BulkKind::Delete);
     let bulk = call(
         &a,
         "POST /papers/bulk-delete",
@@ -1439,14 +1515,7 @@ fn limits_and_path_restrictions() {
     let too_many: Vec<String> = (0..501)
         .map(|i| format!("019a0000-0000-7000-8000-{i:012}"))
         .collect();
-    api(
-        &mut a.admin,
-        ApiCommand::Elevate {
-            grant,
-            duration_ms: 60_000,
-        },
-    )
-    .unwrap();
+    elevate(&mut a, grant, BulkKind::Delete);
     expect(
         &a,
         "POST /papers/bulk-delete",
@@ -1513,12 +1582,25 @@ fn limits_and_path_restrictions() {
         "export_folder_not_allowed",
     );
     assert!(!outside.join("x.bib").exists());
+    // The extension must match the format (daemon export guard, #26).
+    for (format, name) in [("bibtex", "x.json"), ("ris", "x.bib"), ("bibtex", "noext")] {
+        expect(
+            &a,
+            "POST /exports",
+            post("/exports", json!({"format": format, "file_name": name})),
+            403,
+            "export_folder_not_allowed",
+        );
+    }
     // A symlink placed inside the allowed folder is refused by the writer.
-    std::os::unix::fs::symlink(&outside, a.exports.join("link")).unwrap();
+    std::os::unix::fs::symlink(&outside, a.exports.join("link.bib")).unwrap();
     expect(
         &a,
         "POST /exports",
-        post("/exports", json!({"format": "bibtex", "file_name": "link"})),
+        post(
+            "/exports",
+            json!({"format": "bibtex", "file_name": "link.bib"}),
+        ),
         400,
         "invalid_input",
     );
@@ -1645,6 +1727,256 @@ fn lower_scopes_never_see_full_text_or_annotation_content() {
     assert_eq!(resp.status, 200);
     assert_eq!(resp.json()["candidates"][0]["existing_match"], Value::Null);
     assert!(!resp.text().contains(&paper));
+}
+
+/// Review P2: a token that cannot read papers neither learns from a dry run whether a
+/// record already exists, nor creates a duplicate by committing it.
+#[test]
+fn write_only_imports_never_duplicate_and_never_reveal_existing_papers() {
+    let mut a = Api::start();
+    let (_, full) = a.token("full", &issuable());
+    let existing = create_paper(&a, &full, MARKER_TITLE, "10.1234/existing");
+    let (_, write_only) = a.token("write only", &[Scope::PapersWrite]);
+    let import = |content: &str, dry_run: bool| {
+        a.call(
+            "POST /imports",
+            Req::new("POST", format!("{API}/imports"))
+                .token(&write_only)
+                .json(&json!({"format": "bibtex", "dry_run": dry_run, "content": content})),
+        )
+    };
+    // Same citation key as the existing paper and an exact DOI match: nothing in the dry
+    // run may differ from a record that matches nothing.
+    let dup = "@article{same, title={Existing again}, doi={10.1234/existing}}";
+    let fresh = "@article{same, title={Brand new}, doi={10.1234/brand-new}}";
+    let shown = |resp: &Resp| {
+        let mut body = resp.json();
+        // Titles differ by construction; everything else must be identical.
+        body["candidates"][0]["title"] = Value::Null;
+        body
+    };
+    let dup_preview = import(dup, true);
+    let fresh_preview = import(fresh, true);
+    assert_eq!(dup_preview.status, 200);
+    assert_eq!(shown(&dup_preview), shown(&fresh_preview));
+    assert!(!dup_preview.text().contains(&existing));
+    assert!(!dup_preview.text().contains("hidden"));
+    // Committing the duplicate skips it daemon-side (no second paper, no error).
+    let committed = import(dup, false);
+    assert_eq!(committed.status, 201, "{}", committed.text());
+    assert_eq!(committed.json()["created"], json!([]));
+    let committed = import(fresh, false);
+    assert_eq!(committed.json()["created"].as_array().unwrap().len(), 1);
+    let all = a.call(
+        "GET /papers",
+        Req::new("GET", format!("{API}/papers?limit=500")).token(&full),
+    );
+    // The existing paper and the fresh import only.
+    assert_eq!(
+        all.json()["papers"].as_array().unwrap().len(),
+        2,
+        "{}",
+        all.text()
+    );
+    let existing_count = all.json()["papers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|p| p["doi"] == json!("10.1234/existing"))
+        .count();
+    assert_eq!(existing_count, 1);
+    // The same rule over IPC for the same grant: Create on a hidden duplicate is skipped.
+    let mut ipc = a.env.session("cli", write_only.clone());
+    let preview = match ipc
+        .call(Command::Import(ImportRequestUi::Preview(ImportRequest {
+            candidates: vec![{
+                let mut d = PaperDraft::titled("Existing via IPC");
+                d.bibliography.doi = Some("10.1234/existing".into());
+                d
+            }],
+            destination: ImportDestination::default(),
+        })))
+        .unwrap()
+        .unwrap()
+    {
+        Reply::Import(ImportReply::Preview(p)) => p,
+        other => panic!("{other:?}"),
+    };
+    assert!(preview.candidates[0].matches.is_empty());
+    let outcome = match ipc
+        .call(Command::Import(ImportRequestUi::Commit(ImportCommit {
+            preview_id: preview.id,
+            decisions: vec![ImportDecision {
+                candidate_index: 0,
+                action: ImportAction::Create,
+            }],
+        })))
+        .unwrap()
+        .unwrap()
+    {
+        Reply::Import(ImportReply::Committed(o)) => o,
+        other => panic!("{other:?}"),
+    };
+    assert!(outcome.created.is_empty());
+}
+
+/// Review P2: tokens cannot spoof human provenance or review AI annotations.
+#[test]
+fn tokens_create_only_ai_annotations_and_cannot_confirm_them() {
+    let mut a = Api::start();
+    let (_, full) = a.token("full", &issuable());
+    let paper = create_paper(&a, &full, MARKER_TITLE, "10.1234/provenance");
+    let attachment = attach(&mut a, &paper, PAGE_WORD);
+    for source in ["human", "import"] {
+        let resp = a.call(
+            "POST /attachments/{id}/annotations",
+            Req::new("POST", format!("{API}/attachments/{attachment}/annotations"))
+                .token(&full)
+                .json(&json!({"kind": "note", "source": source,
+                    "anchor": {"state": "resolved", "page_index": 0}, "quote": "", "comment": "x"})),
+        );
+        assert_eq!(
+            (resp.status, resp.code().as_str()),
+            (400, "invalid_input"),
+            "{source}"
+        );
+    }
+    let created = a.call(
+        "POST /attachments/{id}/annotations",
+        Req::new(
+            "POST",
+            format!("{API}/attachments/{attachment}/annotations"),
+        )
+        .token(&full)
+        .json(
+            &json!({"kind": "note", "anchor": {"state": "resolved", "page_index": 0},
+                "quote": "", "comment": "ai note"}),
+        ),
+    );
+    assert_eq!(created.status, 201);
+    assert_eq!(created.json()["annotation"]["source"], "ai");
+    let id = AnnotationId(
+        created.json()["annotation"]["id"]
+            .as_str()
+            .unwrap()
+            .parse()
+            .unwrap(),
+    );
+    // The same token over IPC: human source, confirmation and replayed rows are refused.
+    let mut ipc = a.env.session("mcp", full.clone());
+    let new = |source| NewAnnotation {
+        attachment_id: cm_protocol::domain::AttachmentId(attachment.parse().unwrap()),
+        kind: AnnotationKind::Note,
+        source,
+        anchor: Anchor::Resolved {
+            page_index: 0,
+            page_label: None,
+            quads: vec![],
+        },
+        quote: String::new(),
+        context_before: None,
+        context_after: None,
+        color: None,
+        comment: Some("spoof".into()),
+    };
+    assert!(matches!(
+        ipc.call(Command::Annotations(AnnotationRequest::Create(Box::new(
+            new(AnnotationSource::Human)
+        ))))
+        .unwrap(),
+        Err(WireError::Service(
+            cm_protocol::library::ServiceError::InvalidInput(_)
+        ))
+    ));
+    assert!(matches!(
+        ipc.call(Command::Annotations(AnnotationRequest::ConfirmAi(id)))
+            .unwrap(),
+        Err(WireError::Denied(Denial::Forbidden(_)))
+    ));
+    assert!(
+        ipc.call(Command::Annotations(AnnotationRequest::Create(Box::new(
+            new(AnnotationSource::Ai)
+        ))))
+        .unwrap()
+        .is_ok()
+    );
+    // The owner (desktop) still confirms AI annotations.
+    assert!(
+        a.admin
+            .call(Command::Annotations(AnnotationRequest::ConfirmAi(id)))
+            .unwrap()
+            .is_ok()
+    );
+}
+
+/// Review P3: request-target and framing edge cases.
+#[test]
+fn edge_cases_absolute_form_duplicate_host_http10_and_chunked_bodies() {
+    let mut a = Api::start();
+    let (_, token) = a.token("edge", &issuable());
+    let port = a.port;
+    let raw = |text: String| {
+        let mut s = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+        let _ = s.write_all(text.as_bytes());
+        let mut out = Vec::new();
+        let _ = s.read_to_end(&mut out);
+        String::from_utf8_lossy(&out).into_owned()
+    };
+    // Absolute-form target naming another authority, with a valid Host.
+    let out = raw(format!(
+        "GET http://evil.example:{port}{API}/health HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n"
+    ));
+    assert!(
+        out.starts_with("HTTP/1.1 400") && out.contains("host_not_allowed"),
+        "{out}"
+    );
+    // Absolute-form naming the API itself is fine.
+    let out = raw(format!(
+        "GET http://127.0.0.1:{port}{API}/health HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n"
+    ));
+    assert!(out.starts_with("HTTP/1.1 200"), "{out}");
+    // Two Host headers.
+    let out = raw(format!(
+        "GET {API}/health HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nHost: evil.example:{port}\r\nConnection: close\r\n\r\n"
+    ));
+    assert!(out.starts_with("HTTP/1.1 400"), "{out}");
+    // HTTP/1.0 without Host.
+    let out = raw(format!("GET {API}/health HTTP/1.0\r\n\r\n"));
+    assert!(
+        out.starts_with("HTTP/1.0 400") || out.starts_with("HTTP/1.1 400"),
+        "{out}"
+    );
+    // A chunked body over the JSON limit (no Content-Length to check up front).
+    let chunk = "a".repeat(64 * 1024);
+    let mut body = String::from("{\"title\":\"");
+    while body.len() < 1024 * 1024 + 1 {
+        body.push_str(&chunk);
+    }
+    body.push_str("\"}");
+    let mut request = format!(
+        "POST {API}/papers HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer {}\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n",
+        token.0
+    );
+    for piece in body.as_bytes().chunks(64 * 1024) {
+        request.push_str(&format!("{:x}\r\n", piece.len()));
+        request.push_str(std::str::from_utf8(piece).unwrap());
+        request.push_str("\r\n");
+    }
+    request.push_str("0\r\n\r\n");
+    let out = raw(request);
+    assert!(
+        out.starts_with("HTTP/1.1 413") && out.contains("too_large"),
+        "{}",
+        &out[..out.len().min(300)]
+    );
+    // Nothing was created.
+    let list = a.call(
+        "GET /papers",
+        Req::new("GET", format!("{API}/papers")).token(&token),
+    );
+    assert_eq!(list.json()["papers"], json!([]));
+    drop(a.admin.call(Command::Status));
 }
 
 #[test]

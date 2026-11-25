@@ -25,7 +25,10 @@ use auth::{Authenticator, IssueError, now_ms};
 use cm_core::{
     ServiceError,
     metadata_resolve::Cancellation,
-    policy::{self, Capability, CapabilitySet, Denial, GrantId, Operation, elevation::BulkGuard},
+    policy::{
+        self, Capability, CapabilitySet, Denial, GrantId, Operation,
+        elevation::{BulkGuard, BulkKind},
+    },
     search::extraction::PageTextExtractor,
 };
 use cm_protocol::{
@@ -207,6 +210,7 @@ pub fn start(config: DaemonConfig) -> Result<RunningDaemon, StartError> {
         auth.clone(),
         secrets,
         paths.library_key(),
+        paths.library.clone(),
         Arc::new(crate::audit::AuditLog::new(
             paths.audit_log(),
             config.audit_max_bytes,
@@ -281,6 +285,7 @@ pub fn start(config: DaemonConfig) -> Result<RunningDaemon, StartError> {
             }
             shared.jobs.stop();
             shared.auth.flush_last_used();
+            shared.api.audit.flush();
             drop(shared);
             // Release the single-writer lock only after the library worker has closed its
             // connections; otherwise the next daemon could open the library (and see its
@@ -575,7 +580,7 @@ impl Session {
                     .unwrap_or_else(|e| e.into_inner())
                     .remove(&id);
                 if let Some((log, grant, kind)) = audit {
-                    log.record(&audit_entry(grant, kind, operation, &result, target));
+                    log.record(audit_entry(grant, kind, operation, &result, target));
                 }
                 responder.send(result);
             }
@@ -781,19 +786,22 @@ impl Session {
                         }),
                     GrantCommand::List => Ok(GrantReply::Grants(auth.list())),
                     GrantCommand::Revoke(grant) => {
+                        // Same order as `ApiService::revoke`: registry, jobs, then the secret.
                         let revoked = auth.revoke(grant, now_ms());
-                        self.shared.api.forget_secret(grant);
-                        self.shared
-                            .bulk
-                            .lock()
-                            .unwrap_or_else(|e| e.into_inner())
-                            .forget(grant);
                         // Fail closed: the grant is revoked in memory even if persisting failed,
                         // and its jobs must not keep running with its authority.
                         let jobs = match revoked {
                             Ok(false) => Ok(0),
                             Ok(true) | Err(_) => self.shared.jobs.owner_revoked(grant),
                         };
+                        if !matches!(revoked, Ok(false)) {
+                            self.shared.api.forget_secret(grant);
+                            self.shared
+                                .bulk
+                                .lock()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .forget(grant);
+                        }
                         match (revoked, jobs) {
                             (Ok(true), Ok(_)) => Ok(GrantReply::Revoked(grant)),
                             (Ok(false), _) => Err(WireError::Service(ServiceError::NotFound)),
@@ -885,42 +893,55 @@ fn admit(
     now: i64,
 ) -> Result<CapabilitySet, WireError> {
     let operation = command.operation();
-    let decided = shared
-        .auth
-        .authorize(grant, requested, operation, now)
-        .map_err(WireError::Denied)
-        .and_then(|held| guard(shared, grant, command, operation, &held, now).map(|()| held));
-    if let Err(error) = &decided {
-        record_denial(shared, grant, operation, error);
+    let held = match shared.auth.authorize(grant, requested, operation, now) {
+        Ok(held) => held,
+        Err(denial) => {
+            let error = WireError::Denied(denial);
+            record_denial(shared, grant, operation, &error);
+            return Err(error);
+        }
+    };
+    if let Err(error) = guard(shared, grant, command, &held) {
+        // Bulk refusals are recorded as the bulk decision (admin audit sink).
+        let decided = match &error {
+            WireError::Denied(Denial::Forbidden(op)) => *op,
+            _ => operation,
+        };
+        record_denial(shared, grant, decided, &error);
+        return Err(error);
     }
-    decided
+    Ok(held)
 }
 
-/// #26 checks after the operation's capability requirement passed: the bulk guard (decided
-/// as `BulkTrash`/`BulkMove`) and export folders for tokens without `LocalFileWrite`.
+/// #26 checks after the operation's capability requirement passed: the per-kind bulk guard
+/// (decided as `BulkTrash`/`BulkMove`) and export folders for tokens without
+/// `LocalFileWrite` (real-directory containment, `.bib`/`.ris` only).
 fn guard(
     shared: &Shared,
     grant: GrantId,
     command: &Command,
-    operation: Operation,
     held: &CapabilitySet,
-    now: i64,
 ) -> Result<(), WireError> {
-    let moves = matches!(
-        command,
-        Command::Organization(
-            OrganizationRequest::CollectionMember(..) | OrganizationRequest::TagMember(..)
-        )
-    );
+    let kind = bulk_kind(command);
+    // Exempt: the owner's permanent BulkElevated, or a running elevation for exactly this
+    // kind (and the session was not narrowed to exclude BulkElevated).
+    let exempt = kind.is_some_and(|kind| {
+        held.contains(&Capability::BulkElevated)
+            && (shared
+                .auth
+                .stored(grant)
+                .is_some_and(|s| s.grant.capabilities.contains(&Capability::BulkElevated))
+                || shared.auth.elevation_of(grant) == Some(kind))
+    });
     shared
         .bulk
         .lock()
         .unwrap_or_else(|e| e.into_inner())
-        .check(grant, held, operation, moves, now)
+        .check(grant, kind, exempt, Instant::now())
         .map_err(|bulk| WireError::Denied(Denial::Forbidden(bulk)))?;
     if let Command::Export(request) = command
         && !held.contains(&Capability::LocalFileWrite)
-        && !policy::export::destination_allowed(&request.path, &shared.api.export_dirs())
+        && !export_allowed(request, &shared.api.export_dirs())
     {
         return Err(WireError::Denied(Denial::Forbidden(Operation::Export)));
     }
@@ -928,7 +949,7 @@ fn guard(
 }
 
 fn record_denial(shared: &Shared, grant: GrantId, operation: Operation, error: &WireError) {
-    shared.api.audit.record(&audit_entry(
+    shared.api.audit.record(audit_entry(
         grant,
         shared.auth.kind_of(grant),
         operation,
@@ -1036,6 +1057,53 @@ impl Session {
     }
 }
 
+/// Which burst limit a command counts toward (`policy::elevation`).
+fn bulk_kind(command: &Command) -> Option<BulkKind> {
+    use cm_protocol::annotations::AnnotationRequest;
+    match command {
+        Command::Lifecycle { .. }
+        | Command::Organization(
+            OrganizationRequest::DeleteCollection(_) | OrganizationRequest::DeleteTag(_),
+        )
+        | Command::Annotations(AnnotationRequest::Delete(_)) => Some(BulkKind::Delete),
+        Command::Organization(
+            OrganizationRequest::CollectionMember(..) | OrganizationRequest::TagMember(..),
+        ) => Some(BulkKind::Move),
+        _ => None,
+    }
+}
+
+/// `exports:write` destinations: lexically inside an allowed folder, the parent chain
+/// really contains that folder (same device and inode, so bind mounts or case-folding
+/// spellings cannot fake containment), and the extension matches the format.
+fn export_allowed(request: &cm_protocol::exchange::ExportRequest, allowed: &[PathBuf]) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    let extension = match request.format {
+        cm_protocol::exchange::Format::Bibtex => "bib",
+        cm_protocol::exchange::Format::Ris => "ris",
+    };
+    if !policy::export::destination_allowed(&request.path, allowed)
+        || !policy::export::extension_allowed(&request.path, &[extension])
+    {
+        return false;
+    }
+    let ids = |p: &std::path::Path| {
+        std::fs::symlink_metadata(p)
+            .ok()
+            .map(|m| (m.dev(), m.ino()))
+    };
+    let roots: Vec<(u64, u64)> = allowed.iter().filter_map(|d| ids(d)).collect();
+    let mut current = request.path.parent();
+    while let Some(dir) = current {
+        match ids(dir) {
+            Some(id) if roots.contains(&id) => return true,
+            Some(_) => current = dir.parent(),
+            None => return false,
+        }
+    }
+    false
+}
+
 /// The grant a token-management command acts on (recorded in the audit log).
 fn api_target(command: &cm_protocol::api::ApiCommand) -> Option<GrantId> {
     use cm_protocol::api::ApiCommand as A;
@@ -1073,6 +1141,7 @@ fn audit_entry(
             .err()
             .map(|e| crate::api::reason_code(e).to_owned()),
         target,
+        count: 1,
     }
 }
 
@@ -1134,4 +1203,74 @@ fn redact_matches(preview: &mut ImportPreview) -> Vec<bool> {
     }
     preview.warnings.push(REDACTED_PREVIEW_WARNING.into());
     duplicates
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cm_protocol::{
+        annotations::{AnnotationId, AnnotationRequest},
+        exchange::{ExportRequest, ExportSelection, Format},
+    };
+
+    #[test]
+    fn annotation_deletes_count_toward_the_delete_burst() {
+        let id = AnnotationId(uuid::Uuid::nil());
+        assert_eq!(
+            bulk_kind(&Command::Annotations(AnnotationRequest::Delete(id))),
+            Some(BulkKind::Delete)
+        );
+        assert_eq!(
+            bulk_kind(&Command::Annotations(AnnotationRequest::ConfirmAi(id))),
+            None
+        );
+        assert_eq!(bulk_kind(&Command::Status), None);
+    }
+
+    #[test]
+    fn export_containment_uses_the_real_directory_and_the_format_extension() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        let allowed = root.join("exports");
+        std::fs::create_dir_all(allowed.join("sub")).unwrap();
+        let request = |path: PathBuf, format| ExportRequest {
+            selection: ExportSelection::All,
+            format,
+            path,
+        };
+        let dirs = vec![allowed.clone()];
+        assert!(export_allowed(
+            &request(allowed.join("sub/a.bib"), Format::Bibtex),
+            &dirs
+        ));
+        assert!(export_allowed(
+            &request(allowed.join("a.ris"), Format::Ris),
+            &dirs
+        ));
+        assert!(!export_allowed(
+            &request(allowed.join("a.ris"), Format::Bibtex),
+            &dirs
+        ));
+        assert!(!export_allowed(
+            &request(allowed.join("a.json"), Format::Bibtex),
+            &dirs
+        ));
+        // A missing parent cannot prove containment; neither can a deleted allowed folder.
+        assert!(!export_allowed(
+            &request(allowed.join("missing/a.bib"), Format::Bibtex),
+            &dirs
+        ));
+        std::fs::remove_dir_all(&allowed).unwrap();
+        std::fs::create_dir(&allowed).unwrap();
+        // Recreated at the same path: the folder itself is the allowed root again.
+        assert!(export_allowed(
+            &request(allowed.join("a.bib"), Format::Bibtex),
+            &dirs
+        ));
+        std::fs::remove_dir(&allowed).unwrap();
+        assert!(!export_allowed(
+            &request(allowed.join("a.bib"), Format::Bibtex),
+            &dirs
+        ));
+    }
 }

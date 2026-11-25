@@ -8,7 +8,10 @@ use super::{Session, Shared, record_denial};
 use crate::{api::ApiService, ipc::auth::now_ms};
 use cm_core::{
     metadata_resolve::Cancellation,
-    policy::{CapabilitySet, ClientKind, Denial, Grant, GrantId, Operation},
+    policy::{
+        Capability, CapabilitySet, ClientKind, Denial, Grant, GrantId, Operation,
+        elevation::BulkKind,
+    },
 };
 use cm_protocol::ipc::{Command, Credential, Reply, ServerFrame, WireError};
 use std::{
@@ -74,13 +77,38 @@ impl Gateway {
     pub fn preauthorize(&self, grant: GrantId, operations: &[Operation]) -> Result<(), WireError> {
         let now = now_ms();
         for operation in operations {
-            if let Err(denial) = self.0.auth.authorize(grant, None, *operation, now) {
-                let error = WireError::Denied(denial);
+            let decided = self
+                .0
+                .auth
+                .authorize(grant, None, *operation, now)
+                .map_err(WireError::Denied)
+                .and_then(|_| self.elevated_for(grant, *operation));
+            if let Err(error) = decided {
                 record_denial(&self.0, grant, *operation, &error);
                 return Err(error);
             }
         }
         Ok(())
+    }
+    /// Elevation is per kind (#26): a bulk endpoint needs the owner's permanent
+    /// `BulkElevated` or a running elevation of exactly its kind, the same rule the per-item
+    /// guard applies.
+    fn elevated_for(&self, grant: GrantId, operation: Operation) -> Result<(), WireError> {
+        let kind = match operation {
+            Operation::BulkTrash => BulkKind::Delete,
+            Operation::BulkMove => BulkKind::Move,
+            _ => return Ok(()),
+        };
+        let permanent = self
+            .0
+            .auth
+            .stored(grant)
+            .is_some_and(|s| s.grant.capabilities.contains(&Capability::BulkElevated));
+        if permanent || self.0.auth.elevation_of(grant) == Some(kind) {
+            Ok(())
+        } else {
+            Err(WireError::Denied(Denial::Forbidden(operation)))
+        }
     }
     /// The same decision `Session::dispatch` makes, without running anything (used by
     /// adapters to decide what a response may contain, e.g. whether to echo a record).

@@ -232,7 +232,7 @@ impl Listener {
             .enable_time()
             .build()?;
         let (shutdown, stopped) = tokio::sync::watch::channel(false);
-        let app = handlers::App::new(gateway.clone(), config, addr.port());
+        let app = handlers::App::new(gateway.clone(), config, addr);
         let limits = config.limits.clone();
         let listener = {
             let _guard = runtime.enter();

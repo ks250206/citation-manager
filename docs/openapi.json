@@ -360,10 +360,18 @@
               "type": "object"
             },
             "type": "array"
+          },
+          "stopped": {
+            "description": "Why the batch stopped early (later items are not_attempted)",
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
-          "results"
+          "results",
+          "stopped"
         ],
         "type": "object"
       },
@@ -898,6 +906,39 @@
         ],
         "type": "object"
       },
+      "JobSubmit": {
+        "additionalProperties": false,
+        "properties": {
+          "deadline_at_ms": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "idempotency_key": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "kind": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "max_attempts": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "payload": {}
+        },
+        "required": [
+          "kind",
+          "idempotency_key"
+        ],
+        "type": "object"
+      },
       "Membership": {
         "additionalProperties": false,
         "properties": {
@@ -977,8 +1018,7 @@
           },
           "source": {
             "enum": [
-              "ai",
-              "human"
+              "ai"
             ],
             "type": "string"
           }
@@ -3328,6 +3368,128 @@
         ]
       }
     },
+    "/jobs": {
+      "post": {
+        "operationId": "submitJob",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobSubmit"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobEnvelope"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid input, JSON, query or Host header (code says which)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, unknown, revoked or expired token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, browser origin refused, elevation or export folder required"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict with existing data or state"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Body or result too large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Body is not application/json"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Busy or unavailable (Retry-After)"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request time limit reached"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "jobs:write"
+            ]
+          }
+        ],
+        "summary": "Submit a job owned by this token (idempotent on kind + key; kinds add their own requirements)",
+        "x-daemon-operations": [
+          "JobSubmit"
+        ],
+        "x-required-scopes": [
+          "jobs:write"
+        ]
+      }
+    },
     "/jobs/{id}": {
       "get": {
         "operationId": "getJob",
@@ -3528,6 +3690,119 @@
         "summary": "Cancel one of this token's jobs",
         "x-daemon-operations": [
           "JobCancel"
+        ],
+        "x-required-scopes": [
+          "jobs:write"
+        ]
+      }
+    },
+    "/jobs/{id}/retry": {
+      "post": {
+        "operationId": "retryJob",
+        "parameters": [
+          {
+            "description": "Resource UUID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobEnvelope"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid input, JSON, query or Host header (code says which)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, unknown, revoked or expired token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, browser origin refused, elevation or export folder required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict with existing data or state"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Busy or unavailable (Retry-After)"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request time limit reached"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "jobs:write"
+            ]
+          }
+        ],
+        "summary": "Retry one of this token's failed or cancelled jobs",
+        "x-daemon-operations": [
+          "JobRetry"
         ],
         "x-required-scopes": [
           "jobs:write"

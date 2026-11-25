@@ -8,7 +8,10 @@
 //! (#28) can wrap these commands or send `Command::Api` itself with an owner credential.
 use crate::lifecycle::{DaemonPaths, Launch, euid, local_connector};
 use cm_protocol::{
-    api::{ApiCommand, ApiReply, BindAddress, ClientKind, IssueToken, Scope, ScopeSet, profiles},
+    api::{
+        ApiCommand, ApiReply, BindAddress, BulkKind, ClientKind, IssueToken, Scope, ScopeSet,
+        profiles,
+    },
     client::Session,
     ipc::{Command, GrantId, Reply, WireError},
 };
@@ -31,11 +34,16 @@ Usage:
                        [--mcp-read-only] [--expires-days N] [--allow-non-tty]
   papersd token list   --library DIR
   papersd token revoke --library DIR --id GRANT
-  papersd token elevate --library DIR --id GRANT --minutes N   (1..=15)
+  papersd token elevate --library DIR --id GRANT --kind delete|move --minutes N   (1..=15)
   papersd api show     --library DIR
   papersd api set      --library DIR [--enable|--disable] [--bind 127.0.0.1|::1] [--port N]
 Common: [--runtime-dir DIR]. Scopes: papers:read papers:write papers:delete files:read
 annotations:read annotations:write exports:write jobs:read jobs:write";
+
+/// Labels without control characters (they may come from older rows or other clients).
+fn printable(text: &str) -> String {
+    text.chars().filter(|c| !c.is_control()).collect()
+}
 
 /// Whether `papersd`'s first argument selects an admin subcommand.
 pub fn is_admin(first: Option<&std::ffi::OsStr>) -> bool {
@@ -44,6 +52,11 @@ pub fn is_admin(first: Option<&std::ffi::OsStr>) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn labels_lose_control_characters() {
+        assert_eq!(super::printable("a\u{1b}[31mb\nc"), "a[31mbc");
+    }
+
     #[test]
     fn utc_day() {
         assert_eq!(super::day(Some(0)), "1970-01-01");
@@ -64,6 +77,7 @@ struct Args {
     allow_non_tty: bool,
     id: Option<GrantId>,
     minutes: Option<i64>,
+    bulk: Option<BulkKind>,
     enable: Option<bool>,
     bind: Option<BindAddress>,
     port: Option<u16>,
@@ -77,14 +91,21 @@ fn parse(rest: &[String]) -> Result<Args, String> {
         match flag.as_str() {
             "--library" => a.library = Some(PathBuf::from(value()?)),
             "--runtime-dir" => a.runtime_dir = Some(PathBuf::from(value()?)),
-            "--label" => a.label = Some(value()?),
+            // Control characters (terminal escapes) never reach the daemon or the output.
+            "--label" => a.label = Some(printable(&value()?)),
             "--kind" => {
                 let v = value()?;
-                a.kind = Some(
-                    ClientKind::parse(&v)
-                        .filter(|k| k.scoped_token())
-                        .ok_or(format!("unknown token kind {v}"))?,
-                )
+                match v.as_str() {
+                    "delete" => a.bulk = Some(BulkKind::Delete),
+                    "move" => a.bulk = Some(BulkKind::Move),
+                    _ => {
+                        a.kind = Some(
+                            ClientKind::parse(&v)
+                                .filter(|k| k.scoped_token())
+                                .ok_or(format!("unknown token kind {v}"))?,
+                        )
+                    }
+                }
             }
             "--scope" => {
                 let v = value()?;
@@ -224,13 +245,17 @@ pub fn run(
                 return EXIT_USAGE;
             }
         },
-        ("token", "elevate") => match (a.id, a.minutes) {
-            (Some(grant), Some(minutes)) => ApiCommand::Elevate {
+        ("token", "elevate") => match (a.id, a.minutes, a.bulk) {
+            (Some(grant), Some(minutes), Some(kind)) => ApiCommand::Elevate {
                 grant,
+                kind,
                 duration_ms: minutes.saturating_mul(60_000),
             },
             _ => {
-                let _ = writeln!(err, "papersd: --id and --minutes are required");
+                let _ = writeln!(
+                    err,
+                    "papersd: --id, --kind delete|move and --minutes are required"
+                );
                 return EXIT_USAGE;
             }
         },
@@ -271,14 +296,30 @@ pub fn run(
             stored_in,
             secret_account,
         }) => {
-            // The secret is the only stdout line; never logged anywhere else.
-            let _ = writeln!(out, "{}", credential.0);
+            // The secret is the only stdout line; never logged anywhere else. If it cannot be
+            // delivered (closed pipe, full disk) nobody has it: revoke it and fail.
+            if writeln!(out, "{}", credential.0)
+                .and_then(|()| out.flush())
+                .is_err()
+            {
+                let revoked = call(&mut session, ApiCommand::Revoke(token.id)).is_ok();
+                let _ = writeln!(
+                    err,
+                    "papersd: could not write the token to stdout; {}",
+                    if revoked {
+                        "it was revoked"
+                    } else {
+                        "revoking it failed, revoke it in the settings"
+                    }
+                );
+                return EXIT_ERROR;
+            }
             let _ = writeln!(
                 err,
                 "Issued {} token {} \"{}\" scopes [{}] expires {}.\nShown once. Stored in: {} (account {secret_account}).",
                 token.kind.name(),
                 token.id,
-                token.label,
+                printable(&token.label),
                 token
                     .scopes
                     .iter()
@@ -301,7 +342,7 @@ pub fn run(
                     t.id,
                     t.kind.name(),
                     if t.revoked { "revoked" } else { "active" },
-                    t.label,
+                    printable(&t.label),
                     t.scopes
                         .iter()
                         .map(|s| s.name())
