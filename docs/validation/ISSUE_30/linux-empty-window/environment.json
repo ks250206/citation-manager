@@ -1,0 +1,108 @@
+{
+  "started_utc": "2026-11-25T12:20:46.220476+00:00",
+  "system": "Linux",
+  "machine": "x86_64",
+  "platform": "Linux-6.18.44-fc-v880-x86_64-with-glibc2.39",
+  "python": "3.13.18",
+  "rust": "rustc 1.99.1 (58cf8f9c3 2026-10-13)\nbinary: rustc\ncommit-hash: 58cf8f9c35b355199727627d07ae34a4e2846d67\ncommit-date: 2026-10-13\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.1\nLLVM version: 23.1.1",
+  "cargo": "cargo 1.99.1 (5f94df478 2026-08-27)",
+  "git_head": "56d3eed82a5152744149583626132dde688511ba",
+  "git_status": "",
+  "cargo_lock_sha256": "9cad1156a30d30904f1523dbb0cb2ceacdc383516bf919620433e2d9b7a61cb4",
+  "build_environment": {
+    "RUSTFLAGS": null,
+    "CARGO_ENCODED_RUSTFLAGS": null,
+    "CARGO_BUILD_TARGET": null,
+    "CARGO_TARGET_DIR": null
+  },
+  "ci": false,
+  "runner": {
+    "name": null,
+    "os": null,
+    "arch": null,
+    "image": null,
+    "image_version": null
+  },
+  "cpu": [
+    "Intel(R) Xeon(R) Processor @ 2.10GHz"
+  ],
+  "logical_cpu_count": 4,
+  "ram_bytes": 16868675584,
+  "os": "Ubuntu 24.04.5 LTS",
+  "kernel": "6.18.44-fc-v880",
+  "virtualization": "docker",
+  "parameters": {
+    "papers": 10000,
+    "pdfs": 1000,
+    "pages_per_pdf": 20,
+    "pages": 20000,
+    "samples": 21,
+    "warm_repeats": 11,
+    "seed": 30
+  },
+  "artifacts": {
+    "papersd": {
+      "cargo_args": [
+        "-p",
+        "cm-daemon",
+        "--bin",
+        "papersd",
+        "--features",
+        "pdf-metadata"
+      ],
+      "features": [
+        "default",
+        "pdf-metadata"
+      ],
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 0,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": false
+      },
+      "sha256": "187b788b4708bb3e7ea0486a08667d351350854888f0f3bcd40550d2ae39e106"
+    },
+    "ipc": {
+      "cargo_args": [
+        "-p",
+        "cm-daemon",
+        "--example",
+        "bench_representative_ipc"
+      ],
+      "features": [
+        "default"
+      ],
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 0,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": false
+      },
+      "sha256": "879af2c9364f8e563b77a3802856589637840e370603cb9228750ae2debd900a"
+    },
+    "seed": {
+      "cargo_args": [
+        "-p",
+        "cm-storage",
+        "--example",
+        "bench_representative_seed"
+      ],
+      "features": [],
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 0,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": false
+      },
+      "sha256": "00279802637c1e085812387dd20da9fea2415906e7a26f0ffa41bad4a9cab012"
+    },
+    "gui": null
+  },
+  "pdfium": {
+    "path": "/tmp/claude-0/-home-user-citation-manager/7457c2a3-3b09-58f5-88b4-33fcb55efaaf/scratchpad/pdfium/lib/libpdfium.so",
+    "sha256": "1c251efce460d67437a4c76d4be9033ae2f17bf5603f5bff1af10209b94ca723"
+  }
+}

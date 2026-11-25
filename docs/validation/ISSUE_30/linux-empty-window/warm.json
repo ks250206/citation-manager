@@ -1,0 +1,106 @@
+{
+  "idle_ms": 1500,
+  "kind": "warm_start",
+  "method": "lazy start through the GUI/CLI LocalConnector Launch path: spawn papersd, wait for its socket, authenticated handshake, Status, first 100-row library page; repeat 0 follows seeding/indexing, later repeats have a warm OS cache",
+  "runs": [
+    {
+      "connected_ms": 34.974324,
+      "first_page_ms": 42.460748,
+      "idle_exit_wait_ms": 1543.6536950000002,
+      "pid": 27383,
+      "repeat": 0,
+      "rows": 100,
+      "rss_kib_after_first_page": 13572
+    },
+    {
+      "connected_ms": 28.632831,
+      "first_page_ms": 39.232272,
+      "idle_exit_wait_ms": 1528.207917,
+      "pid": 27457,
+      "repeat": 1,
+      "rows": 100,
+      "rss_kib_after_first_page": 13512
+    },
+    {
+      "connected_ms": 29.150547999999997,
+      "first_page_ms": 40.648427,
+      "idle_exit_wait_ms": 1523.413522,
+      "pid": 27530,
+      "repeat": 2,
+      "rows": 100,
+      "rss_kib_after_first_page": 13564
+    },
+    {
+      "connected_ms": 28.939621,
+      "first_page_ms": 37.372112,
+      "idle_exit_wait_ms": 1539.6852330000002,
+      "pid": 27602,
+      "repeat": 3,
+      "rows": 100,
+      "rss_kib_after_first_page": 13512
+    },
+    {
+      "connected_ms": 33.592295,
+      "first_page_ms": 41.300286,
+      "idle_exit_wait_ms": 1533.283478,
+      "pid": 27676,
+      "repeat": 4,
+      "rows": 100,
+      "rss_kib_after_first_page": 13520
+    },
+    {
+      "connected_ms": 29.507695000000002,
+      "first_page_ms": 37.775505,
+      "idle_exit_wait_ms": 1526.461039,
+      "pid": 27749,
+      "repeat": 5,
+      "rows": 100,
+      "rss_kib_after_first_page": 13556
+    },
+    {
+      "connected_ms": 32.418621,
+      "first_page_ms": 40.702245999999995,
+      "idle_exit_wait_ms": 1512.3684289999999,
+      "pid": 27821,
+      "repeat": 6,
+      "rows": 100,
+      "rss_kib_after_first_page": 13592
+    },
+    {
+      "connected_ms": 29.469448,
+      "first_page_ms": 41.43919,
+      "idle_exit_wait_ms": 1525.509731,
+      "pid": 27896,
+      "repeat": 7,
+      "rows": 100,
+      "rss_kib_after_first_page": 13568
+    },
+    {
+      "connected_ms": 30.697074,
+      "first_page_ms": 38.018196999999994,
+      "idle_exit_wait_ms": 1530.0131399999998,
+      "pid": 27968,
+      "repeat": 8,
+      "rows": 100,
+      "rss_kib_after_first_page": 13636
+    },
+    {
+      "connected_ms": 28.840849000000002,
+      "first_page_ms": 39.20626,
+      "idle_exit_wait_ms": 1519.1659049999998,
+      "pid": 28041,
+      "repeat": 9,
+      "rows": 100,
+      "rss_kib_after_first_page": 13664
+    },
+    {
+      "connected_ms": 28.890653,
+      "first_page_ms": 39.887814,
+      "idle_exit_wait_ms": 1524.160894,
+      "pid": 28113,
+      "repeat": 10,
+      "rows": 100,
+      "rss_kib_after_first_page": 13116
+    }
+  ]
+}

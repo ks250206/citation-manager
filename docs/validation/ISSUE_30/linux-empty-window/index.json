@@ -1,0 +1,1532 @@
+{
+  "wall_s_including_idle_exit": 68.92804534099992,
+  "idle_ms": 2000,
+  "rusage": {
+    "user_s": 55.687254,
+    "system_s": 3.714348,
+    "max_rss_kib": 43496,
+    "in_blocks": 7904,
+    "out_blocks": 6104368,
+    "voluntary_ctx": 36160,
+    "involuntary_ctx": 146
+  },
+  "peak_rss_kib": 27076,
+  "last_io": {
+    "rss_kib": 27076,
+    "cpu_s": 59.0,
+    "read_bytes": 4046848,
+    "write_bytes": 3125366784,
+    "rchar": 4227629841,
+    "wchar": 3704144482
+  },
+  "samples": [
+    {
+      "t": 0.0,
+      "papersd": {
+        "rss_kib": 9184,
+        "cpu_s": 0.0,
+        "read_bytes": 0,
+        "write_bytes": 49152,
+        "rchar": 79203,
+        "wchar": 14
+      }
+    },
+    {
+      "t": 0.505,
+      "papersd": {
+        "rss_kib": 26012,
+        "cpu_s": 0.0,
+        "read_bytes": 4034560,
+        "write_bytes": 10289152,
+        "rchar": 20938702,
+        "wchar": 12179274
+      }
+    },
+    {
+      "t": 1.009,
+      "papersd": {
+        "rss_kib": 26080,
+        "cpu_s": 0.0,
+        "read_bytes": 4046848,
+        "write_bytes": 30830592,
+        "rchar": 39286269,
+        "wchar": 35770838
+      }
+    },
+    {
+      "t": 1.515,
+      "papersd": {
+        "rss_kib": 26160,
+        "cpu_s": 1.0,
+        "read_bytes": 4046848,
+        "write_bytes": 41844736,
+        "rchar": 44608830,
+        "wchar": 49841322
+      }
+    },
+    {
+      "t": 2.021,
+      "papersd": {
+        "rss_kib": 26176,
+        "cpu_s": 1.0,
+        "read_bytes": 4046848,
+        "write_bytes": 60104704,
+        "rchar": 62763177,
+        "wchar": 70900634
+      }
+    },
+    {
+      "t": 2.528,
+      "papersd": {
+        "rss_kib": 26196,
+        "cpu_s": 2.0,
+        "read_bytes": 4046848,
+        "write_bytes": 88981504,
+        "rchar": 112559622,
+        "wchar": 102901486
+      }
+    },
+    {
+      "t": 3.035,
+      "papersd": {
+        "rss_kib": 26196,
+        "cpu_s": 2.0,
+        "read_bytes": 4046848,
+        "write_bytes": 124674048,
+        "rchar": 176677804,
+        "wchar": 145015366
+      }
+    },
+    {
+      "t": 3.541,
+      "papersd": {
+        "rss_kib": 26204,
+        "cpu_s": 3.0,
+        "read_bytes": 4046848,
+        "write_bytes": 145944576,
+        "rchar": 210034464,
+        "wchar": 170452482
+      }
+    },
+    {
+      "t": 4.047,
+      "papersd": {
+        "rss_kib": 26204,
+        "cpu_s": 3.0,
+        "read_bytes": 4046848,
+        "write_bytes": 165670912,
+        "rchar": 224932326,
+        "wchar": 194669554
+      }
+    },
+    {
+      "t": 4.554,
+      "papersd": {
+        "rss_kib": 26212,
+        "cpu_s": 4.0,
+        "read_bytes": 4046848,
+        "write_bytes": 184664064,
+        "rchar": 243997530,
+        "wchar": 217338902
+      }
+    },
+    {
+      "t": 5.059,
+      "papersd": {
+        "rss_kib": 26212,
+        "cpu_s": 4.0,
+        "read_bytes": 4046848,
+        "write_bytes": 203956224,
+        "rchar": 268091660,
+        "wchar": 240871510
+      }
+    },
+    {
+      "t": 5.564,
+      "papersd": {
+        "rss_kib": 26212,
+        "cpu_s": 4.0,
+        "read_bytes": 4046848,
+        "write_bytes": 226119680,
+        "rchar": 295141770,
+        "wchar": 267380322
+      }
+    },
+    {
+      "t": 6.069,
+      "papersd": {
+        "rss_kib": 26212,
+        "cpu_s": 5.0,
+        "read_bytes": 4046848,
+        "write_bytes": 245481472,
+        "rchar": 320676471,
+        "wchar": 289935194
+      }
+    },
+    {
+      "t": 6.575,
+      "papersd": {
+        "rss_kib": 26212,
+        "cpu_s": 5.0,
+        "read_bytes": 4046848,
+        "write_bytes": 264736768,
+        "rchar": 345313386,
+        "wchar": 312010830
+      }
+    },
+    {
+      "t": 7.08,
+      "papersd": {
+        "rss_kib": 26212,
+        "cpu_s": 6.0,
+        "read_bytes": 4046848,
+        "write_bytes": 289488896,
+        "rchar": 383470556,
+        "wchar": 343148534
+      }
+    },
+    {
+      "t": 7.585,
+      "papersd": {
+        "rss_kib": 26216,
+        "cpu_s": 6.0,
+        "read_bytes": 4046848,
+        "write_bytes": 308445184,
+        "rchar": 404428208,
+        "wchar": 366929410
+      }
+    },
+    {
+      "t": 8.092,
+      "papersd": {
+        "rss_kib": 26216,
+        "cpu_s": 7.0,
+        "read_bytes": 4046848,
+        "write_bytes": 324423680,
+        "rchar": 416918545,
+        "wchar": 385730854
+      }
+    },
+    {
+      "t": 8.598,
+      "papersd": {
+        "rss_kib": 26216,
+        "cpu_s": 7.0,
+        "read_bytes": 4046848,
+        "write_bytes": 340795392,
+        "rchar": 428152413,
+        "wchar": 404979150
+      }
+    },
+    {
+      "t": 9.104,
+      "papersd": {
+        "rss_kib": 26216,
+        "cpu_s": 8.0,
+        "read_bytes": 4046848,
+        "write_bytes": 366751744,
+        "rchar": 465840895,
+        "wchar": 436879622
+      }
+    },
+    {
+      "t": 9.609,
+      "papersd": {
+        "rss_kib": 26216,
+        "cpu_s": 8.0,
+        "read_bytes": 4046848,
+        "write_bytes": 381390848,
+        "rchar": 485321131,
+        "wchar": 454998670
+      }
+    },
+    {
+      "t": 10.114,
+      "papersd": {
+        "rss_kib": 26236,
+        "cpu_s": 8.0,
+        "read_bytes": 4046848,
+        "write_bytes": 399433728,
+        "rchar": 499692567,
+        "wchar": 476851914
+      }
+    },
+    {
+      "t": 10.62,
+      "papersd": {
+        "rss_kib": 26300,
+        "cpu_s": 9.0,
+        "read_bytes": 4046848,
+        "write_bytes": 415944704,
+        "rchar": 513162080,
+        "wchar": 497701334
+      }
+    },
+    {
+      "t": 11.125,
+      "papersd": {
+        "rss_kib": 26300,
+        "cpu_s": 9.0,
+        "read_bytes": 4046848,
+        "write_bytes": 433016832,
+        "rchar": 524228363,
+        "wchar": 517670754
+      }
+    },
+    {
+      "t": 11.632,
+      "papersd": {
+        "rss_kib": 26300,
+        "cpu_s": 10.0,
+        "read_bytes": 4046848,
+        "write_bytes": 470392832,
+        "rchar": 589896953,
+        "wchar": 560955514
+      }
+    },
+    {
+      "t": 12.137,
+      "papersd": {
+        "rss_kib": 26300,
+        "cpu_s": 10.0,
+        "read_bytes": 4046848,
+        "write_bytes": 500191232,
+        "rchar": 643629358,
+        "wchar": 594248894
+      }
+    },
+    {
+      "t": 12.642,
+      "papersd": {
+        "rss_kib": 26300,
+        "cpu_s": 11.0,
+        "read_bytes": 4046848,
+        "write_bytes": 529043456,
+        "rchar": 698723729,
+        "wchar": 628618446
+      }
+    },
+    {
+      "t": 13.148,
+      "papersd": {
+        "rss_kib": 26300,
+        "cpu_s": 11.0,
+        "read_bytes": 4046848,
+        "write_bytes": 547852288,
+        "rchar": 712642201,
+        "wchar": 652690910
+      }
+    },
+    {
+      "t": 13.653,
+      "papersd": {
+        "rss_kib": 26300,
+        "cpu_s": 12.0,
+        "read_bytes": 4046848,
+        "write_bytes": 571080704,
+        "rchar": 740905597,
+        "wchar": 680417566
+      }
+    },
+    {
+      "t": 14.158,
+      "papersd": {
+        "rss_kib": 26300,
+        "cpu_s": 12.0,
+        "read_bytes": 4046848,
+        "write_bytes": 591302656,
+        "rchar": 765111557,
+        "wchar": 704473230
+      }
+    },
+    {
+      "t": 14.663,
+      "papersd": {
+        "rss_kib": 26300,
+        "cpu_s": 13.0,
+        "read_bytes": 4046848,
+        "write_bytes": 608870400,
+        "rchar": 777623752,
+        "wchar": 725729466
+      }
+    },
+    {
+      "t": 15.167,
+      "papersd": {
+        "rss_kib": 26300,
+        "cpu_s": 13.0,
+        "read_bytes": 4046848,
+        "write_bytes": 625111040,
+        "rchar": 789510765,
+        "wchar": 745249110
+      }
+    },
+    {
+      "t": 15.672,
+      "papersd": {
+        "rss_kib": 26308,
+        "cpu_s": 13.0,
+        "read_bytes": 4046848,
+        "write_bytes": 650342400,
+        "rchar": 823442910,
+        "wchar": 773397958
+      }
+    },
+    {
+      "t": 16.177,
+      "papersd": {
+        "rss_kib": 26308,
+        "cpu_s": 14.0,
+        "read_bytes": 4046848,
+        "write_bytes": 669745152,
+        "rchar": 847073476,
+        "wchar": 795960990
+      }
+    },
+    {
+      "t": 16.683,
+      "papersd": {
+        "rss_kib": 26308,
+        "cpu_s": 14.0,
+        "read_bytes": 4046848,
+        "write_bytes": 687427584,
+        "rchar": 862964044,
+        "wchar": 818771578
+      }
+    },
+    {
+      "t": 17.19,
+      "papersd": {
+        "rss_kib": 26308,
+        "cpu_s": 15.0,
+        "read_bytes": 4046848,
+        "write_bytes": 701485056,
+        "rchar": 872276616,
+        "wchar": 836808234
+      }
+    },
+    {
+      "t": 17.694,
+      "papersd": {
+        "rss_kib": 26308,
+        "cpu_s": 15.0,
+        "read_bytes": 4046848,
+        "write_bytes": 716795904,
+        "rchar": 883644472,
+        "wchar": 855773790
+      }
+    },
+    {
+      "t": 18.2,
+      "papersd": {
+        "rss_kib": 26308,
+        "cpu_s": 16.0,
+        "read_bytes": 4046848,
+        "write_bytes": 742813696,
+        "rchar": 923272586,
+        "wchar": 885904794
+      }
+    },
+    {
+      "t": 18.705,
+      "papersd": {
+        "rss_kib": 26308,
+        "cpu_s": 16.0,
+        "read_bytes": 4046848,
+        "write_bytes": 761114624,
+        "rchar": 940210339,
+        "wchar": 907454098
+      }
+    },
+    {
+      "t": 19.209,
+      "papersd": {
+        "rss_kib": 26328,
+        "cpu_s": 17.0,
+        "read_bytes": 4046848,
+        "write_bytes": 781959168,
+        "rchar": 970505760,
+        "wchar": 933166826
+      }
+    },
+    {
+      "t": 19.714,
+      "papersd": {
+        "rss_kib": 26328,
+        "cpu_s": 17.0,
+        "read_bytes": 4046848,
+        "write_bytes": 805961728,
+        "rchar": 1001787539,
+        "wchar": 960512970
+      }
+    },
+    {
+      "t": 20.219,
+      "papersd": {
+        "rss_kib": 26328,
+        "cpu_s": 18.0,
+        "read_bytes": 4046848,
+        "write_bytes": 834428928,
+        "rchar": 1046681032,
+        "wchar": 993482442
+      }
+    },
+    {
+      "t": 20.724,
+      "papersd": {
+        "rss_kib": 26328,
+        "cpu_s": 18.0,
+        "read_bytes": 4046848,
+        "write_bytes": 868913152,
+        "rchar": 1112726579,
+        "wchar": 1034625822
+      }
+    },
+    {
+      "t": 21.23,
+      "papersd": {
+        "rss_kib": 26328,
+        "cpu_s": 18.0,
+        "read_bytes": 4046848,
+        "write_bytes": 900874240,
+        "rchar": 1173089035,
+        "wchar": 1071925234
+      }
+    },
+    {
+      "t": 21.736,
+      "papersd": {
+        "rss_kib": 26328,
+        "cpu_s": 19.0,
+        "read_bytes": 4046848,
+        "write_bytes": 926191616,
+        "rchar": 1200512529,
+        "wchar": 1100833902
+      }
+    },
+    {
+      "t": 22.241,
+      "papersd": {
+        "rss_kib": 26328,
+        "cpu_s": 19.0,
+        "read_bytes": 4046848,
+        "write_bytes": 943300608,
+        "rchar": 1212401958,
+        "wchar": 1122811186
+      }
+    },
+    {
+      "t": 22.746,
+      "papersd": {
+        "rss_kib": 26328,
+        "cpu_s": 20.0,
+        "read_bytes": 4046848,
+        "write_bytes": 963653632,
+        "rchar": 1239766111,
+        "wchar": 1146792550
+      }
+    },
+    {
+      "t": 23.26,
+      "papersd": {
+        "rss_kib": 26328,
+        "cpu_s": 20.0,
+        "read_bytes": 4046848,
+        "write_bytes": 985550848,
+        "rchar": 1268357268,
+        "wchar": 1173691410
+      }
+    },
+    {
+      "t": 23.766,
+      "papersd": {
+        "rss_kib": 26328,
+        "cpu_s": 21.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1010143232,
+        "rchar": 1297664071,
+        "wchar": 1201037150
+      }
+    },
+    {
+      "t": 24.272,
+      "papersd": {
+        "rss_kib": 26332,
+        "cpu_s": 21.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1027264512,
+        "rchar": 1314576375,
+        "wchar": 1221591634
+      }
+    },
+    {
+      "t": 24.777,
+      "papersd": {
+        "rss_kib": 26332,
+        "cpu_s": 22.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1044414464,
+        "rchar": 1325286842,
+        "wchar": 1243145370
+      }
+    },
+    {
+      "t": 25.284,
+      "papersd": {
+        "rss_kib": 26332,
+        "cpu_s": 22.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1060253696,
+        "rchar": 1336781079,
+        "wchar": 1262039190
+      }
+    },
+    {
+      "t": 25.788,
+      "papersd": {
+        "rss_kib": 26332,
+        "cpu_s": 23.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1086349312,
+        "rchar": 1366425396,
+        "wchar": 1292116222
+      }
+    },
+    {
+      "t": 26.294,
+      "papersd": {
+        "rss_kib": 26332,
+        "cpu_s": 23.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1108905984,
+        "rchar": 1392404454,
+        "wchar": 1317529970
+      }
+    },
+    {
+      "t": 26.798,
+      "papersd": {
+        "rss_kib": 26332,
+        "cpu_s": 23.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1132752896,
+        "rchar": 1430856204,
+        "wchar": 1345269606
+      }
+    },
+    {
+      "t": 27.304,
+      "papersd": {
+        "rss_kib": 26332,
+        "cpu_s": 24.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1154088960,
+        "rchar": 1450008078,
+        "wchar": 1370758486
+      }
+    },
+    {
+      "t": 27.809,
+      "papersd": {
+        "rss_kib": 26332,
+        "cpu_s": 24.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1171521536,
+        "rchar": 1463781125,
+        "wchar": 1391392950
+      }
+    },
+    {
+      "t": 28.314,
+      "papersd": {
+        "rss_kib": 26332,
+        "cpu_s": 25.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1187938304,
+        "rchar": 1470270626,
+        "wchar": 1412805866
+      }
+    },
+    {
+      "t": 28.819,
+      "papersd": {
+        "rss_kib": 26332,
+        "cpu_s": 25.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1211809792,
+        "rchar": 1500811512,
+        "wchar": 1442748758
+      }
+    },
+    {
+      "t": 29.324,
+      "papersd": {
+        "rss_kib": 26332,
+        "cpu_s": 26.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1235968000,
+        "rchar": 1539749701,
+        "wchar": 1470981674
+      }
+    },
+    {
+      "t": 29.829,
+      "papersd": {
+        "rss_kib": 26332,
+        "cpu_s": 26.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1259655168,
+        "rchar": 1558453650,
+        "wchar": 1498235314
+      }
+    },
+    {
+      "t": 30.334,
+      "papersd": {
+        "rss_kib": 26336,
+        "cpu_s": 27.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1278377984,
+        "rchar": 1578357662,
+        "wchar": 1520979170
+      }
+    },
+    {
+      "t": 30.84,
+      "papersd": {
+        "rss_kib": 26336,
+        "cpu_s": 27.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1296461824,
+        "rchar": 1592276604,
+        "wchar": 1543412234
+      }
+    },
+    {
+      "t": 31.345,
+      "papersd": {
+        "rss_kib": 26336,
+        "cpu_s": 27.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1316933632,
+        "rchar": 1609653918,
+        "wchar": 1569192898
+      }
+    },
+    {
+      "t": 31.849,
+      "papersd": {
+        "rss_kib": 26336,
+        "cpu_s": 28.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1342763008,
+        "rchar": 1640063357,
+        "wchar": 1599874778
+      }
+    },
+    {
+      "t": 32.356,
+      "papersd": {
+        "rss_kib": 26336,
+        "cpu_s": 28.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1383309312,
+        "rchar": 1719508217,
+        "wchar": 1646918398
+      }
+    },
+    {
+      "t": 32.86,
+      "papersd": {
+        "rss_kib": 27064,
+        "cpu_s": 29.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1417875456,
+        "rchar": 1794481987,
+        "wchar": 1687123982
+      }
+    },
+    {
+      "t": 33.365,
+      "papersd": {
+        "rss_kib": 27068,
+        "cpu_s": 29.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1458466816,
+        "rchar": 1874722884,
+        "wchar": 1733361722
+      }
+    },
+    {
+      "t": 33.87,
+      "papersd": {
+        "rss_kib": 27068,
+        "cpu_s": 30.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1490386944,
+        "rchar": 1939950563,
+        "wchar": 1771496182
+      }
+    },
+    {
+      "t": 34.376,
+      "papersd": {
+        "rss_kib": 27072,
+        "cpu_s": 30.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1532350464,
+        "rchar": 2020274083,
+        "wchar": 1819894270
+      }
+    },
+    {
+      "t": 34.882,
+      "papersd": {
+        "rss_kib": 27072,
+        "cpu_s": 30.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1566597120,
+        "rchar": 2084297464,
+        "wchar": 1859506446
+      }
+    },
+    {
+      "t": 35.388,
+      "papersd": {
+        "rss_kib": 27072,
+        "cpu_s": 31.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1601093632,
+        "rchar": 2147780509,
+        "wchar": 1899636798
+      }
+    },
+    {
+      "t": 35.892,
+      "papersd": {
+        "rss_kib": 27072,
+        "cpu_s": 31.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1634369536,
+        "rchar": 2214277938,
+        "wchar": 1938974550
+      }
+    },
+    {
+      "t": 36.399,
+      "papersd": {
+        "rss_kib": 27072,
+        "cpu_s": 32.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1670025216,
+        "rchar": 2284634910,
+        "wchar": 1980056494
+      }
+    },
+    {
+      "t": 36.905,
+      "papersd": {
+        "rss_kib": 27072,
+        "cpu_s": 32.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1699713024,
+        "rchar": 2344553081,
+        "wchar": 2015179754
+      }
+    },
+    {
+      "t": 37.41,
+      "papersd": {
+        "rss_kib": 27072,
+        "cpu_s": 33.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1734176768,
+        "rchar": 2409829698,
+        "wchar": 2056089578
+      }
+    },
+    {
+      "t": 37.915,
+      "papersd": {
+        "rss_kib": 27072,
+        "cpu_s": 33.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1760460800,
+        "rchar": 2446984853,
+        "wchar": 2087999310
+      }
+    },
+    {
+      "t": 38.42,
+      "papersd": {
+        "rss_kib": 27072,
+        "cpu_s": 34.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1782849536,
+        "rchar": 2465700324,
+        "wchar": 2115749546
+      }
+    },
+    {
+      "t": 38.926,
+      "papersd": {
+        "rss_kib": 27072,
+        "cpu_s": 34.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1801375744,
+        "rchar": 2478665118,
+        "wchar": 2138167378
+      }
+    },
+    {
+      "t": 39.431,
+      "papersd": {
+        "rss_kib": 27072,
+        "cpu_s": 34.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1834840064,
+        "rchar": 2531753236,
+        "wchar": 2177136770
+      }
+    },
+    {
+      "t": 39.936,
+      "papersd": {
+        "rss_kib": 27072,
+        "cpu_s": 35.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1853206528,
+        "rchar": 2551137508,
+        "wchar": 2200877526
+      }
+    },
+    {
+      "t": 40.441,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 35.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1872670720,
+        "rchar": 2565621077,
+        "wchar": 2224320170
+      }
+    },
+    {
+      "t": 40.945,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 36.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1895198720,
+        "rchar": 2583759795,
+        "wchar": 2251519430
+      }
+    },
+    {
+      "t": 41.45,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 36.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1914003456,
+        "rchar": 2597690826,
+        "wchar": 2272141854
+      }
+    },
+    {
+      "t": 41.955,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 37.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1941327872,
+        "rchar": 2639005615,
+        "wchar": 2304876830
+      }
+    },
+    {
+      "t": 42.459,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 37.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1960484864,
+        "rchar": 2659118294,
+        "wchar": 2327209370
+      }
+    },
+    {
+      "t": 42.966,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 38.0,
+        "read_bytes": 4046848,
+        "write_bytes": 1981562880,
+        "rchar": 2675986755,
+        "wchar": 2353131194
+      }
+    },
+    {
+      "t": 43.472,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 38.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2003226624,
+        "rchar": 2698275133,
+        "wchar": 2380096850
+      }
+    },
+    {
+      "t": 43.977,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 39.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2021056512,
+        "rchar": 2715629773,
+        "wchar": 2401447034
+      }
+    },
+    {
+      "t": 44.482,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 39.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2041393152,
+        "rchar": 2730754680,
+        "wchar": 2424865090
+      }
+    },
+    {
+      "t": 44.986,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 39.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2078650368,
+        "rchar": 2802343386,
+        "wchar": 2468517178
+      }
+    },
+    {
+      "t": 45.493,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 40.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2111356928,
+        "rchar": 2866560230,
+        "wchar": 2506736870
+      }
+    },
+    {
+      "t": 46.002,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 40.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2146054144,
+        "rchar": 2932120732,
+        "wchar": 2547030642
+      }
+    },
+    {
+      "t": 46.519,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 41.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2169176064,
+        "rchar": 2956272131,
+        "wchar": 2575071518
+      }
+    },
+    {
+      "t": 47.024,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 41.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2188251136,
+        "rchar": 2976930407,
+        "wchar": 2596688402
+      }
+    },
+    {
+      "t": 47.529,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 42.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2215956480,
+        "rchar": 3016275761,
+        "wchar": 2632494694
+      }
+    },
+    {
+      "t": 48.035,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 42.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2239500288,
+        "rchar": 3058161563,
+        "wchar": 2661164286
+      }
+    },
+    {
+      "t": 48.54,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 43.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2268557312,
+        "rchar": 3103514930,
+        "wchar": 2695012394
+      }
+    },
+    {
+      "t": 49.044,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 43.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2290073600,
+        "rchar": 3132902067,
+        "wchar": 2721277830
+      }
+    },
+    {
+      "t": 49.549,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 43.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2309107712,
+        "rchar": 3158807259,
+        "wchar": 2743383530
+      }
+    },
+    {
+      "t": 50.055,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 44.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2330882048,
+        "rchar": 3190116404,
+        "wchar": 2768623270
+      }
+    },
+    {
+      "t": 50.561,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 44.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2355638272,
+        "rchar": 3222257386,
+        "wchar": 2795817474
+      }
+    },
+    {
+      "t": 51.066,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 45.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2376880128,
+        "rchar": 3255400435,
+        "wchar": 2822107158
+      }
+    },
+    {
+      "t": 51.573,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 45.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2407182336,
+        "rchar": 3310579847,
+        "wchar": 2859023874
+      }
+    },
+    {
+      "t": 52.08,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 46.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2435227648,
+        "rchar": 3350545043,
+        "wchar": 2890116922
+      }
+    },
+    {
+      "t": 52.584,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 46.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2465619968,
+        "rchar": 3390864433,
+        "wchar": 2923508434
+      }
+    },
+    {
+      "t": 53.1,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 47.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2488958976,
+        "rchar": 3423030308,
+        "wchar": 2950402458
+      }
+    },
+    {
+      "t": 53.607,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 47.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2517614592,
+        "rchar": 3462213758,
+        "wchar": 2983851382
+      }
+    },
+    {
+      "t": 54.111,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 47.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2536427520,
+        "rchar": 3480632269,
+        "wchar": 3005657386
+      }
+    },
+    {
+      "t": 54.615,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 48.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2562760704,
+        "rchar": 3526384360,
+        "wchar": 3038202014
+      }
+    },
+    {
+      "t": 55.121,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 48.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2587357184,
+        "rchar": 3551182630,
+        "wchar": 3068201406
+      }
+    },
+    {
+      "t": 55.628,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 49.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2604105728,
+        "rchar": 3561177056,
+        "wchar": 3089106174
+      }
+    },
+    {
+      "t": 56.133,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 49.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2622959616,
+        "rchar": 3574734533,
+        "wchar": 3113766266
+      }
+    },
+    {
+      "t": 56.64,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 50.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2644361216,
+        "rchar": 3592597945,
+        "wchar": 3138216106
+      }
+    },
+    {
+      "t": 57.146,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 50.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2672984064,
+        "rchar": 3638870813,
+        "wchar": 3172505782
+      }
+    },
+    {
+      "t": 57.652,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 51.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2710708224,
+        "rchar": 3710898595,
+        "wchar": 3216015354
+      }
+    },
+    {
+      "t": 58.157,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 51.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2746671104,
+        "rchar": 3780078894,
+        "wchar": 3257044890
+      }
+    },
+    {
+      "t": 58.663,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 51.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2774728704,
+        "rchar": 3824776563,
+        "wchar": 3289315450
+      }
+    },
+    {
+      "t": 59.169,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 52.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2795311104,
+        "rchar": 3839657625,
+        "wchar": 3313905342
+      }
+    },
+    {
+      "t": 59.674,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 52.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2814390272,
+        "rchar": 3855791900,
+        "wchar": 3334890866
+      }
+    },
+    {
+      "t": 60.179,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 53.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2833690624,
+        "rchar": 3870320107,
+        "wchar": 3358320882
+      }
+    },
+    {
+      "t": 60.685,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 53.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2867412992,
+        "rchar": 3937443124,
+        "wchar": 3398125346
+      }
+    },
+    {
+      "t": 61.191,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 54.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2894770176,
+        "rchar": 3975292434,
+        "wchar": 3430264110
+      }
+    },
+    {
+      "t": 61.696,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 54.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2920189952,
+        "rchar": 4010383076,
+        "wchar": 3459657422
+      }
+    },
+    {
+      "t": 62.207,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 55.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2940530688,
+        "rchar": 4025865961,
+        "wchar": 3484657946
+      }
+    },
+    {
+      "t": 62.713,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 55.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2957656064,
+        "rchar": 4042411899,
+        "wchar": 3504520866
+      }
+    },
+    {
+      "t": 63.219,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 56.0,
+        "read_bytes": 4046848,
+        "write_bytes": 2973065216,
+        "rchar": 4048607055,
+        "wchar": 3522933534
+      }
+    },
+    {
+      "t": 63.723,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 56.0,
+        "read_bytes": 4046848,
+        "write_bytes": 3007193088,
+        "rchar": 4112612278,
+        "wchar": 3562807014
+      }
+    },
+    {
+      "t": 64.23,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 56.0,
+        "read_bytes": 4046848,
+        "write_bytes": 3024785408,
+        "rchar": 4127448987,
+        "wchar": 3582999710
+      }
+    },
+    {
+      "t": 64.735,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 57.0,
+        "read_bytes": 4046848,
+        "write_bytes": 3040690176,
+        "rchar": 4135535178,
+        "wchar": 3602437686
+      }
+    },
+    {
+      "t": 65.241,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 57.0,
+        "read_bytes": 4046848,
+        "write_bytes": 3058757632,
+        "rchar": 4152627304,
+        "wchar": 3624465402
+      }
+    },
+    {
+      "t": 65.747,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 58.0,
+        "read_bytes": 4046848,
+        "write_bytes": 3069710336,
+        "rchar": 4156407171,
+        "wchar": 3639487678
+      }
+    },
+    {
+      "t": 66.253,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 58.0,
+        "read_bytes": 4046848,
+        "write_bytes": 3088326656,
+        "rchar": 4172142689,
+        "wchar": 3662444066
+      }
+    },
+    {
+      "t": 66.758,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 59.0,
+        "read_bytes": 4046848,
+        "write_bytes": 3119353856,
+        "rchar": 4221771009,
+        "wchar": 3697489266
+      }
+    },
+    {
+      "t": 67.263,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 59.0,
+        "read_bytes": 4046848,
+        "write_bytes": 3125366784,
+        "rchar": 4227629841,
+        "wchar": 3704144482
+      }
+    },
+    {
+      "t": 67.77,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 59.0,
+        "read_bytes": 4046848,
+        "write_bytes": 3125366784,
+        "rchar": 4227629841,
+        "wchar": 3704144482
+      }
+    },
+    {
+      "t": 68.276,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 59.0,
+        "read_bytes": 4046848,
+        "write_bytes": 3125366784,
+        "rchar": 4227629841,
+        "wchar": 3704144482
+      }
+    },
+    {
+      "t": 68.78,
+      "papersd": {
+        "rss_kib": 27076,
+        "cpu_s": 59.0,
+        "read_bytes": 4046848,
+        "write_bytes": 3125366784,
+        "rchar": 4227629841,
+        "wchar": 3704144482
+      }
+    }
+  ],
+  "extract_jobs_span_s": 66.841
+}

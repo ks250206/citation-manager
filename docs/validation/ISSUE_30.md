@@ -80,7 +80,7 @@ Xvfb（1400x900x24、GPU なし＝ソフトウェア描画）で起動。
 | メタデータ検索 p95 < 150 ms（literal 全ケース） | 103.9 ms（hit 13.6 / no-hit 115.0 / 複合 94.4） | 77.2 ms（hit 8.4 / no-hit 86.6 / 複合 77.2） | 達成。no-hit は全件走査で余裕小 |
 | 本文全文検索 p95 < 300 ms（索引済、完全な回答） | 34.7 ms | 28.8 ms | 達成 |
 | 〃 既定 scope の全語（短語の部分回答を含む） | 57.1 ms | 58.0 ms | 参考 |
-| 〃 collection 内 | 67.7 ms | 76.7 ms | 参考（短語は後述の制限あり） |
+| 〃 collection 内 | 67.7 ms | 76.7 ms | 参考（短語 1 call 目の 0 件は後述 4 で解消、再測定 92.2 ms） |
 | 短語 `AllPages` の 1 call（window/結果 page） | p95 121.3 ms | p95 106.7 ms | 1 call は目標内。完全回答は数十 call |
 | GUI アイドル RSS < 200 MB | GUI 160.9 MiB（+ papersd 13.3 = 174.2） | — | Linux Xvfb で達成。macOS は**未測定** |
 | PDF 1本閲覧時 RSS < 350 MB（総プロセス） | **409.7 MiB**（GUI 320.6 + papersd 89.1） | — | **未達**（Linux）。macOS は**未測定** |
@@ -154,12 +154,30 @@ PDF page を「未検索」と返す（0 件表示と区別、#18 の設計ど�
 3. **16 GB Apple Silicon 実機（未測定）**: 同じ `benchmark.yml`/`representative.py` を実機で
    `--out` 付きで実行すれば同形式の JSON が得られる。GitHub runner は 7 GB の仮想 M1 で
    代替ではない。
-4. **短語（1–2 文字）の collection 内検索**（参考、目標外の製品所見）: collection 0 は
-   2,000 文献 + 2,000 page。短語走査の window は文書 id 順で、先に投入された書誌 2,000 件で
-   既定 window（2,000）を使い切るため、1 call 目は page を 1 件も見ずに 0 件 +
-   `DocumentsAfterWindow` を返す（Linux/macOS 共通、p95 69/89 ms）。完全回答には
-   continuation が要る。案: 短語走査を page 文書から先に行う、または narrowing 時は対象
-   文書数で window を決める（#18/#21 の範囲、本 PR では変更しない）。
+4. **短語（1–2 文字）の collection 内検索**（参考、目標外の製品所見）→ **#81 で解消**:
+   collection 0 は 2,000 文献 + 2,000 page。短語走査の window は文書 id 順で、先に投入された
+   書誌 2,000 件で既定 window（2,000）を使い切るため、1 call 目は page を 1 件も見ずに 0 件 +
+   `DocumentsAfterWindow` を返していた（Linux/macOS 共通、p95 69/89 ms）。
+   - 対応: 一致がないまま `candidate_limit` に達した window は 256 行 chunk で走査を続け、
+     一致した chunk、20,000 文書、走査開始時の残り時間の半分、scope 終端のいずれかで終える
+     （[ADR](../ADR/fulltext-search.md) の Empty-window extension）。cursor は最後に調べた
+     id のまま、window 間の重複なし、上限到達は通常の partial（`timed_out` ではない）。
+     回帰テスト `scoped_short_term_reaches_pages_behind_a_window_of_records`。
+   - 再測定（Linux、同条件・同 oracle、commit 56d3eed、
+     [linux-empty-window](ISSUE_30/linux-empty-window/)）:
+
+     | ケース | 旧（[linux](ISSUE_30/linux/)） | 新 |
+     |---|---|---|
+     | collection 内 `電` 1 call 目 | 0 件、2,000 文書、p95 69.2 ms | **75 件**（page）、2,256 文書、p95 113.3 ms |
+     | collection 内 `電池` 1 call 目 | 0 件、2,000 文書、p95 69.0 ms | **37 件**（page）、2,256 文書、p95 92.4 ms |
+     | 既定 scope `電`/`電池` 1 call（書誌のみ、一致なし） | 2,000 文書で partial、p95 59.2/57.5 ms、書誌完了まで 5 call・198/203 ms | 10,000 文書を 1 call で走査し書誌は完了（残りは `PdfPagesForShortTerms` のみ）、p95 233.1/239.8 ms、計 186/178 ms |
+     | `AllPages` `電`/`電池` 完全走査 | 15 window・6.4/3.5 s | 11 window・6.7/3.8 s、再現率 1.0・偽陽性 0 |
+     | `AllPages` 1 call p95 | 121.3 ms | 141.7 ms |
+
+     既定 scope の一致なし短語は、同じ仕事を 5 call から 1 call にまとめた分だけ 1 call の
+     待ち時間が増える（総時間は同等、本文全文検索 p95 目標 300 ms の内側）。その他の §16.2
+     指標は同水準（全文 p95 38.5 ms、メタデータ 124.2 ms、コレクション切替 7.0 ms。
+     実行環境の差で全体に約 1 割遅い）。macOS は**未再測定**。
 5. **索引作成の書き込み量**: 402 MB の DB に 3.13 GB を書いた（約 7.8 倍、WAL/checkpoint と
    FTS segment merge）。案: 一括抽出時の FTS `automerge`/`crisismerge` と WAL checkpoint 間隔の
    調整、または page batch を大きくする。SSD 寿命より時間への影響を実機で確認する。

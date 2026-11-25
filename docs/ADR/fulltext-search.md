@@ -155,7 +155,11 @@ diagnostic, so a request never silently selects the whole library.
   scanning PDF pages first (needs a two-part cursor on every surface and moves title hits,
   the highest-weighted, behind all pages — the same empty-window failure mirrored for
   terms found only in records); sizing the window by the scoped document count (no help
-  for a collection larger than one window). The paper-level AND re-check below uses fixed
+  for a collection larger than one window). Measured on the #30 data (Linux): the
+  collection-scoped `電` first call now returns 75 page hits after 2,256 documents (p95
+  113 ms, was 0 hits / 69 ms); default-scope `電` scans all 10,000 records in one call
+  (p95 233 ms) instead of five 2,000-document calls (59 ms each, ~200 ms in total); see
+  [ISSUE_30](../validation/ISSUE_30.md). The paper-level AND re-check below uses fixed
   windows. Scope `bounded` (default) scans bibliographic and
   annotation documents always and PDF pages only after an explicit narrowing filter
   (doi/tag/collection/year/`collection`/`papers`); otherwise `unsearched` contains
