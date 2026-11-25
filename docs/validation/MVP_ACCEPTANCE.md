@@ -137,7 +137,7 @@ open while a child is open or a gate below remains.
 | #11 PDFium PoC | closed | met ([PDFIUM_POC](PDFIUM_POC.md)) | — |
 | #34 `.app` layout | open (PR #78 merged; real-Mac items remain) | hosted-runner evidence complete ([APP_LAYOUT_POC](APP_LAYOUT_POC.md)) | real Mac: Finder install, quarantine, concurrent first start, sleep/logout, TCC |
 | #52 command registry, #53 FTS tokenizer | closed | met ([ISSUE_52](ISSUE_52.md), [ISSUE_53](ISSUE_53.md)) | — |
-| **#2 M1** 文献管理・DOI・BibTeX/RIS | open | Exit met: 1000 BibTeX/RIS records imported, classified, searched and re-exported without corruption on a real Mac ([native-bulk](issue-15/native-bulk.md)) | #15 gates below; live DOI |
+| **#2 M1** 文献管理・DOI・BibTeX/RIS | closed (exit met; real-Mac gates tracked here) | Exit met: 1000 BibTeX/RIS records imported, classified, searched and re-exported without corruption on a real Mac ([native-bulk](issue-15/native-bulk.md)) | #15 gates below; live DOI |
 | #12 collections/tags/filters | closed | met | — |
 | #13 BibTeX/RIS | closed | met | — |
 | #14 DOI resolver | closed | met with loopback providers; live providers never contacted | live Crossref/DataCite |
@@ -145,11 +145,11 @@ open while a child is open or a gate below remains.
 | #16 palette/Vim | closed | met on Linux GUI; macOS ⌘/IME not verified | real Mac |
 | #33 ImportService | closed | met ([ISSUE_33](ISSUE_33.md)) | — |
 | #46 search DSL | closed | met ([ISSUE_46](ISSUE_46.md)) | — |
-| **#3 M2** PDF・全文検索・注釈 | open | Exit met on Linux: multi-line and rotated annotations saved, restarted (#19 GUI), exported and re-read (#20 runtime + pypdf/poppler, 4 rotations) | macOS GUI not exercised; save dialog |
+| **#3 M2** PDF・全文検索・注釈 | closed (exit met; real-Mac gates tracked here) | Exit met on Linux: multi-line and rotated annotations saved, restarted (#19 GUI), exported and re-read (#20 runtime + pypdf/poppler, 4 rotations) | macOS GUI not exercised; save dialog |
 | #17 viewer, #18 extraction/FTS, #19 annotations, #20 export, #21 search UI | closed | met on Linux (GUI under Xvfb, PDFium 8125) | macOS GUI; #20 real save dialog |
-| **#4 M3** Browser Capture | open | Exit met: GUI closed → browser save (Linux Chromium + Firefox ESR with the real extension; macOS VM probes) | store extension IDs; real Mac |
+| **#4 M3** Browser Capture | closed (exit met; real-Mac gates tracked here) | Exit met: GUI closed → browser save (Linux Chromium + Firefox ESR with the real extension; macOS VM probes) | store extension IDs; real Mac |
 | #22 capture service, #23 native host, #24 extension | closed | met ([ISSUE_22](ISSUE_22.md), [ISSUE_23](ISSUE_23.md), [ISSUE_24](ISSUE_24.md)) | store IDs (#24), branded Chrome |
-| **#5 M4** daemon・REST・MCP・CLI | open | Exit met: with no GUI running an MCP client searches and reads full text; after the owner's write grant it adds annotations (release E2E on Linux and the macOS VM) | — |
+| **#5 M4** daemon・REST・MCP・CLI | closed (exit met; real-Mac gates tracked here) | Exit met: with no GUI running an MCP client searches and reads full text; after the owner's write grant it adds annotations (release E2E on Linux and the macOS VM) | — |
 | #25 papersd/IPC, #26 tokens/grants, #27 REST, #28 CLI, #29 MCP | closed | met ([ISSUE_25](ISSUE_25.md) … PR #70); macOS Keychain storage not verified (#26) | Keychain on a real Mac |
 | **#6 M5** 安定化と配布 | open | Exit **partly** met: new install → browser save → PDF annotation → MCP is reproducible by `tests/e2e/release` on Linux (passed) and, without a browser, on the macOS VM; not on a real Mac, not with a signed build | all blockers below |
 | #30 recovery/security/10k | open (PR #77 merged) | recovery, hostile-input and layout regressions met; benchmark partial ([ISSUE_30](ISSUE_30.md)) | 16 GB reference machine; PDF-view RSS above target; frame time unmeasured |
