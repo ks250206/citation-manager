@@ -40,6 +40,8 @@ pub enum BulkKind {
     Move,
 }
 impl BulkKind {
+    /// Every kind, in the order a chooser offers them.
+    pub const ALL: [BulkKind; 2] = [Self::Delete, Self::Move];
     /// The operation a request is decided as once the burst limit is exceeded.
     pub fn operation(self) -> Operation {
         match self {
@@ -82,6 +84,17 @@ impl std::fmt::Display for ElevationError {
             }
         })
     }
+}
+
+/// The kinds a grant holding `capabilities` may be elevated for (each needs its base
+/// capability; see `elevation_length`), in `BulkKind::ALL` order. A grant holding both the
+/// delete and the write scope may be elevated for either, but only one at a time, so
+/// clients must let the owner choose instead of picking one.
+pub fn elevatable_kinds(capabilities: &CapabilitySet) -> Vec<BulkKind> {
+    BulkKind::ALL
+        .into_iter()
+        .filter(|kind| kind.base(capabilities))
+        .collect()
 }
 
 /// Validates a requested elevation and returns its monotonic length.
@@ -205,5 +218,40 @@ mod tests {
             elevation_length(&set(&[LibraryRead, MetadataRead]), BulkKind::Delete, 1_000),
             Err(ElevationError::NothingToElevate)
         );
+    }
+
+    #[test]
+    fn elevatable_kinds_match_elevation_length() {
+        assert_eq!(
+            elevatable_kinds(&set(&[LibraryDelete, LibraryWrite])),
+            vec![BulkKind::Delete, BulkKind::Move]
+        );
+        assert_eq!(
+            elevatable_kinds(&set(&[LibraryDelete])),
+            vec![BulkKind::Delete]
+        );
+        assert_eq!(
+            elevatable_kinds(&set(&[AnnotationsWrite])),
+            vec![BulkKind::Delete]
+        );
+        assert_eq!(
+            elevatable_kinds(&set(&[LibraryWrite])),
+            vec![BulkKind::Move]
+        );
+        assert!(elevatable_kinds(&set(&[LibraryRead, MetadataRead])).is_empty());
+        for caps in [
+            set(&[LibraryDelete, LibraryWrite]),
+            set(&[AnnotationsWrite]),
+            set(&[LibraryWrite]),
+            set(&[MetadataRead]),
+        ] {
+            for kind in BulkKind::ALL {
+                assert_eq!(
+                    elevatable_kinds(&caps).contains(&kind),
+                    elevation_length(&caps, kind, 1_000).is_ok(),
+                    "{caps:?} {kind:?}"
+                );
+            }
+        }
     }
 }

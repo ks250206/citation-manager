@@ -111,7 +111,9 @@ minutes, never past the token expiry, only for tokens holding that kind's base s
 (`papers:delete`/`annotations:write` for delete, `papers:write` for move), and session
 narrowing applies. The deadline is a monotonic `Instant` in the daemon; the stored
 wall-clock end is display only, is cleared at daemon start, and elevations end with the
-daemon. `EndElevation` stops it immediately.
+daemon. `EndElevation` stops it immediately. A token holding both base scopes can be
+elevated for either kind, so the settings screen lets the owner choose the kind (offering
+only `policy::elevation::elevatable_kinds` of the token) and sends exactly that choice.
 
 ### Owner-only capabilities
 
@@ -146,7 +148,11 @@ must not listen while `enabled` is false.
 | fallback | `$XDG_DATA_HOME` or `~/.local/share` (macOS `~/Library/Application Support`) `/citation-manager/secrets/<library key>/<account>.secret`, 0600 in a 0700 dir **outside the library** (so syncing or copying the library folder does not carry token copies; `<library>/daemon/secrets` only without a home directory) | **weaker**: readable by any same-UID process, copied by home backups; the GUI shows a warning |
 
 Helpers run by absolute path with a 20 s timeout and are always reaped (killed and waited
-for on every error path). The fallback reads with `lstat` + open + `fstat` and refuses a
+for on every error path). Clients give commands that wait on the store (issue: write plus
+Keychain read-back; re-issue: also deletes secrets; revoke) at least the whole helper
+sequence as their deadline (`ApiCommand::secret_store_steps`, `ClientTimeouts::for_command`),
+so a slow or locked keyring cannot make the client discard the reply carrying the new
+secret while the daemon completes the action. The fallback reads with `lstat` + open + `fstat` and refuses a
 symlink, a non-0600/multi-link file or an inode swap between the calls (std has no
 `O_NOFOLLOW`); writes go through a `create_new` temp file and rename. A failed OS write
 falls back to the file. At daemon start, stored copies of revoked or expired tokens are

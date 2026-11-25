@@ -5,8 +5,9 @@
 //! person presses Done or leaves the screen, and is never written to settings or logs.
 use cm_protocol::{
     api::{
-        ApiOverview, ApiSettings, AuditEntry, BindAddress, ClientKind, IssueToken, Scope, ScopeSet,
-        SecretBackend, TokenInfo, lifetime, profiles,
+        ApiCommand, ApiOverview, ApiSettings, AuditEntry, BindAddress, BulkKind, ClientKind,
+        IssueToken, Scope, ScopeSet, SecretBackend, TokenInfo, elevatable_kinds, lifetime,
+        profiles,
     },
     ipc::GrantId,
 };
@@ -25,8 +26,65 @@ pub const ISSUABLE: [Scope; 9] = [
     Scope::JobsWrite,
 ];
 pub const ELEVATION_MINUTES: i64 = 15;
-pub const ELEVATE_WARNING: &str = "Bulk delete/move without the per-minute limit for 15 minutes. \
-    Only elevate right before a bulk operation you asked the client to do.";
+/// Warning shown next to the confirmation of an elevation of `kind`.
+pub fn elevate_warning(kind: BulkKind) -> &'static str {
+    match kind {
+        BulkKind::Delete => {
+            "Bulk delete (Trash/restore papers, delete collections, tags and annotations) \
+             without the per-minute limit for 15 minutes. Only elevate right before a bulk \
+             operation you asked the client to do."
+        }
+        BulkKind::Move => {
+            "Bulk move (add/remove papers to/from collections and tags) without the \
+             per-minute limit for 15 minutes. Only elevate right before a bulk operation you \
+             asked the client to do."
+        }
+    }
+}
+/// Short name of an elevation kind for the chooser and the confirm button.
+pub fn bulk_kind_label(kind: BulkKind) -> &'static str {
+    match kind {
+        BulkKind::Delete => "Bulk delete",
+        BulkKind::Move => "Bulk move",
+    }
+}
+/// The elevation kinds the owner may grant this token, in chooser order: exactly the ones
+/// the daemon accepts (the token holds the base scope each lifts, e.g. `papers:delete` or
+/// `annotations:write` for delete, `papers:write` for move). One elevation covers one kind,
+/// so a token with several must let the owner choose. Empty for revoked tokens.
+pub fn elevation_kinds(token: &TokenInfo) -> Vec<BulkKind> {
+    if token.revoked {
+        return Vec::new();
+    }
+    elevatable_kinds(&token.capabilities)
+}
+/// The confirmation "Elevate…" opens: the first kind the token allows, which the person can
+/// change before confirming. `None` when the token allows no elevation.
+pub fn elevate_confirm(token: &TokenInfo) -> Option<Confirm> {
+    elevation_kinds(token)
+        .first()
+        .map(|kind| Confirm::Elevate(token.id, *kind))
+}
+/// The same confirmation with another kind chosen; `None` if the token does not allow it.
+pub fn choose_elevation(confirm: Confirm, token: &TokenInfo, kind: BulkKind) -> Option<Confirm> {
+    match confirm {
+        Confirm::Elevate(id, _) if id == token.id && elevation_kinds(token).contains(&kind) => {
+            Some(Confirm::Elevate(id, kind))
+        }
+        _ => None,
+    }
+}
+/// The request a confirmed elevation sends: the kind the person chose, never a substitute.
+/// `None` if the token (as last listed) no longer allows that kind.
+pub fn elevation_request(token: &TokenInfo, kind: BulkKind) -> Option<ApiCommand> {
+    elevation_kinds(token)
+        .contains(&kind)
+        .then_some(ApiCommand::Elevate {
+            grant: token.id,
+            kind,
+            duration_ms: ELEVATION_MINUTES * 60_000,
+        })
+}
 pub const FILE_STORE_WARNING: &str = "No OS keyring is available: token copies are kept in \
     0600 files in your user data folder, outside the library (readable by any program running \
     as you, and copied by home-folder backups).";
@@ -149,7 +207,8 @@ pub enum ReplyKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Confirm {
     AllowWrites(GrantId),
-    Elevate(GrantId),
+    /// Elevation of the token for the chosen kind (changeable until confirmed).
+    Elevate(GrantId, BulkKind),
     Revoke(GrantId),
     Reissue(GrantId),
 }

@@ -29,8 +29,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-/// Longest a keychain/secret-service helper may take before it is killed.
-const HELPER_TIMEOUT: Duration = Duration::from_secs(20);
+/// Longest a keychain/secret-service helper may take before it is killed. Clients size
+/// token-management deadlines from it (`ApiCommand::secret_store_steps`).
+const HELPER_TIMEOUT: Duration = crate::api::SECRET_HELPER_TIMEOUT;
 const MAX_SECRET: u64 = 512;
 
 pub trait SecretStore: Send + Sync {

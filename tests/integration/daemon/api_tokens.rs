@@ -7,7 +7,7 @@ use cm_daemon::ipc::start;
 use cm_protocol::{
     api::{
         ApiCommand, ApiReply, AuditOutcome, BindAddress, BulkKind, ClientKind, IssueToken, Scope,
-        ScopeSet, SecretBackend, TokenInfo, profiles,
+        ScopeSet, SecretBackend, TokenInfo, elevatable_kinds, profiles,
     },
     client::{
         ClientError, Session, handshake,
@@ -20,6 +20,7 @@ use cm_protocol::{
     },
     library::{LibraryRequest, NewPaper, ServiceError},
     library_query::LibraryQuery,
+    organization::{CollectionInput, OrganizationRequest},
     search::SearchRequest,
 };
 use std::{
@@ -572,6 +573,92 @@ fn bulk_operations_need_a_short_explicit_elevation() {
             .any(|e| e.operation == Operation::GrantElevate
                 && e.target == Some(info.id)
                 && e.outcome == AuditOutcome::Succeeded)
+    );
+}
+
+/// Codex review (PR #69): a token holding both `papers:delete` and `papers:write` can be
+/// elevated for either kind, and a move elevation (what the settings UI now sends when the
+/// owner chooses "Bulk move") lifts the move limit only.
+#[test]
+fn a_delete_and_write_token_can_be_elevated_for_bulk_moves() {
+    let env = Env::new();
+    let (config, _) = with_memory_store(&env);
+    let _daemon = start(config).unwrap();
+    let mut desktop = env.desktop();
+    let papers: Vec<_> = (0..12)
+        .map(|i| create(&mut desktop, &format!("move {i}")).unwrap())
+        .collect();
+    let collection = match desktop
+        .call(Command::Organization(
+            OrganizationRequest::CreateCollection(CollectionInput::named("Bulk")),
+        ))
+        .unwrap()
+        .unwrap()
+    {
+        Reply::Organization(o) => o.collections[0].id,
+        other => panic!("{other:?}"),
+    };
+    let (info, token, _) = issue_token(
+        &mut desktop,
+        "organizer",
+        ClientKind::Api,
+        &[Scope::PapersRead, Scope::PapersWrite, Scope::PapersDelete],
+    );
+    assert_eq!(
+        elevatable_kinds(&info.capabilities),
+        vec![BulkKind::Delete, BulkKind::Move]
+    );
+    let mut client = env.session("api", token);
+    let mut member = false;
+    let mut toggle = |s: &mut Session| {
+        member = !member;
+        s.call(Command::Organization(
+            OrganizationRequest::CollectionMember(papers[0].id, collection, member),
+        ))
+        .unwrap()
+        .map(|_| ())
+    };
+    for i in 0..cm_core::policy::elevation::MOVE_BURST {
+        assert!(toggle(&mut client).is_ok(), "move {i}");
+    }
+    assert_eq!(
+        toggle(&mut client).unwrap_err(),
+        WireError::Denied(Denial::Forbidden(Operation::BulkMove))
+    );
+    let ApiReply::Updated(elevated) = api(
+        &mut desktop,
+        ApiCommand::Elevate {
+            grant: info.id,
+            kind: BulkKind::Move,
+            duration_ms: 60_000,
+        },
+    )
+    .unwrap() else {
+        panic!()
+    };
+    assert_eq!(elevated.elevated_kind, Some(BulkKind::Move));
+    for i in 0..5 {
+        assert!(toggle(&mut client).is_ok(), "elevated move {i}");
+    }
+    // The move elevation does not lift the delete limit.
+    for paper in &papers[1..=cm_core::policy::elevation::DESTRUCTIVE_BURST] {
+        client
+            .call(Command::Lifecycle {
+                paper: paper.id,
+                deleted: true,
+            })
+            .unwrap()
+            .unwrap();
+    }
+    assert_eq!(
+        client
+            .call(Command::Lifecycle {
+                paper: papers[11].id,
+                deleted: true,
+            })
+            .unwrap()
+            .unwrap_err(),
+        WireError::Denied(Denial::Forbidden(Operation::BulkTrash))
     );
 }
 

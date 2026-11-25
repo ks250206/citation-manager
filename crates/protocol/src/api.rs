@@ -9,13 +9,20 @@ use crate::ipc::{Credential, GrantId, Operation};
 pub use cm_core::policy::{
     Capability, CapabilitySet,
     api::{ApiSettings, ApiSettingsError, BindAddress, DEFAULT_PORT},
-    elevation::{BulkKind, MAX_ELEVATION_MS},
+    elevation::{BulkKind, MAX_ELEVATION_MS, elevatable_kinds},
     scopes::{
         Access, ClientKind, ENDPOINTS, Endpoint, Lifetime, Scope, ScopeSet, Surface,
-        TokenPolicyError, endpoint, lifetime, profiles, scopes_of, validate_token,
+        TokenPolicyError, capabilities as scope_capabilities, endpoint, lifetime, profiles,
+        scopes_of, validate_token,
     },
 };
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
+
+/// Longest one OS secret-store helper run (`/usr/bin/security`, `/usr/bin/secret-tool`) may
+/// take before the daemon kills it (`client::secrets`). A slow keyring, or one waiting for
+/// the user to unlock it, can use all of it.
+pub const SECRET_HELPER_TIMEOUT: Duration = Duration::from_secs(20);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
@@ -59,6 +66,28 @@ impl ApiCommand {
             Self::SetScopes { .. } => Operation::GrantUpdate,
             Self::Elevate { .. } | Self::EndElevation(_) => Operation::GrantElevate,
             Self::Audit { .. } => Operation::AuditRead,
+        }
+    }
+    /// Most OS secret-store helper runs the daemon may wait on, one after another, before
+    /// it answers this command (each bounded by `SECRET_HELPER_TIMEOUT`). Clients size the
+    /// command's deadline from it: a reply discarded after the daemon finished issuing would
+    /// lose the only copy of the new secret the person sees.
+    pub fn secret_store_steps(&self) -> u32 {
+        match self {
+            // `put`: the Keychain store writes, then reads back to confirm.
+            Self::IssueToken(_) => 2,
+            // Issue (write + read-back), delete the old secret, and if the old grant cannot
+            // be revoked, revoke the new one too (deleting its secret).
+            Self::Reissue(_) => 4,
+            // Deletes the stored secret.
+            Self::Revoke(_) => 1,
+            Self::Overview
+            | Self::SaveSettings(_)
+            | Self::ListTokens
+            | Self::SetScopes { .. }
+            | Self::Elevate { .. }
+            | Self::EndElevation(_)
+            | Self::Audit { .. } => 0,
         }
     }
 }
