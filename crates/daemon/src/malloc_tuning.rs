@@ -17,6 +17,7 @@
 
 /// The tunable `apply` adds (256 KiB: large buffers are always mmapped and returned on free).
 pub const MMAP_THRESHOLD_TUNABLE: &str = "glibc.malloc.mmap_threshold=262144";
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
 const VARIABLE: &str = "GLIBC_TUNABLES";
 
 /// The `GLIBC_TUNABLES` value to re-execute with, or `None` when the current value already
