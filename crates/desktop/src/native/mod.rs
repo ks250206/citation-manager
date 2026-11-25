@@ -13,6 +13,7 @@ macro_rules! primary {
     };
 }
 mod annotations_ui;
+mod api_ui;
 mod details_ui;
 mod import_ui;
 mod library_ui;
@@ -87,6 +88,11 @@ enum Event {
     Annotation(
         Box<annotations_ui::AnnOp>,
         Result<cm_protocol::annotations::AnnotationReply, ServiceError>,
+    ),
+    /// #26 API settings replies bypass the lanes like annotations.
+    Api(
+        Box<api_ui::ApiOp>,
+        Result<cm_protocol::api::ApiReply, ServiceError>,
     ),
 }
 struct Message {
@@ -175,6 +181,9 @@ struct LibraryView {
     pending_jump: Option<(AttachmentId, u32)>,
     viewer_focus: FocusHandle,
     page_input: Entity<TextInput>,
+    /// #26 API & Integrations screen.
+    api: crate::api_settings::ApiSettingsState,
+    api_inputs: api_ui::ApiInputs,
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Screen {
@@ -183,6 +192,7 @@ enum Screen {
     Pdf,
     Settings,
     Report,
+    Api,
 }
 impl LibraryView {
     fn new(client: Arc<dyn LibraryClient>, window: &mut Window, cx: &mut Context<Self>) -> Self {
@@ -265,6 +275,8 @@ impl LibraryView {
             pending_jump: None,
             viewer_focus: cx.focus_handle(),
             page_input: cx.new(|cx| TextInput::new("Page", cx)),
+            api: Default::default(),
+            api_inputs: api_ui::ApiInputs::new(cx),
         };
         view.subscribe_viewer_inputs(window, cx);
         view.subscribe_annotation_inputs(window, cx);
@@ -416,6 +428,10 @@ impl LibraryView {
                 self.annotation_reply(*op, result, cx);
                 return;
             }
+            Event::Api(op, result) => {
+                self.api_reply(*op, result, cx);
+                return;
+            }
             event => Message { event, ..message },
         };
         if let Event::Progress(report) = message.event {
@@ -555,7 +571,7 @@ impl LibraryView {
                 }
                 Err(e) => self.status(format!("Export failed: {e}"), true, cx),
             },
-            Event::Progress(_) | Event::Render(..) | Event::Annotation(..) => (),
+            Event::Progress(_) | Event::Render(..) | Event::Annotation(..) | Event::Api(..) => (),
         }
         self.lock_fields(cx);
         cx.notify();
@@ -1067,6 +1083,10 @@ impl Render for LibraryView {
         // descendant no "Library" binding (Esc, shortcuts) would fire. Hand focus
         // to the table on Library, else to the root. Find opts out by updating
         // `focus_layout` itself before focusing the search field.
+        // A shown token secret never outlives the screen it was shown on.
+        if self.screen != Screen::Api && self.api.revealed.is_some() {
+            self.api.conceal();
+        }
         let layout = (self.screen, self.settings.details_tab.clone());
         if layout != self.focus_layout {
             self.focus_layout = layout;
@@ -1110,6 +1130,7 @@ impl Render for LibraryView {
                 Screen::Import => self.import_screen(cx).into_any_element(),
                 Screen::Pdf => self.pdf_screen(cx).into_any_element(),
                 Screen::Settings => self.settings_screen(cx).into_any_element(),
+                Screen::Api => self.api_screen(cx).into_any_element(),
                 Screen::Report => div()
                     .id("operation-report")
                     .flex_1()

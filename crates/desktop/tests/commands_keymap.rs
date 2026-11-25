@@ -166,7 +166,6 @@ fn known_pdf_api_commands_remain_disabled_even_when_host_claims_connection() {
         ("pdf.save", 20),
         ("pdf.highlight_selection", 21),
         ("pdf.show_annotations", 21),
-        ("api.open_settings", 26),
     ] {
         let handlers = [id];
         let context = CommandContext {
@@ -180,6 +179,35 @@ fn known_pdf_api_commands_remain_disabled_even_when_host_claims_connection() {
             }
             other => panic!("expected deferred {id}: {other:?}"),
         }
+    }
+}
+
+#[test]
+fn api_settings_provider_is_registered_and_connected_by_its_host() {
+    use cm_desktop::commands::{api_commands, api_ids};
+    let registry = CommandRegistry::m1();
+    let ids: Vec<_> = api_commands().iter().map(|c| c.id).collect();
+    assert_eq!(
+        ids,
+        [
+            api_ids::OPEN_SETTINGS,
+            api_ids::NEW_TOKEN,
+            api_ids::NEW_MCP_PROFILE
+        ]
+    );
+    for id in ids {
+        // Not deferred any more: disabled only until the host connects it.
+        assert_eq!(
+            registry.availability(id, &CommandContext::default()),
+            Availability::Disabled(DisabledReason::NotConnected)
+        );
+        let handlers = [id];
+        let context = CommandContext {
+            connected_handlers: &handlers,
+            ..CommandContext::default()
+        };
+        // A UI command: available even before the library is ready.
+        assert_eq!(registry.availability(id, &context), Availability::Enabled);
     }
 }
 

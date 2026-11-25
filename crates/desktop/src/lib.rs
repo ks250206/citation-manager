@@ -20,6 +20,7 @@ mod native;
 pub use native::run;
 
 pub mod annotations;
+pub mod api_settings;
 pub mod attachments;
 pub mod details;
 pub mod import_dialogs;

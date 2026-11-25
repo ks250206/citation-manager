@@ -996,3 +996,16 @@ exactly-once ではなく at-least-once + 冪等効果と明記する。macOS .a
 ページ/文書/実行あたりの上限、画像/暗号化/破損 PDF の明示状態）で行う。3文字未満の語は
 unicode61 token と、範囲・件数・時間上限付きの literal scan で検索し、未検索領域と continuation を
 返す（0件表示と区別）。幅/NFC 正規化は #53 実測どおり行わない。GUI #21、負荷 #30 は未実施。
+
+## 34. #26 token/grant 管理・scope・API 設定
+
+[api-tokens-grants ADR](docs/ADR/api-tokens-grants.md) が §13.1–13.4/§14.1/§17 の実装上の明確化となる。
+API/MCP/CLI token は #25 の daemon grant で、scope は `cm_core::policy::scopes` の固定 capability 集合と
+REST/MCP/CLI 対応表（#27–#29 が import）。§13.2 の `/search` は本文・注釈 snippet を返すため
+`papers:read files:read annotations:read` を要する。token は常に期限付き（read 90/最大365日、write 30/最大90日）、
+平文は一度だけ表示し OS secret store（Keychain/Secret Service、無ければ弱い 0600 file）、DB は SHA-256 のみ。
+失効・scope 変更は live session の次の要求から即時。MCP は read-only 既定、write は確認付き別操作。
+一括削除/移動は grant 毎 60 秒 10/25 件を超えると最大 15 分の明示 elevation が必要。API は既定 OFF、
+127.0.0.1/::1 と 1024–65535 のみ保存（listener は #27）。export は許可フォルダ限定。監査ログは
+内容・秘密なしの有界 file。GUI「API & integrations」と `papersd token|api` CLI bootstrap を提供する。
+証跡は [ISSUE_26](docs/validation/ISSUE_26.md)。

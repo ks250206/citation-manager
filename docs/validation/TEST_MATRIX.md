@@ -60,7 +60,7 @@ GitHub runner の OS/Xcode 差による失敗は PR 上で実結果を確認す�
 | GPUI window / 保存→再起動→閲覧 #10 | implementing agent が自動検証、UI操作可能な agent が実機検証。利用不可なら Ryoji Kanno (ks250206) | #10で実 window と#8保存を検証済み。[手順・画面・結果](ISSUE_10.md)。日本語IME候補選択は未検証。#7当時の未実施記録は上記の履歴 |
 | PDFium runtime/ABI/文字位置/注釈 roundtrip #11 | implementing agent が fixture 自動検証、UI可能 agent。fallback Ryoji Kanno | **未実施**。dylib 未選択/未同梱。ABI/load path、corpus、Unicode/回転/複数行、出力再読込を証拠化 |
 | .app resource配置/遅延起動/寿命 #34 | implementing agent + macOS実機操作可能 agent。fallback Ryoji Kanno | **未実施**。.app 未作成。bundle移動/GUIなし/同時起動/idleとjob中の寿命/PDFium pathを記録 |
-| 認可境界 #25/#26 | implementing agent が自動セキュリティ回帰、ユーザー同意UIは実機可能 agent / Ryoji Kanno | #25: Linux 自動回帰 passed（[ISSUE_25](ISSUE_25.md)）。macOS peer/.app、#26 同意UI/永続token管理は**未実施** |
+| 認可境界 #25/#26 | implementing agent が自動セキュリティ回帰、ユーザー同意UIは実機可能 agent / Ryoji Kanno | #25: Linux 自動回帰 passed（[ISSUE_25](ISSUE_25.md)）。#26: Linux 自動回帰と Xvfb GUI 操作 passed（[ISSUE_26](ISSUE_26.md)）。macOS peer/.app と Keychain は**未実施** |
 | 全文抽出/検索 #18 | implementing agent が Linux 自動回帰と pin 済み Linux PDFium 実抽出 | Linux 自動回帰と実 PDFium 抽出→検索 passed（[ISSUE_18](ISSUE_18.md)）。macOS PDFium/.app 同梱 (#34)、GUI 検索 (#21)、1万件/2万頁負荷 (#30) は**未実施** |
 | Chrome/Firefox保存 #23/#24 | implementing agent がfixture、自動化可能な実ブラウザ agent。fallback Ryoji Kanno | **未実施**。拡張/host未実装。両ブラウザでGUI閉鎖時の保存/重複/失敗再試行を記録 |
 | MCP stdio tools #29 | implementing agent が公式SDK/clientから自動試験 | **未実施**。入口は Unavailable。read-only/write許可・出典ページ・stdout純度・transport停止を検証 |

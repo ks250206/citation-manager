@@ -1,7 +1,7 @@
 //! Command Palette overlay, command dispatch and Vim-key routing for the library table.
 use super::*;
 use crate::{
-    commands::{Availability, CommandContext, DisabledReason, ids, workbench_ids as wb},
+    commands::{Availability, CommandContext, DisabledReason, api_ids, ids, workbench_ids as wb},
     keymap::{self, InputState, KeyStroke, Mode, Resolution},
     palette,
 };
@@ -36,6 +36,9 @@ pub(super) const CONNECTED: &[&str] = &[
     wb::TOGGLE_VIM,
     wb::RELOAD_KEYMAP,
     wb::COPY_DEFAULT_KEYMAP,
+    api_ids::OPEN_SETTINGS,
+    api_ids::NEW_TOKEN,
+    api_ids::NEW_MCP_PROFILE,
 ];
 
 /// Platform shortcuts bound directly in GPUI (see `key_bindings`), shown next to commands.
@@ -325,6 +328,9 @@ impl LibraryView {
                     cx,
                 );
             }
+            api_ids::OPEN_SETTINGS => self.open_api(api_ui::ApiFocus::Settings, window, cx),
+            api_ids::NEW_TOKEN => self.open_api(api_ui::ApiFocus::NewToken, window, cx),
+            api_ids::NEW_MCP_PROFILE => self.open_api(api_ui::ApiFocus::NewMcpProfile, window, cx),
             _ => self.status(format!("{id} is not connected"), true, cx),
         }
         cx.notify();

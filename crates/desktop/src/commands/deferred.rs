@@ -27,12 +27,6 @@ pub fn deferred_commands() -> Vec<Command> {
             18,
             "Full-text search is not connected",
         ),
-        (
-            "api.open_settings",
-            "Open API Settings",
-            26,
-            "API settings are not connected",
-        ),
     ]
     .into_iter()
     .map(|(id, title, issue, reason)| Command {
