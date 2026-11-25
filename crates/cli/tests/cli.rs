@@ -101,7 +101,10 @@ impl Env {
         self.run(args, &[])
     }
     fn run(&self, args: &[&std::ffi::OsStr], env: &[(&str, &str)]) -> Run {
-        let mut command = Process::new(PAPERS);
+        self.run_program(Path::new(PAPERS), args, env)
+    }
+    fn run_program(&self, program: &Path, args: &[&std::ffi::OsStr], env: &[(&str, &str)]) -> Run {
+        let mut command = Process::new(program);
         command
             .args(args)
             .current_dir(&self.root)
@@ -695,6 +698,26 @@ fn read_only_sessions_and_grants_are_refused_writes() {
         .unwrap();
     env.papers(&["--credential-file", bogus.to_str().unwrap(), "list"])
         .expect(5);
+}
+
+/// #34: `papers` linked onto PATH (e.g. `~/.local/bin/papers` -> the .app's `MacOS/papers`)
+/// still starts the `papersd` next to the real executable. On macOS `current_exe()` is the
+/// link itself, so the CLI must resolve it before looking for its sibling.
+#[test]
+fn papers_run_through_a_symlink_starts_its_own_papersd() {
+    let env = Env::new();
+    let bin = env.root.join("bin on PATH");
+    std::fs::create_dir(&bin).unwrap();
+    let link = bin.join("papers");
+    std::os::unix::fs::symlink(PAPERS, &link).unwrap();
+    assert!(!bin.join("papersd").exists());
+    let args: Vec<&std::ffi::OsStr> = ["server", "start"]
+        .iter()
+        .map(std::ffi::OsStr::new)
+        .collect();
+    let started = env.run_program(&link, &args, &[]).expect(0);
+    assert_eq!(started["started"], true);
+    env.stop_daemon();
 }
 
 #[test]

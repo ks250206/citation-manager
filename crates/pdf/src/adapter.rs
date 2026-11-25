@@ -15,7 +15,7 @@ pub(crate) fn load(path: &Path) -> Result<Pdfium, PdfError> {
         return Err(PdfError::LibraryPath);
     }
     let bytes = std::fs::read(path).map_err(|_| PdfError::LibraryLoad)?;
-    if format!("{:x}", Sha256::digest(&bytes)) != PDFIUM_SHA256 {
+    if !trusted_library_digest(&format!("{:x}", Sha256::digest(&bytes))) {
         return Err(PdfError::LibraryChecksum);
     }
     let bindings = Pdfium::bind_to_library(path).map_err(|_| PdfError::LibraryLoad)?;

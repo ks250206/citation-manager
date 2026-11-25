@@ -168,8 +168,10 @@ impl CredentialStore for FixedCredential {
 }
 
 fn sibling_launch(papersd: Option<PathBuf>, daemon_idle_ms: Option<u64>) -> Option<Launch> {
+    // Symlinks resolved: a `papers-mcp` linked onto PATH still uses the bundle's papersd (#34).
     let papersd = papersd.or_else(|| {
         std::env::current_exe()
+            .and_then(|p| p.canonicalize())
             .ok()
             .map(|exe| exe.with_file_name("papersd"))
     });

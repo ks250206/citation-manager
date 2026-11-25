@@ -93,13 +93,17 @@ impl Target {
 }
 
 /// `papersd` next to this executable (`<prefix>/bin`, `.app/Contents/MacOS`, `target/<profile>`).
+/// Symlinks are resolved first: on macOS `current_exe()` returns the path that was executed,
+/// so `papers` linked onto PATH (#34/#31) must still find the bundle's own `papersd`.
 pub fn papersd_path() -> Result<PathBuf, CliError> {
-    let exe = std::env::current_exe().map_err(|e| {
-        CliError::new(
-            Kind::DaemonUnavailable,
-            format!("cannot locate papers: {e}"),
-        )
-    })?;
+    let exe = std::env::current_exe()
+        .and_then(|p| p.canonicalize())
+        .map_err(|e| {
+            CliError::new(
+                Kind::DaemonUnavailable,
+                format!("cannot locate papers: {e}"),
+            )
+        })?;
     let papersd = exe.with_file_name("papersd");
     if !papersd.is_file() {
         return Err(CliError::new(

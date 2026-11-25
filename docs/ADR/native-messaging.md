@@ -1,8 +1,9 @@
 # #23: Browser Native Messaging host, registration and message contract
 
 Status: implemented on Linux and verified with real Chromium and Firefox ESR against the real
-#25 `papersd` ([ISSUE_23](../validation/ISSUE_23.md)). macOS paths are implemented from the
-documented browser locations but not run; Windows is not supported. The browser extension
+#25 `papersd` ([ISSUE_23](../validation/ISSUE_23.md)). macOS: run from the `.app` on a hosted
+runner with Chrome for Testing and release Firefox (#34,
+[APP_LAYOUT_POC](../validation/APP_LAYOUT_POC.md)); Windows is not supported. The browser extension
 itself is #24; the `.app` bundle and its launch hooks are #34.
 
 ## Process and placement
@@ -224,8 +225,11 @@ after 60 s). Keep previews short-lived (≤ 300 s, #33) and commit promptly.
 - One library per user installation (the one in `config.json`).
 - The same-UID limitation of the security ADR applies: a local process of the user can run the
   host with an allowed origin argument or read the 0600 credential.
-- No automatic hook re-runs `refresh` yet; #34 must call it on every app launch. Until then a
-  moved `.app` needs a manual `papers-native-host refresh` (Linux: re-run the installer).
-- Not verified: macOS (paths, `.app` launch, quarantine/signing #31), branded Google Chrome and
-  Chrome Web Store/AMO-signed builds (only Playwright's Chromium and Firefox ESR with a
-  sideloaded unsigned test add-on), Windows (registry registration is not implemented).
+- #34: every launch of `Citation Manager.app` runs `refresh`, so a moved or updated app repairs
+  its manifests when it is opened; `register`/`refresh` refuse App Translocation and read-only
+  locations ([app layout](app-layout.md)). Linux: re-run the installer.
+- macOS was run on a hosted macOS 15 runner from the `.app` (Chrome for Testing and release
+  Firefox with a temporary add-on; [APP_LAYOUT_POC](../validation/APP_LAYOUT_POC.md)). Not
+  verified: real Mac hardware, quarantine/signing (#31), branded Google Chrome (it ignores
+  unpacked extensions from the command line) and Chrome Web Store/AMO-signed builds, Windows
+  (registry registration is not implemented).

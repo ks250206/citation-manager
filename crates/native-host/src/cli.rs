@@ -223,6 +223,13 @@ fn publishable_exe(allow_development_build: bool) -> Result<PathBuf, String> {
             exe.display()
         ));
     }
+    if let Some(reason) = manifest::transient_location(&exe) {
+        return Err(format!(
+            "{} {reason}; move Citation Manager.app to /Applications (or another writable \
+             folder), start it once from there and register again",
+            exe.display()
+        ));
+    }
     if exe.to_str().is_none() {
         return Err(format!(
             "{} is not valid UTF-8; browsers cannot start it from a JSON manifest",

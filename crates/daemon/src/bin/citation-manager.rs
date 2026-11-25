@@ -2,12 +2,29 @@
 //! to the library's `papersd` (started on demand from next to this executable) through the
 //! authenticated `IpcLibraryClient`. The open connection keeps the daemon alive while the GUI
 //! runs. No HTTP listener is started.
+//!
+//! #34: inside `Citation Manager.app` a launch without arguments (Finder, Dock, `open`) uses
+//! the per-user library under `~/Library/Application Support/Citation Manager`, and every
+//! bundle launch re-points the browser host manifests (`papers-native-host refresh`). See
+//! `cm_daemon::app_bundle`.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 fn main() {
-    use cm_daemon::lifecycle::{DaemonPaths, Launch, euid, local_connector};
+    use cm_daemon::{
+        app_bundle,
+        lifecycle::{DaemonPaths, Launch, euid, local_connector},
+    };
     use cm_protocol::client::IpcLibraryClient;
     use std::{path::PathBuf, sync::Arc, time::Duration};
-    let mut args = std::env::args_os().skip(1);
+    let fail = |error: &dyn std::fmt::Display| -> ! {
+        eprintln!("Cannot prepare library service: {error}");
+        std::process::exit(1);
+    };
+    // Canonical: siblings and the bundle are found from the real file, never from cwd/PATH.
+    let exe = app_bundle::own_executable().unwrap_or_else(|e| fail(&e));
+    let in_bundle = app_bundle::bundle_contents(&exe).is_some();
+    let arguments = app_bundle::launch_arguments(std::env::args_os().skip(1));
+    let bundle_default = in_bundle && arguments.is_empty();
+    let mut args = arguments.into_iter();
     let mut path = None;
     let mut settings = None;
     while let Some(flag) = args.next() {
@@ -24,21 +41,27 @@ fn main() {
             std::process::exit(2);
         }
     }
+    if path.is_none() && bundle_default {
+        path = Some(
+            app_bundle::prepare_default_library(std::env::var_os("HOME").as_deref())
+                .unwrap_or_else(|e| fail(&e)),
+        );
+    }
     let Some(path) = path else {
         eprintln!(
             "Usage: citation-manager --library /absolute/private/library [--settings /absolute/private/ui.json]"
         );
         std::process::exit(2);
     };
-    let fail = |error: &dyn std::fmt::Display| -> ! {
-        eprintln!("Cannot prepare library service: {error}");
-        std::process::exit(1);
-    };
+    if in_bundle && let Some(mut refresh) = app_bundle::refresh_native_host(&exe) {
+        // Reaped in the background; a failed refresh never blocks the app.
+        let _ = std::thread::Builder::new()
+            .name("native-host-refresh".into())
+            .spawn(move || refresh.wait());
+    }
     let paths = DaemonPaths::new(&path, None, euid()).unwrap_or_else(|e| fail(&e));
     // Same directory as this executable (.app MacOS/ or <prefix>/bin); never a PATH search.
-    let papersd = std::env::current_exe()
-        .map(|exe| exe.with_file_name("papersd"))
-        .unwrap_or_else(|e| fail(&e));
+    let papersd = exe.with_file_name("papersd");
     let mut connector = local_connector(paths, "desktop");
     let mut extra_args = Vec::new();
     if let Some(settings) = settings {
