@@ -44,6 +44,16 @@ NO_IDENTITY = 'UNVERIFIED: no Developer ID'
 NO_NOTARY = 'UNVERIFIED: no notary credentials'
 NOT_RUN = 'not run'
 EXIT_UNVERIFIED = 3
+# Notarization ran but Apple did not accept it: the release must not be published.
+EXIT_NOT_NOTARIZED = 4
+
+
+class NotarizationRejected(Exception):
+    """Carries the status report so it is still written before the nonzero exit."""
+
+    def __init__(self, status):
+        super().__init__(status.get('release'))
+        self.status = status
 
 
 def notary_credentials(env):
@@ -139,23 +149,27 @@ def sign_app(app, dmg, env, identity, run=None):
             run(['ditto', '-c', '-k', '--keepParent', str(app), str(archive)])
             state, submission = notarize(run, archive, credentials)
         status['notarization_app'] = f'{state} (submission {submission})'
-        if state == 'Accepted':
-            run(['xcrun', 'stapler', 'staple', str(app)])
-            status['staple_app'] = 'stapled'
+        if state != 'Accepted':
+            status['release'] = f'FAILED: app notarization {state}'
+            raise NotarizationRejected(status)
+        run(['xcrun', 'stapler', 'staple', str(app)])
+        status['staple_app'] = 'stapled'
     create_dmg.build(app, dmg)
     run(['codesign', '--force', '--sign', identity, '--timestamp'] + extra + [str(dmg)])
     status['dmg'] = f'{Path(dmg).name} signed'
     if credentials:
         state, submission = notarize(run, dmg, credentials)
         status['notarization_dmg'] = f'{state} (submission {submission})'
-        if state == 'Accepted':
-            run(['xcrun', 'stapler', 'staple', str(dmg)])
-            run(['xcrun', 'stapler', 'validate', str(dmg)])
-            status['staple_dmg'] = 'stapled and validated'
-            gatekeeper = subprocess.run(['spctl', '--assess', '--type', 'open', '--context',
-                                         'context:primary-signature', '--verbose=2', str(dmg)],
-                                        capture_output=True, text=True)
-            status['gatekeeper'] = (gatekeeper.stdout + gatekeeper.stderr).strip()
+        if state != 'Accepted':
+            status['release'] = f'FAILED: dmg notarization {state}'
+            raise NotarizationRejected(status)
+        run(['xcrun', 'stapler', 'staple', str(dmg)])
+        run(['xcrun', 'stapler', 'validate', str(dmg)])
+        status['staple_dmg'] = 'stapled and validated'
+        gatekeeper = subprocess.run(['spctl', '--assess', '--type', 'open', '--context',
+                                     'context:primary-signature', '--verbose=2', str(dmg)],
+                                    capture_output=True, text=True)
+        status['gatekeeper'] = (gatekeeper.stdout + gatekeeper.stderr).strip()
     return status
 
 
@@ -195,7 +209,12 @@ def main():
         print(codesign.sign_pdfium_copy(args.source, args.destination, identity=identity, timestamp=True,
                                         keychain=os.environ.get('CM_SIGN_KEYCHAIN')))
     else:
-        report(sign_app(args.app, args.dmg, os.environ, identity), args.status)
+        try:
+            report(sign_app(args.app, args.dmg, os.environ, identity), args.status)
+        except NotarizationRejected as rejected:
+            report(rejected.status, args.status)
+            print(rejected.status['release'], file=sys.stderr)
+            sys.exit(EXIT_NOT_NOTARIZED)
 
 
 if __name__ == '__main__':
