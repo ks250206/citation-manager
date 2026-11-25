@@ -14,6 +14,8 @@ cli     The bundled `papers` run through a symlink in a PATH directory: no daemo
         lazy start of the bundle's `papersd`, `add file` + `fulltext` (PDFium text through
         the bundled dylib), REST opt-in + `GET /attachments/{id}/pages/0` (PDFium render,
         saved as page.png), then idle exit once nothing is connected.
+dmg     For a bundle inside the mounted .dmg (#31): the Applications link, the browser host
+        refusing to register from the read-only image, then the cli phase from the image.
 gui     Register the browser host, move the bundle to a new path (spaces + non-ASCII), start
         it through LaunchServices without arguments (bundle default library under the temp
         HOME), check the manifest was re-pointed by the app, take a screenshot, quit the
@@ -176,7 +178,15 @@ def macho_files(app):
 
 # ---------------------------------------------------------------- phases
 
-def phase_static(ev, app, expect_signed):
+def crate_notice_count(contents):
+    """Crates listed in the bundled third-party notices summary, or None when absent."""
+    summary = contents / 'Resources/licenses/third-party-licenses.json'
+    if not summary.is_file():
+        return None
+    return len(json.loads(summary.read_text())['crates'])
+
+
+def phase_static(ev, app, expect_signed, require_notices=False):
     contents = app / 'Contents'
     ev.check('app_outside_checkout', ROOT not in app.resolve().parents and ' ' in str(app.resolve()),
              str(app.resolve()))
@@ -187,6 +197,9 @@ def phase_static(ev, app, expect_signed):
     ev.check('layout_files_present', not missing, missing or [str(p.relative_to(app)) for p in macho_files(app)])
     notices = sorted(p.name for p in (contents / 'Resources/licenses/pdfium').iterdir())
     ev.check('pdfium_notices_bundled', 'LICENSE' in notices and len(notices) >= 19, notices)
+    crates = crate_notice_count(contents)
+    ev.check('crate_notices_bundled', bool(crates) and (contents / 'Resources/licenses/THIRD_PARTY_NOTICES.md').is_file(),
+             {'crates': crates}, required=require_notices)
     pin = build_app.pdfium.artifact('macos')
     runtime = json.loads((contents / 'Resources/pdfium-runtime.json').read_text())
     digest = hashlib.sha256((contents / build_app.PDFIUM).read_bytes()).hexdigest()
@@ -417,12 +430,26 @@ def phase_gui(ev, app, work, moved_parent):
     return moved
 
 
+def phase_dmg(ev, app, work):
+    link = app.parent / 'Applications'
+    ev.check('dmg_applications_link', link.is_symlink() and os.readlink(link) == '/Applications', str(link))
+    env = isolated_env(work, 'dmg')
+    host = app / 'Contents/MacOS/papers-native-host'
+    refused = ev.run([host, 'register', '--library', work / 'dmg library', '--browser',
+                      f'chromium={Path(env["HOME"]) / "nm"}', '--development-extensions'], env=env)
+    ev.check('host_refuses_read_only_image', refused.returncode != 0 and 'read-only volume' in refused.stderr,
+             {'exit': refused.returncode, 'stderr': refused.stderr.strip()[-400:]})
+    shutil.rmtree(env['TMPDIR'], ignore_errors=True)
+    phase_cli(ev, app, work)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--app', type=Path, required=True)
     parser.add_argument('--out', type=Path, required=True, help='evidence directory')
     parser.add_argument('--work', type=Path, required=True, help='scratch directory (HOME, libraries)')
-    parser.add_argument('--phase', action='append', choices=['static', 'cli', 'gui'])
+    parser.add_argument('--phase', action='append', choices=['static', 'cli', 'gui', 'dmg'])
+    parser.add_argument('--require-notices', action='store_true', help='the crate notices must be bundled')
     parser.add_argument('--expect-signed', action='store_true', help='codesign --verify must pass')
     parser.add_argument('--moved-parent', type=Path, help='where the gui phase moves the bundle')
     args = parser.parse_args()
@@ -435,9 +462,11 @@ def main():
     ev.log(f'app {app}; phases {phases}; macOS {subprocess.run(["sw_vers", "-productVersion"], capture_output=True, text=True).stdout.strip()}')
     try:
         if 'static' in phases:
-            phase_static(ev, app, args.expect_signed)
+            phase_static(ev, app, args.expect_signed, args.require_notices)
         if 'cli' in phases:
             phase_cli(ev, app, args.work)
+        if 'dmg' in phases:
+            phase_dmg(ev, app, args.work)
         if 'gui' in phases:
             moved = phase_gui(ev, app, args.work, args.moved_parent or args.work / 'Moved Apps 移動先')
             (args.out / 'moved-app-path.txt').write_text(str(moved) + '\n')
