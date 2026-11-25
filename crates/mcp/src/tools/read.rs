@@ -52,7 +52,8 @@ pub fn search_schema() -> Value {
                 "description": "next_cursor from a previous call with the same arguments.",
                 "properties": {
                     "scan_after": {"type": "integer", "minimum": 0, "maximum": 9007199254740991i64},
-                    "offset": {"type": "integer", "minimum": 0, "maximum": 30000}
+                    "offset": {"type": "integer", "minimum": 0, "maximum": 30000},
+                    "pages_after": {"type": "integer", "minimum": 0, "maximum": 9007199254740991i64}
                 }}
         }),
         &[],
@@ -124,6 +125,7 @@ pub async fn search_papers(ctx: &Ctx<'_>, args: &Args) -> Result<Value, ToolErro
         request.cursor = Some(SearchCursor {
             scan_after: cursor["scan_after"].as_f64().unwrap_or(0.0) as i64,
             offset: cursor["offset"].as_f64().unwrap_or(0.0) as u32,
+            pages_after: cursor["pages_after"].as_f64().unwrap_or(0.0) as i64,
         });
     }
     let page = match ctx.call(Command::Search(Box::new(request))).await? {
