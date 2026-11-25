@@ -181,6 +181,27 @@ pub fn in_development_tree(path: &Path) -> bool {
     })
 }
 
+/// Why browsers must not be pointed at `path`, if they must not: a macOS App Translocation
+/// copy (Gatekeeper runs a quarantined app that was never moved from a randomized, read-only
+/// location that disappears) or any read-only filesystem such as the mounted `.dmg`. Either
+/// would leave the manifest pointing at a path that is gone or can never be updated (#34).
+pub fn transient_location(path: &Path) -> Option<&'static str> {
+    if is_translocated(path) {
+        return Some("is an App Translocation copy (the app was started without being moved)");
+    }
+    match rustix::fs::statvfs(path) {
+        Ok(fs) if fs.f_flag.contains(rustix::fs::StatVfsMountFlags::RDONLY) => {
+            Some("is on a read-only volume (e.g. the mounted disk image)")
+        }
+        _ => None,
+    }
+}
+
+fn is_translocated(path: &Path) -> bool {
+    path.components()
+        .any(|c| c.as_os_str() == "AppTranslocation")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -300,5 +321,19 @@ mod tests {
         assert!(in_development_tree(
             &checkout.join("target/release/papers-native-host")
         ));
+    }
+
+    #[test]
+    fn translocated_and_read_only_locations_are_never_published() {
+        let translocated = Path::new(
+            "/private/var/folders/ab/cd/T/AppTranslocation/0A1B/d/Citation Manager.app/Contents/MacOS/papers-native-host",
+        );
+        assert!(is_translocated(translocated));
+        assert!(transient_location(translocated).is_some());
+        let installed =
+            Path::new("/Applications/Citation Manager.app/Contents/MacOS/papers-native-host");
+        assert!(!is_translocated(installed));
+        let temp = tempfile::tempdir().unwrap();
+        assert_eq!(transient_location(temp.path()), None, "writable temp dir");
     }
 }

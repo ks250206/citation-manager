@@ -14,7 +14,8 @@ workspace = true
 cm-protocol.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-rustix.workspace = true
+# fs: statvfs, to refuse publishing a host on a read-only volume (#34).
+rustix = { workspace = true, features = ["fs"] }
 
 [dev-dependencies]
 tempfile.workspace = true

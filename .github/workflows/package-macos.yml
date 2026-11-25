@@ -1,0 +1,113 @@
+name: macOS app package
+# #34: assemble the unsigned Citation Manager.app from release binaries and the pinned PDFium,
+# place it outside the checkout under a path with spaces, and verify layout, linkage,
+# PDFium load/render/text, lazy daemon start/idle exit, a GUI launch after moving the bundle,
+# and Chrome/Firefox Native Messaging probes. Hosted-runner evidence only: it is not a
+# real-hardware check and an ad-hoc signature is not a distribution signature (#31).
+on:
+  pull_request:
+    paths:
+      - 'packaging/**'
+      - 'scripts/package/**'
+      - 'scripts/native-host/**'
+      - '.github/workflows/package-macos.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: package-macos-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  app-layout:
+    runs-on: macos-15
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    env:
+      APP_NAME: Citation Manager.app
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.14'
+      - name: Environment and exact toolchain
+        run: |
+          rustup toolchain install 1.99.1 --profile minimal
+          rustup show active-toolchain
+          sw_vers
+          uname -m
+          xcodebuild -version
+      - name: Rust build cache
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          shared-key: package-macos
+          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
+      - name: Ensure Xcode Metal compiler
+        run: |
+          if ! xcrun --sdk macosx metal -v; then
+            xcodebuild -downloadComponent MetalToolchain
+          fi
+      - name: Release binaries (GUI + papersd with PDFium, CLI, MCP, native host)
+        run: |
+          cargo build --release --locked -p cm-daemon --bins --features desktop-bootstrap
+          cargo build --release --locked -p cm-cli -p cm-mcp -p cm-native-host
+          cargo build --release --locked -p cm-native-host --example inspect_capture
+      - name: Fetch the pinned PDFium (checksum-verified)
+        run: python3 scripts/pdfium/fetch.py "$RUNNER_TEMP/pdfium"
+      - name: Assemble the unsigned bundle and place it outside the checkout
+        run: |
+          python3 scripts/package/macos/build_app.py --bin-dir target/release \
+            --pdfium-dir "$RUNNER_TEMP/pdfium" --out "$RUNNER_TEMP/package"
+          mkdir -p "$RUNNER_TEMP/Install Root 検証" "$RUNNER_TEMP/Signed Copy"
+          ditto "$RUNNER_TEMP/package/$APP_NAME" "$RUNNER_TEMP/Install Root 検証/$APP_NAME"
+          ditto "$RUNNER_TEMP/package/$APP_NAME" "$RUNNER_TEMP/Signed Copy/$APP_NAME"
+          find "$RUNNER_TEMP/Install Root 検証/$APP_NAME" -print | sed "s|$RUNNER_TEMP/||"
+          du -sh "$RUNNER_TEMP/package/$APP_NAME"
+      - name: Unsigned bundle - static, CLI/PDFium/lazy start, GUI after move
+        run: |
+          python3 scripts/package/layout-smoke/smoke.py \
+            --app "$RUNNER_TEMP/Install Root 検証/$APP_NAME" \
+            --out "$RUNNER_TEMP/evidence/unsigned" --work "$RUNNER_TEMP/work unsigned" \
+            --moved-parent "$RUNNER_TEMP/Moved Apps 移動先"
+      - name: Ad-hoc signed bundle - codesign verify, static and CLI/PDFium
+        if: ${{ !cancelled() }}
+        run: |
+          python3 scripts/package/macos/codesign.py "$RUNNER_TEMP/Signed Copy/$APP_NAME"
+          python3 scripts/package/layout-smoke/smoke.py --expect-signed --phase static --phase cli \
+            --app "$RUNNER_TEMP/Signed Copy/$APP_NAME" \
+            --out "$RUNNER_TEMP/evidence/adhoc" --work "$RUNNER_TEMP/work adhoc"
+      - name: Chrome Native Messaging probe (host and papersd from the moved bundle)
+        run: |
+          app="$(cat "$RUNNER_TEMP/evidence/unsigned/moved-app-path.txt")"
+          chrome="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+          "$chrome" --version
+          python3 scripts/native-host/browser_smoke.py --bin-dir target/release --app "$app" \
+            --browser chromium --executable "$chrome" \
+            --report "$RUNNER_TEMP/evidence/browser-chrome.json" 2>&1 | tee "$RUNNER_TEMP/evidence/browser-chrome.log"
+      - name: Firefox Native Messaging probe (release Firefox, temporary add-on via geckodriver)
+        if: ${{ !cancelled() }}
+        run: |
+          app="$(cat "$RUNNER_TEMP/evidence/unsigned/moved-app-path.txt")"
+          firefox="/Applications/Firefox.app/Contents/MacOS/firefox"
+          driver="$(command -v geckodriver || echo "$GECKOWEBDRIVER/geckodriver")"
+          "$firefox" --version
+          "$driver" --version | head -1
+          python3 scripts/native-host/browser_smoke.py --bin-dir target/release --app "$app" \
+            --browser firefox --executable "$firefox" --firefox-driver "$driver" \
+            --report "$RUNNER_TEMP/evidence/browser-firefox.json" 2>&1 | tee "$RUNNER_TEMP/evidence/browser-firefox.log"
+      - name: Archive bundles
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/evidence"
+          if [ -d "$RUNNER_TEMP/package/$APP_NAME" ]; then
+            ditto -c -k --keepParent "$RUNNER_TEMP/package/$APP_NAME" "$RUNNER_TEMP/evidence/Citation-Manager-unsigned.app.zip"
+          fi
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: package-macos-evidence
+          path: ${{ runner.temp }}/evidence/
+          if-no-files-found: error
+          retention-days: 14

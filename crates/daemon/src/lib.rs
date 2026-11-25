@@ -4,6 +4,8 @@
 pub mod admin;
 /// #26 tokens, MCP profiles, elevation and local API settings.
 pub mod api;
+/// #34 `Citation Manager.app` launch context (bundle default library, browser host refresh).
+pub mod app_bundle;
 /// #26 bounded audit log.
 pub mod audit;
 pub mod desktop_worker;

@@ -13,6 +13,14 @@ browser profile or the development tree (binaries are copied into the temp prefi
   4. Check every host process exited, quit the browser, and confirm (GUI never started)
      that papersd persisted the paper and drove the PDF job to a terminal state.
 
+macOS (#34): `--app "/path with spaces/Citation Manager.app"` runs the host and papersd in
+place from the bundle (no copy), processes are found with `ps`, branded Google Chrome gets
+`--disable-features=DisableLoadExtensionCommandLineSwitch` (Chrome 137+ ignores
+`--load-extension` otherwise) and a mock keychain, and release Firefox (which refuses unsigned
+add-ons in a profile) is driven through geckodriver, which installs the add-on as a temporary
+add-on (`--firefox-driver PATH`). `--firefox-manifest-dir` registers the Firefox manifest in an
+explicit directory instead of the temp HOME's (recorded in the checks; clean it up afterwards).
+
 Example (Linux, Xvfb on :99):
   cargo build -p cm-daemon --bin papersd && cargo build -p cm-native-host --bins --examples
   python3 scripts/native-host/browser_smoke.py --bin-dir target/debug \\
@@ -21,6 +29,7 @@ Example (Linux, Xvfb on :99):
       --browser firefox --executable /path/to/firefox/firefox
 """
 import argparse
+import base64
 import http.server
 import json
 import os
@@ -32,6 +41,7 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.request
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -46,7 +56,9 @@ def log(message):
 
 
 def processes_running(executable):
-    """PIDs whose /proc/<pid>/exe is `executable` (exact path)."""
+    """PIDs running `executable` (exact path): /proc on Linux, `ps` elsewhere (macOS)."""
+    if not Path('/proc/self/exe').exists():
+        return ps_processes(executable)
     found = []
     for entry in Path('/proc').iterdir():
         if entry.name.isdigit():
@@ -55,6 +67,22 @@ def processes_running(executable):
                     found.append(int(entry.name))
             except OSError:
                 pass
+    return found
+
+
+def command_runs(command_line, executable):
+    """Whether a `ps -o command=` line starts with `executable` as a whole argument."""
+    text = str(executable)
+    return command_line == text or command_line.startswith(text + ' ')
+
+
+def ps_processes(executable):
+    out = subprocess.run(['ps', '-axo', 'pid=,command='], capture_output=True, text=True).stdout
+    found = []
+    for line in out.splitlines():
+        pid, _, command_line = line.strip().partition(' ')
+        if pid.isdigit() and command_line and command_runs(command_line.strip(), executable):
+            found.append(int(pid))
     return found
 
 
@@ -113,7 +141,88 @@ def prepare_extension(tmp, browser, port):
     return ext
 
 
-def launch_browser(tmp, browser, executable, ext, env):
+def chromium_arguments(user_data, ext, macos):
+    arguments = [f'--user-data-dir={user_data}', '--no-first-run',
+                 '--no-default-browser-check', '--no-sandbox', '--disable-gpu',
+                 f'--disable-extensions-except={ext}', f'--load-extension={ext}']
+    if macos:
+        # Branded Chrome 137+ ignores --load-extension unless this feature is disabled; the
+        # mock keychain avoids a "Chrome Safe Storage" keychain prompt on a headless runner.
+        arguments += ['--disable-features=DisableLoadExtensionCommandLineSwitch',
+                      '--use-mock-keychain', '--password-store=basic']
+    return arguments + ['about:blank']
+
+
+def build_xpi(tmp, ext):
+    xpi = tmp / f'{FIREFOX_ID}.xpi'
+    with zipfile.ZipFile(xpi, 'w') as archive:
+        for item in ext.iterdir():
+            archive.write(item, item.name)
+    return xpi
+
+
+class Geckodriver:
+    """Release Firefox through geckodriver: the add-on is installed as a temporary add-on,
+    which Firefox allows without a signature (a sideloaded profile add-on would be disabled)."""
+
+    def __init__(self, tmp, driver, executable, xpi, env):
+        self.port = free_port()
+        self.process = subprocess.Popen([str(driver), '--port', str(self.port)], env=env,
+                                        stdout=open(tmp / 'geckodriver.log', 'wb'),
+                                        stderr=subprocess.STDOUT, start_new_session=True)
+        self.pid = self.process.pid
+        if not wait_for(lambda: self._up(), 30):
+            raise SystemExit('geckodriver did not start')
+        firefox_options = {'binary': str(executable), 'args': ['-headless'],
+                           'prefs': {'browser.shell.checkDefaultBrowser': False,
+                                     'datareporting.policy.dataSubmissionEnabled': False,
+                                     'app.update.disabledForTesting': True}}
+        session = self._call('POST', '/session', {'capabilities': {'alwaysMatch': {
+            'browserName': 'firefox', 'moz:firefoxOptions': firefox_options}}})
+        self.session = session['value']['sessionId']
+        installed = self._call('POST', f'/session/{self.session}/moz/addon/install',
+                               {'addon': base64.b64encode(xpi.read_bytes()).decode(), 'temporary': True})
+        log(f'temporary add-on installed: {installed["value"]}')
+
+    def _up(self):
+        try:
+            return self._call('GET', '/status')['value'].get('ready') is not None
+        except OSError:
+            return False
+
+    def _call(self, method, path, body=None):
+        data = None if body is None else json.dumps(body).encode()
+        request = urllib.request.Request(f'http://127.0.0.1:{self.port}{path}', data=data, method=method,
+                                         headers={'Content-Type': 'application/json'})
+        with urllib.request.urlopen(request, timeout=120) as response:
+            return json.loads(response.read())
+
+    def poll(self):
+        return self.process.poll()
+
+    def quit(self):
+        try:
+            self._call('DELETE', f'/session/{self.session}')
+        except OSError as error:
+            log(f'geckodriver session delete failed: {error!r}')
+        self.process.terminate()
+        try:
+            self.process.wait(timeout=20)
+        except subprocess.TimeoutExpired:
+            self.process.kill()
+            self.process.wait()
+
+
+def free_port():
+    import socket
+    with socket.socket() as s:
+        s.bind(('127.0.0.1', 0))
+        return s.getsockname()[1]
+
+
+def launch_browser(tmp, browser, executable, ext, env, firefox_driver=None):
+    if browser == 'firefox' and firefox_driver:
+        return Geckodriver(tmp, firefox_driver, executable, build_xpi(tmp, ext), env)
     if browser == 'firefox':
         profile = tmp / 'firefox-profile'
         (profile / 'extensions').mkdir(parents=True)
@@ -135,14 +244,15 @@ def launch_browser(tmp, browser, executable, ext, env):
         command = [str(executable), '--headless', '--no-remote', '--profile', str(profile), 'about:blank']
     else:
         user_data = tmp / 'chromium-profile'
-        command = [str(executable), f'--user-data-dir={user_data}', '--no-first-run',
-                   '--no-default-browser-check', '--no-sandbox', '--disable-gpu',
-                   f'--disable-extensions-except={ext}', f'--load-extension={ext}', 'about:blank']
+        command = [str(executable)] + chromium_arguments(user_data, ext, sys.platform == 'darwin')
     return subprocess.Popen(command, env=env, stdout=subprocess.DEVNULL, stderr=open(tmp / 'browser.log', 'wb'),
                             start_new_session=True)
 
 
 def quit_browser(process):
+    if isinstance(process, Geckodriver):
+        process.quit()
+        return
     try:
         os.killpg(process.pid, signal.SIGTERM)
     except ProcessLookupError:
@@ -166,22 +276,30 @@ def main():
     parser.add_argument('--browser', choices=['chromium', 'firefox'], required=True)
     parser.add_argument('--executable', type=Path, required=True)
     parser.add_argument('--keep', action='store_true', help='keep the temp directory')
+    parser.add_argument('--app', type=Path,
+                        help='macOS: run papersd/papers-native-host in place from this .app bundle')
+    parser.add_argument('--firefox-driver', type=Path, help='geckodriver (release Firefox, temporary add-on)')
+    parser.add_argument('--firefox-manifest-dir', type=Path,
+                        help='register the Firefox manifest here instead of under the temp HOME')
+    parser.add_argument('--report', type=Path, help='also write the checks as JSON here')
     args = parser.parse_args()
     bin_dir = args.bin_dir.resolve()
     tmp = Path(tempfile.mkdtemp(prefix=f'cm-nh-smoke-{args.browser}-'))
     checks = {}
     try:
-        prefix_bin = install(tmp, bin_dir)
+        prefix_bin = (args.app.resolve() / 'Contents/MacOS') if args.app else install(tmp, bin_dir)
         host = prefix_bin / 'papers-native-host'
         papersd = prefix_bin / 'papersd'
         library, runtime = tmp / 'library', tmp / 'run'
         runtime.mkdir(mode=0o700)
-        env = {k: v for k, v in os.environ.items() if k in ('PATH', 'DISPLAY', 'LANG', 'XAUTHORITY')}
+        env = {k: v for k, v in os.environ.items() if k in ('PATH', 'DISPLAY', 'LANG', 'XAUTHORITY', 'USER', 'LOGNAME')}
         env.update(HOME=str(tmp / 'home'), XDG_CONFIG_HOME=str(tmp / 'config'),
                    XDG_RUNTIME_DIR=str(runtime), TMPDIR=str(tmp))
         (tmp / 'home').mkdir()
-        if args.browser == 'firefox':
-            manifest_spec = 'firefox'  # ~/.mozilla/native-messaging-hosts under the temp HOME
+        if args.browser == 'firefox' and args.firefox_manifest_dir:
+            manifest_spec = f'firefox={args.firefox_manifest_dir}'
+        elif args.browser == 'firefox':
+            manifest_spec = 'firefox'  # per-user manifest directory under the temp HOME
         else:
             manifest_spec = f'chromium={tmp / "chromium-profile/NativeMessagingHosts"}'
         register = subprocess.run(
@@ -208,12 +326,14 @@ def main():
         threading.Thread(target=server.serve_forever, daemon=True).start()
         ext = prepare_extension(tmp, args.browser, server.server_address[1])
         started = time.monotonic()
-        browser = launch_browser(tmp, args.browser, args.executable.resolve(), ext, env)
+        browser = launch_browser(tmp, args.browser, args.executable.resolve(), ext, env, args.firefox_driver)
         log(f'launched {args.browser} pid {browser.pid}')
         got = Driver.event.wait(120)
         checks['extension_reported'] = got
         if not got:
-            log('no report; browser log tail:\n' + (tmp / 'browser.log').read_text(errors='replace')[-4000:])
+            for name in ('browser.log', 'geckodriver.log'):
+                if (tmp / name).is_file():
+                    log(f'no report; {name} tail:\n' + (tmp / name).read_text(errors='replace')[-4000:])
             raise SystemExit(1)
         result = Driver.reports[0]
         log(f'report after {time.monotonic() - started:.1f}s: ' + json.dumps(result)[:3000])
@@ -232,7 +352,8 @@ def main():
         checks['host_exited_after_requests'] = wait_for(lambda: not processes_running(host), 10)
         quit_browser(browser)
         checks['browser_quit'] = browser.poll() is not None
-        browser_log = (tmp / 'browser.log').read_text(errors='replace')
+        browser_log = ''.join((tmp / name).read_text(errors='replace')
+                              for name in ('browser.log', 'geckodriver.log') if (tmp / name).is_file())
         diagnostics = [line for line in browser_log.splitlines() if line.startswith('papers-native-host:')]
         log('host stderr as captured by the browser:\n' + '\n'.join(diagnostics))
         checks['host_stderr_has_no_page_content'] = not any(
@@ -250,13 +371,19 @@ def main():
         checks['paper_persisted'] = state['paper']['found'] and not state['paper']['deleted']
         checks['pdf_job_terminal'] = job is None or state['job']['terminal']
     finally:
-        for pid in processes_running(tmp / 'prefix/bin/papersd'):
+        for pid in processes_running(prefix_bin / 'papersd' if 'prefix_bin' in locals() else tmp / 'prefix/bin/papersd'):
             os.kill(pid, signal.SIGTERM)
         if not args.keep:
             shutil.rmtree(tmp, ignore_errors=True)
         else:
             log(f'kept {tmp}')
         log('checks: ' + json.dumps(checks, indent=2))
+        if args.report:
+            args.report.write_text(json.dumps({'browser': args.browser, 'executable': str(args.executable),
+                                               'app': str(args.app) if args.app else None,
+                                               'firefox_manifest_dir': str(args.firefox_manifest_dir)
+                                               if args.firefox_manifest_dir else None,
+                                               'checks': checks}, indent=2) + '\n')
     sys.exit(0 if checks and all(checks.values()) else 1)
 
 

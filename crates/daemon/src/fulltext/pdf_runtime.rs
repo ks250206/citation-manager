@@ -27,6 +27,7 @@ pub fn shared(explicit: Option<&Path>) -> Result<&'static PdfWorker, String> {
             let library = match explicit {
                 Some(path) => path.to_path_buf(),
                 None => std::env::current_exe()
+                    .and_then(|p| p.canonicalize())
                     .map_err(|e| e.to_string())
                     .and_then(|exe| bundled_library(&exe).map_err(|e| e.to_string()))?,
             };
@@ -44,7 +45,7 @@ impl PdfiumExtractor {
     /// The bundled library next to the running executable, if present (`None` when this
     /// installation has no PDF runtime, so no extraction job kind is registered).
     pub fn bundled() -> Option<Self> {
-        let exe = std::env::current_exe().ok()?;
+        let exe = std::env::current_exe().ok()?.canonicalize().ok()?;
         bundled_library(&exe)
             .ok()
             .filter(|p| p.is_file())
