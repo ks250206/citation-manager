@@ -185,7 +185,7 @@ python3 scripts/benchmarks/frame_timing.py --out NAME                        # m
   permission. A phase whose expected span never completed is reported `observed: false`.
 - **Phases**: startup idle; list wheel scrolling; list j/k (selection + details); list paging
   (Next ›); open the first corpus PDF through the palette's "Open paper:// Link from
-  Clipboard" (input → first page painted); vim `J`×19 / `K`×19 page turns; PDF wheel and j/k
-  scrolling; idle. Frames are attributed to phases by Unix time.
+  Clipboard" (input → first page painted); Expand; vim `J`×19 / `K`×19 page turns; far jumps
+  through the page field (mostly uncached pages); PDF wheel and j/k scrolling; idle. Frames are attributed to phases by Unix time.
 - Output: `target/frame-timing-benchmark/<NAME>/{environment,phases,frames,gpui-frames,summary}.json`,
   `gui.log` and screenshots. Manual workflow: `benchmark.yml` (`suite: frame-timing`).

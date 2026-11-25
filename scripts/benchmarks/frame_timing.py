@@ -50,6 +50,9 @@ LIST_CENTER = (580, 450)
 LIST_NEXT_PAGE = (884, 797)
 EXPAND = (1269, 73)
 PDF_PAGE = (660, 520)  # page column after Expand
+PAGE_FIELD = (73, 297)  # the viewer toolbar's page number field after Expand
+# Far jumps through the page field: mostly pages outside the render cache and prefetch.
+JUMPS = (10, 20, 5, 15, 1, 12, 18, 3)
 GPUI_FRAME = re.compile(r'^frame duration: ([0-9.]+)(ns|µs|us|ms|s)$')
 UNITS_MS = {'ns': 1e-6, 'µs': 1e-3, 'us': 1e-3, 'ms': 1.0, 's': 1000.0}
 
@@ -437,6 +440,15 @@ def drive(bin_dir, library, out, link, settle_s):
         driver.screenshot(out / 'shot-pdf-last.png')
         with phase('page_turn_back', expect='page_turn'):
             driver.key('K', 19, 700)
+        with phase('page_jump', expect='page_turn'):
+            for page in JUMPS:
+                driver.click(PAGE_FIELD)
+                time.sleep(0.3)
+                driver.type(str(page))
+                driver.key('Return')
+                time.sleep(1.5)
+        driver.click(PDF_PAGE)  # the page field had focus; j/k below need the page column
+        time.sleep(1)
         with phase('pdf_wheel', expect='pdf_scroll'):
             for _ in range(2):
                 driver.wheel(PDF_PAGE, True, 60, 40)
@@ -508,6 +520,7 @@ def main():
     link = f"paper://{paper}/attachment/{seed['attachments'][0]}/page/1"
     if platform.system() == 'Linux':
         env['x_tools'] = {t: shutil.which(t) is not None for t in ('Xvfb', 'xdotool', 'xclip', 'import')}
+        env['dev_dri_present'] = Path('/dev/dri').exists()  # no GPU node: software rendering
         env['vulkan_icds'] = sorted(p.name for p in Path('/usr/share/vulkan/icd.d').glob('*.json')) \
             if Path('/usr/share/vulkan/icd.d').exists() else []
     (out / 'environment.json').write_text(json.dumps(env, indent=2) + '\n')
