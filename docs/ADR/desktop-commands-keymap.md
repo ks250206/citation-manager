@@ -87,7 +87,10 @@ The complete document replaces the keymap; it is not a patch or a merge with def
   Explicit Shift with printable non-letters (including named `Plus`) rejects; use the
   resulting literal instead (`Cmd+?`, not `Cmd+Shift+/`). This avoids layout-dependent
   aliases hiding collisions. The plus character itself is spelled `Plus` because `+`
-  separates modifiers (`Cmd+Plus`); the native adapter must use this spelling.
+  separates modifiers (`Cmd+Plus`); the native adapter must use this spelling. When a
+  platform reports Shift together with an unshifted non-letter key, the adapter uses the produced
+  character instead (`Cmd+?`, `Cmd+Plus`); without a produced character it does not
+  guess a layout and the event does not match.
   `⌘K` is display notation, represented by `Cmd+k` in JSON. Unicode text is not a shortcut token.
 - `command` must exactly match a registered descriptor; a known disabled command is valid.
 - At most 64 KiB input, 256 bindings, nesting depth 8 (root counts as 1). The byte cap runs before
