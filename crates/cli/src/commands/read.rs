@@ -445,14 +445,22 @@ pub fn fulltext(daemon: &mut dyn Daemon, args: &FulltextArgs) -> Result<Report, 
 
 pub fn annotations(daemon: &mut dyn Daemon, args: &AnnotationsArgs) -> Result<Report, CliError> {
     let paper = paper_id(&args.paper)?;
-    let request = match &args.attachment {
-        Some(raw) => AnnotationRequest::List(parse_id(raw, "attachment ID")?),
-        None => AnnotationRequest::ForPaper(paper),
+    // Always list by paper: an attachment-scoped list would accept another paper's attachment
+    // and label its annotations (and paper:// links) with this paper's ID.
+    let attachment: Option<AttachmentId> = match &args.attachment {
+        Some(raw) => Some(parse_id(raw, "attachment ID")?),
+        None => None,
     };
-    let mut list = match daemon.call(Ipc::Annotations(request), INTERACTIVE)? {
+    let mut list = match daemon.call(
+        Ipc::Annotations(AnnotationRequest::ForPaper(paper)),
+        INTERACTIVE,
+    )? {
         Reply::Annotations(AnnotationReply::List(list)) => list,
         _ => return Err(unexpected()),
     };
+    if let Some(id) = attachment {
+        list.retain(|a| a.attachment_id == id);
+    }
     let total = list.len();
     let truncated = total > args.limit as usize;
     list.truncate(args.limit as usize);

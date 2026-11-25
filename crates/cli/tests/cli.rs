@@ -458,6 +458,22 @@ fn file_import_search_show_fulltext_annotations_export_without_gui() {
     );
     let imported = env.papers(&["import", "refs.bib", "--yes"]).expect(0);
     assert_eq!(imported["result"]["created"].as_array().unwrap().len(), 2);
+
+    // --attachment narrows the paper's own annotations; another paper's attachment never lists
+    // (or relabels) annotations under this paper.
+    let narrowed = env
+        .papers(&["annotations", &paper, "--attachment", &attachment])
+        .expect(0);
+    assert_eq!(narrowed["total"], 1);
+    let other = imported["result"]["created"][0]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let foreign = env
+        .papers(&["annotations", &other, "--attachment", &attachment])
+        .expect(0);
+    assert_eq!(foreign["paper_id"], other.as_str());
+    assert_eq!(foreign["total"], 0);
     assert_eq!(env.paper_count(), 3);
     let again = env.papers(&["import", "refs.bib", "--yes"]);
     again.expect(4);

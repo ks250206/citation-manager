@@ -142,12 +142,7 @@ pub fn run(
                 destination: destination.clone(),
             },
         )?;
-        let decisions: Vec<Decision> = preview
-            .candidates
-            .iter()
-            .enumerate()
-            .map(|(i, c)| decide::decide(c, i, &policy))
-            .collect();
+        let decisions: Vec<Decision> = decide::decide_batch(&preview.candidates, &policy);
         if let Some(e) = decide::first_undecided(&decisions) {
             cancel_preview(daemon, &preview);
             report.data["saved"] = json!(!created.is_empty());
@@ -227,13 +222,9 @@ fn review(
                 destination: destination.clone(),
             },
         )?;
-        for (i, candidate) in preview.candidates.iter().enumerate() {
-            let decision = seen.check(
-                candidate,
-                start + i,
-                decide::decide(candidate, i, policy),
-                policy,
-            );
+        let decisions = decide::decide_batch(&preview.candidates, policy);
+        for ((i, candidate), decision) in preview.candidates.iter().enumerate().zip(decisions) {
+            let decision = seen.check(candidate, start + i, decision, policy);
             rows.push(decide::candidate_json(candidate, start + i, &decision));
             plan.push(decision);
         }

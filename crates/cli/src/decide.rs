@@ -65,9 +65,13 @@ pub enum Decision {
     },
 }
 
-/// Exact persisted matches plus exact matches with an EARLIER row of the same batch (the
-/// first occurrence may be created; later ones are duplicates of it).
-fn exact(candidate: &PreviewCandidate, index: usize) -> (Vec<PaperId>, Vec<usize>) {
+/// Exact persisted matches plus exact matches with an EARLIER row of the same batch that may
+/// still be created (`counts`); later rows are duplicates of that first occurrence.
+fn exact(
+    candidate: &PreviewCandidate,
+    index: usize,
+    counts: &dyn Fn(usize) -> bool,
+) -> (Vec<PaperId>, Vec<usize>) {
     (
         candidate
             .matches
@@ -79,12 +83,43 @@ fn exact(candidate: &PreviewCandidate, index: usize) -> (Vec<PaperId>, Vec<usize
             .batch_matches
             .iter()
             .copied()
-            .filter(|&j| j < index)
+            .filter(|&j| j < index && counts(j))
             .collect(),
     )
 }
 
+/// Decides every row of one preview batch in order. An earlier row that is skipped (invalid or
+/// itself a duplicate) is never saved, so it does not make a later row with the same
+/// identifier a duplicate.
+pub fn decide_batch(candidates: &[PreviewCandidate], policy: &Policy) -> Vec<Decision> {
+    let mut decisions: Vec<Decision> = Vec::with_capacity(candidates.len());
+    for (index, candidate) in candidates.iter().enumerate() {
+        let skipped = |j: usize| {
+            matches!(
+                decisions.get(j),
+                Some(Decision::Act {
+                    action: ImportAction::Skip,
+                    ..
+                })
+            )
+        };
+        let decision = decide_with(candidate, index, policy, &|j| !skipped(j));
+        decisions.push(decision);
+    }
+    decisions
+}
+
+/// Decides one row on its own, treating every earlier batch match as a duplicate.
 pub fn decide(candidate: &PreviewCandidate, index: usize, policy: &Policy) -> Decision {
+    decide_with(candidate, index, policy, &|_| true)
+}
+
+fn decide_with(
+    candidate: &PreviewCandidate,
+    index: usize,
+    policy: &Policy,
+    counts: &dyn Fn(usize) -> bool,
+) -> Decision {
     let undecided = |kind, reason: String| Decision::Undecided { kind, reason };
     if candidate.diagnostics.iter().any(|d| d.error) {
         let reason = candidate
@@ -160,7 +195,7 @@ pub fn decide(candidate: &PreviewCandidate, index: usize, policy: &Policy) -> De
             label: "merge",
         };
     }
-    let (persisted, batch) = exact(candidate, index);
+    let (persisted, batch) = exact(candidate, index, counts);
     if !persisted.is_empty() || !batch.is_empty() {
         return match policy.on_duplicate {
             OnDuplicate::Skip => Decision::Act {
@@ -524,6 +559,38 @@ mod tests {
         let mut bulk = policy(OnDuplicate::Ask);
         bulk.skip_invalid = true;
         assert_eq!(action(decide(&invalid, 0, &bulk)), ImportAction::Skip);
+    }
+
+    #[test]
+    fn skipped_rows_do_not_make_later_batch_rows_duplicates() {
+        // Row 0 is invalid (skipped), row 1 repeats its DOI: row 1 is the first row that is
+        // actually saved, so it is created, not skipped as a duplicate of row 0.
+        let mut invalid = candidate(&[]);
+        invalid.batch_matches = vec![1];
+        invalid.diagnostics.push(RowDiagnostic {
+            field: "title".into(),
+            message: "missing".into(),
+            error: true,
+        });
+        let mut valid = candidate(&[]);
+        valid.batch_matches = vec![0];
+        let mut bulk = policy(OnDuplicate::Skip);
+        bulk.skip_invalid = true;
+        let decisions = decide_batch(&[invalid.clone(), valid.clone()], &bulk);
+        assert_eq!(action(decisions[0].clone()), ImportAction::Skip);
+        assert_eq!(action(decisions[1].clone()), ImportAction::Create);
+        // A third row repeating the same identifier is a duplicate of the created row 1.
+        let mut third = candidate(&[]);
+        third.batch_matches = vec![0, 1];
+        let decisions = decide_batch(&[invalid, valid, third], &bulk);
+        assert_eq!(action(decisions[2].clone()), ImportAction::Skip);
+        assert!(matches!(
+            decisions[2],
+            Decision::Act {
+                label: "skip_duplicate",
+                ..
+            }
+        ));
     }
 
     #[test]
