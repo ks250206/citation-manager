@@ -428,7 +428,7 @@ impl LibraryView {
         self.status(format!("Placed the note on p. {}", page + 1), false, cx);
     }
     /// Palette entry: place the selected unresolved note on the page the viewer shows.
-    pub(super) fn ann_place_selected(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn ann_place_selected(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let target = self
             .ann
             .selected()
@@ -447,11 +447,15 @@ impl LibraryView {
             .filter(|v| v.attachment_id() == attachment && self.settings.details_tab == "PDF")
             .map(|v| v.current_page());
         match page {
-            Some(page) => self.ann_place_on_page(id, page, cx),
+            Some(page) => {
+                self.ann_place_on_page(id, page, cx);
+                // Keep paging and Ctrl+Z on the viewer after the palette closes.
+                self.viewer_focus.focus(window, cx);
+            }
             // Not looking at its PDF yet: open it first, the person then picks the page.
             None => {
                 if let Some(a) = self.ann.selected().cloned() {
-                    self.ann_open(&a, cx);
+                    self.ann_open(&a, window, cx);
                 }
                 self.status(
                     "Go to the note's page, then run Place Note on Current Page again",
@@ -462,7 +466,7 @@ impl LibraryView {
         }
     }
     /// Jump from the list to the annotation's page in the PDF tab.
-    pub(super) fn ann_open(&mut self, a: &Annotation, cx: &mut Context<Self>) {
+    pub(super) fn ann_open(&mut self, a: &Annotation, window: &mut Window, cx: &mut Context<Self>) {
         self.host.selected = Some(a.attachment_id);
         self.settings.details_tab = "PDF".into();
         self.persist(cx);
@@ -470,6 +474,11 @@ impl LibraryView {
         if let Some(page) = page_of(a) {
             self.pending_jump = Some((a.attachment_id, page));
         }
+        // The viewer takes the keyboard, so the page can be chosen with J/K or the page field
+        // and placed with Place Note on Current Page without clicking the page first. Marking
+        // the PDF layout as already focused stops render from moving focus back to the list.
+        self.focus_layout = (self.screen, self.settings.details_tab.clone());
+        self.viewer_focus.focus(window, cx);
         cx.notify();
     }
     pub(super) fn subscribe_annotation_inputs(
@@ -589,7 +598,7 @@ impl LibraryView {
                 .flex_col()
                 .gap_1()
                 .cursor_pointer()
-                .on_click(cx.listener(move |this, _, _, cx| this.ann_open(&item, cx)))
+                .on_click(cx.listener(move |this, _, window, cx| this.ann_open(&item, window, cx)))
                 .child(
                     div()
                         .flex()
@@ -666,8 +675,9 @@ impl LibraryView {
                 // Notes can also be placed by hand on a page chosen in the viewer.
                 let manual = place.manual.then(|| {
                     let item = a.clone();
-                    button(("ann-manual", i), "Place in PDF…", true)
-                        .on_click(cx.listener(move |this, _, _, cx| this.ann_open(&item, cx)))
+                    button(("ann-manual", i), "Place in PDF…", true).on_click(
+                        cx.listener(move |this, _, window, cx| this.ann_open(&item, window, cx)),
+                    )
                 });
                 row = row.child(match (place.search, proposal) {
                     (false, _) => div()
@@ -675,9 +685,12 @@ impl LibraryView {
                         .flex_wrap()
                         .items_center()
                         .gap_2()
-                        .child(hint(
-                            "No quoted text to search for: open it in the PDF, go to its page and choose Place on p. N (palette: Place Note on Current Page).",
-                        ))
+                        .child(
+                            hint(
+                                "No quoted text to search for: open it in the PDF, go to its page and choose Place on p. N (palette: Place Note on Current Page).",
+                            )
+                            .w_full(),
+                        )
                         .children(manual),
                     (true, None) => div()
                         .flex()
@@ -693,11 +706,14 @@ impl LibraryView {
                         .flex_wrap()
                         .items_center()
                         .gap_2()
-                        .child(hint(if place.manual {
-                            "The quoted text was not found in this PDF. Place it by hand, keep it unresolved or delete it."
-                        } else {
-                            "The quoted text was not found in this PDF. Keep it unresolved or delete it."
-                        }))
+                        .child(
+                            hint(if place.manual {
+                                "The quoted text was not found in this PDF. Place it by hand, keep it unresolved or delete it."
+                            } else {
+                                "The quoted text was not found in this PDF. Keep it unresolved or delete it."
+                            })
+                            .w_full(),
+                        )
                         .children(manual),
                     (true, Some(Some(p))) => {
                         let place = p.clone();

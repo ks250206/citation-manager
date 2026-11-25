@@ -391,7 +391,7 @@ impl LibraryView {
                 self.ann.note_open = true;
                 self.ann.note.focus_handle(cx).focus(window, cx);
             }
-            pdf::PLACE_NOTE => self.ann_place_selected(cx),
+            pdf::PLACE_NOTE => self.ann_place_selected(window, cx),
             pdf::SHOW_ANNOTATIONS => {
                 self.show(Screen::Library, window, cx);
                 self.settings.details_tab = "Notes".into();
