@@ -2,6 +2,7 @@
 """Validate the current 12-crate boundary from Cargo metadata, including target/dev deps."""
 import json
 from pathlib import Path
+import re
 import subprocess
 
 # Allowed edges, not required imports: feature PRs own additive edges within this boundary.
@@ -65,8 +66,39 @@ def validate(metadata):
                     if dep['source'] != expected_source or not dep['optional'] or dep['target'] != NATIVE_TARGET:
                         raise ValueError('GPUI must use the pinned optional native desktop lane')
 
+# #20: the workspace forbids `unsafe`; the single audited exception is the PDFium appearance
+# FFI module. Any other `unsafe` block/fn/impl or `allow(unsafe_code)` fails the check, and only
+# cm-pdf may replace the inherited `forbid` with `deny`.
+UNSAFE_ALLOWED = {'crates/pdf/src/appearance.rs'}
+UNSAFE_CODE = re.compile(r'\bunsafe\s*(\{|fn\b|impl\b|trait\b|extern\b)|allow\s*\(\s*unsafe_code\s*\)')
+
+def check_unsafe(root):
+    root = Path(root)
+    offenders = []
+    for path in sorted(root.rglob('*.rs')):
+        relative = path.relative_to(root).as_posix()
+        if relative.split('/')[0] in {'target', '.git'} or '/target/' in f'/{relative}':
+            continue
+        code = '\n'.join(line.split('//', 1)[0] for line in path.read_text(encoding='utf-8').splitlines())
+        if UNSAFE_CODE.search(code) and relative not in UNSAFE_ALLOWED:
+            offenders.append(relative)
+    if offenders:
+        raise ValueError(f'unsafe code outside {sorted(UNSAFE_ALLOWED)}: {offenders}')
+    workspace = (root / 'Cargo.toml').read_text(encoding='utf-8')
+    if not re.search(r'\[workspace\.lints\.rust\][^\[]*unsafe_code\s*=\s*"forbid"', workspace):
+        raise ValueError('workspace must forbid unsafe_code')
+    for manifest in sorted((root / 'crates').glob('*/Cargo.toml')):
+        text = manifest.read_text(encoding='utf-8')
+        crate = manifest.parent.name
+        inherits = re.search(r'\[lints\]\s*workspace\s*=\s*true', text)
+        denies = re.search(r'\[lints\.rust\][^\[]*unsafe_code\s*=\s*"deny"', text)
+        if not (inherits or (crate == 'pdf' and denies)):
+            raise ValueError(f'{crate} must inherit the workspace lints (only pdf may deny instead)')
+
 if __name__ == '__main__':
     result = subprocess.run(['cargo', 'metadata', '--locked', '--no-deps', '--format-version', '1'],
                             cwd=ROOT, check=True, text=True, capture_output=True)
     validate(json.loads(result.stdout))
+    check_unsafe(ROOT)
     print('Architecture: 12 crates, allowed dependency direction and platform isolation passed')
+    print('Unsafe: confined to ' + ', '.join(sorted(UNSAFE_ALLOWED)))

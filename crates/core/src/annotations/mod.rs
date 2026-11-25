@@ -120,6 +120,25 @@ pub fn valid_color(color: &str) -> bool {
             && color[1..].bytes().all(|b| b.is_ascii_hexdigit()))
 }
 
+/// Display/export colour (RGB) of a stored colour name or `#RRGGBB`; unknown or absent is yellow.
+/// The viewer overlay and the annotated PDF export (#20) use the same values.
+pub fn rgb(color: Option<&str>) -> [u8; 3] {
+    let value = match color.unwrap_or("yellow") {
+        "yellow" => 0xffd84d,
+        "green" => 0x7bd88f,
+        "blue" => 0x6fa8ff,
+        "pink" => 0xff8fc0,
+        "purple" => 0xb48cff,
+        "orange" => 0xffa94d,
+        hex if hex.len() == 7 && hex.starts_with('#') => {
+            u32::from_str_radix(&hex[1..], 16).unwrap_or(0xffd84d)
+        }
+        _ => 0xffd84d,
+    };
+    let [_, r, g, b] = u32::to_be_bytes(value);
+    [r, g, b]
+}
+
 /// Whitespace-only comments are stored as no comment, on every path.
 fn clean_comment(comment: Option<String>) -> Option<String> {
     comment.filter(|c| !c.trim().is_empty())

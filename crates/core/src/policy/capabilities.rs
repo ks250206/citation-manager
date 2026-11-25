@@ -24,6 +24,10 @@ pub enum Capability {
     LocalFileRead,
     /// Create a caller-named local file (bibliography export).
     LocalFileWrite,
+    /// #20: atomically replace an existing caller-named `.pdf` the person confirmed in the
+    /// desktop's own replace prompt. Only the desktop preset holds it; `LocalFileWrite` alone
+    /// (e.g. an approved MCP write grant) can create new files but never replace one.
+    LocalFileReplace,
     /// Network metadata lookups (DOI providers).
     NetworkLookup,
     /// Private UI preferences.
@@ -36,7 +40,7 @@ pub enum Capability {
     GrantAdmin,
 }
 impl Capability {
-    pub const ALL: [Capability; 12] = [
+    pub const ALL: [Capability; 13] = [
         Self::LibraryRead,
         Self::LibraryWrite,
         Self::LibraryDelete,
@@ -44,6 +48,7 @@ impl Capability {
         Self::CapturePreview,
         Self::LocalFileRead,
         Self::LocalFileWrite,
+        Self::LocalFileReplace,
         Self::NetworkLookup,
         Self::UiSettings,
         Self::JobsRead,
@@ -118,6 +123,10 @@ pub enum Operation {
     FulltextRead,
     /// #17 render one page of a stored attachment for viewing.
     PdfRender,
+    /// #20 write an annotated copy of a stored PDF to a caller-named new file.
+    PdfExport,
+    /// #20 the same export replacing an existing file the person confirmed.
+    PdfExportReplace,
     /// #19 list annotations / propose a position for an unresolved one.
     AnnotationRead,
     /// #19 create/update/delete/undo/confirm/carry-over/resolve annotations.
@@ -165,7 +174,8 @@ impl Operation {
             PdfPreviewNew => All(&[LibraryWrite, LocalFileRead]),
             PdfAttach | PdfCommitNew | PdfRetryAttachment => All(&[LibraryWrite, LocalFileRead]),
             MetadataResolve => All(&[NetworkLookup]),
-            Export => All(&[LibraryRead, LocalFileWrite]),
+            Export | PdfExport => All(&[LibraryRead, LocalFileWrite]),
+            PdfExportReplace => All(&[LibraryRead, LocalFileWrite, LocalFileReplace]),
             JobSubmit | JobCancel | JobRetry => All(&[JobsControl]),
             JobRead => All(&[JobsRead]),
             GrantIssue | GrantList | GrantRevoke => All(&[GrantAdmin]),
