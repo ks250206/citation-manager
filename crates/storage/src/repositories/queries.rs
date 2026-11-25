@@ -29,6 +29,18 @@ impl Predicate {
         self.sql.push(')');
     }
 }
+/// Metadata predicate only: compare the ASCII base media type, ignoring parameters and
+/// SP/HTAB around it. Managed ingestion preserves the input. Shared by the `has_pdf`
+/// filter and the page's `with_pdf` marks so the column and the filter always agree.
+const PDF: &str = "EXISTS(SELECT 1 FROM attachments a WHERE a.paper_id=p.id AND a.kind='pdf' AND lower(trim(substr(a.mime_type,1,instr(a.mime_type||';',';')-1),char(9)||' '))='application/pdf')";
+fn has_pdf(tx: &Connection, id: PaperId) -> Result<bool, ServiceError> {
+    tx.query_row(
+        &format!("SELECT {PDF} FROM papers p WHERE p.id=?1"),
+        [id.0.to_string()],
+        |row| row.get(0),
+    )
+    .map_err(service_error)
+}
 fn contains(expression: &str, parameter: &str) -> String {
     // instr treats %, _ and backslash literally. Builtin lower is ASCII-only.
     format!("instr(lower(coalesce({expression},'')),lower({parameter}))>0")
@@ -57,7 +69,10 @@ fn contributor_match(parameter: &str, authors_only: bool) -> String {
 }
 fn predicate(query: &LibraryQuery) -> Result<Predicate, ServiceError> {
     let mut b = Predicate {
-        sql: "SELECT p.id FROM papers p WHERE 1=1".into(),
+        sql: format!(
+            "SELECT p.id,{} FROM papers p WHERE 1=1",
+            optional_key(query.sort.field).unwrap_or("NULL")
+        ),
         values: vec![],
     };
     let f = &query.filter;
@@ -103,10 +118,7 @@ fn predicate(query: &LibraryQuery) -> Result<Predicate, ServiceError> {
         b.and(&format!("p.type={v}"));
     }
     if let Some(has) = f.has_pdf {
-        // Metadata predicate only: compare the ASCII base media type, ignoring
-        // parameters and SP/HTAB around it. Managed ingestion preserves the input.
-        let pdf = "EXISTS(SELECT 1 FROM attachments a WHERE a.paper_id=p.id AND a.kind='pdf' AND lower(trim(substr(a.mime_type,1,instr(a.mime_type||';',';')-1),char(9)||' '))='application/pdf')";
-        b.and(&format!("{}{pdf}", if has { "" } else { "NOT " }));
+        b.and(&format!("{}{PDF}", if has { "" } else { "NOT " }));
     }
     if let Some(keyword) = &f.keyword {
         for token in keyword.split_whitespace() {
@@ -160,6 +172,12 @@ fn predicate(query: &LibraryQuery) -> Result<Predicate, ServiceError> {
                 let key = b.bind(year.unwrap_or(0));
                 b.and(&format!("((p.year IS NULL)>{null} OR ((p.year IS NULL)={null} AND (coalesce(p.year,0) {op} {key} OR (coalesce(p.year,0)={key} AND p.id {op} {id}))))"));
             }
+            SortValue::OptionalText(text) => {
+                let field = optional_key(query.sort.field).ok_or(ServiceError::Unavailable)?;
+                let null = b.bind(i32::from(text.is_none()));
+                let key = b.bind(text.unwrap_or_default());
+                b.and(&format!("((({field}) IS NULL)>{null} OR ((({field}) IS NULL)={null} AND (coalesce({field},'') {op} {key} OR (coalesce({field},'')={key} AND p.id {op} {id}))))"));
+            }
         }
     }
     let dir = match query.sort.direction {
@@ -169,6 +187,11 @@ fn predicate(query: &LibraryQuery) -> Result<Predicate, ServiceError> {
     let order = match query.sort.field {
         SortField::Id => format!("p.id {dir}"),
         SortField::Year => format!("(p.year IS NULL) ASC,p.year {dir},p.id {dir}"),
+        SortField::Author | SortField::Journal => {
+            // Missing values sort last in both directions, like years.
+            let key = optional_key(query.sort.field).ok_or(ServiceError::Unavailable)?;
+            format!("(({key}) IS NULL) ASC,{key} {dir},p.id {dir}")
+        }
         field => format!("{} {dir},p.id {dir}", sort_column(field)),
     };
     let limit = b.bind(i64::from(query.limit) + 1);
@@ -182,6 +205,18 @@ fn sort_column(field: SortField) -> &'static str {
         SortField::Year => "p.year",
         SortField::CreatedAt => "p.created_at",
         SortField::UpdatedAt => "p.updated_at",
+        SortField::Author | SortField::Journal => "p.id",
+    }
+}
+/// SQL key of the optional-text sorts. The page records the key SQLite computed for the
+/// last row, so the cursor never depends on re-deriving it from the Paper value.
+fn optional_key(field: SortField) -> Option<&'static str> {
+    match field {
+        SortField::Journal => Some("nullif(p.journal,'')"),
+        SortField::Author => Some(
+            "(SELECT coalesce(nullif(person.family_name,''),nullif(person.literal_name,''),nullif(person.given_name,'')) FROM paper_people pp JOIN people person ON person.id=pp.person_id WHERE pp.paper_id=p.id AND pp.role='author' ORDER BY pp.sort_order LIMIT 1)",
+        ),
+        _ => None,
     }
 }
 fn sort_value(p: &Paper, field: SortField) -> Result<SortValue, ServiceError> {
@@ -195,6 +230,8 @@ fn sort_value(p: &Paper, field: SortField) -> Result<SortValue, ServiceError> {
         SortField::UpdatedAt => {
             SortValue::Text(p.updated_at.clone().ok_or(ServiceError::Unavailable)?)
         }
+        // Read from the query row instead (see `optional_key`).
+        SortField::Author | SortField::Journal => return Err(ServiceError::Unavailable),
     })
 }
 impl LibraryQueryRepository for SqliteLibraryQuery<'_> {
@@ -209,28 +246,39 @@ impl LibraryQueryRepository for SqliteLibraryQuery<'_> {
             .prepare(&b.sql)
             .map_err(service_error)?
             .query_map(params_from_iter(b.values.iter()), |row| {
-                row.get::<_, String>(0)
+                Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
             })
             .map_err(service_error)?
             .collect::<rusqlite::Result<Vec<_>>>()
             .map_err(service_error)?;
         let more = ids.len() > query.limit as usize;
         let mut papers = Vec::with_capacity(ids.len().min(query.limit as usize));
-        for id in ids.into_iter().take(query.limit as usize) {
+        let mut with_pdf = Vec::new();
+        let mut last_key = None;
+        for (id, key) in ids.into_iter().take(query.limit as usize) {
             let id = PaperId(Uuid::parse_str(&id).map_err(|_| ServiceError::Unavailable)?);
             papers.push(super::papers::read(&tx, id, true)?.ok_or(ServiceError::Unavailable)?);
+            if has_pdf(&tx, id)? {
+                with_pdf.push(id);
+            }
+            last_key = key;
         }
         let next = if more {
             let last = papers.last().ok_or(ServiceError::Unavailable)?;
-            Some(LibraryCursor::from_position(
-                query,
-                last.id,
-                sort_value(last, query.sort.field)?,
-            )?)
+            let value = if optional_key(query.sort.field).is_some() {
+                SortValue::OptionalText(last_key)
+            } else {
+                sort_value(last, query.sort.field)?
+            };
+            Some(LibraryCursor::from_position(query, last.id, value)?)
         } else {
             None
         };
         tx.commit().map_err(service_error)?;
-        Ok(LibraryPage { papers, next })
+        Ok(LibraryPage {
+            papers,
+            next,
+            with_pdf,
+        })
     }
 }

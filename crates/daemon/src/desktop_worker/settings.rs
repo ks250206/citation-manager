@@ -39,8 +39,9 @@ pub(super) fn load(path: &Path) -> Result<SettingsLoaded, ServiceError> {
         if bytes.len() > 16384 {
             return Err(invalid("Settings exceed 16 KiB"));
         }
-        let settings: Settings = serde_json::from_slice(&bytes)
+        let mut settings: Settings = serde_json::from_slice(&bytes)
             .map_err(|e| invalid(format!("Invalid settings: {e}")))?;
+        settings.upgrade();
         if !settings.valid() {
             return Err(invalid("Invalid layout values"));
         }

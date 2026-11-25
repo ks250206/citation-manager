@@ -109,9 +109,20 @@ M1 の文字列を MATCH にそのまま渡して意味を変えたり、metadat
 - limit は1..=500（default50）。filter tags は最大100 ID、nil ID 不可。
   keyword / author / type は各最大1024 UTF-8 bytes、Some(blank) とNULを拒否。keyword 最大16 token。
   呼出側は条件なしを None で渡す。author/type は有効な入力文字列をそのまま照合する。
-- sort は ID / title / year / created_at / updated_at、昇降両順。
+- sort は ID / title / year / created_at / updated_at / author / journal、昇降両順。
   文字列は BINARY、year の NULL は両方向とも最後。最後の tie-breaker は同方向の canonical UUID。
   title の locale-aware collation や relevance order はない。
+- #84 で author / journal を追加した（既存 variant と cursor 形式は不変、追加のみ）。
+  author の key は role=`author` の先頭 contributor（`paper_people.sort_order` 順）の
+  family_name、空なら literal_name、空なら given_name。editor などは対象外。
+  journal の key は `papers.journal`（空文字は NULL 扱い）。どちらも key が無い論文は
+  year と同様に両方向とも最後。cursor の key は `SortValue::OptionalText` で、
+  SQLite が計算した値をそのまま保持する（Paper から再計算しない）。旧 cursor はそのまま有効、
+  別 sort の cursor 流用は従来どおり InvalidInput。title / year と同じく index は追加せず、
+  一ページごとの並べ替えで足りる（10k 規模の計測は #86 で扱う）。migration は追加していない。
+- `LibraryPage.with_pdf` は、そのページの論文のうち `has_pdf: Some(true)` と同じ metadata
+  述語に当たる ID（一覧の PDF 列用）。serde default / 空なら省略なので、古い reply も新しい
+  reply も相互に読める。REST / CLI の出力形式は変えていない。
 - `LibraryPage.next` は追加行がある場合だけ返す。最後の row の sort key / ID と厳密な filter / sort を
   versioned opaque JSON cursor に保持する。復元は `LibraryCursor::from_encoded`、取得は `as_str`。
   version / 構造 / UUID / key型 / filter / sort を検証し、別 query の流用は InvalidInput。

@@ -247,8 +247,39 @@ fn citation_text_omits_missing_parts() {
 #[test]
 fn settings_accept_old_files_and_reject_invalid_history() {
     let old = r#"{"version":1,"columns":[{"name":"Title","visible":true,"width":300},{"name":"Year","visible":true,"width":65},{"name":"Type","visible":true,"width":90},{"name":"DOI","visible":true,"width":180}],"sort":{"field":"Id","direction":"Asc"},"navigation_width":220,"details_width":380,"reading":false,"details_tab":"Info"}"#;
-    let settings: Settings = serde_json::from_str(old).unwrap();
-    assert!(settings.vim && settings.recent_commands.is_empty() && settings.valid());
+    let mut settings: Settings = serde_json::from_str(old).unwrap();
+    assert!(settings.vim && settings.recent_commands.is_empty());
+    // Pre-#84 four-column files are upgraded on load, keeping their widths.
+    assert!(!settings.valid());
+    settings.upgrade();
+    assert!(settings.valid());
+    let names: Vec<_> = settings.columns.iter().map(|c| c.name.as_str()).collect();
+    assert_eq!(
+        names,
+        [
+            "Author", "Title", "Year", "Journal", "PDF", "Type", "DOI", "Added"
+        ]
+    );
+    let visible: Vec<_> = settings
+        .columns
+        .iter()
+        .filter(|c| c.visible)
+        .map(|c| c.name.as_str())
+        .collect();
+    assert_eq!(visible, ["Author", "Title", "Year", "Journal", "PDF"]);
+    assert_eq!(settings.columns[1].width, 300);
+    assert_eq!(settings.columns[6].width, 180);
+    // An upgraded (or current) layout is left alone.
+    let current = settings.clone();
+    settings.upgrade();
+    assert_eq!(settings, current);
+    let mut hidden_title = Settings::default();
+    hidden_title.columns[1].visible = false;
+    assert!(!hidden_title.valid());
+    let mut unknown = Settings::default();
+    unknown.columns[0].name = "Editor".into();
+    unknown.upgrade();
+    assert!(!unknown.valid());
     let mut bad = Settings {
         recent_commands: vec!["Not An Id".into()],
         ..Default::default()

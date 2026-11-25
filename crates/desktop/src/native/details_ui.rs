@@ -58,11 +58,9 @@ impl LibraryView {
             .when_some(viewer, |el, viewer| {
                 el.child(
                     div()
-                        .id("pdf-attachments")
-                        .max_h(px(220.))
                         .flex_shrink_0()
-                        .overflow_y_scroll()
-                        .p_3()
+                        .px_3()
+                        .py_2()
                         .border_b_1()
                         .border_color(rgb(BORDER))
                         .child(self.pdf_host(cx)),
@@ -233,7 +231,11 @@ impl LibraryView {
             .child(section("COLLECTIONS & TAGS"))
             .when(
                 self.organization.collections.is_empty() && self.organization.tags.is_empty(),
-                |el| el.child(hint("Create collections or tags in Organize & export.")),
+                |el| {
+                    el.child(hint(
+                        "Create collections or tags in ⚙ Settings › Organize & export.",
+                    ))
+                },
             )
             .children(
                 self.organization
@@ -269,98 +271,136 @@ impl LibraryView {
                 }))
             }))
     }
+    /// Attachment list above the viewer. The rows come first and have their own bounded
+    /// scroll area, so every attachment stays reachable above the viewer toolbar (#84);
+    /// the attach button and the two drop targets share one compact row below.
     fn pdf_host(&self, cx: &mut Context<Self>) -> Div {
         let enabled = !self.locked();
+        let paper = self.editor.as_ref().map(|p| p.id);
+        let count = self.host.attachments.len();
         div()
-            .child(line("PDF attachments"))
-            .when(self.editor.is_none(), |el| {
-                el.child(line("Select a saved paper to attach a PDF."))
+            .flex()
+            .flex_col()
+            .gap_1()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                        div()
+                            .flex_1()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child(match count {
+                                0 => "PDF attachments".to_string(),
+                                n => format!("PDF attachments ({n})"),
+                            }),
+                    )
+                    .when_some(paper, |el, id| {
+                        el.child(button("attach-picker", "Attach PDF…", enabled).on_click(
+                            cx.listener(move |this, _, _, cx| {
+                                if !this.locked() {
+                                    this.pick_pdfs(false, PdfIntent::AttachExisting(id), cx);
+                                }
+                            }),
+                        ))
+                    }),
+            )
+            .when(paper.is_none(), |el| {
+                el.child(hint("Select a saved paper to attach a PDF."))
             })
-            .when_some(self.editor.as_ref(), |el, p| {
-                let id = p.id;
+            .when(self.busy(Lane::Attachments), |el| {
+                el.child(hint("Loading attachment references…"))
+            })
+            .when(
+                paper.is_some() && count == 0 && !self.busy(Lane::Attachments),
+                |el| el.child(hint("No attachments yet")),
+            )
+            .when(count > 0, |el| {
                 el.child(
-                    button("attach-picker", "Attach PDF to this paper…", enabled).on_click(
-                        cx.listener(move |this, _, _, cx| {
-                            if !this.locked() {
-                                this.pick_pdfs(false, PdfIntent::AttachExisting(id), cx);
-                            }
-                        }),
-                    ),
-                )
-                .child(
                     div()
-                        .id("attach-drop")
-                        .px_3()
-                        .py_1()
-                        .my_1()
-                        .rounded_md()
-                        .text_size(px(12.))
-                        .bg(rgb(0xe0eaff))
-                        .child("Drop PDFs here to ATTACH to this paper (bibliography unchanged)")
-                        .on_drop(cx.listener(move |this, paths: &ExternalPaths, _, cx| {
-                            if !this.locked() {
-                                this.inspect(
-                                    Selection::Files(paths.paths().to_vec()),
-                                    PdfIntent::AttachExisting(id),
-                                    cx,
-                                );
-                            }
-                        })),
+                        .id("attachment-list")
+                        // About four rows; more scroll inside this list, never under the toolbar.
+                        .max_h(px(124.))
+                        .overflow_y_scroll()
+                        .flex()
+                        .flex_col()
+                        .gap(px(2.))
+                        .children(self.host.attachments.iter().enumerate().map(
+                            |(index, (a, status))| {
+                                let id = a.id;
+                                nav_item(
+                                    ("attachment", index),
+                                    format!(
+                                        "📄 {} · {} KB{}",
+                                        a.original_name,
+                                        a.byte_size.div_ceil(1024),
+                                        match status {
+                                            AttachmentStatus::Present => String::new(),
+                                            other => format!(" · {other:?}"),
+                                        }
+                                    ),
+                                    self.host.selected == Some(id),
+                                )
+                                .flex_shrink_0()
+                                .w_full()
+                                .on_click(cx.listener(
+                                    move |this, _, _, cx| {
+                                        this.host.selected = Some(id);
+                                        cx.notify();
+                                    },
+                                ))
+                            },
+                        )),
                 )
             })
             .child(
                 div()
-                    .id("register-drop")
-                    .px_3()
-                    .py_1()
-                    .my_1()
-                    .rounded_md()
-                    .text_size(px(12.))
-                    .bg(rgb(0xe5efe8))
-                    .child("Drop PDFs here to register them as NEW papers (after review)")
-                    .on_drop(cx.listener(|this, paths: &ExternalPaths, _, cx| {
-                        if !this.locked() {
-                            this.inspect(
-                                Selection::Files(paths.paths().to_vec()),
-                                PdfIntent::RegisterNew,
-                                cx,
-                            );
-                        }
-                    })),
-            )
-            .when(self.busy(Lane::Attachments), |el| {
-                el.child(line("Loading attachment references…"))
-            })
-            .when(
-                self.host.attachments.is_empty() && !self.busy(Lane::Attachments),
-                |el| el.child(line("No attachments")),
-            )
-            .children(
-                self.host
-                    .attachments
-                    .iter()
-                    .enumerate()
-                    .map(|(index, (a, status))| {
-                        let id = a.id;
-                        nav_item(
-                            ("attachment", index),
-                            format!(
-                                "📄 {} · {} KB{}",
-                                a.original_name,
-                                a.byte_size.div_ceil(1024),
-                                match status {
-                                    AttachmentStatus::Present => String::new(),
-                                    other => format!(" · {other:?}"),
-                                }
-                            ),
-                            self.host.selected == Some(id),
+                    .flex()
+                    .gap_1()
+                    .text_size(px(11.))
+                    .when_some(paper, |el, id| {
+                        el.child(
+                            div()
+                                .id("attach-drop")
+                                .flex_1()
+                                .px_2()
+                                .py(px(3.))
+                                .rounded_md()
+                                .bg(rgb(0xe0eaff))
+                                .min_w_0()
+                                .child("Drop PDFs to attach")
+                                .on_drop(cx.listener(move |this, paths: &ExternalPaths, _, cx| {
+                                    if !this.locked() {
+                                        this.inspect(
+                                            Selection::Files(paths.paths().to_vec()),
+                                            PdfIntent::AttachExisting(id),
+                                            cx,
+                                        );
+                                    }
+                                })),
                         )
-                        .w_full()
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            this.host.selected = Some(id);
-                            cx.notify();
-                        }))
-                    }),
+                    })
+                    .child(
+                        div()
+                            .id("register-drop")
+                            .flex_1()
+                            .px_2()
+                            .py(px(3.))
+                            .rounded_md()
+                            .bg(rgb(0xe5efe8))
+                            .min_w_0()
+                            .child("Drop PDFs as new papers")
+                            .on_drop(cx.listener(|this, paths: &ExternalPaths, _, cx| {
+                                if !this.locked() {
+                                    this.inspect(
+                                        Selection::Files(paths.paths().to_vec()),
+                                        PdfIntent::RegisterNew,
+                                        cx,
+                                    );
+                                }
+                            })),
+                    ),
             )
     }
 }

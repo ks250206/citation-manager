@@ -154,3 +154,56 @@ subsequently exercised for both intents on the dedicated PDF files / folder
 screen (human gestures plus CUA outcomes; duplicate Details/PDF drop zones untested).
 Offline DOI, concurrency and failed-query robustness remain unverified. PR45 remains
 Draft; #34 stays HELD. No command registry/keymap or search experiment is added here.
+
+
+## #84 library list and top bar (M6-1)
+
+The table shows Author (first author by the author role, "et al." when there are more),
+Title, Year, Journal and a PDF badge by default; Type, DOI and Added are optional columns.
+Column visibility and widths stay in `ui-settings.json`: the column list is now the eight
+names in `cm_protocol::settings::COLUMNS`, in that order, and Title cannot be hidden. A
+pre-#84 file (Title/Year/Type/DOI) is upgraded on load, keeping its widths; visibility then
+follows the new defaults. Any other layout still has to validate or falls back to defaults
+with the usual warning. Text columns shrink to a minimum width before the pane would clip
+Year or the PDF badge. Column toggles are in ⚙ Settings › Table columns, the footer's
+Columns… button, a right-click on the header, the palette (Table Columns…) and the
+Organize & export screen.
+
+Header clicks sort by Author, Title, Year, Journal and Added (the date added, newest first
+on the first click); clicking the sorted column again reverses it. Each sort is a daemon
+`LibrarySort`, so keyset paging, cursor identity and reload rules are the #12 ones (see
+[library-organization-query](library-organization-query.md)); there is no client-side
+reordering of a loaded page. PDF, Type and DOI headers do not sort.
+The PDF badge comes from `LibraryPage.with_pdf`, computed in the same read transaction
+with the `has_pdf` filter's predicate, so the badge and the PDF filter agree.
+
+Selection follows desktop conventions (`cm_desktop::library`): a click selects one row,
+Cmd/Ctrl+click toggles a row, Shift+click selects from the anchor (the last plain or
+Cmd/Ctrl-clicked row) to the clicked row, Cmd/Ctrl+Shift+click adds that range, and
+Shift+↑/↓ grow or shrink the range from the anchor. Cmd/Ctrl+A selects the loaded page.
+The details pane shows the most recently clicked or moved-to row. Selection stays on the
+loaded page, as before; paging is still explicit.
+
+A right-click on a row (or Shift+F10 / the Menu key, or the palette's Paper Actions…)
+opens a menu for the selection: Open (↩), Copy citation(s) (Cmd/Ctrl+Shift+C; `y` in Vim
+mode), Add to / Move to collection (move when a collection is being viewed), Tags (a check
+box for one paper; "Add #tag" for several) and Move to Trash / Restore (Delete). Shortcuts
+are shown next to each item. Several papers are handled one request at a time through the
+existing single-paper organization and lifecycle requests (`cm_desktop::bulk`), stopping at
+the first failure and reporting how many were done; no daemon command was added. Menus
+are keyboard-navigable (↑/↓, Tab, → / ← for submenus, ↩ or Space, Esc) and the palette sits
+behind them in the same way as before.
+
+The top bar keeps Library, Import review and PDFs. "＋ Add" holds New paper, Add paper by
+DOI…, Add PDFs…, Import BibTeX… and Import RIS…; "⚙ Settings" holds Organize & export,
+API & integrations, the column toggles, Vim keys, the reading layout and the palette. Both
+settings screens link to each other and remain palette commands (Organize & Export, Open
+API & Integrations Settings); Import RIS… is now its own palette command.
+
+Layout fixes from the #74 run: the PDF tab lists attachments first in their own bounded
+scroll area (about four rows) with the attach button and drop targets in one compact row
+below, so a second attachment is never pushed under the viewer toolbar. The viewer keeps
+the same page position when its width changes (Expand, or coming back to the PDF tab at
+another width) instead of reusing a pixel offset from another scale, and "Place in PDF…"
+for an unresolved note opens at the top of the page in view (or the first page), not at a
+leftover offset that can sit in a blank margin. Evidence: [ISSUE_84](../validation/ISSUE_84.md).

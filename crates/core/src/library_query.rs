@@ -43,6 +43,11 @@ pub enum SortField {
     Year,
     CreatedAt,
     UpdatedAt,
+    /// First contributor with role `author` (by position): family name, else literal
+    /// name, else given name. Papers without an author sort LAST in both directions.
+    Author,
+    /// Container title. Papers without one sort LAST in both directions.
+    Journal,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum SortDirection {
@@ -115,13 +120,16 @@ fn invalid(reason: &str) -> ServiceError {
 }
 
 /// Adapter-owned key, recorded from the returned row. UUID is always the final
-/// tie-breaker in the requested direction. Years with no value sort LAST in both
-/// directions; strings use SQLite BINARY order. Calls do not share a snapshot.
+/// tie-breaker in the requested direction. Years, authors and journals with no value
+/// sort LAST in both directions; strings use SQLite BINARY order. Calls do not share a
+/// snapshot.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SortValue {
     Id,
     Text(String),
     Year(Option<i32>),
+    /// Optional text key (author, journal) as the adapter computed it for the row.
+    OptionalText(Option<String>),
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -185,6 +193,10 @@ impl LibraryCursor {
             (SortField::Id, SortValue::Id)
                 | (SortField::Year, SortValue::Year(_))
                 | (
+                    SortField::Author | SortField::Journal,
+                    SortValue::OptionalText(_)
+                )
+                | (
                     SortField::Title | SortField::CreatedAt | SortField::UpdatedAt,
                     SortValue::Text(_)
                 )
@@ -198,6 +210,10 @@ impl LibraryCursor {
 pub struct LibraryPage {
     pub papers: Vec<Paper>,
     pub next: Option<LibraryCursor>,
+    /// Papers of this page that match `has_pdf: Some(true)` (same metadata predicate),
+    /// for a list's PDF column. Absent from older replies, which read as "none known".
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub with_pdf: Vec<PaperId>,
 }
 pub trait LibraryQueryRepository {
     /// One consistent read transaction per page; at most limit full Paper values,

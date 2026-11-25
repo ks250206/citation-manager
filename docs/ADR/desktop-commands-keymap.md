@@ -187,3 +187,21 @@ Persistence: `Settings` gains `vim` (default on) and `recent_commands` (≤16 do
 the whole document and falls back to the defaults with diagnostics shown in Organize & export ›
 Keyboard. "Copy Default Keymap JSON" puts the built-in document on the clipboard as a template.
 The `Cmd` token in keymap files means the platform primary modifier.
+
+## #84: list commands, table keys and popup menus
+
+New library IDs (all connected, all shown in the palette): `import.ris` (Import RIS…; the
+existing `import.bibliography` is now titled Import BibTeX…), `add.menu` (opens ＋ Add),
+`paper.actions` (the row menu for the selection), `library.select_all`, `library.columns`
+(column toggles) and `library.sort_author` / `_title` / `_year` / `_journal` / `_added`
+(running the same sort again reverses it). `paper.move_to_trash` and `citation.copy` now act
+on the whole selection when several rows are selected.
+
+GPUI table bindings added in the `PaperTable` context: Shift+↑/↓ extend the selection,
+⌘A / Ctrl+A select all, Shift+F10 and the Menu key open the row menu, Delete and ⌘⌫ /
+Ctrl+Backspace move the selection to Trash (restore in the Trash view), ⌘⇧C / Ctrl+Shift+C
+copy citations. They work with Vim keys on or off and are listed as fixed shortcuts in the
+palette and next to menu items. A `Menu` key context (↑/↓, Tab/Shift+Tab, →/←, ↩, Space,
+Esc) belongs to the popup menus, which are siblings of the `Library` context like the palette,
+so workbench shortcuts cannot fire behind an open menu. Menu entries and their keyboard
+navigation are framework-free (`cm_desktop::menu`) and unit-tested.

@@ -146,7 +146,9 @@ impl LibraryView {
         self.show(Screen::Api, window, cx);
         self.api.confirm = None;
         match focus {
-            ApiFocus::Settings => {}
+            // Keep a key context (Esc → Library, ⌘K) even when opened from a menu or the
+            // palette, which hand focus to the table that this screen replaces.
+            ApiFocus::Settings => self.focus.focus(window, cx),
             ApiFocus::NewToken => {
                 self.api.form = Default::default();
                 self.api_inputs.label.focus_handle(cx).focus(window, cx);
@@ -385,6 +387,7 @@ impl LibraryView {
             .flex_col()
             .gap_4()
             .max_w(px(1200.))
+            .child(self.settings_switcher(cx))
             .when_some(state.notice.clone(), |el, (text, error)| {
                 el.child(
                     div()

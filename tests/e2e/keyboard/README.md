@@ -22,3 +22,8 @@ Native checks (run on a real desktop; record results in docs/validation):
 8. A pending prefix never outlives an unrelated interaction: press `g`, then click another row
    (or ⌘F / Ctrl+F into search and Esc back) and press `g` within a second — the selection must
    not jump to the first paper.
+9. #84 table selection and menus: Shift+click and Shift+↑/↓ select a range from the anchor,
+   ⌘/Ctrl+click toggles a row, ⌘A / Ctrl+A selects the page; the details pane follows the last
+   row. Right-click or Shift+F10 opens the row menu with shortcuts shown; ↑/↓, →/←, ↩ and Esc
+   drive it and its submenus, and no workbench shortcut fires behind it. ＋ Add and ⚙ Settings
+   open the same kind of menu; Esc returns focus to the table.

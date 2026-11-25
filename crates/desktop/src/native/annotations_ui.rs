@@ -471,9 +471,16 @@ impl LibraryView {
         self.settings.details_tab = "PDF".into();
         self.persist(cx);
         self.ann_select(Some(a.id), cx);
-        if let Some(page) = page_of(a) {
-            self.pending_jump = Some((a.attachment_id, page));
-        }
+        // An unresolved note has no page: start from the top of the page the viewer already
+        // shows for that PDF (or its first page), never from a leftover offset that may sit
+        // in a blank margin or past a page the person never saw at this width.
+        let page = page_of(a).unwrap_or_else(|| {
+            self.viewer
+                .as_ref()
+                .filter(|v| v.attachment_id() == a.attachment_id)
+                .map_or(0, |v| v.current_page())
+        });
+        self.pending_jump = Some((a.attachment_id, page));
         // The viewer takes the keyboard, so the page can be chosen with J/K or the page field
         // and placed with Place Note on Current Page without clicking the page first. Marking
         // the PDF layout as already focused stops render from moving focus back to the list.
