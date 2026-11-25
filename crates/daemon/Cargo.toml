@@ -86,3 +86,8 @@ required-features = ["pdfium-runtime-tests"]
 name = "backend_bench_import"
 path = "../../scripts/benchmarks/import.rs"
 test = true
+
+# #20 library annotations -> annotated PDF copy -> PDFium re-read, with the pinned runtime.
+[[test]]
+name = "pdf_export_runtime"
+required-features = ["pdfium-runtime-tests"]
