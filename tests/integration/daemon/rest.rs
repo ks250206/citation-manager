@@ -2339,3 +2339,131 @@ fn shutdown_with_the_api_enabled_releases_the_library_promptly() {
     drop(idle);
     again.shutdown();
 }
+
+/// Sends a JSON POST in two steps: the head with `Expect: 100-continue`, and the body only
+/// after the server asked for it (i.e. after the request was authenticated and authorized).
+/// `between` runs in that gap.
+fn post_after_continue(
+    port: u16,
+    token: &Credential,
+    path: &str,
+    body: &Value,
+    between: impl FnOnce(),
+) -> Resp {
+    let mut conn = Conn::open(port);
+    let body = serde_json::to_vec(body).unwrap();
+    let head = format!(
+        "POST {API}{path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer {token}\r\n\
+         Content-Type: application/json\r\nContent-Length: {}\r\nExpect: 100-continue\r\n\r\n",
+        body.len(),
+        token = token.0,
+    );
+    conn.writer.write_all(head.as_bytes()).unwrap();
+    let mut line = String::new();
+    conn.reader.read_line(&mut line).unwrap();
+    assert!(
+        line.contains(" 100 "),
+        "expected 100 Continue, got {line:?}"
+    );
+    loop {
+        line.clear();
+        conn.reader.read_line(&mut line).unwrap();
+        if line.trim_end().is_empty() {
+            break;
+        }
+    }
+    between();
+    conn.writer.write_all(&body).unwrap();
+    conn.read_response()
+}
+
+/// An elevation checked when a bulk request arrived must not carry the batch once it ended:
+/// every item is authorized again, so nothing runs on the ordinary burst allowance.
+#[test]
+fn bulk_batches_stop_when_the_elevation_ends_after_admission() {
+    let mut a = Api::start();
+    let (grant, token) = a.token("bulk", &issuable());
+    let papers: Vec<String> = (0..3)
+        .map(|i| {
+            create_paper(
+                &a,
+                &token,
+                &format!("Bulk {i}"),
+                &format!("10.1234/bulk{i}"),
+            )
+        })
+        .collect();
+    let detail = |a: &Api, id: &str| {
+        let resp = a.send(&Req::new("GET", format!("{API}/papers/{id}")).token(&token));
+        assert_eq!(resp.status, 200, "{}", resp.text());
+        resp.json()
+    };
+    let port = a.port;
+    let stopped = |resp: &Resp| {
+        assert_eq!(resp.status, 200, "{}", resp.text());
+        let body = resp.json();
+        assert_eq!(body["stopped"], "elevation_required", "{body}");
+        let results = body["results"].as_array().unwrap();
+        assert_eq!(results.len(), 3);
+        assert_eq!(results[0]["error"], "elevation_required");
+        assert!(results[1..].iter().all(|r| r["error"] == "not_attempted"));
+    };
+
+    elevate(&mut a, grant, BulkKind::Delete);
+    let resp = post_after_continue(
+        port,
+        &token,
+        "/papers/bulk-delete",
+        &json!({ "paper_ids": papers }),
+        || {
+            api(&mut a.admin, ApiCommand::EndElevation(grant)).unwrap();
+        },
+    );
+    conforms(&a.doc, "POST /papers/bulk-delete", &resp);
+    stopped(&resp);
+    for id in &papers {
+        assert_eq!(detail(&a, id)["paper"]["deleted_at"], Value::Null);
+    }
+
+    let collection = |a: &Api, name: &str| {
+        let resp = a.send(
+            &Req::new("POST", format!("{API}/collections"))
+                .token(&token)
+                .json(&json!({ "name": name })),
+        );
+        assert_eq!(resp.status, 201, "{}", resp.text());
+        resp.json()["collection"]["id"].as_str().unwrap().to_owned()
+    };
+    let from = collection(&a, "From");
+    let to = collection(&a, "To");
+    for id in &papers {
+        let resp = a.send(
+            &Req::new("POST", format!("{API}/collections/{from}/papers"))
+                .token(&token)
+                .json(&json!({ "paper_id": id })),
+        );
+        assert_eq!(resp.status, 200, "{}", resp.text());
+    }
+    elevate(&mut a, grant, BulkKind::Move);
+    let resp = post_after_continue(
+        port,
+        &token,
+        &format!("/collections/{to}/papers/bulk-move"),
+        &json!({ "paper_ids": papers, "from": from }),
+        || {
+            api(&mut a.admin, ApiCommand::EndElevation(grant)).unwrap();
+        },
+    );
+    conforms(&a.doc, "POST /collections/{id}/papers/bulk-move", &resp);
+    stopped(&resp);
+    for id in &papers {
+        let collections = detail(&a, id)["collections"].clone();
+        let ids: Vec<&str> = collections
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| c["id"].as_str().unwrap())
+            .collect();
+        assert_eq!(ids, vec![from.as_str()], "{id} was not moved");
+    }
+}

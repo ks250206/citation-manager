@@ -391,11 +391,23 @@ fn bulk_ids(ids: &[PaperId]) -> Result<(), ApiError> {
     }
     Ok(())
 }
-/// Per-item outcome. A denial (revoked token, elevation ended) stops the batch.
-/// Runs a batch one item at a time. A denial (token revoked, elevation ended), the request
-/// deadline or a client disconnect stops it; the response still lists every id (later ones
-/// as `not_attempted`) and `stopped` names the reason, so a caller sees what was done.
-fn run_batch<C>(
+/// What a batch needs besides its per-item work: the endpoint's authorization as of now.
+trait Batch {
+    fn reauthorize(&self) -> Result<(), ApiError>;
+}
+impl Batch for super::ctx::Calls {
+    fn reauthorize(&self) -> Result<(), ApiError> {
+        super::ctx::Calls::reauthorize(self)
+    }
+}
+/// Runs a batch one item at a time. Before each item the endpoint's operations (the bulk
+/// operation, including its elevation kind) are authorized again, so an elevation that
+/// expired or was ended after the request was admitted stops the batch before the next item
+/// instead of falling back to the per-command burst allowance. A denial (token revoked,
+/// elevation ended), the request deadline or a client disconnect stops it; the response
+/// still lists every id (later ones as `not_attempted`) and `stopped` names the reason, so
+/// a caller sees what was done.
+fn run_batch<C: Batch>(
     c: &mut C,
     ids: Vec<PaperId>,
     mut item: impl FnMut(&mut C, PaperId) -> Result<(), ApiError>,
@@ -407,7 +419,7 @@ fn run_batch<C>(
             results.push(json!({ "id": id, "ok": false, "error": "not_attempted" }));
             continue;
         }
-        match item(c, id) {
+        match c.reauthorize().and_then(|()| item(c, id)) {
             Ok(()) => results.push(json!({ "id": id, "ok": true })),
             Err(e) => {
                 if matches!(
@@ -1508,12 +1520,27 @@ async fn submit_job(ctx: Ctx, headers: HeaderMap, body: Body) -> Result<Response
 mod tests {
     use super::*;
 
+    /// Counts the items run; the re-authorization fails once `deny_after` items ran.
+    #[derive(Default)]
+    struct Fake {
+        run: usize,
+        deny_after: Option<usize>,
+    }
+    impl Batch for Fake {
+        fn reauthorize(&self) -> Result<(), ApiError> {
+            match self.deny_after {
+                Some(n) if self.run >= n => Err(ApiError::forbidden(Operation::BulkTrash)),
+                _ => Ok(()),
+            }
+        }
+    }
+
     #[test]
     fn a_denied_batch_reports_what_was_done_and_what_was_not() {
         let ids: Vec<PaperId> = (1..=4).map(|i| PaperId(uuid::Uuid::from_u128(i))).collect();
-        let mut calls = 0;
+        let mut calls = Fake::default();
         let reply = run_batch(&mut calls, ids.clone(), |n, id| {
-            *n += 1;
+            n.run += 1;
             match id.0.as_u128() {
                 1 => Ok(()),
                 2 => Err(ApiError::not_found()),
@@ -1521,7 +1548,7 @@ mod tests {
                 _ => unreachable!("stopped before the fourth item"),
             }
         });
-        assert_eq!(calls, 3);
+        assert_eq!(calls.run, 3);
         assert_eq!(reply["stopped"], "unauthenticated");
         let results = reply["results"].as_array().unwrap();
         assert_eq!(results.len(), 4);
@@ -1529,8 +1556,27 @@ mod tests {
         assert_eq!(results[1]["error"], "not_found");
         assert_eq!(results[2]["error"], "unauthenticated");
         assert_eq!(results[3]["error"], "not_attempted");
-        let done = run_batch(&mut (), ids, |_, _| Ok(()));
+        let done = run_batch(&mut Fake::default(), ids, |_, _| Ok(()));
         assert_eq!(done["stopped"], Value::Null);
+    }
+
+    #[test]
+    fn a_batch_is_authorized_again_before_every_item() {
+        let ids: Vec<PaperId> = (1..=3).map(|i| PaperId(uuid::Uuid::from_u128(i))).collect();
+        let mut ending = Fake {
+            run: 0,
+            deny_after: Some(1),
+        };
+        let reply = run_batch(&mut ending, ids, |n, _| {
+            n.run += 1;
+            Ok(())
+        });
+        assert_eq!(ending.run, 1, "nothing runs after the elevation ended");
+        assert_eq!(reply["stopped"], "elevation_required");
+        let results = reply["results"].as_array().unwrap();
+        assert_eq!(results[0]["ok"], true);
+        assert_eq!(results[1]["error"], "elevation_required");
+        assert_eq!(results[2]["error"], "not_attempted");
     }
 
     #[test]

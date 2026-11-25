@@ -59,6 +59,8 @@ pub struct Deadline(pub Instant);
 pub struct Ctx {
     pub app: App,
     grant: Option<GrantId>,
+    /// The `ENDPOINTS` row's operations (authorized again per item by bulk endpoints).
+    operations: &'static [Operation],
     deadline: Instant,
 }
 
@@ -161,6 +163,7 @@ impl FromRequestParts<App> for Ctx {
         Ok(Self {
             app: app.clone(),
             grant,
+            operations: endpoint.operations,
             deadline,
         })
     }
@@ -180,6 +183,8 @@ impl Drop for CancelOnDrop {
 
 pub struct Calls {
     session: InternalSession,
+    gateway: Gateway,
+    operations: &'static [Operation],
     deadline: Instant,
     /// Set when the client went away or the request timed out: no further command runs
     /// (stops bulk loops between items).
@@ -197,6 +202,15 @@ impl Calls {
         self.session
             .call(command, self.deadline)
             .map_err(ApiError::from_call)
+    }
+    /// Authorizes the endpoint's own operations again, as of now. Bulk endpoints call this
+    /// before every item: the elevation checked when the request arrived may have expired or
+    /// been ended since (e.g. while the body was still uploading), and the per-command burst
+    /// guard alone would then still let a few more items through.
+    pub fn reauthorize(&self) -> Result<(), ApiError> {
+        self.gateway
+            .preauthorize(self.session.grant(), self.operations)
+            .map_err(ApiError::from_wire)
     }
 }
 
@@ -221,6 +235,8 @@ impl Ctx {
         let mut guard = CancelOnDrop(Some((session.canceller(), cancelled.clone())));
         let mut calls = Calls {
             session,
+            gateway: self.app.gateway.clone(),
+            operations: self.operations,
             deadline: self.deadline,
             cancelled,
         };
