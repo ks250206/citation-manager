@@ -291,14 +291,27 @@ impl Stream for ClosedPeerQuirk {
 }
 
 #[test]
-fn a_peer_closed_before_socket_options_is_a_handshake_close_on_macos() {
+fn transport_errors_after_connect_are_a_handshake_close_but_timeouts_are_not() {
+    // The macOS EINVAL-from-setsockopt case, and the other ways a just-closed socket fails.
     let err =
         handshake_within(&mut ClosedPeerQuirk, hello(), Duration::from_millis(100)).unwrap_err();
-    // On macOS this is the daemon-closed case and is retried; elsewhere EINVAL stays an
-    // ordinary I/O error (Linux never reports a closed peer this way).
-    assert_eq!(
-        err.closed_during_handshake(),
-        cfg!(target_os = "macos"),
-        "{err:?}"
-    );
+    assert!(err.closed_during_handshake(), "{err:?}");
+    for kind in [
+        io::ErrorKind::NotConnected,
+        io::ErrorKind::BrokenPipe,
+        io::ErrorKind::ConnectionReset,
+        io::ErrorKind::UnexpectedEof,
+    ] {
+        assert!(
+            ClientError::Io(kind.into()).closed_during_handshake(),
+            "{kind:?}"
+        );
+    }
+    for kind in [io::ErrorKind::TimedOut, io::ErrorKind::WouldBlock] {
+        assert!(
+            !ClientError::Io(kind.into()).closed_during_handshake(),
+            "{kind:?}"
+        );
+    }
+    assert!(!ClientError::Protocol("expected welcome").closed_during_handshake());
 }
