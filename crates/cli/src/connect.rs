@@ -165,7 +165,8 @@ impl Connection {
                 format!("cannot read the library's credential: {e}"),
             )
         })?;
-        let welcome = handshake_within(stream.as_mut(), hello, HANDSHAKE).map_err(client_error)?;
+        let welcome =
+            handshake_within(stream.as_mut(), hello, HANDSHAKE).map_err(handshake_error)?;
         Ok(Self {
             stream,
             next: 1,
@@ -246,17 +247,26 @@ fn connect_error(e: io::Error) -> CliError {
 }
 
 pub fn client_error(e: ClientError) -> CliError {
-    let closed = match &e {
-        ClientError::Protocol(reason) => reason.contains("closed during handshake"),
-        ClientError::Io(e) | ClientError::Frame(FrameError::Io(e)) => matches!(
-            e.kind(),
-            io::ErrorKind::UnexpectedEof
-                | io::ErrorKind::BrokenPipe
-                | io::ErrorKind::ConnectionReset
-                | io::ErrorKind::ConnectionAborted
-        ),
-        _ => false,
-    };
+    classify(e, false)
+}
+
+/// A failure after the socket connected during Hello/Welcome. As in
+/// `cm_protocol::client::connect_and_handshake`, any transport error except a timeout means the
+/// daemon went away (idle-exit race; platforms disagree on the errno) and earns one retry.
+fn handshake_error(e: ClientError) -> CliError {
+    classify(e, true)
+}
+
+fn classify(e: ClientError, handshake: bool) -> CliError {
+    let closed = handshake
+        && match &e {
+            ClientError::Protocol(reason) => reason.contains("closed during handshake"),
+            ClientError::Io(e) | ClientError::Frame(FrameError::Io(e)) => !matches!(
+                e.kind(),
+                io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted
+            ),
+            _ => false,
+        };
     match e {
         ClientError::Rejected(HandshakeRejection::Unauthenticated) => CliError::new(
             Kind::PermissionDenied,
@@ -346,6 +356,29 @@ mod tests {
         assert_eq!(
             client_error(ClientError::Rejected(HandshakeRejection::Unauthenticated)).kind,
             Kind::PermissionDenied
+        );
+        // Handshake transport errors (macOS: ENOTCONN/EINVAL too) earn the one retry; timeouts
+        // and errors on established sessions do not.
+        for kind in [
+            io::ErrorKind::NotConnected,
+            io::ErrorKind::InvalidInput,
+            io::ErrorKind::BrokenPipe,
+        ] {
+            assert!(
+                handshake_error(ClientError::Io(io::Error::from(kind)))
+                    .message
+                    .contains(CLOSED)
+            );
+        }
+        assert!(
+            !handshake_error(ClientError::Io(io::Error::from(io::ErrorKind::TimedOut)))
+                .message
+                .contains(CLOSED)
+        );
+        assert!(
+            !client_error(ClientError::Io(io::Error::from(io::ErrorKind::BrokenPipe)))
+                .message
+                .contains(CLOSED)
         );
         assert_eq!(
             connect_error(io::Error::from(io::ErrorKind::ConnectionRefused)).kind,
