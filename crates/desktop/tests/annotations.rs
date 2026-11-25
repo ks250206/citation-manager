@@ -214,3 +214,33 @@ fn context_is_bounded_and_colors_map_safely() {
     assert_eq!(rgb(Some("#102030")), 0x102030);
     assert_eq!(rgb(Some("bogus")), rgb(None));
 }
+
+#[test]
+fn a_hit_or_link_selects_its_annotation_only_once_the_list_has_arrived() {
+    let list = [
+        row(1, AnnotationKind::Highlight, vec![]),
+        row(2, AnnotationKind::Note, vec![]),
+    ];
+    let wanted = list[1].id;
+    assert_eq!(pending_selection(None, Some(&list)), PendingSelection::Idle);
+    // Before the paper's annotation list arrives, nothing may be selected: the comment
+    // editor would show a stale comment that Save would write over the stored one.
+    assert_eq!(
+        pending_selection(Some(wanted), None),
+        PendingSelection::Wait
+    );
+    // An empty list that has arrived is a real answer, not "still loading".
+    assert_eq!(
+        pending_selection(Some(wanted), Some(&[])),
+        PendingSelection::Missing(wanted)
+    );
+    assert_eq!(
+        pending_selection(Some(wanted), Some(&list)),
+        PendingSelection::Select(wanted)
+    );
+    let other = row(9, AnnotationKind::Highlight, vec![]).id;
+    assert_eq!(
+        pending_selection(Some(other), Some(&list)),
+        PendingSelection::Missing(other)
+    );
+}
