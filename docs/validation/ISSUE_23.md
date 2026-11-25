@@ -52,3 +52,23 @@ passed every check:
 - A successful public PDF download through the host flow (no outbound network for the daemon
   here); #22 covers the fetch itself with a loopback fixture.
 - The real #24 extension UI.
+
+## After merging main (#62) through #22
+
+Merged `claude/issue-22-capture` @ `f827762` (contains main #19/#25/#18 and the #22 capture →
+#18 extraction trigger). Only TEST_MATRIX conflicted; the DESIGN #23 section is now §35. Linux:
+
+| Command | Result |
+|---|---|
+| `cargo fmt --all -- --check` | passed |
+| `cargo clippy --workspace --all-targets --locked -- -D warnings` | passed |
+| `cargo clippy -p cm-daemon --all-targets --features desktop-bootstrap --locked -- -D warnings` | passed |
+| `cargo clippy -p cm-desktop --all-targets --features native-gpui --locked -- -D warnings` | passed |
+| `cargo test --workspace --locked --no-fail-fast` | passed: 396 tests |
+| `cargo test -p cm-daemon -p cm-desktop --features cm-daemon/desktop-bootstrap --locked` | passed: 142 tests |
+| pinned Linux PDFium runtime tests (`cm-pdf` 3, `cm-daemon` `fulltext_runtime`) | passed |
+| `python3 scripts/check_architecture.py`, `python3 -m unittest discover -s scripts -p 'test_*.py'` | passed (38) |
+| `python3 scripts/check_migrations.py --base origin/main` | passed (no new migration) |
+| `browser_smoke.py --browser chromium` (Playwright Chromium 1243, Xvfb) | passed: all 17 checks; PDF job terminal `failed` after 4 attempts (offline) |
+
+Firefox ESR smoke was not rerun after this merge.

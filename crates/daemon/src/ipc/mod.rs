@@ -11,6 +11,7 @@ mod capture;
 
 use crate::{
     desktop_worker::InProcessLibraryClient,
+    fulltext::readers::{MAX_SEARCH_READERS, ReaderPool},
     jobs::{CapturePdfFetchHandler, JobEngine, JobHandler, JobPolicy, default_handlers},
     lifecycle::{self, Activity, DaemonPaths, LibraryLock},
 };
@@ -19,6 +20,7 @@ use cm_core::{
     ServiceError,
     metadata_resolve::Cancellation,
     policy::{self, Capability, CapabilitySet, Denial, GrantId, Operation},
+    search::extraction::PageTextExtractor,
 };
 use cm_metadata::fetch_policy::{FetchPolicy, HostResolver, PdfFetcher, SystemResolver};
 use cm_protocol::{
@@ -33,8 +35,9 @@ use cm_protocol::{
     },
     jobs::{JobCommand, JobReply},
     library::LibraryClient,
+    search::{FulltextReply, FulltextRequest, SearchReply, SearchRequest},
 };
-use cm_storage::{LibraryDb, LibraryDirectory, StorageError};
+use cm_storage::{LibraryDb, LibraryDirectory, SqlFault, StorageError, fts::SearchReader};
 use std::{
     collections::HashMap,
     io,
@@ -49,7 +52,7 @@ use std::{
         mpsc,
     },
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
@@ -65,6 +68,10 @@ pub struct DaemonConfig {
     pub jobs: JobPolicy,
     /// Extra/overriding job handlers (registered after the built-in capture handler).
     pub handlers: Vec<Arc<dyn JobHandler>>,
+    /// #18 page text extractor. `Some` registers `fulltext.extract` and automatic
+    /// extraction of pending PDF attachments; `None` (no PDF runtime) leaves PDF text
+    /// unindexed and searches report it as `PendingExtraction`.
+    pub extractor: Option<Arc<dyn PageTextExtractor>>,
     /// #22 capture PDF fetch policy and name resolution.
     pub capture: CaptureConfig,
 }
@@ -92,6 +99,7 @@ impl DaemonConfig {
             jobs: JobPolicy::default(),
             handlers: default_handlers(),
             capture: CaptureConfig::default(),
+            extractor: None,
         }
     }
 }
@@ -126,6 +134,9 @@ struct Shared {
     auth: Arc<Authenticator>,
     engine: InProcessLibraryClient,
     jobs: JobEngine,
+    /// #18 pool of interruptible read connections for search/extraction status (WAL
+    /// readers do not block each other or the writer).
+    readers: ReaderPool,
     activity: Arc<Activity>,
     sessions: AtomicU64,
     /// Import preview handle -> grant that created it (preview grant binding).
@@ -177,12 +188,15 @@ pub fn start(config: DaemonConfig) -> Result<RunningDaemon, StartError> {
     // The lock holder is the only migration runner. Upgrades take a pre-migration backup.
     let control = LibraryDb::open_with_safety_backups(&directory).map_err(StartError::Storage)?;
     let control = Arc::new(Mutex::new(control));
+    let readers =
+        ReaderPool::new(directory.clone(), MAX_SEARCH_READERS).map_err(StartError::Storage)?;
     let auth = Arc::new(Authenticator::load(control.clone()).map_err(StartError::Service)?);
     auth.bootstrap_desktop(&paths.desktop_credential, now_ms())?;
     let activity = Arc::new(Activity::default());
-    let engine =
-        InProcessLibraryClient::start_with_settings(paths.library.clone(), config.settings)?;
-    // The live grant registry decides whether a job's owner may still run it.
+    let (engine, engine_exit) =
+        InProcessLibraryClient::start_with_exit(paths.library.clone(), config.settings)?;
+    // Built-in #22 capture handler first, then the configured (possibly overriding) handlers,
+    // then #18 extraction when a page text extractor is available.
     let mut handlers: Vec<Arc<dyn JobHandler>> = vec![Arc::new(CapturePdfFetchHandler::new(
         PdfFetcher::with_resolver(
             config.capture.fetch.clone(),
@@ -190,6 +204,12 @@ pub fn start(config: DaemonConfig) -> Result<RunningDaemon, StartError> {
         ),
     ))];
     handlers.extend(config.handlers);
+    if let Some(extractor) = config.extractor {
+        handlers.push(Arc::new(crate::fulltext::FulltextExtractHandler {
+            extractor,
+        }));
+    }
+    // The live grant registry decides whether a job's owner may still run it.
     let jobs = JobEngine::start_with_owners(
         directory,
         control,
@@ -199,6 +219,8 @@ pub fn start(config: DaemonConfig) -> Result<RunningDaemon, StartError> {
         auth.clone(),
     )
     .map_err(StartError::Service)?;
+    // Attachments added while no daemon (or no PDF runtime) was running.
+    jobs.ensure_extraction();
     lifecycle::prepare_private_dir(&paths.runtime_dir)?;
     lifecycle::remove_stale_socket(&paths.socket)?;
     let listener = UnixListener::bind(&paths.socket)?;
@@ -209,6 +231,7 @@ pub fn start(config: DaemonConfig) -> Result<RunningDaemon, StartError> {
         auth,
         engine,
         jobs,
+        readers,
         activity,
         sessions: AtomicU64::new(0),
         previews: Mutex::new(HashMap::new()),
@@ -240,6 +263,12 @@ pub fn start(config: DaemonConfig) -> Result<RunningDaemon, StartError> {
             }
             shared.jobs.stop();
             drop(shared);
+            // Release the single-writer lock only after the library worker has closed its
+            // connections; otherwise the next daemon could open the library (and see its
+            // WAL sidecars being torn down) while this one still holds it open.
+            if !engine_exit.wait(Duration::from_secs(10)) {
+                eprintln!("papersd: library worker did not exit within 10 s");
+            }
             drop(lock);
         })?;
     Ok(RunningDaemon {
@@ -592,6 +621,12 @@ impl Session {
                 let tx = self.tx.clone();
                 let previews = self.shared.clone();
                 let grant = self.grant;
+                let adds_attachments = matches!(
+                    command,
+                    PdfCommand::Attach { .. }
+                        | PdfCommand::CommitNew { .. }
+                        | PdfCommand::RetryAttachment { .. }
+                );
                 let redact = !held.contains(&Capability::LibraryRead);
                 self.engine.pdf(
                     command.into_request(self.cancellation(id)),
@@ -609,6 +644,9 @@ impl Session {
                             if redact {
                                 redact_matches(p);
                             }
+                        }
+                        if adds_attachments && r.is_ok() {
+                            previews.jobs.ensure_extraction();
                         }
                         done(r.map(Reply::Pdf).map_err(Into::into))
                     }),
@@ -688,6 +726,27 @@ impl Session {
                 done(result.map(Reply::Grants));
                 Ok(())
             }
+            Command::Search(request) => {
+                done(self.search(&request).map(Reply::Search));
+                Ok(())
+            }
+            Command::Fulltext(request) => {
+                done(self.fulltext(request).map(Reply::Fulltext));
+                Ok(())
+            }
+            Command::Annotations(mut request) => {
+                // The wire form carries no token (`#[serde(skip)]`): Propose gets this request's
+                // server-side token, cancelled by `ClientFrame::Cancel` or by disconnecting.
+                if let cm_protocol::annotations::AnnotationRequest::Propose { cancel, .. } =
+                    &mut request
+                {
+                    *cancel = self.cancellation(id);
+                }
+                self.engine.annotations(
+                    request,
+                    Box::new(move |r| done(r.map(Reply::Annotations).map_err(Into::into))),
+                )
+            }
             Command::Capture(command) => self.capture(id, command, held, done),
             _ => {
                 done(Err(WireError::Service(ServiceError::InvalidInput(
@@ -706,6 +765,85 @@ impl Session {
         }
     }
 }
+
+impl Session {
+    /// #18 search on a pooled read connection, inside one read snapshot and within the
+    /// request's `timeout_ms` (enforced inside SQLite; an interrupted lookup is reported as
+    /// a timed-out page by the search service).
+    ///
+    /// Only real damage leads to recovery: a failure classified as corruption verifies the
+    /// index, and only a failed verification schedules one `search.rebuild` job (which
+    /// renumbers documents). Lock contention (BUSY/LOCKED), here or during verification,
+    /// is returned as `WireError::Busy` (retry later) and never triggers a rebuild. The
+    /// source tables are never modified by the search path.
+    fn search(&self, request: &SearchRequest) -> Result<SearchReply, WireError> {
+        let budget = request
+            .timeout_ms
+            .clamp(1, cm_core::search::types::MAX_TIMEOUT_MS);
+        let reader = self
+            .shared
+            .readers
+            .acquire(Instant::now() + Duration::from_millis(u64::from(budget)))?;
+        let (error, fault) = {
+            let snapshot = reader.snapshot().map_err(|_| WireError::Unavailable)?;
+            match cm_core::search::search(&*snapshot, request) {
+                Ok(reply) => return Ok(reply),
+                Err(e) => (e, snapshot.fault()),
+            }
+        };
+        match fault {
+            Some(SqlFault::Busy) => Err(WireError::Busy),
+            Some(SqlFault::Corrupt) => self.recover_index(&reader),
+            _ => Err(WireError::Service(error)),
+        }
+    }
+    /// A search hit corruption: verify, and schedule a rebuild only for confirmed damage.
+    fn recover_index(&self, reader: &SearchReader) -> Result<SearchReply, WireError> {
+        let index = reader.search_index();
+        let health = match index.verify() {
+            Ok(health) => health,
+            Err(_) if index.fault() == Some(SqlFault::Busy) => return Err(WireError::Busy),
+            Err(e) => return Err(WireError::Service(e)),
+        };
+        if health.ok() {
+            return Err(WireError::Service(ServiceError::Unavailable));
+        }
+        let generation = index.generation().unwrap_or_default();
+        let job = self.shared.jobs.submit_system(
+            cm_protocol::jobs::kinds::SEARCH_REBUILD,
+            &format!("auto-rebuild:{generation}"),
+            serde_json::json!({}),
+        )?;
+        Err(WireError::Service(ServiceError::InvalidInput(format!(
+            "search index is damaged; rebuild job {} scheduled",
+            job.id.0
+        ))))
+    }
+    fn fulltext(&self, request: FulltextRequest) -> Result<FulltextReply, WireError> {
+        let reader = self
+            .shared
+            .readers
+            .acquire(Instant::now() + FULLTEXT_READ_WAIT)?;
+        let reader = reader.fulltext_reader();
+        Ok(match request {
+            FulltextRequest::Status(paper) => FulltextReply::Status(reader.for_paper(paper)?),
+            FulltextRequest::AttachmentStatus(attachment) => {
+                FulltextReply::Status(reader.for_attachment(attachment)?.into_iter().collect())
+            }
+            FulltextRequest::Pages(request) => {
+                FulltextReply::Pages(Box::new(reader.pages(&request)?))
+            }
+            _ => {
+                return Err(WireError::Service(ServiceError::InvalidInput(
+                    "unsupported full-text request".into(),
+                )));
+            }
+        })
+    }
+}
+
+/// How long a full-text status/page read waits for a free search reader.
+const FULLTEXT_READ_WAIT: Duration = Duration::from_secs(5);
 
 /// Without LibraryRead a preview must not reveal existing papers (native host capture).
 fn redact_matches(preview: &mut ImportPreview) {

@@ -1,4 +1,5 @@
 //! Library engine. All IO and retained import state stay on workers; #25 serves it over IPC.
+mod annotations;
 pub(crate) mod files;
 mod pdf;
 mod settings;
@@ -73,10 +74,13 @@ pub(super) struct Worker<'a> {
     pdfs: PdfReport,
     partial_pdfs: Vec<PdfFile>,
     pdf_preview: Option<(usize, cm_protocol::import::PreviewId)>,
-    #[cfg(feature = "pdf-metadata")]
-    pdf: Option<Result<cm_pdf::worker::PdfWorker, String>>,
     /// Retained parse/PDF state of sessions other than the one currently executing.
     sessions: HashMap<u64, Retained>,
+    /// Confirmation ledger for annotation undo/redo (#19), kept for the worker's lifetime.
+    confirmations: cm_core::annotations::Confirmations,
+    /// Tests replace the PDF page source of `Propose`.
+    #[cfg(test)]
+    test_pages: Option<Box<dyn FnMut() -> Box<dyn annotations::PageReader> + Send>>,
 }
 /// Per-session retained parse/PDF-inspection state (#25): one IPC session can never
 /// preview or commit from another session's selected files.
@@ -116,6 +120,17 @@ pub type CapturePreviewed = (
     cm_protocol::import::ImportPreview,
     cm_protocol::capture::CaptureResolution,
 );
+/// Signals that the library worker thread has finished (its database is closed).
+pub struct WorkerExit(mpsc::Receiver<()>);
+impl WorkerExit {
+    /// Waits up to `timeout` for the worker to exit; `true` once it has.
+    pub fn wait(&self, timeout: std::time::Duration) -> bool {
+        matches!(
+            self.0.recv_timeout(timeout),
+            Err(mpsc::RecvTimeoutError::Disconnected)
+        )
+    }
+}
 
 /// In-process engine. The GUI no longer embeds it (#25): `papersd` owns it behind IPC,
 /// one `for_session` handle per authenticated connection.
@@ -131,14 +146,27 @@ impl InProcessLibraryClient {
     }
     /// Only explicit dedicated paths; no default user library/settings or daemon listener.
     pub fn start_with_settings(path: PathBuf, settings: Option<PathBuf>) -> std::io::Result<Self> {
+        Self::start_with_exit(path, settings).map(|(client, _)| client)
+    }
+    /// Like `start_with_settings`, plus a handle that reports when the library worker has
+    /// exited and therefore closed its database connections (after the last clone is gone).
+    pub fn start_with_exit(
+        path: PathBuf,
+        settings: Option<PathBuf>,
+    ) -> std::io::Result<(Self, WorkerExit)> {
         let (sender, receiver) = mpsc::sync_channel::<Work>(32);
+        let (exited, exit) = mpsc::channel::<()>();
         thread::Builder::new()
             .name("library-worker".into())
             .spawn(move || {
+                // Dropped when this thread ends, after the worker (and its connections).
+                let _exited = exited;
                 while let Ok(first) = receiver.recv() {
                     let opened = (|| {
                         let directory = LibraryDirectory::prepare(&path)?;
-                        let db = LibraryDb::open(&directory)?;
+                        // Upgrades of an existing library take a pre-migration backup first
+                        // (new schema from later issues, e.g. #19 annotations).
+                        let db = LibraryDb::open_with_safety_backups(&directory)?;
                         let import_db = LibraryDb::open(&directory)?;
                         Ok::<_, cm_storage::StorageError>((directory, db, import_db))
                     })();
@@ -164,9 +192,10 @@ impl InProcessLibraryClient {
                         pdfs: PdfReport::default(),
                         partial_pdfs: Vec::new(),
                         pdf_preview: None,
-                        #[cfg(feature = "pdf-metadata")]
-                        pdf: None,
                         sessions: HashMap::new(),
+                        confirmations: Default::default(),
+                        #[cfg(test)]
+                        test_pages: None,
                     };
                     first(Ok(&mut worker));
                     while let Ok(work) = receiver.recv() {
@@ -179,11 +208,14 @@ impl InProcessLibraryClient {
         thread::Builder::new()
             .name("doi-worker".into())
             .spawn(move || serve_resolver(lookups))?;
-        Ok(Self {
-            sender,
-            resolver,
-            session: 0,
-        })
+        Ok((
+            Self {
+                sender,
+                resolver,
+                session: 0,
+            },
+            WorkerExit(exit),
+        ))
     }
     /// #22 capture preview: extraction and the DOI complement run on the network worker,
     /// then the draft enters the SAME common #33 coordinator as every other import (no
@@ -354,6 +386,37 @@ impl LibraryClient for InProcessLibraryClient {
             }
         })
     }
+    fn annotations(
+        &self,
+        request: cm_protocol::annotations::AnnotationRequest,
+        complete: Reply<cm_protocol::annotations::AnnotationReply>,
+    ) -> Result<(), ServiceError> {
+        use cm_protocol::annotations::{AnnotationReply, AnnotationRequest};
+        if let AnnotationRequest::Propose { id, cancel } = request {
+            // Rows are looked up on the library worker; the PDF is verified and searched on a
+            // helper thread (as page renders are), so library requests keep flowing.
+            return self
+                .sender
+                .try_send(Box::new(move |worker| {
+                    match worker.and_then(|w| w.begin_propose(id, cancel)) {
+                        Err(e) => complete(Err(e)),
+                        Ok(pending) => {
+                            let spawned = thread::Builder::new()
+                                .name("annotation-propose".into())
+                                .spawn(move || {
+                                    complete(pending.finish().map(AnnotationReply::Proposal))
+                                });
+                            if spawned.is_err() {
+                                // `complete` moved into the closure; the caller's lost-reply
+                                // guard reports Unavailable when it is dropped.
+                            }
+                        }
+                    }
+                }))
+                .map_err(|_| ServiceError::Unavailable);
+        }
+        self.enqueue(complete, move |w| w.annotations(request))
+    }
     fn load_settings(&self, complete: Reply<SettingsLoaded>) -> Result<(), ServiceError> {
         self.enqueue(complete, |w| settings::load(&w.settings_path))
     }
@@ -398,6 +461,28 @@ impl LibraryClient for InProcessLibraryClient {
         progress: PdfProgress,
         complete: Reply<PdfReply>,
     ) -> Result<(), ServiceError> {
+        if let PdfRequest::Render(request) = request {
+            // Resolve and submit on the library worker; wait for PDFium elsewhere so a slow
+            // page never blocks library reads/writes.
+            return self
+                .sender
+                .try_send(Box::new(move |worker| match worker {
+                    Err(e) => complete(Err(e)),
+                    Ok(worker) => match worker.begin_render(request) {
+                        Err(failure) => complete(Ok(PdfReply::Page(Err(failure)))),
+                        Ok(pending) => {
+                            let spawned = thread::Builder::new()
+                                .name("pdf-render-wait".into())
+                                .spawn(move || complete(Ok(PdfReply::Page(pending.finish()))));
+                            if spawned.is_err() {
+                                // `complete` moved into the closure; the caller's lost-reply
+                                // guard reports Unavailable when it is dropped.
+                            }
+                        }
+                    },
+                }))
+                .map_err(|_| ServiceError::Unavailable);
+        }
         self.enqueue(complete, move |w| w.pdf(request, progress))
     }
 }

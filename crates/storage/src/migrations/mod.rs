@@ -39,6 +39,14 @@ fn registry() -> Result<Vec<Migration<'static>>, StorageError> {
             "20261124T000000Z_issue-25_001_daemon-grants-jobs.sql",
             include_str!("../../migrations/20261124T000000Z_issue-25_001_daemon-grants-jobs.sql"),
         ),
+        (
+            "20261124T120000Z_issue-18_001_fulltext-search.sql",
+            include_str!("../../migrations/20261124T120000Z_issue-18_001_fulltext-search.sql"),
+        ),
+        (
+            "20261124T120000Z_issue-19_001_annotation-review.sql",
+            include_str!("../../migrations/20261124T120000Z_issue-19_001_annotation-review.sql"),
+        ),
     ];
     if manifest.len() != files.len() {
         return Err(StorageError::Migration("registry/files differ".into()));
@@ -78,6 +86,20 @@ pub(crate) fn validate_current(db: &Connection) -> Result<(), StorageError> {
     if schema_definition(db)? != schema_definition(&expected)? {
         return Err(StorageError::Migration(
             "portable snapshot schema differs from registry".into(),
+        ));
+    }
+    Ok(())
+}
+
+/// Cheap check for an additional connection to a library another connection migrated:
+/// the applied history must be exactly the embedded registry (no migration is run).
+pub(crate) fn check_applied(db: &Connection) -> Result<(), StorageError> {
+    let migrations = registry()?;
+    let applied = history(db)?;
+    verify_history(&migrations, &applied)?;
+    if applied.len() != migrations.len() {
+        return Err(StorageError::Migration(
+            "library schema is not current".into(),
         ));
     }
     Ok(())

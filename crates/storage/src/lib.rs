@@ -4,11 +4,12 @@ pub mod backup;
 pub mod daemon;
 pub mod db;
 mod error;
+pub mod fts;
 pub mod integrity;
 pub mod migrations;
 pub mod repositories;
 pub use db::{LibraryDb, paths::LibraryDirectory};
-pub use error::StorageError;
+pub use error::{SqlFault, StorageError, sql_fault};
 
 #[cfg(all(test, unix))]
 mod crash_recovery;

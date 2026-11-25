@@ -123,3 +123,65 @@ pub fn apply(base: &PaperDraft, input: &[String]) -> Result<PaperDraft, ServiceE
     }
     Ok(draft)
 }
+/// Plain-text citation for the clipboard (`y` / "Copy citation"):
+/// `Family, G.; Other, X. (2017). Title. Journal, 1(2), 3–4. https://doi.org/…`.
+/// Missing parts are omitted; no style engine is implied.
+pub fn citation_text(title: &str, b: &cm_protocol::domain::Bibliography) -> String {
+    let authors: Vec<String> = b
+        .authors
+        .iter()
+        .filter(|a| a.role.is_empty() || a.role == "author")
+        .filter_map(|a| {
+            if let Some(literal) = a.literal_name.as_deref().filter(|s| !s.trim().is_empty()) {
+                return Some(literal.trim().to_owned());
+            }
+            let family = a.family_name.as_deref().map(str::trim).unwrap_or("");
+            let initials: String = a
+                .given_name
+                .as_deref()
+                .unwrap_or("")
+                .split_whitespace()
+                .filter_map(|g| g.chars().next())
+                .map(|c| format!("{c}."))
+                .collect::<Vec<_>>()
+                .join(" ");
+            match (family.is_empty(), initials.is_empty()) {
+                (true, true) => None,
+                (true, false) => Some(initials),
+                (false, true) => Some(family.to_owned()),
+                (false, false) => Some(format!("{family}, {initials}")),
+            }
+        })
+        .collect();
+    let mut out = String::new();
+    if !authors.is_empty() {
+        out.push_str(&authors.join("; "));
+        out.push(' ');
+    }
+    if let Some(year) = b.year {
+        out.push_str(&format!("({year}). "));
+    }
+    let title = title.split_whitespace().collect::<Vec<_>>().join(" ");
+    out.push_str(title.trim_end_matches('.'));
+    out.push('.');
+    if let Some(journal) = b.journal.as_deref().filter(|s| !s.trim().is_empty()) {
+        out.push(' ');
+        out.push_str(journal.trim());
+        if let Some(volume) = b.volume.as_deref().filter(|s| !s.is_empty()) {
+            out.push_str(&format!(", {volume}"));
+            if let Some(issue) = b.issue.as_deref().filter(|s| !s.is_empty()) {
+                out.push_str(&format!("({issue})"));
+            }
+        }
+        if let Some(pages) = b.pages.as_deref().filter(|s| !s.is_empty()) {
+            out.push_str(&format!(", {pages}"));
+        }
+        out.push('.');
+    }
+    if let Some(doi) = b.doi.as_deref().filter(|s| !s.trim().is_empty()) {
+        out.push_str(&format!(" https://doi.org/{}", doi.trim()));
+    } else if let Some(url) = b.url.as_deref().filter(|s| !s.trim().is_empty()) {
+        out.push_str(&format!(" {}", url.trim()));
+    }
+    out
+}

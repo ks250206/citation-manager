@@ -986,7 +986,18 @@ GUI は `IpcLibraryClient` で同じ `LibraryClient` を使い、接続中は da
 試行上限 failed、明示 retry/cancel、restart 後の lease 回収、idempotency key と commit 済み検知を持ち、
 exactly-once ではなく at-least-once + 冪等効果と明記する。macOS .app 配置/起動は #34 で検証する。
 
-## 33. #22 Browser/URL 取り込みと安全な PDF 取得
+## 33. #18 ページ抽出ジョブ・FTS5・日本語短語フォールバック
+
+[fulltext-search ADR](docs/ADR/fulltext-search.md) が §10/§14.3/§18 の実装上の明確化となる。
+書誌/注釈/ページ本文/タグ/soft delete の索引同期は SQLite trigger が単一の `search_documents`
+投影を同じ transaction で更新し、unicode61 (全項目) と trigram (識別子以外) の外部 content FTS5 を
+維持する。再構築は原データを読むだけで投影と両索引を作り直し、trigger 維持結果と一致することを検証した。
+抽出は #25 永続ジョブ `fulltext.extract`（ページ batch commit による再開、ページ間 cancel、
+ページ/文書/実行あたりの上限、画像/暗号化/破損 PDF の明示状態）で行う。3文字未満の語は
+unicode61 token と、範囲・件数・時間上限付きの literal scan で検索し、未検索領域と continuation を
+返す（0件表示と区別）。幅/NFC 正規化は #53 実測どおり行わない。GUI #21、負荷 #30 は未実施。
+
+## 34. #22 Browser/URL 取り込みと安全な PDF 取得
 
 [browser capture ADR](docs/ADR/browser-capture.md) が §8.2/§12.3/§17–18 の実装上の明確化となる。
 Browser/MCP 共通の `CaptureRequest`（URL、title、上限付き HTML snapshot、meta、JSON-LD、明示 PDF、
@@ -1000,7 +1011,7 @@ HTTPS・全 DNS 応答/redirect の公開 IP 検査・接続先 pin・cookie/認
 上限付き自動再試行、それ以外は理由付き failed と明示 retry。認証が必要な PDF は迂回せず、
 ブラウザでのダウンロード後の明示取り込みを案内する。
 
-## 34. #23 Native Messaging host と Chrome/Firefox 登録
+## 35. #23 Native Messaging host と Chrome/Firefox 登録
 
 [native messaging ADR](docs/ADR/native-messaging.md) が §5.1/§12.2–12.3 の実装上の明確化となる。
 `papers-native-host` は `papersd` の兄弟実行ファイルとして配置し（`<prefix>/bin`、`.app/Contents/MacOS`）、

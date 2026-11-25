@@ -42,3 +42,7 @@ required-features = ["runtime"]
 [[test]]
 name = "metadata_runtime"
 required-features = ["runtime"]
+
+[[test]]
+name = "extract_runtime"
+required-features = ["runtime"]
