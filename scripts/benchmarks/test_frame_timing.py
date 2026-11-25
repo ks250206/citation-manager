@@ -58,6 +58,7 @@ class Points(unittest.TestCase):
     def test_negative_coordinates_count_from_the_far_edge(self):
         self.assertEqual(ft.resolve((10, -63), (40, 20), (1320, 860)), (50, 817))
         self.assertEqual(ft.resolve((-436, 5), (0, 53), (1024, 680)), (588, 58))
+        self.assertEqual(ft.resolve((0.5, 147), (0, 53), (1024, 680)), (512.0, 200))
 
     def test_macos_key_table_covers_every_typed_character(self):
         typed = 'Open paper:// Link' + ''.join(str(p) for p in ft.JUMPS) + 'jkJKq'

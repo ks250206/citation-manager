@@ -52,6 +52,7 @@ LIST_NEXT_PAGE = (-436, -63)
 EXPAND = (-51, 73)
 PDF_PAGE = (500, 520)  # page column after Expand
 PAGE_FIELD = (73, 297)  # the viewer toolbar's page number field after Expand
+PALETTE_FIRST = (0.5, 147)  # first Command Palette row (centred overlay)
 # Far jumps through the page field: mostly pages outside the render cache and prefetch.
 JUMPS = (10, 20, 5, 15, 1, 12, 18, 3)
 GPUI_FRAME = re.compile(r'^frame duration: ([0-9.]+)(ns|µs|us|ms|s)$')
@@ -131,8 +132,13 @@ def summarize(doc, gpui, phases, budgets=BUDGETS_MS):
 # ---------------------------------------------------------------- input drivers
 
 def resolve(point, origin, size):
-    """Screen position of a content-area point; negative coordinates count from the far edge."""
-    return tuple(o + (p if p >= 0 else extent + p) for p, o, extent in zip(point, origin, size))
+    """Screen position of a content-area point: negative coordinates count from the far edge,
+    a float strictly between 0 and 1 is a fraction of the extent."""
+    def one(p, o, extent):
+        if isinstance(p, float) and 0 < p < 1:
+            return o + extent * p
+        return o + (p if p >= 0 else extent + p)
+    return tuple(one(p, o, extent) for p, o, extent in zip(point, origin, size))
 
 
 class X11:
@@ -496,9 +502,19 @@ def drive(bin_dir, library, out, link, settle_s):
             time.sleep(1)
             driver.type('Open paper:// Link')
             time.sleep(1)
-            entry['input_unix'] = time.time()
-            driver.key('Return')
-            entry['first_page_seen'] = wait_span(frames_path, 'pdf_first_page', entry['input_unix'], 60)
+            # Return runs the highlighted command. On the macOS runner a posted Return did not
+            # reach the palette, so fall back to clicking the first row; the input time is the
+            # step that actually opened the PDF.
+            for method in ('return', 'click'):
+                entry['input_unix'], entry['input_method'] = time.time(), method
+                if method == 'return':
+                    driver.key('Return')
+                else:
+                    driver.click(PALETTE_FIRST)
+                entry['first_page_seen'] = wait_span(frames_path, 'pdf_first_page', entry['input_unix'],
+                                                     60 if method == 'click' else 15)
+                if entry['first_page_seen']:
+                    break
         time.sleep(2)
         driver.screenshot(out / 'shot-pdf-open.png')
         driver.click(EXPAND)  # the reading layout: a wide page column, larger bitmaps
