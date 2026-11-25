@@ -997,14 +997,20 @@ fn schemas(limits: &Limits) -> Value {
         (
             "BulkResult",
             obj(
-                &["results"],
-                vec![(
-                    "results",
-                    arr(obj(
-                        &["id", "ok"],
-                        vec![("id", id()), ("ok", boolean()), ("error", s())],
-                    )),
-                )],
+                &["results", "stopped"],
+                vec![
+                    (
+                        "results",
+                        arr(obj(
+                            &["id", "ok"],
+                            vec![("id", id()), ("ok", boolean()), ("error", s())],
+                        )),
+                    ),
+                    (
+                        "stopped",
+                        json!({"type": ["string", "null"], "description": "Why the batch stopped early (later items are not_attempted)"}),
+                    ),
+                ],
             ),
         ),
         (
@@ -1138,7 +1144,7 @@ fn schemas(limits: &Limits) -> Value {
                 &["kind", "anchor", "quote"],
                 vec![
                     ("kind", enumeration(&["highlight", "note"])),
-                    ("source", enumeration(&["ai", "human"])),
+                    ("source", enumeration(&["ai"])),
                     ("anchor", r("Anchor")),
                     ("quote", s()),
                     ("context_before", ns()),
@@ -1319,7 +1325,33 @@ fn schemas(limits: &Limits) -> Value {
     )
 }
 
+/// Rebuilds every object with its keys in sorted order. serde_json's `preserve_order`
+/// feature (enabled by GPUI in the desktop lanes through feature unification) would otherwise
+/// keep insertion order, so the serialized contract would depend on the cargo feature set.
+fn canonical(value: Value) -> Value {
+    match value {
+        Value::Object(map) => {
+            let mut entries: Vec<(String, Value)> = map.into_iter().collect();
+            entries.sort_by(|a, b| a.0.cmp(&b.0));
+            Value::Object(
+                entries
+                    .into_iter()
+                    .map(|(k, v)| (k, canonical(v)))
+                    .collect(),
+            )
+        }
+        Value::Array(items) => Value::Array(items.into_iter().map(canonical).collect()),
+        other => other,
+    }
+}
+
+/// The contract, identical for every cargo feature set (all routes are listed; a route whose
+/// runtime is missing answers 503 at run time).
 pub fn document() -> Value {
+    canonical(raw_document())
+}
+
+fn raw_document() -> Value {
     let limits = Limits::default();
     json!({
         "openapi": "3.1.0",
@@ -1387,6 +1419,7 @@ mod tests {
             std::fs::write(committed_path(), &generated).unwrap();
         }
         let committed = std::fs::read_to_string(committed_path()).unwrap_or_default();
+        // Byte-identical under every feature set (default and desktop-bootstrap lanes).
         assert!(
             committed == generated,
             "docs/openapi.json is stale; run CM_UPDATE_OPENAPI=1 cargo test -p cm-daemon openapi"

@@ -36,7 +36,7 @@ use cm_protocol::{
 use cm_protocol::{
     attachments::PdfReply,
     exchange::{ImportReply, ImportRequestUi},
-    import::{ImportPreview, PreviewId},
+    import::{ImportAction, ImportCommit, ImportPreview, PreviewId},
     ipc::{
         ClientFrame, Command, DaemonStatus, GrantCommand, GrantReply, HandshakeRejection,
         MAX_HANDSHAKE_FRAME, MAX_IN_FLIGHT, MAX_REQUEST_FRAME, MAX_RESPONSE_FRAME,
@@ -143,7 +143,7 @@ struct Shared {
     activity: Arc<Activity>,
     sessions: AtomicU64,
     /// Import preview handle -> grant that created it (preview grant binding).
-    previews: Mutex<HashMap<PreviewId, GrantId>>,
+    previews: Mutex<HashMap<PreviewId, PreviewOwner>>,
     /// Live authenticated connections, closed on explicit shutdown.
     streams: Mutex<HashMap<u64, UnixStream>>,
     /// #26 token management, API settings and the audit log.
@@ -493,7 +493,32 @@ impl Session {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .get(preview)
-            == Some(&self.grant)
+            .map(|owner| owner.grant)
+            == Some(self.grant)
+    }
+    /// #27: a caller that cannot read papers gets exact duplicates skipped on commit,
+    /// decided from the unredacted preview (it never learned which rows matched).
+    fn skip_hidden_duplicates(&self, commit: &mut ImportCommit, redacted: bool) {
+        if !redacted {
+            return;
+        }
+        let hidden = self
+            .shared
+            .previews
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&commit.preview_id)
+            .and_then(|owner| owner.hidden_duplicates.clone());
+        let Some(hidden) = hidden else {
+            return;
+        };
+        for decision in &mut commit.decisions {
+            if hidden.get(decision.candidate_index) == Some(&true)
+                && decision.action == ImportAction::Create
+            {
+                decision.action = ImportAction::Skip;
+            }
+        }
     }
     fn cancellation(&self, id: u64) -> Cancellation {
         let cancel = Cancellation::default();
@@ -594,7 +619,12 @@ impl Session {
                 settings,
                 Box::new(move |r| done(r.map(|()| Reply::Unit).map_err(Into::into))),
             ),
-            Command::Import(request) => {
+            Command::Import(mut request) => {
+                let redact = !held.contains(&Capability::LibraryRead)
+                    && !held.contains(&Capability::MetadataRead);
+                if let ImportRequestUi::Commit(commit) = &mut request {
+                    self.skip_hidden_duplicates(commit, redact);
+                }
                 match &request {
                     ImportRequestUi::Commit(c) if !self.preview_owned(&c.preview_id) => {
                         done(denied(Operation::ImportCommit));
@@ -608,22 +638,24 @@ impl Session {
                 }
                 let previews = self.shared.clone();
                 let grant = self.grant;
-                let redact = !held.contains(&Capability::LibraryRead)
-                    && !held.contains(&Capability::MetadataRead);
                 self.engine.import(
                     request,
                     Box::new(move |r| {
                         done(
                             r.map(|reply| match reply {
                                 ImportReply::Preview(mut p) => {
+                                    let hidden_duplicates = redact.then(|| redact_matches(&mut p));
                                     previews
                                         .previews
                                         .lock()
                                         .unwrap_or_else(|e| e.into_inner())
-                                        .insert(p.id.clone(), grant);
-                                    if redact {
-                                        redact_matches(&mut p);
-                                    }
+                                        .insert(
+                                            p.id.clone(),
+                                            PreviewOwner {
+                                                grant,
+                                                hidden_duplicates,
+                                            },
+                                        );
                                     Reply::Import(ImportReply::Preview(p))
                                 }
                                 other => Reply::Import(other),
@@ -647,7 +679,12 @@ impl Session {
                 request,
                 Box::new(move |r| done(r.map(Reply::Exported).map_err(Into::into))),
             ),
-            Command::Pdf(command) => {
+            Command::Pdf(mut command) => {
+                let redact = !held.contains(&Capability::LibraryRead)
+                    && !held.contains(&Capability::MetadataRead);
+                if let PdfCommand::CommitNew { commit, .. } = &mut command {
+                    self.skip_hidden_duplicates(commit, redact);
+                }
                 if let PdfCommand::CommitNew { commit, .. } = &command
                     && !self.preview_owned(&commit.preview_id)
                 {
@@ -663,8 +700,6 @@ impl Session {
                         | PdfCommand::CommitNew { .. }
                         | PdfCommand::RetryAttachment { .. }
                 );
-                let redact = !held.contains(&Capability::LibraryRead)
-                    && !held.contains(&Capability::MetadataRead);
                 self.engine.pdf(
                     command.into_request(self.cancellation(id)),
                     Box::new(move |report| {
@@ -672,15 +707,19 @@ impl Session {
                     }),
                     Box::new(move |mut r| {
                         if let Ok(PdfReply::Preview(p)) = &mut r {
+                            // Same rule as import previews: no read scope, no existing matches.
+                            let hidden_duplicates = redact.then(|| redact_matches(p));
                             previews
                                 .previews
                                 .lock()
                                 .unwrap_or_else(|e| e.into_inner())
-                                .insert(p.id.clone(), grant);
-                            // Same rule as import previews: no LibraryRead, no existing matches.
-                            if redact {
-                                redact_matches(p);
-                            }
+                                .insert(
+                                    p.id.clone(),
+                                    PreviewOwner {
+                                        grant,
+                                        hidden_duplicates,
+                                    },
+                                );
                         }
                         if adds_attachments && r.is_ok() {
                             previews.jobs.ensure_extraction();
@@ -807,6 +846,10 @@ impl Session {
                     &mut request
                 {
                     *cancel = self.cancellation(id);
+                }
+                if let Err(error) = annotation_provenance(&request, &held) {
+                    done(Err(error));
+                    return;
                 }
                 self.engine.annotations(
                     request,
@@ -1036,17 +1079,59 @@ fn audit_entry(
 /// How long a full-text status/page read waits for a free search reader.
 const FULLTEXT_READ_WAIT: Duration = Duration::from_secs(5);
 
-/// Without LibraryRead a preview must not reveal existing papers (native host capture).
-fn redact_matches(preview: &mut ImportPreview) {
-    let mut hidden = 0;
+/// #27 provenance: `source` decides whether the GUI shows an annotation as an unreviewed AI
+/// proposal; `ConfirmAi` is the person's review and `Undo`/`Redo` replay a whole client-supplied
+/// row (source and confirmation included). Only the owner (GrantAdmin, i.e. the desktop) may do
+/// those; token clients (API/MCP/CLI) create `ai` annotations and edit/delete them.
+fn annotation_provenance(
+    request: &cm_protocol::annotations::AnnotationRequest,
+    held: &CapabilitySet,
+) -> Result<(), WireError> {
+    use cm_protocol::annotations::{AnnotationRequest as A, Source};
+    if held.contains(&Capability::GrantAdmin) {
+        return Ok(());
+    }
+    match request {
+        A::Create(new) if new.source != Source::Ai => {
+            Err(WireError::Service(ServiceError::InvalidInput(
+                "annotations created with a token are always source=ai".into(),
+            )))
+        }
+        A::ConfirmAi(_) | A::Undo(_) | A::Redo(_) => Err(WireError::Denied(Denial::Forbidden(
+            Operation::AnnotationWrite,
+        ))),
+        _ => Ok(()),
+    }
+}
+
+/// The grant that created a preview (preview binding) and, for a caller that cannot read
+/// papers, which rows exactly duplicate existing papers (skipped on its commit).
+struct PreviewOwner {
+    grant: GrantId,
+    hidden_duplicates: Option<Vec<bool>>,
+}
+
+/// Same text for every redacted preview: it must not say whether anything matched.
+pub const REDACTED_PREVIEW_WARNING: &str = "Existing-library matches are not shown to this \
+    client; rows that exactly duplicate an existing paper are skipped on commit.";
+
+/// Without a read scope a preview must not reveal existing papers (native host capture,
+/// write-only tokens): matches, the exact-match id, citation-key collision notes and the
+/// re-allocated key are removed, and the warning is constant. Returns which rows were exact
+/// duplicates of existing papers, decided before redaction.
+fn redact_matches(preview: &mut ImportPreview) -> Vec<bool> {
+    let mut duplicates = Vec::with_capacity(preview.candidates.len());
     for candidate in &mut preview.candidates {
-        hidden += candidate.matches.len();
+        duplicates.push(
+            candidate.existing_match.is_some() || candidate.matches.iter().any(|m| m.kind.exact()),
+        );
         candidate.matches.clear();
         candidate.existing_match = None;
+        candidate.draft.bibliography.citation_key = None;
+        candidate
+            .diagnostics
+            .retain(|d| !(d.field == "citation_key" && !d.error));
     }
-    if hidden > 0 {
-        preview.warnings.push(format!(
-            "{hidden} possible existing-library matches hidden for this client"
-        ));
-    }
+    preview.warnings.push(REDACTED_PREVIEW_WARNING.into());
+    duplicates
 }

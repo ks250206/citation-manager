@@ -16,7 +16,10 @@ use cm_core::policy::{
 use cm_protocol::ipc::{Command, Credential, Denial, Reply, WireError};
 use serde::de::DeserializeOwned;
 use std::{
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
     time::{Duration, Instant},
 };
 
@@ -165,10 +168,11 @@ impl FromRequestParts<App> for Ctx {
 
 /// Cancels the request's outstanding daemon work if the handler future is dropped
 /// (client disconnect or timeout) before the blocking call returned.
-struct CancelOnDrop(Option<Canceller>);
+struct CancelOnDrop(Option<(Canceller, Arc<AtomicBool>)>);
 impl Drop for CancelOnDrop {
     fn drop(&mut self) {
-        if let Some(c) = self.0.take() {
+        if let Some((c, flag)) = self.0.take() {
+            flag.store(true, Ordering::SeqCst);
             c.cancel_all();
         }
     }
@@ -177,9 +181,19 @@ impl Drop for CancelOnDrop {
 pub struct Calls {
     session: InternalSession,
     deadline: Instant,
+    /// Set when the client went away or the request timed out: no further command runs
+    /// (stops bulk loops between items).
+    cancelled: Arc<AtomicBool>,
 }
 impl Calls {
     pub fn call(&mut self, command: Command) -> Result<Reply, ApiError> {
+        if self.cancelled.load(Ordering::SeqCst) {
+            return Err(ApiError::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "cancelled",
+                "the request was cancelled",
+            ));
+        }
         self.session
             .call(command, self.deadline)
             .map_err(ApiError::from_call)
@@ -203,10 +217,12 @@ impl Ctx {
         work: impl FnOnce(&mut Calls) -> Result<T, ApiError> + Send + 'static,
     ) -> Result<T, ApiError> {
         let session = self.app.gateway.session(self.grant());
-        let mut guard = CancelOnDrop(Some(session.canceller()));
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let mut guard = CancelOnDrop(Some((session.canceller(), cancelled.clone())));
         let mut calls = Calls {
             session,
             deadline: self.deadline,
+            cancelled,
         };
         let result = tokio::task::spawn_blocking(move || work(&mut calls)).await;
         guard.0 = None;

@@ -6,7 +6,7 @@
 pub use super::ctx::App;
 use super::{
     BASE_PATH,
-    ctx::{Ctx, decode_cursor, encode_cursor, json_body, present, query, uuid, uuid_list},
+    ctx::{Calls, Ctx, decode_cursor, encode_cursor, json_body, present, query, uuid, uuid_list},
     edge,
     error::ApiError,
 };
@@ -59,6 +59,8 @@ pub const MAX_DOI_BYTES: usize = 512;
 pub const MAX_FILE_NAME_BYTES: usize = 255;
 /// Parse diagnostics returned by `POST /imports` (the rest are counted).
 pub const MAX_IMPORT_DIAGNOSTICS: usize = 200;
+/// Pixels of one REST page render (RGBA, base64 in JSON: about 21 MB at the cap).
+pub const MAX_RENDER_PIXELS: u64 = 4_000_000;
 
 /// Every route, keyed by its `ENDPOINTS` name. The router is built only from this list and
 /// the contract tests compare it with `ENDPOINTS` and docs/openapi.json.
@@ -385,36 +387,53 @@ fn bulk_ids(ids: &[PaperId]) -> Result<(), ApiError> {
     Ok(())
 }
 /// Per-item outcome. A denial (revoked token, elevation ended) stops the batch.
-fn item_result(id: PaperId, result: Result<(), ApiError>) -> Result<Value, ApiError> {
-    match result {
-        Ok(()) => Ok(json!({ "id": id, "ok": true })),
-        Err(e) if e.status == StatusCode::UNAUTHORIZED || e.status == StatusCode::FORBIDDEN => {
-            Err(e)
+/// Runs a batch one item at a time. A denial (token revoked, elevation ended), the request
+/// deadline or a client disconnect stops it; the response still lists every id (later ones
+/// as `not_attempted`) and `stopped` names the reason, so a caller sees what was done.
+fn run_batch(
+    c: &mut Calls,
+    ids: Vec<PaperId>,
+    mut item: impl FnMut(&mut Calls, PaperId) -> Result<(), ApiError>,
+) -> Value {
+    let mut results = Vec::with_capacity(ids.len());
+    let mut stopped: Option<&'static str> = None;
+    for id in ids {
+        if stopped.is_some() {
+            results.push(json!({ "id": id, "ok": false, "error": "not_attempted" }));
+            continue;
         }
-        Err(e) => Ok(json!({ "id": id, "ok": false, "error": e.code })),
+        match item(c, id) {
+            Ok(()) => results.push(json!({ "id": id, "ok": true })),
+            Err(e) => {
+                if matches!(
+                    e.status,
+                    StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN | StatusCode::GATEWAY_TIMEOUT
+                ) || e.code == "cancelled"
+                {
+                    stopped = Some(e.code);
+                }
+                results.push(json!({ "id": id, "ok": false, "error": e.code }));
+            }
+        }
     }
+    json!({ "results": results, "stopped": stopped })
 }
 
 async fn bulk_delete(ctx: Ctx, headers: HeaderMap, body: Body) -> Result<Response, ApiError> {
     let body: BulkDeleteBody = json_body(&headers, body, ctx.limits().json_body).await?;
     bulk_ids(&body.paper_ids)?;
-    let results = ctx
+    let reply = ctx
         .run(move |c| {
-            body.paper_ids
-                .into_iter()
-                .map(|id| {
-                    let r = c
-                        .call(Command::Lifecycle {
-                            paper: id,
-                            deleted: true,
-                        })
-                        .map(|_| ());
-                    item_result(id, r)
+            Ok(run_batch(c, body.paper_ids, |c, id| {
+                c.call(Command::Lifecycle {
+                    paper: id,
+                    deleted: true,
                 })
-                .collect::<Result<Vec<_>, _>>()
+                .map(|_| ())
+            }))
         })
         .await?;
-    Ok(ok(json!({ "results": results })))
+    Ok(ok(reply))
 }
 
 #[derive(Debug, Deserialize)]
@@ -696,6 +715,13 @@ async fn render_page(
         };
         ApiError::new(status, code, message)
     })?;
+    if u64::from(page.width) * u64::from(page.height) > MAX_RENDER_PIXELS {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "too_large",
+            format!("the page exceeds {MAX_RENDER_PIXELS} pixels at this zoom; lower the zoom"),
+        ));
+    }
     Ok(ok(json!({
         "attachment_id": page.attachment,
         "page": page.page,
@@ -836,11 +862,11 @@ async fn create_annotation(
         "note" => AnnotationKind::Note,
         _ => return Err(ApiError::invalid("kind must be highlight or note")),
     };
-    // API writes are not made by the person at the GUI: unreviewed `ai` unless stated.
+    // API writes are not made by the person at the GUI: always unreviewed `ai` (a `human`
+    // source would skip the GUI review; the daemon refuses it for every token as well).
     let source = match body.source.as_deref() {
         None | Some("ai") => Source::Ai,
-        Some("human") => Source::Human,
-        Some(_) => return Err(ApiError::invalid("source must be ai or human")),
+        Some(_) => return Err(ApiError::invalid("source must be ai")),
     };
     let input = NewAnnotation {
         attachment_id: attachment,
@@ -1079,29 +1105,22 @@ async fn bulk_move(
         ));
     }
     let from = body.from;
-    let results = ctx
+    let reply = ctx
         .run(move |c| {
-            body.paper_ids
-                .into_iter()
-                .map(|paper| {
-                    let mut r = c
-                        .call(Command::Organization(
-                            OrganizationRequest::CollectionMember(paper, id, true),
-                        ))
-                        .map(|_| ());
-                    if let (Ok(()), Some(from)) = (&r, from) {
-                        r = c
-                            .call(Command::Organization(
-                                OrganizationRequest::CollectionMember(paper, from, false),
-                            ))
-                            .map(|_| ());
-                    }
-                    item_result(paper, r)
-                })
-                .collect::<Result<Vec<_>, _>>()
+            Ok(run_batch(c, body.paper_ids, |c, paper| {
+                c.call(Command::Organization(
+                    OrganizationRequest::CollectionMember(paper, id, true),
+                ))?;
+                if let Some(from) = from {
+                    c.call(Command::Organization(
+                        OrganizationRequest::CollectionMember(paper, from, false),
+                    ))?;
+                }
+                Ok(())
+            }))
         })
         .await?;
-    Ok(ok(json!({ "results": results })))
+    Ok(ok(reply))
 }
 
 #[derive(Debug, Deserialize)]
