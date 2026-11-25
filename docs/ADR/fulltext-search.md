@@ -92,7 +92,8 @@ call loads and hashes the whole file — text only) and a
   error (runner backoff). After 3 consecutive transient failures the attachment becomes
   `failed`. Worker busy / queue full / runtime missing → retryable job error.
 - Automatic submission: papersd submits one ownerless `{scope: pending}` job at start,
-  after `attachment.import` jobs, after PDF attach/commit commands and whenever an
+  after `attachment.import` and #22 `capture.pdf_fetch` jobs, after PDF attach/commit commands
+  and whenever an
   extraction job ends (except when it was cancelled), when unfinished attachments exist
   and no extraction job is active. PDFs attached while a run is active (the attach hook is
   a no-op then) are therefore extracted when that run ends. The idempotency key

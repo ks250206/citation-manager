@@ -14,7 +14,24 @@ ALLOWED = {
     'daemon': {'core', 'protocol', 'storage', 'search', 'pdf', 'metadata'},
     'cli': {'protocol', 'mcp'}, 'mcp': {'protocol'}, 'native-host': {'protocol'},
 }
+# Test-only features: enabled only on dev-dependency edges and never by any feature table, so
+# a normal or release build of a binary cannot contain them (resolver 2+ keeps dev features
+# out of non-test builds).
+TEST_ONLY_FEATURES = {'cm-metadata': {'loopback-test-server'}}
 ROOT = Path(__file__).resolve().parents[1]
+
+def validate_test_only_features(members):
+    for name, package in members.items():
+        for feature, enables in package.get('features', {}).items():
+            for item in enables:
+                owner, _, enabled = item.replace('?/', '/').rpartition('/')
+                owner = owner.removeprefix('dep:') or name
+                if enabled in TEST_ONLY_FEATURES.get(owner, set()) and not (owner == name and feature == enabled):
+                    raise ValueError(f'test-only feature {owner}/{enabled} enabled by {name}/{feature}')
+        for dep in package['dependencies']:
+            test_only = TEST_ONLY_FEATURES.get(dep['name'], set())
+            if test_only & set(dep.get('features', [])) and dep.get('kind') != 'dev':
+                raise ValueError(f'test-only feature of {dep["name"]} enabled outside dev-dependencies: {name}')
 # GPUI's native lane builds only on these desktop targets (Metal on macOS, X11/Wayland on Linux).
 NATIVE_TARGET = 'cfg(any(target_os = "macos", target_os = "linux"))'
 
@@ -24,6 +41,7 @@ def validate(metadata):
     expected = {'cm-' + name for name in ALLOWED}
     if set(members) != expected:
         raise ValueError(f'workspace must contain exactly the 12 planned crates: {set(members) ^ expected}')
+    validate_test_only_features(members)
     for name, package in members.items():
         short = name.removeprefix('cm-')
         for dep in package['dependencies']:

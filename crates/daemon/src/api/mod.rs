@@ -413,6 +413,12 @@ pub fn audited(operation: Operation) -> bool {
             | ImportPreview
             | ImportCancel
             | MetadataResolve
+            // #22: a capture preview never persists (like ImportPreview), cancelling one is
+            // ImportCancel's analogue and PDF job status is a read. Capture saves and PDF
+            // retries are recorded.
+            | CaptureSubmit
+            | CaptureCancel
+            | CapturePdfStatus
             | PdfInspect
             | PdfPreviewNew
             | AttachmentList

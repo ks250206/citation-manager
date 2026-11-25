@@ -17,3 +17,9 @@ sha2.workspace = true
 reqwest.workspace = true
 tokio = { workspace = true, features = ["time"] }
 httpdate = "=1.0.3"
+
+[features]
+default = []
+# Test-only local HTTP fixture server and a loopback-permitting fetch policy (#22). Enabled
+# only through dev-dependencies; production builds never contain the loopback allowance.
+loopback-test-server = []
