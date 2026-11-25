@@ -419,11 +419,18 @@ fn serve(mut stream: UnixStream, shared: &Arc<Shared>) {
     let Ok(mut writer) = stream.try_clone() else {
         return;
     };
-    let (tx, rx) = mpsc::channel::<ServerFrame>();
+    let Ok(overflow) = stream.try_clone() else {
+        return;
+    };
+    let (tx, rx) = mpsc::sync_channel::<Outbound>(OUTBOUND_QUEUE);
+    let outbox = Outbox {
+        tx,
+        stream: Some(Arc::new(overflow)),
+    };
     let writer_thread = thread::Builder::new()
         .name("papersd-writer".into())
         .spawn(move || {
-            for frame in rx {
+            for Outbound { frame, slot } in rx {
                 let result = match write_frame(&mut writer, &frame, MAX_RESPONSE_FRAME) {
                     Err(cm_protocol::ipc::FrameError::TooLarge(_)) => match frame {
                         ServerFrame::Response { id, .. } => write_frame(
@@ -438,13 +445,15 @@ fn serve(mut stream: UnixStream, shared: &Arc<Shared>) {
                     },
                     other => other,
                 };
+                // The request's in-flight slot is released only now that its reply left.
+                drop(slot);
                 if result.is_err() {
                     let _ = writer.shutdown(std::net::Shutdown::Both);
                     break;
                 }
             }
         });
-    if writer_thread.is_err() || tx.send(ServerFrame::Welcome(welcome)).is_err() {
+    if writer_thread.is_err() || !outbox.send(ServerFrame::Welcome(welcome), None) {
         return;
     }
     let _ = stream.set_read_timeout(None);
@@ -461,7 +470,7 @@ fn serve(mut stream: UnixStream, shared: &Arc<Shared>) {
         requested: hello.requested,
         engine: shared.engine.for_session(session),
         shared: shared.clone(),
-        tx,
+        outbox,
         in_flight: Arc::new(AtomicUsize::new(0)),
         cancels: Arc::new(Mutex::new(HashMap::new())),
     };
@@ -499,15 +508,70 @@ fn serve(mut stream: UnixStream, shared: &Arc<Shared>) {
     let _ = stream.shutdown(std::net::Shutdown::Both);
 }
 
-/// Sends exactly one response for a request id and releases its in-flight slot.
-type Pending = (u64, mpsc::Sender<ServerFrame>, Arc<AtomicUsize>);
+/// Frames queued per connection before the client counts as not reading. Responses hold
+/// their request's in-flight slot until written, so at most `MAX_IN_FLIGHT` of them are
+/// queued; the rest of the room is for immediate refusals (`Busy`, denials) and progress.
+const OUTBOUND_QUEUE: usize = 2 * MAX_IN_FLIGHT;
+
+/// One request's share of `MAX_IN_FLIGHT`, released when dropped (after its reply was
+/// written, or when the reply is discarded).
+struct Slot(Arc<AtomicUsize>);
+impl Slot {
+    fn take(in_flight: &Arc<AtomicUsize>) -> Self {
+        in_flight.fetch_add(1, Ordering::SeqCst);
+        Self(in_flight.clone())
+    }
+}
+impl Drop for Slot {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+struct Outbound {
+    frame: ServerFrame,
+    slot: Option<Slot>,
+}
+
+/// Bounded outbound queue of one session. Nothing that produces replies (the shared library
+/// worker included) ever blocks on it: a client that keeps sending but stops reading fills
+/// it and is disconnected, so its unread replies cannot grow the daemon's memory.
+#[derive(Clone)]
+struct Outbox {
+    tx: mpsc::SyncSender<Outbound>,
+    /// Shut down when the queue is full; `None` for in-process adapter sessions, which
+    /// drain their queue themselves.
+    stream: Option<Arc<UnixStream>>,
+}
+impl Outbox {
+    /// Queues a frame. `false` if it was not queued (writer gone, or the client was
+    /// disconnected for not reading). Progress reports are best effort: a full queue drops
+    /// them without disconnecting.
+    fn send(&self, frame: ServerFrame, slot: Option<Slot>) -> bool {
+        match self.tx.try_send(Outbound { frame, slot }) {
+            Ok(()) => true,
+            Err(mpsc::TrySendError::Disconnected(_)) => false,
+            Err(mpsc::TrySendError::Full(rejected)) => {
+                if !matches!(rejected.frame, ServerFrame::PdfProgress { .. })
+                    && let Some(stream) = &self.stream
+                {
+                    let _ = stream.shutdown(std::net::Shutdown::Both);
+                }
+                false
+            }
+        }
+    }
+}
+
+/// Sends exactly one response for a request id; its in-flight slot travels with the reply
+/// and is released once the reply was written.
+type Pending = (u64, Outbox, Slot);
 #[derive(Clone)]
 struct Responder(Arc<Mutex<Option<Pending>>>);
 impl Responder {
     fn send(&self, result: Result<Reply, WireError>) {
-        if let Some((id, tx, in_flight)) = self.0.lock().unwrap_or_else(|e| e.into_inner()).take() {
-            in_flight.fetch_sub(1, Ordering::SeqCst);
-            let _ = tx.send(ServerFrame::Response { id, result });
+        if let Some((id, outbox, slot)) = self.0.lock().unwrap_or_else(|e| e.into_inner()).take() {
+            outbox.send(ServerFrame::Response { id, result }, Some(slot));
         }
     }
 }
@@ -518,14 +582,14 @@ struct Session {
     requested: Option<CapabilitySet>,
     engine: InProcessLibraryClient,
     shared: Arc<Shared>,
-    tx: mpsc::Sender<ServerFrame>,
+    outbox: Outbox,
     in_flight: Arc<AtomicUsize>,
     cancels: Arc<Mutex<HashMap<u64, Cancellation>>>,
 }
 
 impl Session {
     fn respond_now(&self, id: u64, result: Result<Reply, WireError>) {
-        let _ = self.tx.send(ServerFrame::Response { id, result });
+        self.outbox.send(ServerFrame::Response { id, result }, None);
     }
     fn preview_owned(&self, preview: &PreviewId) -> bool {
         self.shared
@@ -593,11 +657,10 @@ impl Session {
             Command::Grants(GrantCommand::Revoke(g)) => Some(*g),
             _ => None,
         };
-        self.in_flight.fetch_add(1, Ordering::SeqCst);
         let responder = Responder(Arc::new(Mutex::new(Some((
             id,
-            self.tx.clone(),
-            self.in_flight.clone(),
+            self.outbox.clone(),
+            Slot::take(&self.in_flight),
         )))));
         let cancels = self.cancels.clone();
         let done = {
@@ -731,7 +794,7 @@ impl Session {
                     done(denied(Operation::PdfCommitNew));
                     return;
                 }
-                let tx = self.tx.clone();
+                let outbox = self.outbox.clone();
                 let previews = self.shared.clone();
                 let grant = self.grant;
                 let adds_attachments = matches!(
@@ -743,7 +806,7 @@ impl Session {
                 self.engine.pdf(
                     command.into_request(self.cancellation(id)),
                     Box::new(move |report| {
-                        let _ = tx.send(ServerFrame::PdfProgress { id, report });
+                        outbox.send(ServerFrame::PdfProgress { id, report }, None);
                     }),
                     Box::new(move |mut r| {
                         if let Ok(PdfReply::Preview(p)) = &mut r {

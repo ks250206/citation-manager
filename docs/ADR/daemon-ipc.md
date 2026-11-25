@@ -77,7 +77,11 @@ start.
 Frames are a 4-byte big-endian length plus UTF-8 JSON (`cm_protocol::ipc::frame`), with
 limits per direction: first (pre-auth) frame 64 KiB, requests 8 MiB, responses 64 MiB. A
 declared oversized length is rejected before allocation. At most 64 in-flight requests per
-connection (`Busy`), 64 connections, 5 s to complete the handshake.
+connection (`Busy`), 64 connections, 5 s to complete the handshake. A request stays in flight
+until its reply has been written to the socket, and each connection's outbound queue is
+bounded (128 frames, never waited on by the library worker): a client that keeps sending but
+stops reading fills it and is disconnected; progress frames are dropped rather than queued
+when it is full.
 
 ```text
 client: Hello{protocol_version, client_kind, requested?, library?, credential}

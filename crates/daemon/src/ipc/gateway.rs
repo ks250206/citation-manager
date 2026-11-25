@@ -4,7 +4,7 @@
 //! the same `Authenticator` as the IPC handshake, and every command it runs goes through
 //! `Session::dispatch` exactly like an IPC request (live-grant authorization, the #26 bulk
 //! and export-folder guards, preview grant binding, redaction and the audit log).
-use super::{Session, Shared, record_denial};
+use super::{OUTBOUND_QUEUE, Outbound, Outbox, Session, Shared, record_denial};
 use crate::{api::ApiService, ipc::auth::now_ms};
 use cm_core::{
     metadata_resolve::Cancellation,
@@ -144,7 +144,7 @@ impl Gateway {
         self.0.internal.active.fetch_add(1, Ordering::SeqCst);
         let active = Active(self.0.internal.clone());
         let id = self.0.sessions.fetch_add(1, Ordering::Relaxed) + 1;
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = mpsc::sync_channel(OUTBOUND_QUEUE);
         let cancels: Arc<Mutex<HashMap<u64, Cancellation>>> = Arc::default();
         InternalSession {
             session: Session {
@@ -153,7 +153,7 @@ impl Gateway {
                 requested: None,
                 engine: self.0.engine.for_session(id),
                 shared: self.0.clone(),
-                tx,
+                outbox: Outbox { tx, stream: None },
                 in_flight: Arc::new(AtomicUsize::new(0)),
                 cancels: cancels.clone(),
             },
@@ -179,7 +179,7 @@ impl Canceller {
 
 pub struct InternalSession {
     session: Session,
-    rx: mpsc::Receiver<ServerFrame>,
+    rx: mpsc::Receiver<Outbound>,
     next: u64,
     canceller: Canceller,
     /// Declared last: released only after `session` (and its `Arc<Shared>`) is dropped.
@@ -204,6 +204,9 @@ impl InternalSession {
         if Instant::now() >= deadline {
             return Err(CallError::TimedOut);
         }
+        // Late frames of an earlier call that gave up (its reply, progress) are stale: drop
+        // them so they cannot fill the bounded queue ahead of this call's reply.
+        while self.rx.try_recv().is_ok() {}
         self.next += 1;
         let id = self.next;
         self.session.dispatch(id, command);
@@ -213,7 +216,10 @@ impl InternalSession {
                 .rx
                 .recv_timeout(left.clamp(Duration::from_millis(1), POLL))
             {
-                Ok(ServerFrame::Response { id: got, result }) if got == id => {
+                Ok(Outbound {
+                    frame: ServerFrame::Response { id: got, result },
+                    ..
+                }) if got == id => {
                     return result.map_err(CallError::Wire);
                 }
                 Ok(_) => {}
