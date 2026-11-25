@@ -779,7 +779,11 @@ impl LibraryView {
         if t.kind == ClientKind::Mcp && !t.revoked {
             status_text = format!(
                 "{status_text} · {}",
-                if allows_writes(t) { "writes" } else { "read-only" }
+                if allows_writes(t) {
+                    "writes"
+                } else {
+                    "read-only"
+                }
             );
         }
         if let Some(until) = t.elevated_until_ms.filter(|at| *at > now) {
