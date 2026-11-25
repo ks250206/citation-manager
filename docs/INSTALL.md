@@ -13,7 +13,7 @@ licenses in [LICENSES](LICENSES.md).
 > yourself or obtained from a source you trust.
 
 Requirements: macOS 13 Ventura or later on Apple Silicon (the published build is arm64; the
-bundled PDFium is universal). About 200 MB of disk for the app.
+bundled PDFium is universal). About 70 MB of disk for the app.
 
 Paths used below:
 

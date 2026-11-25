@@ -49,7 +49,9 @@ generated notices by the rights holder, and the missing copyright lines above.
 |---|---|---|
 | Layout, linkage, PDFium load from the bundle | verified on hosted macOS 15 arm64 | [APP_LAYOUT_POC](validation/APP_LAYOUT_POC.md) |
 | Ad-hoc signature (`codesign -s -`) + `codesign --verify --deep --strict` | verified on hosted runner | same |
-| Hardened runtime with ad-hoc signature | measured on hosted runner, see the validation document | same |
+| Hardened runtime with ad-hoc signature (PDFium, daemon, GUI, Firefox host) | verified on hosted runner; no Team ID involved | [ISSUE_31](validation/ISSUE_31.md) |
+| `.dmg` (UDZO, `hdiutil verify`), run from the mounted image | verified on hosted runner | same |
+| Third-party notices bundled | generated and checked on every packaging run | same |
 | **Developer ID signature** | **UNVERIFIED: no Developer ID** (0 identities, #7) | — |
 | **Notarization and stapling** | **UNVERIFIED: no Developer ID / no notary credentials** | — |
 | Gatekeeper acceptance of a downloaded build | **UNVERIFIED** (requires the two rows above) | — |
@@ -112,6 +114,8 @@ repository or command-line arguments, and are never printed.
 2. **Library validation.** Under the hardened runtime a dylib must be signed by Apple or the
    same Team ID. A dylib re-signed with the same Developer ID satisfies it; keeping the
    upstream (ad-hoc) dylib would require the `com.apple.security.cs.disable-library-validation`
-   entitlement (see the hosted measurement).
+   entitlement. Measured with ad-hoc signatures only (no Team ID on either side): the hardened
+   process loaded the ad-hoc dylib copy without the entitlement; the Developer ID case is
+   unverified.
 3. No Developer ID certificate and no notary credentials exist yet (#7: 0 identities).
 4. Store-published browser extension IDs (#24) are needed for an end-user browser setup.

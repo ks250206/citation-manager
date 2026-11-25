@@ -1074,3 +1074,13 @@ PDF 取得 job は host・ブラウザ・GUI の終了後も daemon が完了さ
 `~/Library/Application Support/Citation Manager/library` を使い、毎回の起動で native host manifest を
 `refresh` する（App Translocation/読取専用 volume は登録しない）。hosted macOS 15 runner の証跡は
 [APP_LAYOUT_POC](docs/validation/APP_LAYOUT_POC.md)。実機検証と Developer ID 署名/notarization（#31）は未完。
+
+## 40. #31 macOS DMG・notices・署名手順
+
+#34 の配置を変えずに配布物を作る。`scripts/package/third_party_notices.py` が出荷 binary の通常依存閉包から
+crate の license 本文を集めた `THIRD_PARTY_NOTICES.md` を生成し PDFium の notices と共に `Resources/licenses/` に
+同梱、`create_dmg.py` が UDZO の `.dmg` を作る。Developer ID 署名→notarization→staple は
+`release_sign.py`（preflight/pdfium/app の段階、秘密は環境変数/Keychain のみ）で、識別子が無ければ
+`UNVERIFIED: no Developer ID` と記録し成功扱いにしない。導入・更新・削除と復旧は
+[INSTALL](docs/INSTALL.md)/[RECOVERY](docs/RECOVERY.md)/[LICENSES](docs/LICENSES.md)、証跡は
+[ISSUE_31](docs/validation/ISSUE_31.md)。Developer ID 署名・notarization・実機導入は未検証。
