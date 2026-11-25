@@ -1,6 +1,7 @@
 //! Desktop views depend only on the replaceable protocol client.
 pub mod commands;
 pub mod keymap;
+pub mod palette;
 #[cfg(any(
     test,
     all(feature = "native-gpui", any(target_os = "macos", target_os = "linux"))

@@ -18,7 +18,18 @@ pub struct Settings {
     pub details_width: u16,
     pub reading: bool,
     pub details_tab: String,
+    /// Vim-style Normal mode for the library table (j/k/gg/G/y and /). Off = plain keys only.
+    #[serde(default = "enabled")]
+    pub vim: bool,
+    /// Most-recent-first Command Palette history (command IDs only, no arguments).
+    #[serde(default)]
+    pub recent_commands: Vec<String>,
 }
+fn enabled() -> bool {
+    true
+}
+/// Upper bound for `recent_commands`, matching the palette's history length.
+pub const MAX_RECENT_COMMANDS: usize = 16;
 impl Default for Settings {
     fn default() -> Self {
         Self {
@@ -36,6 +47,8 @@ impl Default for Settings {
             details_width: 380,
             reading: false,
             details_tab: "Info".into(),
+            vim: true,
+            recent_commands: vec![],
         }
     }
 }
@@ -52,10 +65,22 @@ impl Settings {
                 .zip(["Title", "Year", "Type", "DOI"])
                 .all(|(c, name)| c.name == name && (50..=800).contains(&c.width))
             && self.columns[0].visible
+            && self.recent_commands.len() <= MAX_RECENT_COMMANDS
+            && self.recent_commands.iter().all(|id| {
+                (3..=96).contains(&id.len())
+                    && id
+                        .bytes()
+                        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b"._".contains(&b))
+            })
     }
 }
 #[derive(Debug, Clone)]
 pub struct SettingsLoaded {
     pub settings: Settings,
     pub warning: Option<String>,
+    /// Raw user keymap document (`keymap.json` beside the settings file), if one exists.
+    /// The desktop validates it as a whole and falls back to defaults with diagnostics.
+    pub keymap: Option<Vec<u8>>,
+    /// Where a user keymap is read from, for display; present even when no file exists.
+    pub keymap_path: Option<std::path::PathBuf>,
 }
