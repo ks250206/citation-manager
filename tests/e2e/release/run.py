@@ -653,10 +653,15 @@ class Run:
                     except subprocess.TimeoutExpired:
                         gui.kill()
                 log.close()
-            if round_ == 1 and self.settings.exists():
-                # Written only once something is saved (e.g. the palette history).
-                self.check('gui.settings_owner_only', self.settings.stat().st_mode & 0o077 == 0)
         self.check('gui.daemon_idles_out_after_quit', self.wait_daemon_exit(), self.daemons())
+        # The palette history ("Copy citation") is saved through papersd. Known defect: the GUI's
+        # --settings only applies when the GUI itself started papersd; otherwise the daemon uses
+        # <library>/ui-settings.json. Record which file was written; require one, owner-only.
+        files = [f for f in (self.settings, self.library / 'ui-settings.json') if f.is_file()]
+        self.results['gui_settings_files'] = [str(f) for f in files]
+        self.check('gui.palette_history_persisted_owner_only',
+                   any('citation.copy' in f.read_text() and f.stat().st_mode & 0o077 == 0 for f in files),
+                   self.results['gui_settings_files'])
 
     def search_everywhere(self):
         """The same papers through CLI, REST and MCP (DESIGN §21.2)."""
