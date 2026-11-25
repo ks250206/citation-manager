@@ -10,6 +10,8 @@ pub mod import;
 pub mod library_query;
 pub mod metadata_resolve;
 pub mod papers;
+/// #20 annotated PDF export plan and re-read verification (no PDF runtime or file IO).
+pub mod pdf_export;
 pub mod policy;
 pub mod ports;
 pub mod search;

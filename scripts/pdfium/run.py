@@ -38,9 +38,9 @@ def main(out):
     executable=library_dir/'inspect-pdfkit'
     run(['xcrun','swiftc',ROOT/'scripts/pdfium/inspect_pdfkit.swift','-o',executable])
     for directory, source in [(out, ROOT/'fixtures/pdf/corpus.pdf'), (out/'inherited', ROOT/'fixtures/pdf/inherited.pdf')]:
-        run([sys.executable,ROOT/'scripts/pdfium/complete_appearances.py',directory/'pdfium-export.pdf',directory/'portable-export.pdf'])
-        run(['cargo','run','-p','cm-pdf','--example','pdfium_poc','--features','runtime','--locked','--',directory/'pdfium-portable',directory/'portable-export.pdf',directory/'pdfium-report.json'],env)
-        for input_pdf,name in [(source,'pdfkit-original'),(directory/'pdfium-export.pdf','pdfkit-native'),(directory/'portable-export.pdf','pdfkit-portable')]:
+        # #20: the Rust export already writes /AP /N (FPDFAnnot_SetAP); no Python completion step.
+        run(['cargo','run','-p','cm-pdf','--example','pdfium_poc','--features','runtime','--locked','--',directory/'pdfium-portable',directory/'pdfium-export.pdf',directory/'pdfium-report.json'],env)
+        for input_pdf,name in [(source,'pdfkit-original'),(directory/'pdfium-export.pdf','pdfkit-portable')]:
             run([executable,input_pdf,directory/name])
     # Package evidence for #34: fixed unsigned dylib, dependencies/install_name/minimum OS.
     with (out/'packaging.txt').open('w') as log:

@@ -1,6 +1,6 @@
 //! #19 highlights, comments and notes: requests, undo/redo history and the Notes tab.
 use super::*;
-use crate::annotations::{PaperHistory, Step, StepOutcome};
+use crate::annotations::{PaperHistory, PendingSelection, Step, StepOutcome, pending_selection};
 use cm_protocol::annotations::{
     Anchor, Annotation, AnnotationId, AnnotationKind, AnnotationPatch, AnnotationReply,
     AnnotationRequest, COLORS, Edit, NewAnnotation, Proposal, Source, pending_carry_over,
@@ -36,6 +36,10 @@ pub(super) struct AnnotationState {
     search_serial: u64,
     /// After an undo/redo, the next list refresh also refreshes the comment box.
     refresh_comment: bool,
+    /// The open paper's list has arrived at least once (cleared when the paper changes).
+    loaded: bool,
+    /// Annotation a search hit or deep link asked for, selected once the list is loaded.
+    pending: Option<AnnotationId>,
 }
 impl AnnotationState {
     pub(super) fn new(cx: &mut Context<LibraryView>) -> Self {
@@ -51,6 +55,8 @@ impl AnnotationState {
             search: None,
             search_serial: 0,
             refresh_comment: false,
+            loaded: false,
+            pending: None,
         }
     }
     fn cancel_search(&mut self) {
@@ -99,6 +105,8 @@ impl LibraryView {
         let paper = self.editor.as_ref().map(|p| p.id);
         if self.ann.history.open(paper) {
             self.ann.refresh_comment = false;
+            self.ann.loaded = false;
+            self.ann.pending = None;
             self.ann.selected = None;
             self.ann.proposal = None;
             self.ann.cancel_search();
@@ -136,6 +144,8 @@ impl LibraryView {
                             .unwrap_or_default();
                         self.ann.comment.update(cx, |f, cx| f.set_text(text, cx));
                     }
+                    self.ann.loaded = true;
+                    self.ann_resolve_pending(cx);
                 }
             }
             // Late replies for another paper: the change is stored, but it is not part of
@@ -144,6 +154,7 @@ impl LibraryView {
                 if !mine(paper) => {}
             (AnnOp::Record(paper), Ok(AnnotationReply::Edit(edit))) => {
                 if let Edit::Created(a) = edit.as_ref() {
+                    self.ann.pending = None;
                     self.ann.selected = Some(a.id);
                     let text = a.comment.clone().unwrap_or_default();
                     self.ann.comment.update(cx, |f, cx| f.set_text(text, cx));
@@ -306,6 +317,8 @@ impl LibraryView {
         }
     }
     pub(super) fn ann_select(&mut self, id: Option<AnnotationId>, cx: &mut Context<Self>) {
+        // An explicit selection replaces one still waiting for the list.
+        self.ann.pending = None;
         self.ann.selected = id;
         let comment = self
             .ann
@@ -314,6 +327,25 @@ impl LibraryView {
             .unwrap_or_default();
         self.ann.comment.update(cx, |f, cx| f.set_text(comment, cx));
         cx.notify();
+    }
+    /// Select an annotation of the open paper (search hit, deep link) through `ann_select`,
+    /// so the comment editor shows its comment. Until the paper's list has arrived nothing is
+    /// selected and the editor is empty, so Save cannot write a stale comment over it.
+    pub(super) fn ann_select_when_loaded(&mut self, id: AnnotationId, cx: &mut Context<Self>) {
+        self.ann_select(None, cx);
+        self.ann.pending = Some(id);
+        self.ann_resolve_pending(cx);
+    }
+    fn ann_resolve_pending(&mut self, cx: &mut Context<Self>) {
+        let list = self.ann.loaded.then_some(self.ann.list.as_slice());
+        match pending_selection(self.ann.pending, list) {
+            PendingSelection::Idle | PendingSelection::Wait => {}
+            PendingSelection::Select(id) => self.ann_select(Some(id), cx),
+            PendingSelection::Missing(_) => {
+                self.ann.pending = None;
+                self.status("That annotation no longer exists on this paper", true, cx);
+            }
+        }
     }
     pub(super) fn ann_save_comment(&mut self, cx: &mut Context<Self>) {
         let Some(current) = self.ann.selected() else {

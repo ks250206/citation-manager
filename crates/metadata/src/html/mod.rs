@@ -892,6 +892,9 @@ fn json_ld(blocks: &[String], d: &mut Vec<RowDiagnostic>) -> Tier {
             _ if is_doi_resolver(&lower) || lower.starts_with("doi:") => {
                 push_id(&mut t, "doi", doi_value(value), value, d)
             }
+            // A bare DOI string ("10.xxxx/...") without a propertyID, as the Highwire and
+            // Dublin Core extractors already accept.
+            None if lower.starts_with("10.") => push_id(&mut t, "doi", doi_value(value), value, d),
             _ => {}
         }
     }
