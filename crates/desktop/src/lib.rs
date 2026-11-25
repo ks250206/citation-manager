@@ -19,6 +19,7 @@ mod native;
 #[cfg(all(feature = "native-gpui", any(target_os = "macos", target_os = "linux")))]
 pub use native::run;
 
+pub mod annotations;
 pub mod attachments;
 pub mod details;
 pub mod import_dialogs;

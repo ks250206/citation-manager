@@ -1,15 +1,22 @@
 //! #17 PDF viewer in the Details › PDF slot: continuous pages, zoom/fit/rotate, page jump,
 //! bounded render cache with cancellation, and character-based text selection.
+use super::annotations_ui::page_of;
 use super::*;
+use crate::annotations::{MARKER_H, MARKER_W, is_marker, marker_origin, quads_of};
 use crate::pdf_viewer::{
     self, RenderCache, RenderKey, TextPos, ZoomMode, capped_zoom, hit_char, page_offsets,
     page_range, render_zoom, rotate, rotate_rgba, rotated_points, scale_for, selected_text,
     step_zoom, visible_pages, wanted_pages,
 };
+use cm_protocol::annotations::{
+    Annotation, AnnotationId, AnnotationKind, AnnotationPatch, NewAnnotation,
+};
 use std::collections::BTreeMap;
 
 /// Concurrent page renders; the PDF worker itself is serial, so more only queues.
 const MAX_IN_FLIGHT: usize = 3;
+/// Pointer travel (px) above which a press is a drag, not a click.
+const CLICK_SLOP: f32 = 3.0;
 
 pub(super) struct Viewer {
     attachment: AttachmentId,
@@ -17,6 +24,7 @@ pub(super) struct Viewer {
     /// Crop box and the page's own rotation, from the first render of each page.
     geometry: HashMap<u32, (Rect, Rotation)>,
     chars: HashMap<u32, Vec<PageChar>>,
+    labels: HashMap<u32, Option<String>>,
     has_text: HashMap<u32, bool>,
     failures: HashMap<u32, RenderFailure>,
     document_failure: Option<RenderFailure>,
@@ -31,6 +39,10 @@ pub(super) struct Viewer {
     anchor: Option<TextPos>,
     head: Option<TextPos>,
     dragging: bool,
+    /// Where the left button went down, and whether the pointer has since moved beyond the
+    /// click slop: a press without a drag is a click (selects an annotation on mouse-up).
+    press: Option<Point<Pixels>>,
+    dragged: bool,
     /// Last computed layout inputs, used by event handlers between renders.
     scale: f32,
     device_scale: f32,
@@ -46,6 +58,7 @@ impl Viewer {
             page_count: None,
             geometry: HashMap::new(),
             chars: HashMap::new(),
+            labels: HashMap::new(),
             has_text: HashMap::new(),
             failures: HashMap::new(),
             document_failure: None,
@@ -58,6 +71,8 @@ impl Viewer {
             anchor: None,
             head: None,
             dragging: false,
+            press: None,
+            dragged: false,
             scale: 1.0,
             device_scale: 1.0,
             measured: (0.0, 0.0),
@@ -122,6 +137,41 @@ impl Viewer {
         let chars = self.chars.get(&page)?;
         hit_char(chars, pdf).map(|index| TextPos { page, index })
     }
+    /// One highlight per page touched by the current selection.
+    fn selection_annotations(&self, color: &str) -> Vec<NewAnnotation> {
+        let (Some(a), Some(b)) = (self.anchor, self.head) else {
+            return vec![];
+        };
+        let (start, end) = pdf_viewer::ordered(a, b);
+        (start.page..=end.page)
+            .filter_map(|page| {
+                let chars = self.chars.get(&page)?;
+                let range = page_range(page, chars.len(), a, b)?;
+                crate::annotations::highlight(
+                    self.attachment,
+                    page,
+                    self.labels.get(&page).cloned().flatten(),
+                    chars,
+                    *range.start(),
+                    *range.end(),
+                    color,
+                )
+            })
+            .collect()
+    }
+    /// Topmost annotation under a window position: note markers (drawn last) first, then
+    /// highlights in reverse drawing order.
+    fn annotation_at<'a>(
+        &self,
+        annotations: impl Iterator<Item = &'a Annotation>,
+        position: Point<Pixels>,
+    ) -> Option<AnnotationId> {
+        let (page, display) = self.locate(position)?;
+        let (crop, r) = *self.geometry.get(&page)?;
+        let vp = pdf_viewer::viewport(crop, rotate(r, self.turns), self.scale)?;
+        let on_page: Vec<&Annotation> = annotations.filter(|a| page_of(a) == Some(page)).collect();
+        crate::annotations::annotation_at(vp, &on_page, display)
+    }
     fn selection_text(&self) -> Option<String> {
         let (a, b) = (self.anchor?, self.head?);
         let pages: BTreeMap<u32, &[PageChar]> =
@@ -137,7 +187,7 @@ impl Viewer {
                 .set_offset(point(x, px(-(top - pdf_viewer::PAGE_GAP).max(0.0))));
         }
     }
-    fn current_page(&self) -> u32 {
+    pub(super) fn current_page(&self) -> u32 {
         let (_, h) = self.pane();
         let top = -f32::from(self.scroll.offset().y);
         let visible = visible_pages(&self.layout(), top + h * 0.3, 1.0);
@@ -263,6 +313,7 @@ impl LibraryView {
                 v.page_count = Some(page.page_count.max(1));
                 v.geometry.insert(page.page, (page.crop, page.rotation));
                 v.has_text.insert(page.page, page.has_text);
+                v.labels.insert(page.page, page.label.clone());
                 v.chars.insert(page.page, page.chars);
                 v.failures.remove(&page.page);
                 let (w, h, rgba) = rotate_rgba(page.width, page.height, &page.rgba, v.turns);
@@ -394,6 +445,22 @@ impl LibraryView {
             }
         }
         self.schedule_renders();
+        let Some((has_selection, current_page, attachment)) = self.viewer.as_ref().map(|v| {
+            (
+                v.anchor.zip(v.head).is_some(),
+                v.current_page(),
+                v.attachment,
+            )
+        }) else {
+            return div()
+                .p_3()
+                .child(hint("Select an attachment above to view it."))
+                .into_any_element();
+        };
+        let annotation_bars = self.annotation_bars(has_selection, current_page, attachment, cx);
+        let marks_src: Vec<cm_protocol::annotations::Annotation> =
+            self.ann.for_attachment(attachment).cloned().collect();
+        let selected_ann = self.ann.selected;
         let Some(v) = &mut self.viewer else {
             return div()
                 .p_3()
@@ -407,6 +474,13 @@ impl LibraryView {
         let layout = v.layout();
         let (pane_w, _) = v.pane();
         let selection = v.anchor.zip(v.head);
+        if let Some((attachment, page)) = self.pending_jump
+            && attachment == v.attachment
+            && v.page_count.is_some()
+        {
+            v.scroll_to_page(page);
+            self.pending_jump = None;
+        }
         let toolbar = div()
             .flex()
             .flex_wrap()
@@ -467,6 +541,7 @@ impl LibraryView {
                 button("pdf-copy", "Copy", selection.is_some())
                     .on_click(cx.listener(|this, _, _, cx| this.viewer_copy(cx))),
             );
+
         if let Some(failure) = &v.document_failure {
             return div()
                 .flex()
@@ -503,6 +578,76 @@ impl LibraryView {
                     .cloned();
                 let failure = v.failures.get(&page).map(ToString::to_string);
                 let image_only = v.has_text.get(&page) == Some(&false);
+                let marks: Vec<Div> =
+                    match (
+                        v.geometry.get(&page),
+                        pdf_viewer::viewport(
+                            v.geometry.get(&page).map(|g| g.0).unwrap_or(Rect {
+                                left: 0.0,
+                                bottom: 0.0,
+                                right: 1.0,
+                                top: 1.0,
+                            }),
+                            v.geometry
+                                .get(&page)
+                                .map(|g| rotate(g.1, v.turns))
+                                .unwrap_or(Rotation::R0),
+                            scale,
+                        ),
+                    ) {
+                        (Some(_), Some(vp)) => {
+                            let on_page: Vec<&cm_protocol::annotations::Annotation> = marks_src
+                                .iter()
+                                .filter(|a| page_of(a) == Some(page))
+                                .collect();
+                            // Highlights first, then note markers on top (hit-testing mirrors it).
+                            let highlights =
+                                on_page.iter().filter(|a| !is_marker(a)).flat_map(|a| {
+                                    let color = crate::annotations::rgb(a.color.as_deref());
+                                    let chosen = selected_ann == Some(a.id);
+                                    quads_of(a)
+                                        .iter()
+                                        .map(|q| {
+                                            let b = vp.quad_to_display(*q).bounds();
+                                            div()
+                                                .absolute()
+                                                .left(px(b.left))
+                                                .top(px(b.bottom.min(b.top)))
+                                                .w(px(b.width().abs()))
+                                                .h(px(b.height().abs()))
+                                                .bg(rgba((color << 8) | 0x66))
+                                                .when(chosen, |el| {
+                                                    el.border_b_2().border_color(rgb(ACCENT))
+                                                })
+                                        })
+                                        .collect::<Vec<_>>()
+                                });
+                            let markers = on_page.iter().filter(|a| is_marker(a)).enumerate().map(
+                                |(i, a)| {
+                                    let chosen = selected_ann == Some(a.id);
+                                    let (x, y) = marker_origin(vp, a, i);
+                                    div()
+                                        .absolute()
+                                        .left(px(x))
+                                        .top(px(y))
+                                        .w(px(MARKER_W))
+                                        .h(px(MARKER_H))
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
+                                        .rounded_md()
+                                        .bg(rgb(0xfff4d6))
+                                        .border_1()
+                                        .border_color(rgb(if chosen { ACCENT } else { 0xf0d58a }))
+                                        .text_size(px(11.))
+                                        .cursor_pointer()
+                                        .child("📝")
+                                },
+                            );
+                            highlights.chain(markers).collect()
+                        }
+                        _ => vec![],
+                    };
                 let overlays: Vec<Div> =
                     match (selection, v.geometry.get(&page), v.chars.get(&page)) {
                         (Some((a, b)), Some((crop, r)), Some(chars)) => {
@@ -554,6 +699,7 @@ impl LibraryView {
                             ))
                             .into_any_element(),
                     })
+                    .children(marks)
                     .children(overlays)
                     .when(image_only, |el| {
                         el.child(
@@ -585,9 +731,12 @@ impl LibraryView {
             .flex_1()
             .min_h_0()
             .child(toolbar)
+            .children(annotation_bars)
             .child(
                 div()
                     .id("pdf-pages")
+                    .on_action(cx.listener(|this, _: &AnnotationUndo, _, cx| this.ann_undo(cx)))
+                    .on_action(cx.listener(|this, _: &AnnotationRedo, _, cx| this.ann_redo(cx)))
                     .key_context("PdfViewer")
                     .track_focus(&self.viewer_focus)
                     .on_action(cx.listener(|this, _: &CopySelection, _, cx| this.viewer_copy(cx)))
@@ -601,18 +750,33 @@ impl LibraryView {
                         MouseButton::Left,
                         cx.listener(|this, event: &MouseDownEvent, window, cx| {
                             this.viewer_focus.focus(window, cx);
+                            // Text selection always starts here; whether this was a click on
+                            // a highlight/note is decided on mouse-up.
                             if let Some(v) = &mut this.viewer {
                                 let caret = v.caret_at(event.position);
                                 v.anchor = caret;
                                 v.head = caret;
                                 v.dragging = caret.is_some();
+                                v.press = Some(event.position);
+                                v.dragged = false;
                             }
                             cx.notify();
                         }),
                     )
                     .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
-                        if let Some(v) = &mut this.viewer
-                            && v.dragging
+                        let Some(v) = &mut this.viewer else { return };
+                        if let Some(press) = v.press
+                            && event.dragging()
+                        {
+                            let (dx, dy) = (
+                                f32::from(event.position.x - press.x),
+                                f32::from(event.position.y - press.y),
+                            );
+                            if dx.abs() > CLICK_SLOP || dy.abs() > CLICK_SLOP {
+                                v.dragged = true;
+                            }
+                        }
+                        if v.dragging
                             && event.dragging()
                             && let Some(caret) = v.caret_at(event.position)
                             && v.head != Some(caret)
@@ -626,19 +790,35 @@ impl LibraryView {
                         cx.listener(|this, _: &MouseUpEvent, _, _| {
                             if let Some(v) = &mut this.viewer {
                                 v.dragging = false;
+                                v.press = None;
                             }
                         }),
                     )
                     .on_mouse_up(
                         MouseButton::Left,
-                        cx.listener(|this, _: &MouseUpEvent, _, cx| {
+                        cx.listener(|this, event: &MouseUpEvent, _, cx| {
+                            let mut clicked = None;
                             if let Some(v) = &mut this.viewer {
                                 v.dragging = false;
-                                if v.anchor.is_some() && v.anchor == v.head {
-                                    // A click without a drag clears the selection.
+                                let press = v.press.take();
+                                let click = !v.dragged && v.anchor == v.head;
+                                if click {
+                                    // A click without a drag clears the text selection...
                                     v.anchor = None;
                                     v.head = None;
+                                    // ...and selects the topmost highlight/note under it.
+                                    if !event.modifiers.shift {
+                                        clicked = press.and_then(|p| {
+                                            v.annotation_at(
+                                                this.ann.for_attachment(v.attachment),
+                                                p,
+                                            )
+                                        });
+                                    }
                                 }
+                            }
+                            if clicked.is_some() {
+                                this.ann_select(clicked, cx);
                             }
                             cx.notify();
                         }),
@@ -652,5 +832,155 @@ impl LibraryView {
                     ),
             )
             .into_any_element()
+    }
+    fn highlight_selection(&mut self, cx: &mut Context<Self>) {
+        let color = self.ann.color;
+        let Some(v) = &mut self.viewer else { return };
+        let annotations = v.selection_annotations(color);
+        if annotations.is_empty() {
+            self.status("Select text first (drag across it)", true, cx);
+            return;
+        }
+        v.anchor = None;
+        v.head = None;
+        for annotation in annotations {
+            self.ann_create(annotation);
+        }
+        cx.notify();
+    }
+    /// Highlight/note/undo row plus the note editor and the selected-annotation editor.
+    fn annotation_bars(
+        &self,
+        has_selection: bool,
+        current: u32,
+        attachment: AttachmentId,
+        cx: &mut Context<Self>,
+    ) -> Vec<Div> {
+        let mut bars = vec![
+            div()
+                .flex()
+                .flex_wrap()
+                .items_center()
+                .gap_1()
+                .px_2()
+                .py_1()
+                .border_b_1()
+                .border_color(rgb(BORDER))
+                .child(self.color_swatches(
+                    "pdf-hl-color",
+                    Some(self.ann.color),
+                    cx,
+                    |this, c, cx| {
+                        this.ann.color = c;
+                        cx.notify();
+                    },
+                ))
+                .child(
+                    primary_button("pdf-highlight", "Highlight", has_selection)
+                        .on_click(cx.listener(|this, _, _, cx| this.highlight_selection(cx))),
+                )
+                .child(button("pdf-note", "＋ Note", true).on_click(cx.listener(
+                    |this, _, window, cx| {
+                        this.ann.note_open = !this.ann.note_open;
+                        if this.ann.note_open {
+                            this.ann.note.focus_handle(cx).focus(window, cx);
+                        }
+                        cx.notify();
+                    },
+                )))
+                .child(div().flex_1())
+                .child(
+                    button("pdf-undo", "↶", self.ann_can_undo())
+                        .on_click(cx.listener(|this, _, _, cx| this.ann_undo(cx))),
+                )
+                .child(
+                    button("pdf-redo", "↷", self.ann_can_redo())
+                        .on_click(cx.listener(|this, _, _, cx| this.ann_redo(cx))),
+                ),
+        ];
+        if self.ann.note_open {
+            bars.push(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .px_2()
+                    .py_1()
+                    .border_b_1()
+                    .border_color(rgb(BORDER))
+                    .child(hint(format!("Note on p. {}", current + 1)))
+                    .child(div().flex_1().child(self.ann.note.clone()))
+                    .child(primary_button("pdf-note-save", "Add", true).on_click(
+                        cx.listener(move |this, _, _, cx| this.ann_save_note(current, cx)),
+                    )),
+            );
+        }
+        if let Some(a) = self
+            .ann
+            .selected()
+            .filter(|a| a.attachment_id == attachment)
+        {
+            let id = a.id;
+            bars.push(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .items_center()
+                    .gap_2()
+                    .px_2()
+                    .py_1()
+                    .border_b_1()
+                    .border_color(rgb(BORDER))
+                    .bg(rgb(0xfffbea))
+                    .child(hint(match page_of(a) {
+                        Some(p) => format!("Selected · p. {}", p + 1),
+                        None => "Selected · unresolved".into(),
+                    }))
+                    .when(a.kind == AnnotationKind::Highlight, |el| {
+                        el.child(self.color_swatches(
+                            "pdf-ann-color",
+                            a.color.as_deref(),
+                            cx,
+                            |this, c, _| {
+                                // Re-picking the current colour is not an edit.
+                                if let Some(id) = this
+                                    .ann
+                                    .selected()
+                                    .filter(|a| a.color.as_deref() != Some(c))
+                                    .map(|a| a.id)
+                                {
+                                    this.ann_update(
+                                        id,
+                                        AnnotationPatch {
+                                            color: Some(Some(c.to_owned())),
+                                            comment: None,
+                                        },
+                                    );
+                                }
+                            },
+                        ))
+                    })
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w(px(120.))
+                            .child(self.ann.comment.clone()),
+                    )
+                    .child(
+                        button("pdf-ann-save", "Save", true)
+                            .on_click(cx.listener(|this, _, _, cx| this.ann_save_comment(cx))),
+                    )
+                    .child(
+                        button("pdf-ann-delete", "Delete", true)
+                            .text_color(rgb(0xb42318))
+                            .on_click(cx.listener(move |this, _, _, _| this.ann_delete(id))),
+                    )
+                    .child(
+                        button("pdf-ann-close", "✕", true)
+                            .on_click(cx.listener(|this, _, _, cx| this.ann_select(None, cx))),
+                    ),
+            );
+        }
+        bars
     }
 }

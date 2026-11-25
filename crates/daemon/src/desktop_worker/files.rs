@@ -8,7 +8,7 @@ use std::{
 pub(super) fn invalid(s: impl Into<String>) -> ServiceError {
     ServiceError::InvalidInput(s.into())
 }
-pub(super) fn safe(path: &Path, file: bool) -> Result<(), ServiceError> {
+pub(crate) fn safe(path: &Path, file: bool) -> Result<(), ServiceError> {
     if !path.is_absolute()
         || path
             .components()

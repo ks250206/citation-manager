@@ -92,3 +92,13 @@ artifact in `scripts/pdfium/runtime-lock.json`. Its notices are the macOS set ex
 `pdfium.txt`, which carries the same BSD text without `//` comment markers.
 `scripts/install_linux.py` installs that layout. The independent PDFKit comparison lane
 remains macOS-only; Linux CI runs the pinned runtime corpus and metadata tests.
+
+## #25 transition
+
+The `citation-manager` executable no longer constructs `InProcessLibraryClient`. It builds a
+`LocalConnector` for the library (starting the sibling `papersd` on demand) and injects
+`cm_protocol::client::IpcLibraryClient`; views and `LibraryClient` are unchanged. The worker
+above now runs only inside `papersd`, with retained parse/PDF state per IPC session, and
+`papersd` holds the single-writer lock and runs migrations. The "no daemon process, IPC socket,
+grant issuance or multi-process writer exclusion" statements above describe #10 only. Interactive
+GUI use over IPC was compiled/clippy-checked on Linux, not driven; see [daemon-ipc](daemon-ipc.md).

@@ -6,7 +6,7 @@ pub use cm_core::{
     papers::{NewPaper, PaperList},
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum LibraryRequest {
     List(PaperList),
     Get(PaperId),
@@ -14,7 +14,7 @@ pub enum LibraryRequest {
     Update(Box<Paper>),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum LibraryReply {
     Papers(Vec<Paper>),
     Paper(Box<Paper>),
@@ -45,6 +45,14 @@ pub trait LibraryClient: Send + Sync + 'static {
         _paper: PaperId,
         _deleted: bool,
         _complete: Reply<Paper>,
+    ) -> Result<(), ServiceError> {
+        Err(ServiceError::Unavailable)
+    }
+    /// Highlights/notes (#19). Clients without annotation support report Unavailable.
+    fn annotations(
+        &self,
+        _request: crate::annotations::AnnotationRequest,
+        _complete: Reply<crate::annotations::AnnotationReply>,
     ) -> Result<(), ServiceError> {
         Err(ServiceError::Unavailable)
     }

@@ -1,4 +1,5 @@
 //! Application contracts independent of UI, storage drivers and transports.
+pub mod annotations;
 pub mod attachments;
 pub mod collections;
 pub mod export;
@@ -8,11 +9,12 @@ pub mod import;
 pub mod library_query;
 pub mod metadata_resolve;
 pub mod papers;
+pub mod policy;
 pub mod ports;
 pub mod search;
 pub mod tags;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ServiceError {
     Unavailable,
     Conflict,

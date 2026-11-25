@@ -1,7 +1,7 @@
 //! Feature-local organization requests; no lifecycle/auth envelope.
 use crate::domain::*;
 pub use cm_core::{collections::CollectionInput, tags::TagInput};
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum OrganizationRequest {
     List,
     ForPaper(PaperId),
@@ -14,7 +14,7 @@ pub enum OrganizationRequest {
     DeleteTag(TagId),
     TagMember(PaperId, TagId, bool),
 }
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct Organization {
     pub collections: Vec<Collection>,
     pub tags: Vec<Tag>,

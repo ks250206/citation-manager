@@ -1,7 +1,7 @@
 # #7: daemon の信頼境界
 
-状態: 採用方針。認証/authorizer/IPC は #25 の最初の IPC から実装・試験する。
-#7 に認可が動くサーバーは存在しない。全操作一覧もここでは固定しない。
+状態: 採用方針。#25 で最初の IPC から認証/authorizer を実装・自動試験した（[daemon-ipc ADR](daemon-ipc.md)、
+[Linux 証跡](../validation/ISSUE_25.md)）。macOS の peer/.app 起動、永続 token 管理 UI は #34/#26。
 
 ## 権限を与える主体
 
@@ -45,3 +45,11 @@ PDFium は native parser であり、worker 直列化だけで sandbox になら
 #25 の必須テスト: 未認証/未知/失効/不足 grant の拒否、client kind/scope/UID/PID 偽装の無効性、
 native host の読取制限、preview の grant binding、MCP read-only と write の独立許可。
 これらは #7 で実行済みとしない。
+
+## #25 実装状態
+
+`cm_core::policy` が capability/operation 表と default-deny authorizer を持ち、`papersd` が全 command を
+現在の保存 grant で判定する。credential は 256bit 乱数で SHA-256 のみ保存。client kind/要求 scope は
+narrowing のみ。native host / MCP read-only preset、GrantAdmin 経由の別 grant による write 許可、
+失効/期限の live session への即時適用、preview の grant binding を自動試験した。
+owner の bootstrap credential は library 内 0600 file であり、同一 UID の任意プロセスからの保護は主張しない。

@@ -74,7 +74,7 @@ impl Settings {
             })
     }
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SettingsLoaded {
     pub settings: Settings,
     pub warning: Option<String>,

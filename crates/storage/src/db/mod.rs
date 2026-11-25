@@ -55,6 +55,11 @@ impl LibraryDb {
             connection: &mut self.connection,
         }
     }
+    pub fn annotations(&self) -> crate::repositories::annotations::SqliteAnnotations<'_> {
+        crate::repositories::annotations::SqliteAnnotations {
+            connection: &self.connection,
+        }
+    }
     pub fn attachments(&self) -> SqliteAttachments<'_> {
         SqliteAttachments {
             connection: &self.connection,
@@ -86,7 +91,7 @@ impl LibraryDb {
             .pragma_query_value(None, "foreign_keys", |r| r.get(0))?)
     }
 }
-fn configure(db: &Connection, disk: bool) -> Result<(), StorageError> {
+pub(crate) fn configure(db: &Connection, disk: bool) -> Result<(), StorageError> {
     db.busy_timeout(std::time::Duration::from_secs(5))?;
     db.pragma_update(None, "foreign_keys", true)?;
     let mode: String = db.pragma_update_and_check(

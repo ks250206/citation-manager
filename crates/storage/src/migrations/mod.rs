@@ -35,6 +35,18 @@ fn registry() -> Result<Vec<Migration<'static>>, StorageError> {
             "20261106T090000Z_issue-8_002_relations.sql",
             include_str!("../../migrations/20261106T090000Z_issue-8_002_relations.sql"),
         ),
+        (
+            "20261124T000000Z_issue-25_001_daemon-grants-jobs.sql",
+            include_str!("../../migrations/20261124T000000Z_issue-25_001_daemon-grants-jobs.sql"),
+        ),
+        (
+            "20261124T120000Z_issue-18_001_fulltext-search.sql",
+            include_str!("../../migrations/20261124T120000Z_issue-18_001_fulltext-search.sql"),
+        ),
+        (
+            "20261124T120000Z_issue-19_001_annotation-review.sql",
+            include_str!("../../migrations/20261124T120000Z_issue-19_001_annotation-review.sql"),
+        ),
     ];
     if manifest.len() != files.len() {
         return Err(StorageError::Migration("registry/files differ".into()));
@@ -74,6 +86,20 @@ pub(crate) fn validate_current(db: &Connection) -> Result<(), StorageError> {
     if schema_definition(db)? != schema_definition(&expected)? {
         return Err(StorageError::Migration(
             "portable snapshot schema differs from registry".into(),
+        ));
+    }
+    Ok(())
+}
+
+/// Cheap check for an additional connection to a library another connection migrated:
+/// the applied history must be exactly the embedded registry (no migration is run).
+pub(crate) fn check_applied(db: &Connection) -> Result<(), StorageError> {
+    let migrations = registry()?;
+    let applied = history(db)?;
+    verify_history(&migrations, &applied)?;
+    if applied.len() != migrations.len() {
+        return Err(StorageError::Migration(
+            "library schema is not current".into(),
         ));
     }
     Ok(())
@@ -265,7 +291,7 @@ mod tests {
         let mut blank = Connection::open_in_memory().unwrap();
         blank.execute_batch("CREATE TABLE schema_migrations(version TEXT PRIMARY KEY NOT NULL, checksum TEXT NOT NULL, applied_at TEXT NOT NULL)").unwrap();
         run_registry(&mut blank, &registry().unwrap(), None).unwrap();
-        assert_eq!(history(&blank).unwrap().len(), 2);
+        assert_eq!(history(&blank).unwrap().len(), registry().unwrap().len());
     }
 
     #[test]
@@ -273,7 +299,7 @@ mod tests {
         let mut db = Connection::open_in_memory().unwrap();
         let mut migrations = registry().unwrap();
         run_registry(&mut db, &migrations, None).unwrap();
-        assert_eq!(history(&db).unwrap().len(), 2);
+        assert_eq!(history(&db).unwrap().len(), migrations.len());
         let original = schema(&db);
         run_registry(&mut db, &migrations, None).unwrap();
         assert_eq!(schema(&db), original);
@@ -319,7 +345,10 @@ mod tests {
         let mut upgraded = LibraryDb::open_with_backup(&directory, &mut backup).unwrap();
         assert_eq!(backup.calls, 1);
         assert_eq!(history(&backup.copy).unwrap().len(), 1);
-        assert_eq!(history(&upgraded.connection).unwrap().len(), 2);
+        assert_eq!(
+            history(&upgraded.connection).unwrap().len(),
+            migrations.len()
+        );
         assert_eq!(
             upgraded.papers().get(paper.id).unwrap(),
             Some(paper.clone())

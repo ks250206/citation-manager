@@ -12,3 +12,5 @@ workspace = true
 cm-domain.workspace = true
 cm-core.workspace = true
 serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true

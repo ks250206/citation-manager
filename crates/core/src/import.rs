@@ -37,20 +37,20 @@ pub struct RowDiagnostic {
     pub message: String,
     pub error: bool,
 }
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub struct ImportDestination {
     pub collection: Option<CollectionId>,
     pub tags: Vec<TagId>,
 }
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ImportRequest {
     pub candidates: Vec<PaperDraft>,
     pub destination: ImportDestination,
 }
 /// Service-local retained state handle; NOT a credential. Never log private previews.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct PreviewId(pub String);
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct PreviewCandidate {
     pub draft: PaperDraft,
     /// Legacy convenience: first exact persisted match only.
@@ -59,7 +59,7 @@ pub struct PreviewCandidate {
     pub batch_matches: Vec<usize>,
     pub diagnostics: Vec<RowDiagnostic>,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum MatchKind {
     Doi,
     ExternalId,
@@ -71,26 +71,26 @@ impl MatchKind {
         matches!(self, Self::Doi | Self::ExternalId)
     }
 }
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct DuplicateCandidate {
     pub existing: Paper,
     pub kind: MatchKind,
     pub differences: Vec<FieldDiff>,
 }
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct FieldDiff {
     /// title, external_ids, or a Bibliography JSON field name.
     pub field: String,
     pub before: serde_json::Value,
     pub after: serde_json::Value,
 }
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ImportPreview {
     pub id: PreviewId,
     pub candidates: Vec<PreviewCandidate>,
     pub warnings: Vec<String>,
 }
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ImportAction {
     Create,
     /// Explicit field selection from a reviewed persisted match. No arbitrary payload.
@@ -100,24 +100,24 @@ pub enum ImportAction {
     },
     Skip,
 }
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ImportDecision {
     pub candidate_index: usize,
     pub action: ImportAction,
 }
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ImportCommit {
     pub preview_id: PreviewId,
     pub decisions: Vec<ImportDecision>,
 }
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub struct ImportOutcome {
     pub created: Vec<PaperId>,
     pub merged: Vec<PaperId>,
     pub skipped: usize,
     pub rows: Vec<ImportRowOutcome>,
 }
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ImportRowOutcome {
     pub candidate_index: usize,
     pub paper: Option<PaperId>,

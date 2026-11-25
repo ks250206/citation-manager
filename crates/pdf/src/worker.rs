@@ -136,6 +136,14 @@ pub enum Operation {
         page_index: PageIndex,
         zoom: Option<f32>,
     },
+    /// #18: text of pages `first_page..first_page+max_pages` (clamped) from one load,
+    /// each cut to `max_chars` scalars. No glyph geometry, bitmaps or annotations.
+    Text {
+        source: Source,
+        first_page: u32,
+        max_pages: u32,
+        max_chars: u32,
+    },
     /// Returns a separate PDF in memory; the caller must write with create_new/atomic storage.
     Export {
         source: Source,
@@ -156,6 +164,7 @@ pub enum AppearanceStatus {
 pub enum Output {
     Metadata(Box<MetadataSnapshot>),
     Page(Box<PageSnapshot>),
+    Text(Box<crate::extract::TextBatch>),
     Export(NativeExport),
 }
 #[derive(Clone, Default)]
@@ -200,6 +209,31 @@ impl Ticket {
             Err(mpsc::RecvTimeoutError::Disconnected) => Err(PdfError::WorkerClosed),
         }
     }
+    /// Like `wait`, but polls `stop` (e.g. a caller's cancellation) every 25 ms and cancels the
+    /// operation cooperatively as soon as it returns true.
+    pub fn wait_unless(
+        self,
+        timeout: Duration,
+        stop: impl Fn() -> bool,
+    ) -> Result<Output, PdfError> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            if stop() {
+                self.cancel.cancel();
+                return Err(PdfError::Cancelled);
+            }
+            let left = deadline.saturating_duration_since(Instant::now());
+            if left.is_zero() {
+                self.cancel.cancel();
+                return Err(PdfError::Deadline);
+            }
+            match self.reply.recv_timeout(left.min(Duration::from_millis(25))) {
+                Ok(r) => return r,
+                Err(mpsc::RecvTimeoutError::Timeout) => (),
+                Err(mpsc::RecvTimeoutError::Disconnected) => return Err(PdfError::WorkerClosed),
+            }
+        }
+    }
 }
 impl Drop for Ticket {
     fn drop(&mut self) {
@@ -209,6 +243,48 @@ impl Drop for Ticket {
 pub struct PdfWorker {
     sender: Option<SyncSender<Request>>,
     thread: Option<JoinHandle<()>>,
+}
+/// A cloneable handle that queues operations on the same serial worker from another thread.
+/// While a handle is alive the worker thread keeps running, so dropping `PdfWorker` waits for
+/// outstanding handles; holders must bound their work with deadlines.
+#[derive(Clone)]
+pub struct Submitter {
+    sender: SyncSender<Request>,
+}
+impl Submitter {
+    pub fn submit(
+        &self,
+        op: Operation,
+        cancel: Cancellation,
+        budget: Duration,
+    ) -> Result<Ticket, PdfError> {
+        submit(&self.sender, op, cancel, budget)
+    }
+}
+fn submit(
+    sender: &SyncSender<Request>,
+    op: Operation,
+    cancel: Cancellation,
+    budget: Duration,
+) -> Result<Ticket, PdfError> {
+    validate_operation(&op)?;
+    if budget > Duration::from_secs(60) {
+        return Err(PdfError::LimitExceeded);
+    }
+    let (reply_tx, reply) = mpsc::sync_channel(1);
+    let request = Request {
+        op,
+        context: Context {
+            cancel: cancel.clone(),
+            deadline: Instant::now() + budget,
+        },
+        reply: reply_tx,
+    };
+    match sender.try_send(request) {
+        Ok(()) => Ok(Ticket { reply, cancel }),
+        Err(TrySendError::Full(_)) => Err(PdfError::QueueFull),
+        Err(TrySendError::Disconnected(_)) => Err(PdfError::WorkerClosed),
+    }
 }
 impl PdfWorker {
     /// Absolute developer override or bundle-resolved path only; verifies pinned original bytes.
@@ -253,29 +329,17 @@ impl PdfWorker {
         cancel: Cancellation,
         budget: Duration,
     ) -> Result<Ticket, PdfError> {
-        validate_operation(&op)?;
-        if budget > Duration::from_secs(60) {
-            return Err(PdfError::LimitExceeded);
-        }
-        let (reply_tx, reply) = mpsc::sync_channel(1);
-        let request = Request {
+        submit(
+            self.sender.as_ref().ok_or(PdfError::WorkerClosed)?,
             op,
-            context: Context {
-                cancel: cancel.clone(),
-                deadline: Instant::now() + budget,
-            },
-            reply: reply_tx,
-        };
-        match self
-            .sender
-            .as_ref()
-            .ok_or(PdfError::WorkerClosed)?
-            .try_send(request)
-        {
-            Ok(()) => Ok(Ticket { reply, cancel }),
-            Err(TrySendError::Full(_)) => Err(PdfError::QueueFull),
-            Err(TrySendError::Disconnected(_)) => Err(PdfError::WorkerClosed),
-        }
+            cancel,
+            budget,
+        )
+    }
+    pub fn submitter(&self) -> Result<Submitter, PdfError> {
+        Ok(Submitter {
+            sender: self.sender.clone().ok_or(PdfError::WorkerClosed)?,
+        })
     }
     /// Drain queued requests and join. Cancel outstanding tickets first for prompt cooperative exit.
     /// A native call can still delay shutdown; process isolation is a later hard-timeout boundary.
@@ -307,8 +371,18 @@ fn validate_operation(op: &Operation) -> Result<(), PdfError> {
     let source = match op {
         Operation::Page { source, .. }
         | Operation::Export { source, .. }
+        | Operation::Text { source, .. }
         | Operation::Metadata { source } => source,
     };
+    if let Operation::Text {
+        first_page,
+        max_pages,
+        max_chars,
+        ..
+    } = op
+    {
+        crate::extract::validate(*first_page, *max_pages, *max_chars)?;
+    }
     if !source.path.is_absolute()
         || source
             .password

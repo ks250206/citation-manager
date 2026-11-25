@@ -1,7 +1,7 @@
 //! PDF policy contracts only. No filesystem access or PDF parser is implemented here.
 use super::*;
 use crate::ServiceError;
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum PdfIntent {
     AttachExisting(PaperId),
     RegisterNew,
@@ -128,7 +128,7 @@ pub struct SelectedFile {
     pub byte_size: u64,
     pub sha256: Option<[u8; 32]>,
 }
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum FileDisposition {
     Ready,
     OutsideScope,
@@ -141,7 +141,7 @@ pub enum FileDisposition {
     Imported(AttachmentIdRef),
 }
 /// An attachment ID returned by a future #9 adapter; no file persistence in this module.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct AttachmentIdRef(pub cm_domain::AttachmentId);
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileProgress {

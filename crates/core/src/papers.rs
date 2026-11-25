@@ -2,7 +2,7 @@
 use crate::{ServiceError, ports::PaperRepository};
 use cm_domain::{Bibliography, ExternalId, Paper, PaperId};
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub struct NewPaper {
     pub title: String,
     pub external_ids: Vec<ExternalId>,
@@ -28,7 +28,7 @@ pub enum PaperVisibility {
 
 /// Stable keyset order is internal UUID ascending. New inserts never shift offsets.
 /// Separate calls see the latest committed state, not a long-lived snapshot.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct PaperList {
     pub visibility: PaperVisibility,
     pub after: Option<PaperId>,

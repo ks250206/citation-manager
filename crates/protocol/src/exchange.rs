@@ -5,24 +5,24 @@ pub use cm_core::{
     metadata_resolve::{Cancellation, MetadataResolution},
 };
 use std::path::PathBuf;
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Format {
     Bibtex,
     Ris,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct FileDiagnostic {
     pub line: u64,
     pub message: String,
     pub error: bool,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ParsedFile {
     pub records: usize,
     pub diagnostics: Vec<FileDiagnostic>,
     pub migration_notice: String,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum ImportRequestUi {
     Parse {
         path: PathBuf,
@@ -37,20 +37,20 @@ pub enum ImportRequestUi {
     Commit(ImportCommit),
     Cancel(PreviewId),
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum ImportReply {
     Parsed(ParsedFile),
     Preview(ImportPreview),
     Committed(ImportOutcome),
     Cancelled,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ExportRequest {
     pub selection: ExportSelection,
     pub format: Format,
     pub path: PathBuf,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Exported {
     pub path: PathBuf,
     pub records: usize,

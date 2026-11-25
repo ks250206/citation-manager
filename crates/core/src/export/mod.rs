@@ -9,7 +9,7 @@ pub const MAX_OUTPUT_BYTES: usize = 32 * 1024 * 1024;
 pub const MAX_RECORD_BYTES: usize = 256 * 1024;
 pub const MIGRATION_NOTICE: &str = "BibTeX/RIS transfer bibliography only. PDFs, attachments, annotations, collection/tag relationships and internal IDs are not transferred.";
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ExportSelection {
     /// Active records only, as in #12's default query.
     All,

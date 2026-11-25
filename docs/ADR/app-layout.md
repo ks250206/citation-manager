@@ -34,3 +34,8 @@ GUI 内の早期 PoC は許すが、外部クライアント用の無認可 Core
 the daemon composition root. Its unsigned temporary smoke .app is solely for native
 automation; the product bundle/resource/PDFium/lifecycle guarantees above remain #34.
 See [desktop-bootstrap](desktop-bootstrap.md) and [native evidence](../validation/ISSUE_10.md).
+
+#25 implements `papersd` and the GUI's sibling-executable lazy start (`MacOS/papersd` next to
+`MacOS/citation-manager`, or `<prefix>/bin/papersd` on Linux), the per-library lock, private
+runtime socket and idle exit. Only the Linux behaviour is verified ([ISSUE_25](../validation/ISSUE_25.md));
+the .app placement, Finder/launchd start and browser host probes remain #34/#23.
