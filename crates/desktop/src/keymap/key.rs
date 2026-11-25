@@ -80,10 +80,83 @@ impl KeyStroke {
         })
     }
 
+    /// Adapter from a platform key event. `primary` is the platform shortcut modifier
+    /// (⌘ on macOS, Ctrl elsewhere) and maps to `Cmd`; `control` is an *additional* Control.
+    /// Unmodified printable input uses the produced character (`G`, `/`), so layout and Shift
+    /// are already applied. Returns None for keys outside the canonical vocabulary.
+    pub fn from_platform(
+        key: &str,
+        key_char: Option<&str>,
+        primary: bool,
+        control: bool,
+        alt: bool,
+        shift: bool,
+    ) -> Option<Self> {
+        let named = match key {
+            "enter" => Some("Enter"),
+            "escape" => Some("Esc"),
+            "tab" => Some("Tab"),
+            "backspace" => Some("Backspace"),
+            "delete" => Some("Delete"),
+            "up" => Some("Up"),
+            "down" => Some("Down"),
+            "left" => Some("Left"),
+            "right" => Some("Right"),
+            "home" => Some("Home"),
+            "end" => Some("End"),
+            "pageup" => Some("PageUp"),
+            "pagedown" => Some("PageDown"),
+            "space" => Some("Space"),
+            _ => None,
+        };
+        let mut token = String::new();
+        if primary {
+            token.push_str("Cmd+");
+        }
+        if control {
+            token.push_str("Ctrl+");
+        }
+        if alt {
+            token.push_str("Alt+");
+        }
+        if !primary && !control && !alt {
+            if let Some(name) = named {
+                if shift {
+                    token.push_str("Shift+");
+                }
+                token.push_str(name);
+            } else {
+                let produced = key_char.filter(|c| c.len() == 1)?;
+                token.push_str(produced);
+            }
+        } else {
+            if shift {
+                token.push_str("Shift+");
+            }
+            match named {
+                Some(name) => token.push_str(name),
+                None if key.len() == 1 => token.push_str(&key.to_ascii_lowercase()),
+                None => return None,
+            }
+        }
+        Self::parse(&token).ok()
+    }
+
     pub(super) fn is_escape(&self) -> bool {
         self.key == "Esc" && self.modifiers == 0
     }
     pub(super) fn is_shortcut(&self) -> bool {
         self.modifiers & (CMD | CTRL) != 0
+    }
+}
+
+impl std::fmt::Display for KeyStroke {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (bit, name) in [(CMD, "Cmd"), (CTRL, "Ctrl"), (ALT, "Alt"), (SHIFT, "Shift")] {
+            if self.modifiers & bit != 0 {
+                write!(f, "{name}+")?;
+            }
+        }
+        f.write_str(&self.key)
     }
 }

@@ -113,7 +113,7 @@ impl LibraryView {
                 self.screen = Screen::Import;
                 self.status("Review PDF registration. Embedded metadata is a suggestion; filename may remain provisional", false, cx);
             }
-            Ok(PdfReply::Attachments(_))=>(),
+            Ok(PdfReply::Attachments(_) | PdfReply::Page(_))=>(),
             Err(e)=>self.status(format!("PDF operation failed: {e}. Earlier paper/attachment successes remain; retry explicitly"),true,cx),
         }
     }

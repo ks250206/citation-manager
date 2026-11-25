@@ -2,6 +2,11 @@
 //! Quads retain PDF order: top-left, top-right, bottom-left, bottom-right (Z order).
 use serde::{Deserialize, Serialize};
 
+/// Largest bitmap the PDF worker renders (pixels and per side). Viewers cap their render
+/// zoom to stay inside these instead of asking for pages the worker must refuse.
+pub const MAX_RENDER_PIXELS: usize = 4 * 1024 * 1024;
+pub const MAX_RENDER_SIDE: f32 = 8192.0;
+
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Point {
     pub x: f32,

@@ -45,6 +45,11 @@ fn main() {
     if let Some(ms) = idle {
         config.idle_timeout = Duration::from_millis(ms);
     }
+    // #18: index PDF page text when this installation bundles the pinned PDFium library.
+    #[cfg(feature = "pdf-metadata")]
+    if let Some(extractor) = cm_daemon::fulltext::PdfiumExtractor::bundled() {
+        config.extractor = Some(std::sync::Arc::new(extractor));
+    }
     match start(config) {
         Ok(daemon) => daemon.wait(),
         Err(StartError::AlreadyRunning) => {

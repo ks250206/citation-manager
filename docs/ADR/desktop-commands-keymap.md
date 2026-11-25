@@ -153,3 +153,28 @@ editing/composition/focus state, and preserve native editing and mouse behavior.
 prove only the supplied-data policy and finite resolver, not real GPUI focus, event bubbling,
 keyboard layouts, IME composition, macOS behavior or clipboard behavior. No UI was launched for
 this child. See [#52 evidence](../validation/ISSUE_52.md). No #15/#16 acceptance box is completed here.
+
+## #16: native dispatch, Command Palette and persistence
+
+`desktop::palette` (framework-free) ranks every registered descriptor by a case-insensitive
+subsequence score over the title (word starts and contiguous runs weigh more), falling back to
+the dotted ID below any title match. An empty query lists recent commands first. `record` keeps a
+most-recent-first history of at most 16 registered IDs. Ranking never executes anything.
+
+`commands::workbench` is an additive provider for the #15 workbench (screens, filters, Trash,
+reading layout, export entry, Vim toggle, keymap reload/copy). The native host connects every
+library and workbench ID through one `run_command`, which rechecks availability before running.
+Deferred descriptors (#18/#20/#21/#26) remain disabled and show their issue in the palette.
+
+Keys: platform shortcuts (⌘ on macOS, Ctrl on Linux) are GPUI bindings — ⌘K palette, ⌘N/⌘S/⌘F,
+⌘1/⌘2/⌘, screens, ↑↓/↩/Esc in the table. Keys the bindings do not consume in the table go through
+`KeyResolver` with `KeyStroke::from_platform` (primary modifier → `Cmd`, produced character for
+unmodified printable input). Vim off uses mode `vim_off`, so plain letters pass through. Text
+inputs are never routed through the resolver; their ↩ submits only outside IME composition.
+
+Persistence: `Settings` gains `vim` (default on) and `recent_commands` (≤16 dotted IDs); both are
+`serde(default)`, so earlier settings files keep loading. The worker reads an optional private
+(0600, ≤64 KiB) `keymap.json` beside the settings file and returns the bytes; the desktop validates
+the whole document and falls back to the defaults with diagnostics shown in Organize & export ›
+Keyboard. "Copy Default Keymap JSON" puts the built-in document on the clipboard as a template.
+The `Cmd` token in keymap files means the platform primary modifier.

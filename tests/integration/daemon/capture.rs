@@ -508,3 +508,70 @@ fn duplicates_merge_cancel_and_preview_binding() {
         WireError::Service(cm_protocol::library::ServiceError::NotFound)
     );
 }
+
+/// One page of fixed text for any PDF (no PDFium on this lane).
+struct OnePage;
+impl cm_core::search::extraction::PageTextExtractor for OnePage {
+    fn extract(
+        &self,
+        path: &std::path::Path,
+        first_page: u32,
+        _max_pages: u32,
+        _max_chars: u32,
+        _cancel: &cm_core::metadata_resolve::Cancellation,
+    ) -> Result<cm_core::search::extraction::PageBatch, cm_core::search::extraction::ExtractError>
+    {
+        use cm_core::search::extraction::{ExtractError, ExtractedPage, PageBatch};
+        let bytes = std::fs::read(path).map_err(|e| ExtractError::Failed(e.to_string()))?;
+        Ok(PageBatch {
+            page_count: 1,
+            sha256: Sha256::digest(&bytes).into(),
+            pages: (first_page..1)
+                .map(|i| ExtractedPage {
+                    page_index: i,
+                    page_label: None,
+                    text: "capturedfulltextmarker".into(),
+                    truncated: false,
+                })
+                .collect(),
+        })
+    }
+}
+
+#[test]
+fn captured_pdf_is_extracted_into_the_fulltext_index() {
+    use cm_protocol::{
+        jobs::JobReply,
+        search::{ExtractionState, FulltextReply, FulltextRequest},
+    };
+    let server = TestServer::start(|r| match r.path.as_str() {
+        "/indexed.pdf" => Response::pdf(PDF),
+        _ => Response::new(404),
+    });
+    let env = Env::new();
+    let mut config = config(&env);
+    config.extractor = Some(Arc::new(OnePage));
+    let _daemon = start(config).unwrap();
+    let mut desktop = env.desktop();
+    let mut host = native_host(&env, &mut desktop);
+    let (paper, job) = capture(&mut host, &server, 7, "/indexed.pdf");
+    assert_eq!(settle(&mut host, job).state, JobState::Succeeded);
+    // The finished capture.pdf_fetch job submits the automatic #18 extraction like an
+    // attachment import does; the native host cannot see that ownerless job.
+    let extracted = |desktop: &mut Session| {
+        let jobs = match ok(desktop.call(Command::Jobs(JobCommand::List { active_only: false }))) {
+            Reply::Jobs(JobReply::Jobs(jobs)) => jobs,
+            other => panic!("{other:?}"),
+        };
+        let states = match ok(desktop.call(Command::Fulltext(FulltextRequest::Status(paper)))) {
+            Reply::Fulltext(FulltextReply::Status(s)) => s,
+            other => panic!("{other:?}"),
+        };
+        jobs.iter().any(|j| j.kind == kinds::FULLTEXT_EXTRACT)
+            && states.len() == 1
+            && states[0].state == ExtractionState::Complete
+    };
+    assert!(wait_until(Duration::from_secs(30), || extracted(
+        &mut desktop
+    )));
+}

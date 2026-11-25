@@ -59,3 +59,34 @@ pub(crate) fn service_error(e: rusqlite::Error) -> cm_core::ServiceError {
         _ => ServiceError::Unavailable,
     }
 }
+
+/// Why a SQLite call failed, for callers that must tell index damage from lock contention
+/// or a deadline interrupt (all of which `service_error` reports as `Unavailable`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SqlFault {
+    /// SQLITE_BUSY/SQLITE_LOCKED: another connection holds a conflicting lock. Transient.
+    Busy,
+    /// SQLITE_INTERRUPT: the statement was stopped (request deadline).
+    Interrupted,
+    /// SQLITE_CORRUPT* / SQLITE_NOTADB, or an FTS5 "malformed" report: real damage.
+    Corrupt,
+    Other,
+}
+pub fn sql_fault(e: &rusqlite::Error) -> SqlFault {
+    use rusqlite::ErrorCode;
+    match e {
+        rusqlite::Error::SqliteFailure(failure, message) => match failure.code {
+            ErrorCode::DatabaseBusy | ErrorCode::DatabaseLocked => SqlFault::Busy,
+            ErrorCode::OperationInterrupted => SqlFault::Interrupted,
+            ErrorCode::DatabaseCorrupt | ErrorCode::NotADatabase => SqlFault::Corrupt,
+            _ if message
+                .as_deref()
+                .is_some_and(|m| m.contains("malformed") || m.contains("fts5: corrupt")) =>
+            {
+                SqlFault::Corrupt
+            }
+            _ => SqlFault::Other,
+        },
+        _ => SqlFault::Other,
+    }
+}

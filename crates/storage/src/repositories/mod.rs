@@ -1,3 +1,4 @@
+pub(crate) mod annotations;
 mod attachments;
 mod papers;
 pub use attachments::SqliteAttachments;

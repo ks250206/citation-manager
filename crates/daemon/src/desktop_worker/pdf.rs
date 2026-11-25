@@ -23,6 +23,8 @@ impl Worker<'_> {
         progress: PdfProgress,
     ) -> Result<PdfReply, ServiceError> {
         match request {
+            // Routed by `InProcessLibraryClient::pdf` before reaching the library queue.
+            PdfRequest::Render(_) => Err(invalid("Render requests are not queued here")),
             PdfRequest::List(id) => {
                 let attachments = self.db.attachments().for_paper(id)?;
                 let service = AttachmentService::new(
@@ -280,24 +282,16 @@ impl Worker<'_> {
         }
     }
     #[cfg(feature = "pdf-metadata")]
+    pub(super) fn pdf_worker(&mut self) -> Result<&'static cm_pdf::worker::PdfWorker, String> {
+        // One PDFium worker per process, shared with #18 text extraction and rendering.
+        crate::fulltext::pdf_runtime::shared(None)
+    }
+    #[cfg(feature = "pdf-metadata")]
     fn metadata(&mut self, path: &Path, digest: [u8; 32]) -> (Option<PaperDraft>, Vec<String>) {
         use cm_pdf::worker::*;
         use std::time::Duration;
-        if self.pdf.is_none() {
-            self.pdf = Some(
-                std::env::current_exe()
-                    .map_err(|e| e.to_string())
-                    .and_then(|exe| bundled_library(&exe).map_err(|e| e.to_string()))
-                    .and_then(|path| PdfWorker::start(path).map_err(|e| e.to_string())),
-            );
-        }
         let result: Result<MetadataSnapshot, String> = (|| {
-            let worker = self
-                .pdf
-                .as_ref()
-                .expect("initialized")
-                .as_ref()
-                .map_err(Clone::clone)?;
+            let worker = self.pdf_worker()?;
             let output = worker
                 .submit(
                     Operation::Metadata {
@@ -330,9 +324,74 @@ impl Worker<'_> {
             ),
         }
     }
+    /// Verify the stored blob, then queue one page on the PDF worker. The returned handle
+    /// waits off the library thread.
+    pub(in crate::desktop_worker) fn begin_render(
+        &mut self,
+        request: RenderRequest,
+    ) -> Result<PendingRender, RenderFailure> {
+        if !request.valid() {
+            return Err(RenderFailure::Other("Zoom out of range".into()));
+        }
+        if request.cancel.is_cancelled() {
+            return Err(RenderFailure::Cancelled);
+        }
+        let attachment = self
+            .db
+            .attachments()
+            .get(request.attachment)
+            .map_err(|e| RenderFailure::Other(e.to_string()))?
+            .ok_or(RenderFailure::MissingOrCorrupt)?;
+        let path = cm_storage::attachments::ManagedStore::new(&self.directory)
+            .and_then(|store| store.verified_path(&attachment))
+            .map_err(|_| RenderFailure::MissingOrCorrupt)?;
+        self.submit_render(path, request)
+    }
+    #[cfg(feature = "pdf-metadata")]
+    fn submit_render(
+        &mut self,
+        path: PathBuf,
+        request: RenderRequest,
+    ) -> Result<PendingRender, RenderFailure> {
+        use cm_pdf::worker::*;
+        let page_index = cm_protocol::domain::PageIndex::try_from(request.page)
+            .map_err(|_| RenderFailure::PageOutOfRange)?;
+        let cancel = Cancellation::default();
+        let ticket = self
+            .pdf_worker()
+            .map_err(RenderFailure::RuntimeUnavailable)?
+            .submit(
+                Operation::Page {
+                    source: Source {
+                        path,
+                        password: None,
+                    },
+                    page_index,
+                    zoom: Some(request.zoom),
+                },
+                cancel.clone(),
+                std::time::Duration::from_secs(20),
+            )
+            .map_err(render_failure)?;
+        Ok(PendingRender {
+            ticket,
+            pdf_cancel: cancel,
+            request,
+        })
+    }
     #[cfg(not(feature = "pdf-metadata"))]
     fn metadata(&mut self, _path: &Path, _digest: [u8; 32]) -> (Option<PaperDraft>, Vec<String>) {
         (None, vec!["PDF metadata unresolved: this build has no PDF runtime. Explicit filename/manual registration remains available".into()])
+    }
+    #[cfg(not(feature = "pdf-metadata"))]
+    fn submit_render(
+        &mut self,
+        _path: PathBuf,
+        _request: RenderRequest,
+    ) -> Result<PendingRender, RenderFailure> {
+        Err(RenderFailure::RuntimeUnavailable(
+            "This build has no PDF runtime".into(),
+        ))
     }
     fn attach(
         &mut self,
@@ -513,4 +572,99 @@ fn digest(path: &Path, cancel: &Cancellation) -> Result<([u8; 32], u64), Service
         hash.update(&buffer[..n]);
     }
     Ok((hash.finalize().into(), size))
+}
+
+/// A queued page render; `finish` blocks, so it runs on a helper thread.
+pub(in crate::desktop_worker) struct PendingRender {
+    #[cfg(feature = "pdf-metadata")]
+    ticket: cm_pdf::worker::Ticket,
+    #[cfg(feature = "pdf-metadata")]
+    pdf_cancel: cm_pdf::worker::Cancellation,
+    #[cfg(feature = "pdf-metadata")]
+    request: RenderRequest,
+}
+impl PendingRender {
+    #[cfg(feature = "pdf-metadata")]
+    pub(in crate::desktop_worker) fn finish(self) -> Result<Box<RenderedPage>, RenderFailure> {
+        use cm_pdf::worker::*;
+        use std::sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        };
+        // Bridge the UI's cancellation (scrolled away, document closed) to the PDF worker.
+        let done = Arc::new(AtomicBool::new(false));
+        let watcher = {
+            let (done, ui, pdf) = (
+                done.clone(),
+                self.request.cancel.clone(),
+                self.pdf_cancel.clone(),
+            );
+            std::thread::Builder::new()
+                .name("pdf-render-cancel".into())
+                .spawn(move || {
+                    while !done.load(Ordering::Relaxed) {
+                        if ui.is_cancelled() {
+                            pdf.cancel();
+                            break;
+                        }
+                        std::thread::sleep(std::time::Duration::from_millis(25));
+                    }
+                })
+                .ok()
+        };
+        let output = self.ticket.wait(std::time::Duration::from_secs(21));
+        done.store(true, Ordering::Relaxed);
+        if let Some(watcher) = watcher {
+            let _ = watcher.join();
+        }
+        let Output::Page(snapshot) = output.map_err(render_failure)? else {
+            return Err(RenderFailure::Other("Unexpected PDF worker reply".into()));
+        };
+        let bitmap = snapshot
+            .bitmap
+            .ok_or_else(|| RenderFailure::Other("No bitmap returned".into()))?;
+        Ok(Box::new(RenderedPage {
+            attachment: self.request.attachment,
+            page: self.request.page,
+            page_count: u32::try_from(snapshot.page_count).unwrap_or(0),
+            label: snapshot.page_label,
+            crop: snapshot.crop,
+            rotation: snapshot.rotation,
+            zoom: self.request.zoom,
+            width: bitmap.width,
+            height: bitmap.height,
+            rgba: bitmap.rgba.into(),
+            has_text: snapshot.text_status == TextStatus::Extracted,
+            chars: snapshot
+                .characters
+                .into_iter()
+                .map(|c| PageChar {
+                    unicode: c.unicode,
+                    quad: c.quad,
+                })
+                .collect(),
+        }))
+    }
+    #[cfg(not(feature = "pdf-metadata"))]
+    pub(in crate::desktop_worker) fn finish(self) -> Result<Box<RenderedPage>, RenderFailure> {
+        Err(RenderFailure::RuntimeUnavailable(
+            "This build has no PDF runtime".into(),
+        ))
+    }
+}
+#[cfg(feature = "pdf-metadata")]
+fn render_failure(e: cm_pdf::worker::PdfError) -> RenderFailure {
+    use cm_pdf::worker::PdfError::*;
+    match e {
+        PasswordRequiredOrIncorrect | UnsupportedSecurity => RenderFailure::Encrypted,
+        Malformed | InvalidSource => RenderFailure::Damaged,
+        InvalidPage => RenderFailure::PageOutOfRange,
+        LimitExceeded => RenderFailure::TooLarge,
+        Cancelled => RenderFailure::Cancelled,
+        QueueFull | Deadline => RenderFailure::Busy,
+        LibraryPath | LibraryChecksum | LibraryLoad | AlreadyStarted | WorkerClosed => {
+            RenderFailure::RuntimeUnavailable(format!("PDF runtime unavailable ({e})"))
+        }
+        other => RenderFailure::Other(format!("PDF rendering failed ({other})")),
+    }
 }

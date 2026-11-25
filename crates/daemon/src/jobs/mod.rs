@@ -108,10 +108,18 @@ pub struct JobContext<'a> {
     pub cancel: &'a Cancellation,
     progress: &'a dyn Fn(JobProgress) -> bool,
 }
-impl JobContext<'_> {
+impl<'a> JobContext<'a> {
     /// Records progress and renews the lease. `false`: stop (cancelled or lease lost).
     pub fn progress(&self, progress: JobProgress) -> bool {
         (self.progress)(progress) && !self.cancel.is_cancelled()
+    }
+    /// The same reporter detached from `self`, so a handler can hold it while it borrows `db`.
+    pub fn reporter<'b>(&self) -> impl Fn(JobProgress) -> bool + 'b
+    where
+        'a: 'b,
+    {
+        let (progress, cancel) = (self.progress, self.cancel);
+        move |p| progress(p) && !cancel.is_cancelled()
     }
 }
 
@@ -179,8 +187,43 @@ pub fn default_handlers() -> Vec<Arc<dyn JobHandler>> {
     vec![
         Arc::new(AttachmentImportHandler),
         Arc::new(DiagnosticWaitHandler),
+        Arc::new(crate::fulltext::SearchRebuildHandler),
     ]
 }
+
+/// #18: submit one ownerless `fulltext.extract {scope: pending}` job when PDF attachments
+/// await extraction and no extraction job is active. The idempotency key names the pending
+/// set and the work done/attempted on it (`Unfinished::key`), so a set whose job failed
+/// without progress is not resubmitted in a loop (explicit retry remains).
+fn ensure_extraction(control: &Mutex<LibraryDb>, handlers: &Handlers) -> Option<JobRow> {
+    use cm_protocol::jobs::kinds::FULLTEXT_EXTRACT;
+    if !handlers.contains_key(FULLTEXT_EXTRACT) {
+        return None;
+    }
+    let mut db = control.lock().unwrap_or_else(|e| e.into_inner());
+    let key = db.fulltext_reader().unfinished().ok()?.key()?;
+    let mut jobs = db.daemon_jobs();
+    if jobs
+        .list(None, true)
+        .ok()?
+        .iter()
+        .any(|j| j.kind == FULLTEXT_EXTRACT)
+    {
+        return None;
+    }
+    jobs.submit(&NewJob {
+        kind: FULLTEXT_EXTRACT,
+        idempotency_key: &key,
+        payload_json: AUTO_EXTRACT_PAYLOAD,
+        owner_grant: None,
+        max_attempts: 3,
+        deadline_at_ms: None,
+        now_ms: now_ms(),
+    })
+    .ok()
+    .map(|(row, _)| row)
+}
+const AUTO_EXTRACT_PAYLOAD: &str = "{\"scope\":{\"kind\":\"pending\"},\"force\":false}";
 
 type Handlers = Arc<HashMap<&'static str, Arc<dyn JobHandler>>>;
 
@@ -401,6 +444,38 @@ impl JobEngine {
         let _ = self.wake.send(());
         status(row)
     }
+    /// Submits automatic extraction for pending PDF attachments (no-op without an extractor).
+    pub fn ensure_extraction(&self) {
+        if ensure_extraction(&self.control, &self.handlers).is_some() {
+            let _ = self.wake.send(());
+        }
+    }
+    /// Daemon-initiated (ownerless) job, e.g. `search.rebuild` after detected index damage.
+    /// Visible to GrantAdmin sessions; idempotent on `(kind, key)`.
+    pub fn submit_system(
+        &self,
+        kind: &str,
+        key: &str,
+        payload: Value,
+    ) -> Result<JobStatus, WireError> {
+        let handler = self
+            .handlers
+            .get(kind)
+            .ok_or_else(|| invalid("unknown job kind"))?;
+        handler.validate(&payload)?;
+        let payload = payload.to_string();
+        let (row, _) = self.db().daemon_jobs().submit(&NewJob {
+            kind: handler.kind(),
+            idempotency_key: key,
+            payload_json: &payload,
+            owner_grant: None,
+            max_attempts: self.policy.default_max_attempts,
+            deadline_at_ms: None,
+            now_ms: now_ms(),
+        })?;
+        let _ = self.wake.send(());
+        status(row)
+    }
     /// The grant was revoked: its queued/retry_wait jobs fail with `OWNER_REVOKED` now and
     /// its running job is told to stop (the runner records the same reason). Returns how many
     /// active jobs were affected.
@@ -498,7 +573,28 @@ impl Runner {
             self.refresh_active();
             match claimed {
                 Ok(Some(row)) => {
+                    let (id, kind) = (row.id, row.kind.clone());
                     self.execute(row);
+                    // New attachments (an attachment import or a #22 capture PDF fetch)
+                    // leave pending work. So does an extraction run that
+                    // ended on its budget, deferred an attachment, or ran while further PDFs
+                    // were attached (`ensure_extraction` is a no-op while it is active): when
+                    // it ends, the still-unfinished set gets a job. The idempotency key makes
+                    // this a no-op when the run made no progress; a cancelled run is not
+                    // resubmitted (the user stopped it).
+                    let resume = kind == cm_protocol::jobs::kinds::ATTACHMENT_IMPORT
+                        || kind == cm_protocol::jobs::kinds::CAPTURE_PDF_FETCH
+                        || (kind == cm_protocol::jobs::kinds::FULLTEXT_EXTRACT
+                            && self
+                                .db()
+                                .daemon_jobs()
+                                .get(id)
+                                .ok()
+                                .flatten()
+                                .is_some_and(|j| j.state != "cancelled"));
+                    if resume {
+                        ensure_extraction(&self.control, &self.handlers);
+                    }
                     self.refresh_active();
                 }
                 Ok(None) | Err(_) => {
