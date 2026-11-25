@@ -93,7 +93,7 @@ write. None of them returns stored content.
 | `GET /search` | papers:read + files:read + annotations:read | §13.3 shape + coverage; limits from #18 |
 | `GET /papers/{id}/fulltext/status` | papers:read | extraction state |
 | `GET /papers/{id}/fulltext` | files:read | `from_page`, `max_pages` 1..=50 (10), `max_chars` 1..=400000 (100000) |
-| `GET /attachments/{id}/pages/{page}` | files:read | RGBA as base64 JSON, `zoom` 0.1..=8, at most 4 000 000 pixels |
+| `GET /attachments/{id}/pages/{page}` | files:read | RGBA as base64 JSON (unchanged by the #85 binary IPC frames), `zoom` 0.1..=8, at most 4 000 000 pixels |
 | `GET /papers/{id}/annotations` | annotations:read | |
 | `POST /attachments/{id}/annotations` | annotations:write | `source` is always `ai` (unreviewed in the GUI) |
 | `PATCH /annotations/{id}`, `DELETE /annotations/{id}` | annotations:write | color/comment |

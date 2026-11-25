@@ -15,6 +15,8 @@ fn main() {
     };
     use cm_protocol::client::IpcLibraryClient;
     use std::{path::PathBuf, sync::Arc, time::Duration};
+    // #85: fixed glibc mmap threshold so freed page bitmaps return to the OS.
+    cm_daemon::malloc_tuning::apply();
     let fail = |error: &dyn std::fmt::Display| -> ! {
         eprintln!("Cannot prepare library service: {error}");
         std::process::exit(1);

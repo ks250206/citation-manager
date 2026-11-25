@@ -4,7 +4,7 @@ use super::annotations_ui::page_of;
 use super::*;
 use crate::annotations::{MARKER_H, MARKER_W, is_marker, marker_origin, placement, quads_of};
 use crate::pdf_viewer::{
-    self, BusyBackoff, RenderCache, RenderKey, TextPos, ZoomMode, capped_zoom, hit_char,
+    self, BusyBackoff, PageImage, RenderCache, RenderKey, TextPos, ZoomMode, capped_zoom, hit_char,
     layout_scale, page_offsets, page_range, render_zoom, rescale_offset, rotate, rotate_rgba,
     rotated_points, selected_text, step_zoom, visible_pages, wanted_pages,
 };
@@ -30,7 +30,7 @@ pub(super) struct Viewer {
     document_failure: Option<RenderFailure>,
     mode: ZoomMode,
     turns: u8,
-    cache: RenderCache<Arc<RenderImage>>,
+    cache: RenderCache<PageImage<Arc<RenderImage>>>,
     /// Request serial + cancellation per key; a reply applies only if its serial matches,
     /// so a late reply for a cancelled request cannot consume a newer request's slot.
     in_flight: HashMap<RenderKey, (u64, Cancellation)>,
@@ -217,7 +217,8 @@ impl Viewer {
     }
 }
 
-/// GPUI images are BGRA; the worker returns straight RGBA.
+/// GPUI images are BGRA; the worker returns straight RGBA. Converted in place: the buffer
+/// received from the daemon becomes the image without another copy.
 fn to_render_image(width: u32, height: u32, mut bgra: Vec<u8>) -> Option<Arc<RenderImage>> {
     for px in bgra.as_chunks_mut::<4>().0 {
         px.swap(0, 2);
@@ -226,9 +227,44 @@ fn to_render_image(width: u32, height: u32, mut bgra: Vec<u8>) -> Option<Arc<Ren
     Some(Arc::new(RenderImage::new(vec![image::Frame::new(buffer)])))
 }
 
+/// Pixel-less stand-in for a page image the GPU atlas already holds: same image id, so
+/// drawing finds the existing texture and `drop_image` releases it (#85). It is never
+/// uploaded itself, because its texture outlives it only while the page stays cached.
+fn texture_only(image: &Arc<RenderImage>) -> Arc<RenderImage> {
+    let mut stand_in = RenderImage::new(vec![image::Frame::new(image::RgbaImage::new(1, 1))]);
+    stand_in.id = image.id;
+    Arc::new(stand_in)
+}
+
+/// Draws a cached page from its texture, uploading the pixels on the first draw, and
+/// records that the GPU now holds them so the CPU copy can be released.
+fn page_canvas(page: &PageImage<Arc<RenderImage>>, width: f32, height: f32) -> AnyElement {
+    let image = page.image().clone();
+    let uploaded = page.upload_flag();
+    canvas(
+        |_, _, _| {},
+        move |bounds, _, window, _| {
+            if bounds.size.width <= px(0.) || bounds.size.height <= px(0.) {
+                return;
+            }
+            // Same call as `img()` with ObjectFit::Fill; on success the atlas has the tile
+            // (and its own copy of the pixels, uploaded before the next frame).
+            if window
+                .paint_image(bounds, bounds, Corners::default(), image, 0, false)
+                .is_ok()
+            {
+                uploaded.set(true);
+            }
+        },
+    )
+    .w(px(width))
+    .h(px(height))
+    .into_any_element()
+}
+
 impl LibraryView {
     /// Keep the viewer in step with the attachment chosen in the PDF host.
-    fn sync_viewer(&mut self, cx: &mut Context<Self>) {
+    fn sync_viewer(&mut self) {
         let wanted = self
             .host
             .selected
@@ -250,15 +286,26 @@ impl LibraryView {
                 }
                 if let Some(mut old) = viewer.take() {
                     old.cancel_all();
-                    for image in old.cache.drain() {
-                        cx.drop_image(image, None);
-                    }
+                    self.retired_images
+                        .extend(old.cache.drain().into_iter().map(PageImage::into_image));
                 }
                 *viewer = wanted.map(Viewer::new);
                 if viewer.is_some() {
                     crate::frame_timing::begin(crate::frame_timing::Span::PdfFirstPage, None);
                 }
             }
+        }
+    }
+    /// Runs from the message pump, outside any window update: frees the CPU pixels of pages
+    /// the GPU already holds and releases the textures of pages that left the cache. (Inside
+    /// a window update `drop_image(_, None)` cannot reach the window being updated, so the
+    /// texture would stay in its atlas.)
+    pub(super) fn release_page_memory(&mut self, cx: &mut Context<Self>) {
+        if let Some(v) = &mut self.viewer {
+            v.cache.release_uploaded(texture_only);
+        }
+        for image in self.retired_images.drain(..) {
+            cx.drop_image(image, None);
         }
     }
     /// Request the visible pages (± prefetch) that are not cached at the current zoom and
@@ -368,13 +415,15 @@ impl LibraryView {
                 v.labels.insert(page.page, page.label.clone());
                 v.chars.insert(page.page, page.chars);
                 v.failures.remove(&page.page);
-                let (w, h, rgba) = rotate_rgba(page.width, page.height, &page.rgba, v.turns);
+                // The reader thread handed over the only reference: take the buffer as is.
+                let rgba = Arc::try_unwrap(page.rgba).unwrap_or_else(|shared| (*shared).clone());
+                let (w, h, rgba) = rotate_rgba(page.width, page.height, rgba, v.turns);
                 let bytes = rgba.len();
                 match to_render_image(w, h, rgba) {
                     Some(image) => {
-                        for old in v.cache.insert(key, image, bytes) {
-                            cx.drop_image(old, None);
-                        }
+                        let evicted = v.cache.insert(key, PageImage::new(image), bytes);
+                        self.retired_images
+                            .extend(evicted.into_iter().map(PageImage::into_image));
                     }
                     None => {
                         v.failures.insert(
@@ -437,9 +486,8 @@ impl LibraryView {
             v.turns = (v.turns + 1) % 4;
             v.reset_attempts();
             // Bitmaps are rotated client-side; drop them so pages re-render rotated.
-            for image in v.cache.drain() {
-                cx.drop_image(image, None);
-            }
+            self.retired_images
+                .extend(v.cache.drain().into_iter().map(PageImage::into_image));
             v.scroll_to_page(page);
         }
         cx.notify();
@@ -485,7 +533,7 @@ impl LibraryView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        self.sync_viewer(cx);
+        self.sync_viewer();
         if let Some(v) = &mut self.viewer {
             v.device_scale = window.scale_factor();
             let pane = v.pane();
@@ -651,7 +699,7 @@ impl LibraryView {
                 let image = v
                     .cache
                     .peek(&RenderKey::new(v.attachment, page, capped_zoom(zoom, size)))
-                    .cloned();
+                    .map(|cached| page_canvas(cached, width, height));
                 if timing && image.is_some() {
                     painted.push(page);
                 }
@@ -797,10 +845,7 @@ impl LibraryView {
                     .border_color(rgb(tok().border))
                     .shadow(shadow_of(theme::Elevation::Raised))
                     .child(match image {
-                        Some(image) => img(ImageSource::Render(image))
-                            .w(px(width))
-                            .h(px(height))
-                            .into_any_element(),
+                        Some(canvas) => canvas,
                         None => div()
                             .size_full()
                             .flex()

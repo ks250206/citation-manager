@@ -1,11 +1,13 @@
 //! Local IPC envelope, handshake and framing (#25).
 //!
-//! Wire: each frame is a 4-byte big-endian length followed by that many bytes of UTF-8 JSON.
-//! The first client frame must be `ClientFrame::Hello`; nothing else is accepted (or read
-//! past the small handshake limit) before the daemon has authenticated the credential.
-//! Commands are grouped by feature module and `#[non_exhaustive]`: later issues add
-//! variants and bump `PROTOCOL_VERSION` only for incompatible changes.
+//! Wire: each frame is a 4-byte big-endian length followed by that many bytes of body:
+//! UTF-8 JSON, or (version 2, #85) JSON plus raw binary payloads for page bitmaps (see
+//! `frame`). The first client frame must be `ClientFrame::Hello`; nothing else is accepted
+//! (or read past the small handshake limit) before the daemon has authenticated the
+//! credential. Commands are grouped by feature module and `#[non_exhaustive]`: later issues
+//! add variants and bump `PROTOCOL_VERSION` only for incompatible changes.
 pub mod b64;
+pub mod blob;
 pub mod frame;
 mod pdf;
 pub use frame::{FrameError, read_frame, write_frame};
@@ -25,7 +27,9 @@ use crate::{
 pub use cm_core::policy::{Capability, CapabilitySet, Denial, GrantId, Operation, Requirement};
 use serde::{Deserialize, Serialize};
 
-pub const PROTOCOL_VERSION: u32 = 1;
+/// 2 (#85): page bitmaps travel as binary frame payloads instead of base64 JSON text.
+/// A version-1 peer is answered `VersionMismatch` (handshake frames stay plain JSON).
+pub const PROTOCOL_VERSION: u32 = 2;
 /// Pre-authentication frames are tiny; a larger first frame closes the connection.
 pub const MAX_HANDSHAKE_FRAME: u32 = 64 * 1024;
 pub const MAX_REQUEST_FRAME: u32 = 8 * 1024 * 1024;

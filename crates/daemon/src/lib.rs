@@ -13,5 +13,6 @@ pub mod fulltext;
 pub mod ipc;
 pub mod jobs;
 pub mod lifecycle;
+pub mod malloc_tuning;
 /// #27 local REST API listener (disabled unless the API settings enable it).
 pub mod rest;

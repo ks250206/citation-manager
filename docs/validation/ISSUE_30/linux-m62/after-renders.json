@@ -1,0 +1,353 @@
+{
+  "connections": 3,
+  "kind": "renders",
+  "method": "PdfCommand::Render over authenticated desktop IPC sessions (one per connection), as the GUI viewer requests pages; RSS by ps",
+  "pages": 20,
+  "pid": 11104,
+  "rows": [
+    {
+      "elapsed_ms": 71.34875100000001,
+      "height": 1853,
+      "page": 0,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 84.54555699999999,
+      "height": 1853,
+      "page": 3,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 82.62655600000001,
+      "height": 1853,
+      "page": 6,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 55.712534,
+      "height": 1853,
+      "page": 9,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 79.925515,
+      "height": 1853,
+      "page": 12,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 54.894878,
+      "height": 1853,
+      "page": 15,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 55.76412,
+      "height": 1853,
+      "page": 18,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 97.74882799999999,
+      "height": 1853,
+      "page": 1,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 83.116289,
+      "height": 1853,
+      "page": 4,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 58.551671,
+      "height": 1853,
+      "page": 7,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 79.86578499999999,
+      "height": 1853,
+      "page": 10,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 80.91116199999999,
+      "height": 1853,
+      "page": 13,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 55.806943,
+      "height": 1853,
+      "page": 16,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 54.31898,
+      "height": 1853,
+      "page": 19,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 120.93538400000001,
+      "height": 1853,
+      "page": 2,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 82.798879,
+      "height": 1853,
+      "page": 5,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 80.956889,
+      "height": 1853,
+      "page": 8,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 55.966891,
+      "height": 1853,
+      "page": 11,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 79.953282,
+      "height": 1853,
+      "page": 14,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 57.825588999999994,
+      "height": 1853,
+      "page": 17,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    }
+  ],
+  "rss_kib_after": 25884,
+  "rss_kib_before": 12188,
+  "rss_kib_settled": 25884,
+  "wall_ms": 526.8159860000001,
+  "zoom": 2.200000047683716,
+  "rusage": {
+    "user_s": 0.385996,
+    "system_s": 0.208761,
+    "max_rss_kib": 64324,
+    "in_blocks": 0,
+    "out_blocks": 104,
+    "voluntary_ctx": 1363,
+    "involuntary_ctx": 18
+  },
+  "peak_rss_kib_sampled": 35288,
+  "samples": [
+    {
+      "t": 0.0,
+      "papersd": {
+        "rss_kib": 6604,
+        "cpu_s": 0.0,
+        "read_bytes": 0,
+        "write_bytes": 20480,
+        "rchar": 18918,
+        "wchar": 6
+      }
+    },
+    {
+      "t": 0.255,
+      "papersd": {
+        "rss_kib": 35192,
+        "cpu_s": 0.0,
+        "read_bytes": 0,
+        "write_bytes": 53248,
+        "rchar": 10971444,
+        "wchar": 14
+      }
+    },
+    {
+      "t": 0.509,
+      "papersd": {
+        "rss_kib": 35288,
+        "cpu_s": 0.0,
+        "read_bytes": 0,
+        "write_bytes": 53248,
+        "rchar": 11815870,
+        "wchar": 14
+      }
+    },
+    {
+      "t": 0.763,
+      "papersd": {
+        "rss_kib": 25884,
+        "cpu_s": 0.0,
+        "read_bytes": 0,
+        "write_bytes": 53248,
+        "rchar": 11854253,
+        "wchar": 14
+      }
+    },
+    {
+      "t": 1.018,
+      "papersd": {
+        "rss_kib": 25884,
+        "cpu_s": 0.0,
+        "read_bytes": 0,
+        "write_bytes": 53248,
+        "rchar": 11854253,
+        "wchar": 14
+      }
+    },
+    {
+      "t": 1.272,
+      "papersd": {
+        "rss_kib": 25884,
+        "cpu_s": 0.0,
+        "read_bytes": 0,
+        "write_bytes": 53248,
+        "rchar": 11854253,
+        "wchar": 14
+      }
+    },
+    {
+      "t": 1.527,
+      "papersd": {
+        "rss_kib": 25884,
+        "cpu_s": 0.0,
+        "read_bytes": 0,
+        "write_bytes": 53248,
+        "rchar": 11854253,
+        "wchar": 14
+      }
+    },
+    {
+      "t": 1.782,
+      "papersd": {
+        "rss_kib": 25884,
+        "cpu_s": 0.0,
+        "read_bytes": 0,
+        "write_bytes": 53248,
+        "rchar": 11854253,
+        "wchar": 14
+      }
+    },
+    {
+      "t": 2.036,
+      "papersd": {
+        "rss_kib": 25884,
+        "cpu_s": 0.0,
+        "read_bytes": 0,
+        "write_bytes": 53248,
+        "rchar": 11854253,
+        "wchar": 14
+      }
+    },
+    {
+      "t": 2.291,
+      "papersd": {
+        "rss_kib": 25884,
+        "cpu_s": 0.0,
+        "read_bytes": 0,
+        "write_bytes": 53248,
+        "rchar": 11854253,
+        "wchar": 14
+      }
+    },
+    {
+      "t": 2.545,
+      "papersd": {
+        "rss_kib": 25884,
+        "cpu_s": 0.0,
+        "read_bytes": 0,
+        "write_bytes": 53248,
+        "rchar": 11854253,
+        "wchar": 14
+      }
+    },
+    {
+      "t": 2.8,
+      "papersd": {
+        "rss_kib": 25884,
+        "cpu_s": 0.0,
+        "read_bytes": 0,
+        "write_bytes": 53248,
+        "rchar": 11854253,
+        "wchar": 14
+      }
+    },
+    {
+      "t": 3.054,
+      "papersd": {
+        "rss_kib": 25884,
+        "cpu_s": 0.0,
+        "read_bytes": 0,
+        "write_bytes": 53248,
+        "rchar": 11854253,
+        "wchar": 14
+      }
+    },
+    {
+      "t": 3.309,
+      "papersd": {
+        "rss_kib": 25884,
+        "cpu_s": 0.0,
+        "read_bytes": 0,
+        "write_bytes": 53248,
+        "rchar": 11854253,
+        "wchar": 14
+      }
+    },
+    {
+      "t": 3.563,
+      "papersd": {
+        "rss_kib": 25884,
+        "cpu_s": 0.0,
+        "read_bytes": 0,
+        "write_bytes": 53248,
+        "rchar": 11854253,
+        "wchar": 14
+      }
+    },
+    {
+      "t": 3.818,
+      "papersd": {
+        "rss_kib": 25884,
+        "cpu_s": 0.0,
+        "read_bytes": 0,
+        "write_bytes": 53248,
+        "rchar": 11854253,
+        "wchar": 14
+      }
+    },
+    {
+      "t": 4.073,
+      "papersd": {
+        "rss_kib": 0,
+        "cpu_s": 0.0,
+        "read_bytes": 0,
+        "write_bytes": 53248,
+        "rchar": 11854253,
+        "wchar": 14
+      }
+    }
+  ]
+}

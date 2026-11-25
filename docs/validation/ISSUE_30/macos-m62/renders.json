@@ -1,0 +1,345 @@
+{
+  "connections": 3,
+  "kind": "renders",
+  "macos_memory": {
+    "footprint": "======================================================================\npapersd [15274]: 64-bit    Footprint: 7058 KB (16384 bytes per page)\n======================================================================\n\n  Dirty      Clean  Reclaimable    Regions    Category\n    ---        ---          ---        ---    ---\n1584 KB        0 B      5968 KB          1    MALLOC_NANO\n1296 KB        0 B      5504 KB          3    MALLOC_MEDIUM\n1136 KB        0 B          0 B          3    MALLOC_SMALL\n 551 KB        0 B          0 B        339    __DATA\n 528 KB        0 B          0 B        361    __DATA_CONST\n 432 KB        0 B          0 B          3    MALLOC_TINY\n 402 KB        0 B          0 B          1    page table\n 332 KB        0 B          0 B        106    __DATA_DIRTY\n 304 KB        0 B          0 B         20    stack\n 128 KB        0 B          0 B         14    MALLOC metadata\n 117 KB        0 B          0 B        746    unused dyld shared cache area\n 104 KB        0 B          0 B        209    __AUTH\n  48 KB        0 B          0 B         22    untagged (VM_ALLOCATE)\n  48 KB        0 B          0 B          2    __TPRO_CONST\n  16 KB        0 B          0 B          1    os_alloc_once\n  16 KB        0 B          0 B          1    MALLOC_LARGE\n  16 KB        0 B          0 B          1    Activity Tracing\n    0 B        0 B        42 MB          4    MALLOC_LARGE_REUSABLE\n    0 B    6464 KB          0 B        374    __TEXT\n    0 B      96 KB          0 B          3    mapped file\n    0 B      48 KB          0 B          4    __LINKEDIT\n    0 B        0 B          0 B        356    __AUTH_CONST\n    0 B        0 B          0 B          1    __FONT_DATA\n    ---        ---          ---        ---    ---\n7058 KB    6608 KB        54 MB       2577    TOTAL\n\nAuxiliary data:\n    phys_footprint: 7090 KB\n    phys_footprint_peak: 29 MB\n\n",
+    "vmmap_summary": "Process:         papersd [15274]\nPath:            /Users/USER/*/Bench.app/Contents/MacOS/papersd\nLoad Address:    0x102728000\nIdentifier:      papersd\nVersion:         0\nCode Type:       ARM64\nPlatform:        macOS\nParent Process:  Python [1195]\nTarget Type:     live task\n\nDate/Time:       2026-11-25 15:07:51.052 +0000\nLaunch Time:     2026-11-25 15:07:46.690 +0000\nOS Version:      macOS 15.8.2 (24H232)\nReport Version:  7\nAnalysis Tool:   /Applications/Xcode_16.4.app/Contents/Developer/usr/bin/vmmap\nAnalysis Tool Version:  Xcode 16.4 (16F6)\n\nPhysical footprint:         7090K\nPhysical footprint (peak):  29.0M\nIdle exit:                  untracked\n----\n\nReadOnly portion of Libraries: Total=930.8M resident=189.0M(20%) swapped_out_or_unallocated=741.8M(80%)\nWritable regions: Total=992.0M written=58.6M(6%) resident=58.7M(6%) swapped_out=0K(0%) unallocated=933.3M(94%)\n\n                                VIRTUAL RESIDENT    DIRTY  SWAPPED VOLATILE   NONVOL    EMPTY   REGION \nREGION TYPE                        SIZE     SIZE     SIZE     SIZE     SIZE     SIZE     SIZE    COUNT (non-coalesced) \n===========                     ======= ========    =====  ======= ========   ======    =====  ======= \nActivity Tracing                   256K      16K      16K       0K       0K      16K       0K        1 \nKernel Alloc Once                   32K      16K      16K       0K       0K       0K       0K        1 \nMALLOC guard page                   96K       0K       0K       0K       0K       0K       0K        6 \nMALLOC metadata                    128K     128K     128K       0K       0K       0K       0K        8 \nMALLOC_LARGE metadata               16K      16K      16K       0K       0K       0K       0K        1         see MALLOC ZONE table below\nMALLOC_LARGE_REUSABLE             42.3M    42.3M       0K       0K       0K       0K       0K        4         see MALLOC ZONE table below\nMALLOC_MEDIUM                    384.0M    6800K    1296K       0K       0K       0K       0K        3         see MALLOC ZONE table below\nMALLOC_NANO                      512.0M    7552K    1584K       0K       0K       0K       0K        1         see MALLOC ZONE table below\nMALLOC_SMALL                      24.0M    1136K    1136K       0K       0K       0K       0K        3         see MALLOC ZONE table below\nMALLOC_TINY                       3072K     432K     432K       0K       0K       0K       0K        3         see MALLOC ZONE table below\nSTACK GUARD                        144K       0K       0K       0K       0K       0K       0K        9 \nStack                             24.8M     304K     304K       0K       0K       0K       0K       10 \nStack Guard                       56.0M       0K       0K       0K       0K       0K       0K        1 \nVM_ALLOCATE                        160K       0K       0K       0K       0K       0K       0K       10 \nVM_ALLOCATE (reserved)            1152K       0K       0K       0K       0K       0K       0K        9         reserved VM address space (unallocated)\n__AUTH                            1143K     682K     104K       0K       0K       0K       0K      209 \n__AUTH_CONST                      24.6M    8988K       0K       0K       0K       0K       0K      356 \n__DATA                            4803K    3823K     551K       0K       0K       0K       0K      339 \n__DATA_CONST                      16.2M    8618K     528K       0K       0K       0K       0K      361 \n__DATA_DIRTY                       688K     553K     332K       0K       0K       0K       0K      106 \n__FONT_DATA                        2352       0K       0K       0K       0K       0K       0K        1 \n__LINKEDIT                       622.7M    26.7M       0K       0K       0K       0K       0K        3 \n__OBJC_RO                         61.4M    48.8M       0K       0K       0K       0K       0K        1 \n__OBJC_RW                         2397K    1997K      45K       0K       0K       0K       0K        1 \n__TEXT                           308.1M   162.3M       0K       0K       0K       0K       0K      374 \n__TPRO_CONST                       128K      64K      48K       0K       0K       0K       0K        2 \nmapped file                        112K      96K       0K       0K       0K       0K       0K        2 \npage table in kernel               402K     402K     402K       0K       0K       0K       0K        1 \nshared memory                       64K      48K      48K       0K       0K       0K       0K        3 \nunused but dirty shlib __DATA      121K     121K     121K       0K       0K       0K       0K       52 \n===========                     ======= ========    =====  ======= ========   ======    =====  ======= \nTOTAL                              2.0G   320.9M    7106K       0K       0K      16K       0K     1881 \nTOTAL, minus reserved VM space     2.0G   320.9M    7106K       0K       0K      16K       0K     1881 \n\n                                 VIRTUAL   RESIDENT      DIRTY    SWAPPED ALLOCATION      BYTES DIRTY+SWAP          REGION\nMALLOC ZONE                         SIZE       SIZE       SIZE       SIZE      COUNT  ALLOCATED  FRAG SIZE  % FRAG   COUNT\n===========                      =======  =========  =========  =========  =========  =========  =========  ======  ======\nDefaultMallocZone_0x103958000     512.0M      7552K      1584K         0K      13615       940K       644K     41%       1\nMallocHelperZone_0x103928000      411.0M      8384K      2880K         0K        992      1840K      1040K     37%      10\n===========                      =======  =========  =========  =========  =========  =========  =========  ======  ======\nTOTAL                             923.0M      15.6M      4464K         0K      14607      2780K      1684K     38%      11\n\n"
+  },
+  "method": "PdfCommand::Render over authenticated desktop IPC sessions (one per connection), as the GUI viewer requests pages; RSS by ps",
+  "pages": 20,
+  "pid": 15274,
+  "rows": [
+    {
+      "elapsed_ms": 623.035917,
+      "height": 1853,
+      "page": 0,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 70.312625,
+      "height": 1853,
+      "page": 3,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 197.791709,
+      "height": 1853,
+      "page": 6,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 127.148375,
+      "height": 1853,
+      "page": 9,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 183.45558400000002,
+      "height": 1853,
+      "page": 12,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 148.099917,
+      "height": 1853,
+      "page": 15,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 100.198333,
+      "height": 1853,
+      "page": 18,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 432.560333,
+      "height": 1853,
+      "page": 1,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 195.97916600000002,
+      "height": 1853,
+      "page": 4,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 188.070875,
+      "height": 1853,
+      "page": 7,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 169.7775,
+      "height": 1853,
+      "page": 10,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 88.160958,
+      "height": 1853,
+      "page": 13,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 165.67616600000002,
+      "height": 1853,
+      "page": 16,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 59.186125,
+      "height": 1853,
+      "page": 19,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 458.249333,
+      "height": 1853,
+      "page": 2,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 127.11716700000001,
+      "height": 1853,
+      "page": 5,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 145.53725,
+      "height": 1853,
+      "page": 8,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 63.506875,
+      "height": 1853,
+      "page": 11,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 127.60591700000002,
+      "height": 1853,
+      "page": 14,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    },
+    {
+      "elapsed_ms": 102.82433400000001,
+      "height": 1853,
+      "page": 17,
+      "rgba_bytes": 9702308,
+      "width": 1309
+    }
+  ],
+  "rss_kib_after": 72640,
+  "rss_kib_before": 8912,
+  "rss_kib_settled": 72656,
+  "wall_ms": 1562.885833,
+  "zoom": 2.200000047683716,
+  "rusage": {
+    "user_s": 0.39241499999999996,
+    "system_s": 0.377793,
+    "max_rss_kib": 72752,
+    "in_blocks": 0,
+    "out_blocks": 0,
+    "voluntary_ctx": 24816,
+    "involuntary_ctx": 472
+  },
+  "peak_rss_kib_sampled": 72704,
+  "samples": [
+    {
+      "t": 0.0,
+      "papersd": {
+        "rss_kib": 976,
+        "cpu_s": 0.01
+      }
+    },
+    {
+      "t": 0.367,
+      "papersd": {
+        "rss_kib": 29936,
+        "cpu_s": 0.14
+      }
+    },
+    {
+      "t": 0.689,
+      "papersd": {
+        "rss_kib": 71536,
+        "cpu_s": 0.36
+      }
+    },
+    {
+      "t": 1.104,
+      "papersd": {
+        "rss_kib": 71760,
+        "cpu_s": 0.57
+      }
+    },
+    {
+      "t": 1.475,
+      "papersd": {
+        "rss_kib": 72704,
+        "cpu_s": 0.72
+      }
+    },
+    {
+      "t": 1.863,
+      "papersd": {
+        "rss_kib": 72640,
+        "cpu_s": 0.76
+      }
+    },
+    {
+      "t": 2.266,
+      "papersd": {
+        "rss_kib": 72640,
+        "cpu_s": 0.76
+      }
+    },
+    {
+      "t": 2.554,
+      "papersd": {
+        "rss_kib": 72640,
+        "cpu_s": 0.76
+      }
+    },
+    {
+      "t": 2.958,
+      "papersd": {
+        "rss_kib": 72640,
+        "cpu_s": 0.76
+      }
+    },
+    {
+      "t": 3.299,
+      "papersd": {
+        "rss_kib": 72640,
+        "cpu_s": 0.76
+      }
+    },
+    {
+      "t": 3.578,
+      "papersd": {
+        "rss_kib": 72656,
+        "cpu_s": 0.76
+      }
+    },
+    {
+      "t": 3.868,
+      "papersd": {
+        "rss_kib": 72656,
+        "cpu_s": 0.76
+      }
+    },
+    {
+      "t": 4.21,
+      "papersd": {
+        "rss_kib": 72656,
+        "cpu_s": 0.76
+      }
+    },
+    {
+      "t": 4.536,
+      "papersd": {
+        "rss_kib": 72656,
+        "cpu_s": 0.76
+      }
+    },
+    {
+      "t": 4.901,
+      "papersd": {
+        "rss_kib": 72656,
+        "cpu_s": 0.76
+      }
+    },
+    {
+      "t": 5.238,
+      "papersd": {
+        "rss_kib": 72656,
+        "cpu_s": 0.76
+      }
+    },
+    {
+      "t": 5.533,
+      "papersd": {
+        "rss_kib": 72656,
+        "cpu_s": 0.76
+      }
+    },
+    {
+      "t": 5.889,
+      "papersd": {
+        "rss_kib": 72656,
+        "cpu_s": 0.76
+      }
+    },
+    {
+      "t": 6.184,
+      "papersd": {
+        "rss_kib": 72656,
+        "cpu_s": 0.76
+      }
+    },
+    {
+      "t": 6.487,
+      "papersd": {
+        "rss_kib": 72656,
+        "cpu_s": 0.76
+      }
+    },
+    {
+      "t": 6.864,
+      "papersd": {
+        "rss_kib": 72624,
+        "cpu_s": 0.76
+      }
+    },
+    {
+      "t": 7.268,
+      "papersd": {
+        "rss_kib": 72624,
+        "cpu_s": 0.76
+      }
+    },
+    {
+      "t": 7.666,
+      "papersd": {
+        "rss_kib": 72624,
+        "cpu_s": 0.76
+      }
+    },
+    {
+      "t": 7.923,
+      "papersd": {
+        "rss_kib": 72624,
+        "cpu_s": 0.76
+      }
+    },
+    {
+      "t": 8.251,
+      "papersd": {
+        "rss_kib": 72624,
+        "cpu_s": 0.77
+      }
+    }
+  ]
+}

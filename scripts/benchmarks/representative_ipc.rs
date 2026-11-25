@@ -9,11 +9,16 @@
 //! full-text queries (FTS and Japanese short terms) and an exact recall check of page hits
 //! against the generator's literal oracle. Raw samples only; quantiles are computed by
 //! the Python runner (nearest rank).
+//! `renders LIBRARY RUNTIME SEED PAGES ZOOM CONNECTIONS` (#85): the PDF viewer's daemon side
+//! without a GUI (also on macOS runners): renders the first PAGES pages of the first corpus
+//! PDF at ZOOM over CONNECTIONS concurrent sessions (the viewer keeps up to 3 renders in
+//! flight) and records papersd's RSS before, after and 2 s after the renders.
 use cm_daemon::lifecycle::{DaemonPaths, euid, local_connector};
 use cm_protocol::{
+    attachments::PdfReply,
     client::{Session, local::Launch},
     domain::{AttachmentId, CollectionId, PaperId, TagId},
-    ipc::{Command, Reply},
+    ipc::{Command, PdfCommand, Reply},
     library_query::{LibraryFilter, LibraryQuery, TagMatch},
     search::{DocumentSource, SearchCoverage, SearchReply, SearchRequest, ShortTermScope},
 };
@@ -402,6 +407,99 @@ fn queries(
         "method": "one authenticated desktop IPC session; each timed call is a full request/response round trip (frame encode, auth check, service, decode)"}))
 }
 
+fn open_session(library: &Path, runtime: &Path) -> Result<Session> {
+    let connector = local_connector(paths(library, runtime)?, "desktop");
+    let opened = Instant::now();
+    loop {
+        match Session::open(&connector) {
+            Ok(session) => return Ok(session),
+            Err(e) if opened.elapsed() > Duration::from_secs(60) => return Err(e.into()),
+            Err(_) => std::thread::sleep(Duration::from_millis(20)),
+        }
+    }
+}
+
+fn renders(
+    library: &Path,
+    runtime: &Path,
+    seed: &Path,
+    pages: u32,
+    zoom: f32,
+    connections: u32,
+) -> Result<Value> {
+    let seed: Value = serde_json::from_str(&std::fs::read_to_string(seed)?)?;
+    let attachment = AttachmentId(
+        seed["attachments"][0]
+            .as_str()
+            .ok_or("seed has no attachments")?
+            .parse()?,
+    );
+    let mut session = open_session(library, runtime)?;
+    let pid = match call(&mut session, Command::Status)? {
+        Reply::Status(status) => status.pid,
+        other => return Err(format!("unexpected {other:?}").into()),
+    };
+    let rss_before = rss_kib(pid);
+    let started = Instant::now();
+    let workers: Vec<_> = (0..connections.max(1))
+        .map(|lane| {
+            let (library, runtime) = (library.to_path_buf(), runtime.to_path_buf());
+            std::thread::spawn(move || -> std::result::Result<Vec<Value>, String> {
+                let mut session = open_session(&library, &runtime).map_err(|e| e.to_string())?;
+                let mut rows = Vec::new();
+                for page in (lane..pages).step_by(connections.max(1) as usize) {
+                    let t = Instant::now();
+                    let command = Command::Pdf(PdfCommand::Render {
+                        attachment,
+                        page,
+                        zoom,
+                    });
+                    match call(&mut session, command).map_err(|e| e.to_string())? {
+                        Reply::Pdf(PdfReply::Page(Ok(p))) => rows.push(json!({
+                            "page": page, "elapsed_ms": ms(t), "width": p.width,
+                            "height": p.height, "rgba_bytes": p.rgba.len()})),
+                        other => return Err(format!("page {page}: unexpected {other:?}")),
+                    }
+                }
+                Ok(rows)
+            })
+        })
+        .collect();
+    let mut rows = Vec::new();
+    for worker in workers {
+        rows.extend(worker.join().map_err(|_| "render worker panicked")??);
+    }
+    let wall_ms = ms(started);
+    let rss_after = rss_kib(pid);
+    std::thread::sleep(Duration::from_secs(2));
+    let rss_settled = rss_kib(pid);
+    // macOS: `ps` RSS also counts freed allocations libmalloc keeps as reusable pages, so
+    // record the physical footprint and the region summary too (diagnostic text).
+    let macos_memory = cfg!(target_os = "macos").then(|| {
+        let tool = |program: &str, args: &[&str]| {
+            std::process::Command::new(program)
+                .args(args)
+                .output()
+                .map(|o| {
+                    let text = String::from_utf8_lossy(&o.stdout).into_owned()
+                        + &String::from_utf8_lossy(&o.stderr);
+                    text.chars().take(8000).collect::<String>()
+                })
+                .unwrap_or_else(|e| format!("{program}: {e}"))
+        };
+        let pid = pid.to_string();
+        json!({"footprint": tool("footprint", &[&pid]),
+               "vmmap_summary": tool("vmmap", &["-summary", &pid])})
+    });
+    Ok(
+        json!({"kind": "renders", "pid": pid, "pages": pages, "zoom": zoom,
+        "connections": connections, "wall_ms": wall_ms, "rows": rows,
+        "rss_kib_before": rss_before, "rss_kib_after": rss_after,
+        "rss_kib_settled": rss_settled, "macos_memory": macos_memory,
+        "method": "PdfCommand::Render over authenticated desktop IPC sessions (one per connection), as the GUI viewer requests pages; RSS by ps"}),
+    )
+}
+
 fn main() -> Result<()> {
     if cfg!(debug_assertions) {
         return Err("benchmark executable requires --release".into());
@@ -423,7 +521,15 @@ fn main() -> Result<()> {
             &p(&args[4]),
             samples.parse()?,
         )?,
-        _ => return Err("usage: warm-start PAPERSD LIB RUNTIME REPEATS IDLE_MS | queries LIB RUNTIME ORACLE SEED SAMPLES".into()),
+        ["renders", _, _, _, pages, zoom, connections] => renders(
+            &p(&args[1]),
+            &p(&args[2]),
+            &p(&args[3]),
+            pages.parse()?,
+            zoom.parse()?,
+            connections.parse()?,
+        )?,
+        _ => return Err("usage: warm-start PAPERSD LIB RUNTIME REPEATS IDLE_MS | queries LIB RUNTIME ORACLE SEED SAMPLES | renders LIB RUNTIME SEED PAGES ZOOM CONNECTIONS".into()),
     };
     println!("{}", serde_json::to_string_pretty(&report)?);
     Ok(())

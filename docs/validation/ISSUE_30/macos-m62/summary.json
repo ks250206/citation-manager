@@ -1,0 +1,816 @@
+{
+  "quantile": "nearest rank sorted[ceil(p*N)-1]",
+  "measured": {
+    "warm_start_ms": 122.581833,
+    "warm_start_p95_ms": 241.82999999999998,
+    "collection_switch_p95_ms": 9.762,
+    "tag_and_switch_p95_ms": 10.029417,
+    "metadata_search_p95_ms": 137.826792,
+    "metadata_keyword_p95_ms": 17.296499999999998,
+    "metadata_fts_p95_ms": 32.188041,
+    "fulltext_search_p95_ms": 62.73891700000001,
+    "fulltext_search_p95_ms_all_terms_default_scope": 109.057959,
+    "fulltext_in_collection_p95_ms": 124.48258299999999,
+    "short_term_all_pages_call_p95_ms": 158.005875,
+    "daemon_idle_rss_mib_after_warm_start": 10.546875,
+    "daemon_peak_rss_mib_indexing": 46.515625,
+    "daemon_peak_rss_mib_queries": 19.9375,
+    "gui_idle_rss_mib": null,
+    "total_idle_rss_mib_gui_plus_daemon": null,
+    "pdf_view_rss_mib": null,
+    "daemon_rss_mib_after_renders": 70.953125,
+    "daemon_peak_rss_mib_renders": 71.0
+  },
+  "targets": [
+    {
+      "metric": "warm_start_ms",
+      "target": "温かい起動 1秒程度",
+      "limit": 1000.0,
+      "measured": 122.581833,
+      "status": "met"
+    },
+    {
+      "metric": "collection_switch_p95_ms",
+      "target": "コレクション切り替え p95 < 100 ms",
+      "limit": 100.0,
+      "measured": 9.762,
+      "status": "met"
+    },
+    {
+      "metric": "metadata_search_p95_ms",
+      "target": "メタデータ検索 p95 < 150 ms",
+      "limit": 150.0,
+      "measured": 137.826792,
+      "status": "met"
+    },
+    {
+      "metric": "fulltext_search_p95_ms",
+      "target": "本文全文検索 p95 < 300 ms",
+      "limit": 300.0,
+      "measured": 62.73891700000001,
+      "status": "met"
+    },
+    {
+      "metric": "gui_idle_rss_mib",
+      "target": "GUI アイドル RSS < 200 MB",
+      "limit": 200.0,
+      "measured": null,
+      "status": "unmeasured"
+    },
+    {
+      "metric": "pdf_view_rss_mib",
+      "target": "PDF 1本閲覧時 RSS < 350 MB",
+      "limit": 350.0,
+      "measured": null,
+      "status": "unmeasured"
+    }
+  ],
+  "cases": {
+    "collection_switch": {
+      "samples": 210,
+      "p50_ms": 4.663958999999999,
+      "p95_ms": 9.762,
+      "max_ms": 29.893875,
+      "returned": [
+        100
+      ],
+      "detail": {
+        "collection": 9
+      }
+    },
+    "fts_bibliographic:needle": {
+      "samples": 21,
+      "p50_ms": 20.762666999999997,
+      "p95_ms": 32.188041,
+      "max_ms": 32.382917,
+      "returned": [
+        50
+      ],
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 1428,
+        "unsearched": "[]"
+      }
+    },
+    "fulltext_default:dendrite": {
+      "samples": 21,
+      "p50_ms": 16.703916999999997,
+      "p95_ms": 26.321416,
+      "max_ms": 38.116833,
+      "returned": [
+        50
+      ],
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 400,
+        "unsearched": "[]"
+      }
+    },
+    "fulltext_default:lithium": {
+      "samples": 21,
+      "p50_ms": 46.68425,
+      "p95_ms": 81.73441600000001,
+      "max_ms": 108.817416,
+      "returned": [
+        50
+      ],
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 4000,
+        "unsearched": "[]"
+      }
+    },
+    "fulltext_default:zirconia": {
+      "samples": 21,
+      "p50_ms": 6.5022079999999995,
+      "p95_ms": 10.38,
+      "max_ms": 10.728708,
+      "returned": [
+        21
+      ],
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 21,
+        "unsearched": "[]"
+      }
+    },
+    "fulltext_default:固体電解質": {
+      "samples": 21,
+      "p50_ms": 9.543334,
+      "p95_ms": 13.377708,
+      "max_ms": 14.6915,
+      "returned": [
+        50
+      ],
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 207,
+        "unsearched": "[]"
+      }
+    },
+    "fulltext_default:電": {
+      "samples": 21,
+      "p50_ms": 94.664333,
+      "p95_ms": 164.422459,
+      "max_ms": 280.294625,
+      "returned": [
+        0
+      ],
+      "detail": {
+        "complete": false,
+        "fts_truncated": false,
+        "scanned_documents": 2000,
+        "short_terms": [
+          "電"
+        ],
+        "timed_out": false,
+        "total_hits": 0,
+        "unsearched": "[PdfPagesForShortTerms, DocumentsAfterWindow]"
+      }
+    },
+    "fulltext_default:電池": {
+      "samples": 21,
+      "p50_ms": 93.710417,
+      "p95_ms": 114.69491699999999,
+      "max_ms": 116.245792,
+      "returned": [
+        0
+      ],
+      "detail": {
+        "complete": false,
+        "fts_truncated": false,
+        "scanned_documents": 2000,
+        "short_terms": [
+          "電池"
+        ],
+        "timed_out": false,
+        "total_hits": 0,
+        "unsearched": "[PdfPagesForShortTerms, DocumentsAfterWindow]"
+      }
+    },
+    "fulltext_default:電解質": {
+      "samples": 21,
+      "p50_ms": 19.760584,
+      "p95_ms": 33.156959,
+      "max_ms": 55.46229099999999,
+      "returned": [
+        50
+      ],
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 1730,
+        "unsearched": "[]"
+      }
+    },
+    "fulltext_in_collection:dendrite": {
+      "samples": 21,
+      "p50_ms": 18.352541,
+      "p95_ms": 30.131375,
+      "max_ms": 40.615917,
+      "returned": [
+        50
+      ],
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 100,
+        "unsearched": "[]"
+      }
+    },
+    "fulltext_in_collection:lithium": {
+      "samples": 21,
+      "p50_ms": 43.193791000000004,
+      "p95_ms": 61.422334,
+      "max_ms": 68.879625,
+      "returned": [
+        50
+      ],
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 800,
+        "unsearched": "[]"
+      }
+    },
+    "fulltext_in_collection:zirconia": {
+      "samples": 21,
+      "p50_ms": 5.880875,
+      "p95_ms": 9.324792,
+      "max_ms": 11.085125,
+      "returned": [
+        7
+      ],
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 7,
+        "unsearched": "[]"
+      }
+    },
+    "fulltext_in_collection:固体電解質": {
+      "samples": 21,
+      "p50_ms": 10.689792,
+      "p95_ms": 23.752499999999998,
+      "max_ms": 39.396791,
+      "returned": [
+        44
+      ],
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 44,
+        "unsearched": "[]"
+      }
+    },
+    "fulltext_in_collection:電": {
+      "samples": 21,
+      "p50_ms": 103.708709,
+      "p95_ms": 132.220167,
+      "max_ms": 215.718834,
+      "returned": [
+        0
+      ],
+      "detail": {
+        "complete": false,
+        "fts_truncated": false,
+        "scanned_documents": 2000,
+        "short_terms": [
+          "電"
+        ],
+        "timed_out": false,
+        "total_hits": 0,
+        "unsearched": "[DocumentsAfterWindow]"
+      }
+    },
+    "fulltext_in_collection:電池": {
+      "samples": 21,
+      "p50_ms": 109.39720799999999,
+      "p95_ms": 141.08991600000002,
+      "max_ms": 195.54733399999998,
+      "returned": [
+        0
+      ],
+      "detail": {
+        "complete": false,
+        "fts_truncated": false,
+        "scanned_documents": 2000,
+        "short_terms": [
+          "電池"
+        ],
+        "timed_out": false,
+        "total_hits": 0,
+        "unsearched": "[DocumentsAfterWindow]"
+      }
+    },
+    "fulltext_in_collection:電解質": {
+      "samples": 21,
+      "p50_ms": 18.064875,
+      "p95_ms": 37.807416,
+      "max_ms": 49.863583000000006,
+      "returned": [
+        50
+      ],
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 349,
+        "unsearched": "[]"
+      }
+    },
+    "metadata_combined": {
+      "samples": 21,
+      "p50_ms": 112.26870799999999,
+      "p95_ms": 134.797417,
+      "max_ms": 137.826792,
+      "returned": [
+        71
+      ],
+      "detail": {}
+    },
+    "metadata_keyword": {
+      "samples": 21,
+      "p50_ms": 13.263292,
+      "p95_ms": 17.296499999999998,
+      "max_ms": 22.305458,
+      "returned": [
+        100
+      ],
+      "detail": {}
+    },
+    "metadata_no_hit": {
+      "samples": 21,
+      "p50_ms": 111.278917,
+      "p95_ms": 139.01404200000002,
+      "max_ms": 211.56525000000002,
+      "returned": [
+        0
+      ],
+      "detail": {}
+    },
+    "tag_and_switch": {
+      "samples": 168,
+      "p50_ms": 4.576417,
+      "p95_ms": 10.029417,
+      "max_ms": 30.043292,
+      "returned": [
+        100
+      ],
+      "detail": {
+        "tag": 7
+      }
+    }
+  },
+  "recall": [
+    {
+      "term": "dendrite",
+      "scalars": 8,
+      "scope": "Bounded",
+      "expected": 400,
+      "found": 400,
+      "recall": 1.0,
+      "false_positives": 0,
+      "windows": 1,
+      "calls": 4,
+      "call_p95_ms": 17.540042,
+      "total_ms": 61.868834,
+      "complete": true,
+      "unsearched": "[]"
+    },
+    {
+      "term": "dendrite",
+      "scalars": 8,
+      "scope": "AllPages",
+      "expected": 400,
+      "found": 400,
+      "recall": 1.0,
+      "false_positives": 0,
+      "windows": 1,
+      "calls": 4,
+      "call_p95_ms": 23.950417,
+      "total_ms": 74.401709,
+      "complete": true,
+      "unsearched": "[]"
+    },
+    {
+      "term": "lithium",
+      "scalars": 7,
+      "scope": "Bounded",
+      "expected": 4000,
+      "found": 4000,
+      "recall": 1.0,
+      "false_positives": 0,
+      "windows": 1,
+      "calls": 40,
+      "call_p95_ms": 68.22275,
+      "total_ms": 2232.168,
+      "complete": true,
+      "unsearched": "[]"
+    },
+    {
+      "term": "lithium",
+      "scalars": 7,
+      "scope": "AllPages",
+      "expected": 4000,
+      "found": 4000,
+      "recall": 1.0,
+      "false_positives": 0,
+      "windows": 1,
+      "calls": 40,
+      "call_p95_ms": 68.90675,
+      "total_ms": 2226.841042,
+      "complete": true,
+      "unsearched": "[]"
+    },
+    {
+      "term": "zirconia",
+      "scalars": 8,
+      "scope": "Bounded",
+      "expected": 21,
+      "found": 21,
+      "recall": 1.0,
+      "false_positives": 0,
+      "windows": 1,
+      "calls": 1,
+      "call_p95_ms": 5.046583,
+      "total_ms": 5.054958,
+      "complete": true,
+      "unsearched": "[]"
+    },
+    {
+      "term": "zirconia",
+      "scalars": 8,
+      "scope": "AllPages",
+      "expected": 21,
+      "found": 21,
+      "recall": 1.0,
+      "false_positives": 0,
+      "windows": 1,
+      "calls": 1,
+      "call_p95_ms": 4.301791,
+      "total_ms": 4.311292000000001,
+      "complete": true,
+      "unsearched": "[]"
+    },
+    {
+      "term": "固体電解質",
+      "scalars": 5,
+      "scope": "Bounded",
+      "expected": 207,
+      "found": 207,
+      "recall": 1.0,
+      "false_positives": 0,
+      "windows": 1,
+      "calls": 3,
+      "call_p95_ms": 20.376792000000002,
+      "total_ms": 39.564625,
+      "complete": true,
+      "unsearched": "[]"
+    },
+    {
+      "term": "固体電解質",
+      "scalars": 5,
+      "scope": "AllPages",
+      "expected": 207,
+      "found": 207,
+      "recall": 1.0,
+      "false_positives": 0,
+      "windows": 1,
+      "calls": 3,
+      "call_p95_ms": 14.412167,
+      "total_ms": 30.767792,
+      "complete": true,
+      "unsearched": "[]"
+    },
+    {
+      "term": "電",
+      "scalars": 1,
+      "scope": "Bounded",
+      "expected": 5765,
+      "found": 0,
+      "recall": 0.0,
+      "false_positives": 0,
+      "windows": 5,
+      "calls": 5,
+      "call_p95_ms": 130.867334,
+      "total_ms": 344.718125,
+      "complete": false,
+      "unsearched": "[PdfPagesForShortTerms]"
+    },
+    {
+      "term": "電",
+      "scalars": 1,
+      "scope": "AllPages",
+      "expected": 5765,
+      "found": 5765,
+      "recall": 1.0,
+      "false_positives": 0,
+      "windows": 15,
+      "calls": 65,
+      "call_p95_ms": 161.03504099999998,
+      "total_ms": 8163.325499999999,
+      "complete": true,
+      "unsearched": "[]"
+    },
+    {
+      "term": "電池",
+      "scalars": 2,
+      "scope": "Bounded",
+      "expected": 2858,
+      "found": 0,
+      "recall": 0.0,
+      "false_positives": 0,
+      "windows": 5,
+      "calls": 5,
+      "call_p95_ms": 72.38,
+      "total_ms": 234.324833,
+      "complete": false,
+      "unsearched": "[PdfPagesForShortTerms]"
+    },
+    {
+      "term": "電池",
+      "scalars": 2,
+      "scope": "AllPages",
+      "expected": 2858,
+      "found": 2858,
+      "recall": 1.0,
+      "false_positives": 0,
+      "windows": 15,
+      "calls": 35,
+      "call_p95_ms": 131.091542,
+      "total_ms": 3684.7382079999998,
+      "complete": true,
+      "unsearched": "[]"
+    },
+    {
+      "term": "電解質",
+      "scalars": 3,
+      "scope": "Bounded",
+      "expected": 1730,
+      "found": 1730,
+      "recall": 1.0,
+      "false_positives": 0,
+      "windows": 1,
+      "calls": 18,
+      "call_p95_ms": 17.702708,
+      "total_ms": 247.780042,
+      "complete": true,
+      "unsearched": "[]"
+    },
+    {
+      "term": "電解質",
+      "scalars": 3,
+      "scope": "AllPages",
+      "expected": 1730,
+      "found": 1730,
+      "recall": 1.0,
+      "false_positives": 0,
+      "windows": 1,
+      "calls": 18,
+      "call_p95_ms": 19.714458,
+      "total_ms": 242.82675,
+      "complete": true,
+      "unsearched": "[]"
+    }
+  ],
+  "fulltext_complete_cases": 5,
+  "fulltext_cases": 7,
+  "parameters": {
+    "papers": 10000,
+    "pdfs": 1000,
+    "pages_per_pdf": 20,
+    "pages": 20000,
+    "samples": 21,
+    "warm_repeats": 11,
+    "seed": 30
+  },
+  "timings": {
+    "build_s": 331.427919792,
+    "corpus_s": 13.125345541999991
+  },
+  "seed": {
+    "papers": {
+      "method": "dedicated fixture SQL connection, one transaction, FULL/WAL (search triggers fire); not CRUD throughput",
+      "papers": 10000,
+      "seed_ms": 9134.699666999999
+    },
+    "pdfs": 1000,
+    "pdf_bytes": 38458344,
+    "attach_ms": 5372.300958000001
+  },
+  "index": {
+    "wall_s_including_idle_exit": 54.763561041,
+    "extract_jobs_span_s": 52.557,
+    "rusage": {
+      "user_s": 36.21227,
+      "system_s": 8.093618,
+      "max_rss_kib": 47680,
+      "in_blocks": 0,
+      "out_blocks": 0,
+      "voluntary_ctx": 67915,
+      "involuntary_ctx": 9770
+    },
+    "peak_rss_kib": 47632,
+    "last_io": {
+      "rss_kib": 47632,
+      "cpu_s": 44.3
+    }
+  },
+  "stats": {
+    "integrity_check": "ok",
+    "papers": 10000,
+    "attachments": 1000,
+    "fulltext_pages": 20000,
+    "fulltext_text_bytes": 46929456,
+    "search_documents": 30000,
+    "extraction_states": {
+      "complete": {
+        "attachments": 1000,
+        "pages": 20000,
+        "pages_with_text": 20000
+      }
+    },
+    "index_bytes": {
+      "fulltext_pages": 82112512,
+      "search_documents": 92385280,
+      "search_documents_attachment": 1105920,
+      "search_documents_paper": 1605632,
+      "search_fts_trigram_config": 4096,
+      "search_fts_trigram_data": 143159296,
+      "search_fts_trigram_docsize": 552960,
+      "search_fts_trigram_idx": 376832,
+      "search_fts_words_config": 4096,
+      "search_fts_words_data": 46198784,
+      "search_fts_words_docsize": 573440,
+      "search_fts_words_idx": 229376,
+      "search_index_state": 4096,
+      "sqlite_autoindex_search_documents_1": 978944
+    },
+    "index_bytes_total": 369291264,
+    "file_bytes": {
+      "attachments_dir": 38458344,
+      "backups_dir": 311296,
+      "library_sqlite": 402014208,
+      "library_sqlite_wal": 0
+    }
+  },
+  "corpus": {
+    "generated_chars": 29262108,
+    "pdf_bytes": 38458344,
+    "corpus_sha256": "886109ea7f2061ac5528d5380580eb3e5767ab93bb4e369c53a888a95f9df2d0",
+    "terms": {
+      "電": 5765,
+      "電池": 2858,
+      "電解質": 1730,
+      "固体電解質": 207,
+      "lithium": 4000,
+      "dendrite": 400,
+      "zirconia": 21
+    }
+  },
+  "warm_runs": [
+    {
+      "repeat": 0,
+      "first_page_ms": 149.326666,
+      "connected_ms": 142.979375,
+      "rss_kib": 10768
+    },
+    {
+      "repeat": 1,
+      "first_page_ms": 168.789166,
+      "connected_ms": 164.34516599999998,
+      "rss_kib": 10704
+    },
+    {
+      "repeat": 2,
+      "first_page_ms": 160.09625,
+      "connected_ms": 150.435,
+      "rss_kib": 10624
+    },
+    {
+      "repeat": 3,
+      "first_page_ms": 82.302417,
+      "connected_ms": 75.918417,
+      "rss_kib": 10784
+    },
+    {
+      "repeat": 4,
+      "first_page_ms": 60.438125,
+      "connected_ms": 56.243584,
+      "rss_kib": 10656
+    },
+    {
+      "repeat": 5,
+      "first_page_ms": 112.931208,
+      "connected_ms": 105.45887499999999,
+      "rss_kib": 10736
+    },
+    {
+      "repeat": 6,
+      "first_page_ms": 241.82999999999998,
+      "connected_ms": 236.886333,
+      "rss_kib": 10672
+    },
+    {
+      "repeat": 7,
+      "first_page_ms": 153.20975,
+      "connected_ms": 146.419666,
+      "rss_kib": 10688
+    },
+    {
+      "repeat": 8,
+      "first_page_ms": 132.679958,
+      "connected_ms": 124.457916,
+      "rss_kib": 10688
+    },
+    {
+      "repeat": 9,
+      "first_page_ms": 122.581833,
+      "connected_ms": 110.9205,
+      "rss_kib": 10800
+    },
+    {
+      "repeat": 10,
+      "first_page_ms": 121.055333,
+      "connected_ms": 111.929125,
+      "rss_kib": 10384
+    }
+  ],
+  "queries_rusage": {
+    "user_s": 29.341053,
+    "system_s": 8.197615,
+    "max_rss_kib": 20464,
+    "in_blocks": 0,
+    "out_blocks": 0,
+    "voluntary_ctx": 11005,
+    "involuntary_ctx": 13377
+  },
+  "queries_rss_kib_before": 9088,
+  "queries_rss_kib_after": 20384,
+  "gui": {},
+  "renders": {
+    "connections": 3,
+    "kind": "renders",
+    "macos_memory": {
+      "footprint": "======================================================================\npapersd [15274]: 64-bit    Footprint: 7058 KB (16384 bytes per page)\n======================================================================\n\n  Dirty      Clean  Reclaimable    Regions    Category\n    ---        ---          ---        ---    ---\n1584 KB        0 B      5968 KB          1    MALLOC_NANO\n1296 KB        0 B      5504 KB          3    MALLOC_MEDIUM\n1136 KB        0 B          0 B          3    MALLOC_SMALL\n 551 KB        0 B          0 B        339    __DATA\n 528 KB        0 B          0 B        361    __DATA_CONST\n 432 KB        0 B          0 B          3    MALLOC_TINY\n 402 KB        0 B          0 B          1    page table\n 332 KB        0 B          0 B        106    __DATA_DIRTY\n 304 KB        0 B          0 B         20    stack\n 128 KB        0 B          0 B         14    MALLOC metadata\n 117 KB        0 B          0 B        746    unused dyld shared cache area\n 104 KB        0 B          0 B        209    __AUTH\n  48 KB        0 B          0 B         22    untagged (VM_ALLOCATE)\n  48 KB        0 B          0 B          2    __TPRO_CONST\n  16 KB        0 B          0 B          1    os_alloc_once\n  16 KB        0 B          0 B          1    MALLOC_LARGE\n  16 KB        0 B          0 B          1    Activity Tracing\n    0 B        0 B        42 MB          4    MALLOC_LARGE_REUSABLE\n    0 B    6464 KB          0 B        374    __TEXT\n    0 B      96 KB          0 B          3    mapped file\n    0 B      48 KB          0 B          4    __LINKEDIT\n    0 B        0 B          0 B        356    __AUTH_CONST\n    0 B        0 B          0 B          1    __FONT_DATA\n    ---        ---          ---        ---    ---\n7058 KB    6608 KB        54 MB       2577    TOTAL\n\nAuxiliary data:\n    phys_footprint: 7090 KB\n    phys_footprint_peak: 29 MB\n\n",
+      "vmmap_summary": "Process:         papersd [15274]\nPath:            /Users/USER/*/Bench.app/Contents/MacOS/papersd\nLoad Address:    0x102728000\nIdentifier:      papersd\nVersion:         0\nCode Type:       ARM64\nPlatform:        macOS\nParent Process:  Python [1195]\nTarget Type:     live task\n\nDate/Time:       2026-11-25 15:07:51.052 +0000\nLaunch Time:     2026-11-25 15:07:46.690 +0000\nOS Version:      macOS 15.8.2 (24H232)\nReport Version:  7\nAnalysis Tool:   /Applications/Xcode_16.4.app/Contents/Developer/usr/bin/vmmap\nAnalysis Tool Version:  Xcode 16.4 (16F6)\n\nPhysical footprint:         7090K\nPhysical footprint (peak):  29.0M\nIdle exit:                  untracked\n----\n\nReadOnly portion of Libraries: Total=930.8M resident=189.0M(20%) swapped_out_or_unallocated=741.8M(80%)\nWritable regions: Total=992.0M written=58.6M(6%) resident=58.7M(6%) swapped_out=0K(0%) unallocated=933.3M(94%)\n\n                                VIRTUAL RESIDENT    DIRTY  SWAPPED VOLATILE   NONVOL    EMPTY   REGION \nREGION TYPE                        SIZE     SIZE     SIZE     SIZE     SIZE     SIZE     SIZE    COUNT (non-coalesced) \n===========                     ======= ========    =====  ======= ========   ======    =====  ======= \nActivity Tracing                   256K      16K      16K       0K       0K      16K       0K        1 \nKernel Alloc Once                   32K      16K      16K       0K       0K       0K       0K        1 \nMALLOC guard page                   96K       0K       0K       0K       0K       0K       0K        6 \nMALLOC metadata                    128K     128K     128K       0K       0K       0K       0K        8 \nMALLOC_LARGE metadata               16K      16K      16K       0K       0K       0K       0K        1         see MALLOC ZONE table below\nMALLOC_LARGE_REUSABLE             42.3M    42.3M       0K       0K       0K       0K       0K        4         see MALLOC ZONE table below\nMALLOC_MEDIUM                    384.0M    6800K    1296K       0K       0K       0K       0K        3         see MALLOC ZONE table below\nMALLOC_NANO                      512.0M    7552K    1584K       0K       0K       0K       0K        1         see MALLOC ZONE table below\nMALLOC_SMALL                      24.0M    1136K    1136K       0K       0K       0K       0K        3         see MALLOC ZONE table below\nMALLOC_TINY                       3072K     432K     432K       0K       0K       0K       0K        3         see MALLOC ZONE table below\nSTACK GUARD                        144K       0K       0K       0K       0K       0K       0K        9 \nStack                             24.8M     304K     304K       0K       0K       0K       0K       10 \nStack Guard                       56.0M       0K       0K       0K       0K       0K       0K        1 \nVM_ALLOCATE                        160K       0K       0K       0K       0K       0K       0K       10 \nVM_ALLOCATE (reserved)            1152K       0K       0K       0K       0K       0K       0K        9         reserved VM address space (unallocated)\n__AUTH                            1143K     682K     104K       0K       0K       0K       0K      209 \n__AUTH_CONST                      24.6M    8988K       0K       0K       0K       0K       0K      356 \n__DATA                            4803K    3823K     551K       0K       0K       0K       0K      339 \n__DATA_CONST                      16.2M    8618K     528K       0K       0K       0K       0K      361 \n__DATA_DIRTY                       688K     553K     332K       0K       0K       0K       0K      106 \n__FONT_DATA                        2352       0K       0K       0K       0K       0K       0K        1 \n__LINKEDIT                       622.7M    26.7M       0K       0K       0K       0K       0K        3 \n__OBJC_RO                         61.4M    48.8M       0K       0K       0K       0K       0K        1 \n__OBJC_RW                         2397K    1997K      45K       0K       0K       0K       0K        1 \n__TEXT                           308.1M   162.3M       0K       0K       0K       0K       0K      374 \n__TPRO_CONST                       128K      64K      48K       0K       0K       0K       0K        2 \nmapped file                        112K      96K       0K       0K       0K       0K       0K        2 \npage table in kernel               402K     402K     402K       0K       0K       0K       0K        1 \nshared memory                       64K      48K      48K       0K       0K       0K       0K        3 \nunused but dirty shlib __DATA      121K     121K     121K       0K       0K       0K       0K       52 \n===========                     ======= ========    =====  ======= ========   ======    =====  ======= \nTOTAL                              2.0G   320.9M    7106K       0K       0K      16K       0K     1881 \nTOTAL, minus reserved VM space     2.0G   320.9M    7106K       0K       0K      16K       0K     1881 \n\n                                 VIRTUAL   RESIDENT      DIRTY    SWAPPED ALLOCATION      BYTES DIRTY+SWAP          REGION\nMALLOC ZONE                         SIZE       SIZE       SIZE       SIZE      COUNT  ALLOCATED  FRAG SIZE  % FRAG   COUNT\n===========                      =======  =========  =========  =========  =========  =========  =========  ======  ======\nDefaultMallocZone_0x103958000     512.0M      7552K      1584K         0K      13615       940K       644K     41%       1\nMallocHelperZone_0x103928000      411.0M      8384K      2880K         0K        992      1840K      1040K     37%      10\n===========                      =======  =========  =========  =========  =========  =========  =========  ======  ======\nTOTAL                             923.0M      15.6M      4464K         0K      14607      2780K      1684K     38%      11\n\n"
+    },
+    "method": "PdfCommand::Render over authenticated desktop IPC sessions (one per connection), as the GUI viewer requests pages; RSS by ps",
+    "pages": 20,
+    "pid": 15274,
+    "rss_kib_after": 72640,
+    "rss_kib_before": 8912,
+    "rss_kib_settled": 72656,
+    "wall_ms": 1562.885833,
+    "zoom": 2.200000047683716,
+    "rusage": {
+      "user_s": 0.39241499999999996,
+      "system_s": 0.377793,
+      "max_rss_kib": 72752,
+      "in_blocks": 0,
+      "out_blocks": 0,
+      "voluntary_ctx": 24816,
+      "involuntary_ctx": 472
+    },
+    "peak_rss_kib_sampled": 72704
+  },
+  "environment_file": "environment.json"
+}

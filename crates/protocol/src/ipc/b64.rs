@@ -1,7 +1,6 @@
-//! Standard base64 (RFC 4648, padded) for bitmap payloads in JSON frames. Dependency-free
-//! because the protocol crate may only depend on serde/serde_json/uuid.
-use serde::{Deserialize, Deserializer, Serializer, de::Error};
-use std::sync::Arc;
+//! Standard base64 (RFC 4648, padded) for binary data in JSON outside IPC frames (REST page
+//! renders and cursors, the JSON form of `blob` fields). Dependency-free because the
+//! protocol crate may only depend on serde/serde_json/uuid.
 
 const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
@@ -58,16 +57,6 @@ pub fn decode(text: &str) -> Option<Vec<u8>> {
         out.extend_from_slice(&produced[..3 - pad]);
     }
     Some(out)
-}
-
-pub fn serialize<S: Serializer>(data: &Arc<[u8]>, serializer: S) -> Result<S::Ok, S::Error> {
-    serializer.serialize_str(&encode(data))
-}
-pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Arc<[u8]>, D::Error> {
-    let text = String::deserialize(deserializer)?;
-    decode(&text)
-        .map(Into::into)
-        .ok_or_else(|| D::Error::custom("invalid base64"))
 }
 
 #[cfg(test)]

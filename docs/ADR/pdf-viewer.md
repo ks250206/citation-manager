@@ -26,6 +26,29 @@ Status: accepted for #17. Builds on #11 (PDFium worker), #15 (Details › PDF sl
   budget. Render zoom is bucketed to 0.05 so tiny layout changes reuse bitmaps. Only the
   visible/prefetch working set refreshes recency; building the page column reads cached
   bitmaps without reordering (`peek`), so offscreen pages are evicted before visible ones.
+  (#30 lowered the budget to 64 MiB.)
+- #85 page memory: the bitmap arrives as a raw binary IPC payload (no base64) and becomes the
+  GPU image in place (no copy without a user rotation). A page is drawn by a canvas that calls
+  `paint_image` and then flags the page as uploaded; from the next message-pump tick
+  (`release_page_memory`, every 16 ms) the cache keeps only a 1x1 stand-in `RenderImage`
+  with the same image id (`PageImage`, `texture_only`), so the CPU copy is freed while the
+  atlas texture keeps showing the page. Re-display (scroll back, repaint) draws from that
+  texture; a page whose texture is released (eviction, rotation, another document) leaves
+  the cache with it and is rendered again, never drawn from the stand-in
+  (`drawn_pages_release_their_cpu_pixels_and_redisplay_from_the_texture`). Textures are
+  released (`drop_image`) from the message pump, outside window updates: inside one,
+  `drop_image(_, None)` cannot reach the window being updated and the texture stayed in its
+  atlas (rotation and document switches leaked textures before #85). The byte budget still
+  counts each cached page, so it now bounds texture memory.
+  Limitation: if the GPU renderer clears its atlas (device loss or repeated GPU errors), a
+  released page would be redrawn from its 1x1 stand-in until it leaves the cache; changing
+  zoom or rotation re-renders it.
+- papersd and the GUI re-execute themselves once at start on glibc Linux with
+  `GLIBC_TUNABLES=glibc.malloc.mmap_threshold=262144` (`cm_daemon::malloc_tuning`), so freed
+  bitmap-sized buffers go back to the OS instead of staying in the heap (glibc's dynamic
+  threshold otherwise serves them from the heap after the first one is freed). A threshold the
+  user already set (in `GLIBC_TUNABLES` or `MALLOC_MMAP_THRESHOLD_`) is left alone. Measurements:
+  [ISSUE_30 #85](../validation/ISSUE_30.md#85-pdf-閲覧時のメモリ削減).
 - User rotation is applied to the bitmap client-side (`rotate_rgba`); the effective rotation for
   geometry is page /Rotate + user turns. A test proves the rotated bitmap and the effective
   `Viewport` agree pixel-for-pixel for all 16 combinations.

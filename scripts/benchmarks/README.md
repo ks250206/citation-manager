@@ -154,8 +154,10 @@ a GitHub macOS arm64 runner (not the DESIGN §16.1 machine). Steps: release buil
 with planted English/Japanese terms and a literal per-line oracle), direct-SQL seeding of the
 papers plus `ManagedAttachments::import` of every PDF, automatic extraction by `papersd`
 (sampled RSS/CPU, `/proc/<pid>/io` on Linux, `wait4` rusage), lazy-start warm starts through
-the GUI/CLI `Launch` path, IPC query workload and exact recall, optional GUI phases.
-Output: `target/representative-benchmark/<NAME>/{environment,seed,stats,index,warm,queries,summary}.json`.
+the GUI/CLI `Launch` path, IPC query workload and exact recall, page renders over IPC (#85:
+the first PDF's pages at the GUI's fit-width zoom over 3 connections, papersd RSS before/after;
+the PDF viewer's daemon side, measured on macOS runners too), optional GUI phases.
+Output: `target/representative-benchmark/<NAME>/{environment,seed,stats,index,warm,queries,renders,summary}.json`.
 Quantiles are nearest rank. Only self-created libraries under that directory are touched.
 
 # #86 GUI frame timing (perceived performance)
