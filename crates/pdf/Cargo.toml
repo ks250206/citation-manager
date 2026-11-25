@@ -5,8 +5,12 @@ edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 
-[lints]
-workspace = true
+# The workspace forbids `unsafe_code`. cm-pdf alone denies it instead so that the single
+# audited FFI module `src/appearance.rs` (#20: FPDFAnnot_SetAP, which pdfium-render 0.9.5 only
+# exposes as an unsafe binding) can opt in; every other module still fails to compile with
+# `unsafe`. See docs/ADR/pdf-export.md.
+[lints.rust]
+unsafe_code = "deny"
 
 [dependencies]
 cm-domain.workspace = true
@@ -45,4 +49,8 @@ required-features = ["runtime"]
 
 [[test]]
 name = "extract_runtime"
+required-features = ["runtime"]
+
+[[test]]
+name = "export_runtime"
 required-features = ["runtime"]

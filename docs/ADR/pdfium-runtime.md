@@ -78,6 +78,11 @@ character の tight box は ink bounds、quad は axis-aligned loose bounds の 
 
 ## Export-only 代替の決定
 
+> **#20 で更新:** 製品の export は pypdf を使わない。`Operation::Export` が Rust から
+> `FPDFAnnot_SetAP` で `/AP /N` を生成し（`AppearanceStatus::NormalAppearanceGenerated`）、
+> 再読込で検証してから保存する。以下は M0 PoC 時点の記録で、`complete_appearances.py` は
+> 退役（verify.py が「既存 AP を上書きしない」確認にのみ使用）。詳細は [pdf-export](pdf-export.md)。
+
 実測: PDFium 8125 + wrapper 0.9.5 で Highlight/複数 quads/Unicode Contents/Text note を作成・保存・
 再読込できた。ただし **元 corpus の8件と継承 corpus の4件の全注釈で `/AP` が欠落**。PDFKit は独自 appearance を合成して表示するが、
 それを persistent appearance の成功と呼ばない。Rust の `NativeExport` は

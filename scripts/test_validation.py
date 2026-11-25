@@ -20,6 +20,36 @@ class ArchitectureTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'forbidden dependency'):
             architecture.validate(metadata)
 
+    def test_unsafe_is_confined_to_the_pdfium_appearance_module(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'Cargo.toml').write_text('[workspace.lints.rust]\nunsafe_code = "forbid"\n')
+            for crate, lints in [('core', '[lints]\nworkspace = true\n'),
+                                 ('pdf', '[lints.rust]\nunsafe_code = "deny"\n')]:
+                (root / 'crates' / crate / 'src').mkdir(parents=True)
+                (root / 'crates' / crate / 'Cargo.toml').write_text(lints)
+            allowed = root / 'crates/pdf/src/appearance.rs'
+            allowed.write_text('#![allow(unsafe_code)]\nfn f() { unsafe { g() } }\n')
+            ok = root / 'crates/core/src/lib.rs'
+            ok.write_text('// an unsafe { comment } is fine\nlet s = "unsafe path";\n')
+            (root / 'target/debug').mkdir(parents=True)
+            (root / 'target/debug/gen.rs').write_text('unsafe { x() }')
+            architecture.check_unsafe(root)
+            for bad in ['fn f() { unsafe { g() } }', 'unsafe fn f() {}', 'unsafe impl Send for X {}',
+                        '#![allow(unsafe_code)]', '#[allow( unsafe_code )] mod m;']:
+                with self.subTest(bad=bad):
+                    ok.write_text(bad)
+                    with self.assertRaisesRegex(ValueError, 'unsafe code outside'):
+                        architecture.check_unsafe(root)
+            ok.write_text('')
+            (root / 'crates/core/Cargo.toml').write_text('[lints.rust]\nunsafe_code = "deny"\n')
+            with self.assertRaisesRegex(ValueError, 'must inherit'):
+                architecture.check_unsafe(root)
+            (root / 'crates/core/Cargo.toml').write_text('[lints]\nworkspace = true\n')
+            (root / 'Cargo.toml').write_text('[workspace.lints.rust]\nunsafe_code = "deny"\n')
+            with self.assertRaisesRegex(ValueError, 'must forbid'):
+                architecture.check_unsafe(root)
+
     def test_daemon_desktop_bootstrap_has_only_the_narrow_optional_edge(self):
         metadata = self.metadata()
         daemon = next(p for p in metadata['packages'] if p['name'] == 'cm-daemon')

@@ -4,12 +4,6 @@ use super::{Command, Requirement};
 pub fn deferred_commands() -> Vec<Command> {
     [
         (
-            "pdf.save",
-            "Save Current PDF",
-            20,
-            "PDF export is not connected",
-        ),
-        (
             "pdf.highlight_selection",
             "Highlight Selection",
             21,

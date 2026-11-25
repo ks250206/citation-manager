@@ -2,6 +2,7 @@
 mod annotations;
 pub(crate) mod files;
 mod pdf;
+mod pdf_export;
 mod settings;
 use cm_core::{import::ImportCoordinator, papers::PaperService, ports::ImportService};
 use cm_protocol::{
@@ -477,6 +478,27 @@ impl LibraryClient for InProcessLibraryClient {
                             if spawned.is_err() {
                                 // `complete` moved into the closure; the caller's lost-reply
                                 // guard reports Unavailable when it is dropped.
+                            }
+                        }
+                    },
+                }))
+                .map_err(|_| ServiceError::Unavailable);
+        }
+        if let PdfRequest::Export(request) = request {
+            // Same split as Render: validate and plan on the library worker, then PDFium,
+            // the temp file, re-read verification and the final move on a helper thread.
+            return self
+                .sender
+                .try_send(Box::new(move |worker| match worker {
+                    Err(e) => complete(Err(e)),
+                    Ok(worker) => match worker.begin_pdf_export(request) {
+                        Err(failure) => complete(Ok(PdfReply::Exported(Err(failure)))),
+                        Ok(pending) => {
+                            let spawned = thread::Builder::new()
+                                .name("pdf-export".into())
+                                .spawn(move || complete(Ok(PdfReply::Exported(pending.finish()))));
+                            if spawned.is_err() {
+                                // As for renders: the dropped `complete` reports Unavailable.
                             }
                         }
                     },
