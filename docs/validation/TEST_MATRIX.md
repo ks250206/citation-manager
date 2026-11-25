@@ -61,6 +61,7 @@ GitHub runner の OS/Xcode 差による失敗は PR 上で実結果を確認す�
 | PDFium runtime/ABI/文字位置/注釈 roundtrip #11 | implementing agent が fixture 自動検証、UI可能 agent。fallback Ryoji Kanno | **未実施**。dylib 未選択/未同梱。ABI/load path、corpus、Unicode/回転/複数行、出力再読込を証拠化 |
 | .app resource配置/遅延起動/寿命 #34 | implementing agent + macOS実機操作可能 agent。fallback Ryoji Kanno | **未実施**。.app 未作成。bundle移動/GUIなし/同時起動/idleとjob中の寿命/PDFium pathを記録 |
 | 認可境界 #25/#26 | implementing agent が自動セキュリティ回帰、ユーザー同意UIは実機可能 agent / Ryoji Kanno | #25: Linux 自動回帰 passed（[ISSUE_25](ISSUE_25.md)）。macOS peer/.app、#26 同意UI/永続token管理は**未実施** |
+| 全文抽出/検索 #18 | implementing agent が Linux 自動回帰と pin 済み Linux PDFium 実抽出 | Linux 自動回帰と実 PDFium 抽出→検索 passed（[ISSUE_18](ISSUE_18.md)）。macOS PDFium/.app 同梱 (#34)、GUI 検索 (#21)、1万件/2万頁負荷 (#30) は**未実施** |
 | Chrome/Firefox保存 #23/#24 | implementing agent がfixture、自動化可能な実ブラウザ agent。fallback Ryoji Kanno | **未実施**。拡張/host未実装。両ブラウザでGUI閉鎖時の保存/重複/失敗再試行を記録。#22 の daemon 側 capture/PDF job は Linux 自動試験済み（[ISSUE_22](ISSUE_22.md)） |
 | MCP stdio tools #29 | implementing agent が公式SDK/clientから自動試験 | **未実施**。入口は Unavailable。read-only/write許可・出典ページ・stdout純度・transport停止を検証 |
 | Developer ID / notarization / DMG #31 | Ryoji Kanno が Developer ID と Apple 公証権限を用意し、権限を与えた配布担当 agent が実行 | **blocker**: `security find-identity -v -p codesigning` → `0 valid identities found`。Developer ID署名・notarizationは未検証。秘密は保存/Issue公開しない |

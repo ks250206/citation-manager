@@ -47,7 +47,8 @@ pub struct ClientTimeouts {
     pub handshake: Duration,
     /// Socket write limit for request and cancel frames. Default 30 s.
     pub write: Duration,
-    /// `Status`, `Jobs`, `Grants`: answered on the daemon's connection thread. Default 30 s.
+    /// `Status`, `Jobs`, `Grants`, `Search`, `Fulltext`: answered on the daemon's connection
+    /// thread. Default 30 s.
     pub control: Duration,
     /// Library CRUD, queries, organization, lifecycle, settings, DOI resolve: they queue
     /// behind the daemon's single library worker. Default 5 min.
@@ -81,6 +82,9 @@ impl ClientTimeouts {
     pub fn for_command(&self, command: &Command) -> Duration {
         match command {
             Command::Status | Command::Jobs(_) | Command::Grants(_) => self.control,
+            // #18: bounded by the request's scan budget (<= 10 s) and FTS candidate caps.
+            Command::Search(_) | Command::Fulltext(_) => self.control,
+            Command::Annotations(_) => self.interactive,
             Command::Library(_)
             | Command::Query(_)
             | Command::Organization(_)
@@ -661,6 +665,27 @@ impl LibraryClient for IpcLibraryClient {
             complete,
             |r| match r {
                 Reply::Exported(e) => Some(e),
+                _ => None,
+            },
+        )
+    }
+    fn annotations(
+        &self,
+        request: crate::annotations::AnnotationRequest,
+        complete: crate::library::Reply<crate::annotations::AnnotationReply>,
+    ) -> Result<(), ServiceError> {
+        // Propose's token is not serialized; the transport forwards it as a Cancel frame.
+        let cancel = match &request {
+            crate::annotations::AnnotationRequest::Propose { cancel, .. } => Some(cancel.clone()),
+            _ => None,
+        };
+        self.typed(
+            Command::Annotations(request),
+            cancel,
+            None,
+            complete,
+            |r| match r {
+                Reply::Annotations(a) => Some(a),
                 _ => None,
             },
         )

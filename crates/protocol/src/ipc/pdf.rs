@@ -32,6 +32,12 @@ pub enum PdfCommand {
         index: usize,
     },
     List(PaperId),
+    /// #17 viewer page render (the token stays client-side; see `ClientFrame::Cancel`).
+    Render {
+        attachment: crate::domain::AttachmentId,
+        page: u32,
+        zoom: f32,
+    },
 }
 impl PdfCommand {
     /// Splits the cancellation token (kept by the client) from the serializable command.
@@ -68,6 +74,14 @@ impl PdfCommand {
                 (Self::RetryAttachment { index }, Some(cancel))
             }
             PdfRequest::List(paper) => (Self::List(paper), None),
+            PdfRequest::Render(r) => (
+                Self::Render {
+                    attachment: r.attachment,
+                    page: r.page,
+                    zoom: r.zoom,
+                },
+                Some(r.cancel),
+            ),
         }
     }
     /// Daemon side: bind the command to a daemon-owned token for this request.
@@ -99,6 +113,16 @@ impl PdfCommand {
             },
             Self::RetryAttachment { index } => PdfRequest::RetryAttachment { index, cancel },
             Self::List(paper) => PdfRequest::List(paper),
+            Self::Render {
+                attachment,
+                page,
+                zoom,
+            } => PdfRequest::Render(crate::attachments::RenderRequest {
+                attachment,
+                page,
+                zoom,
+                cancel,
+            }),
         }
     }
     pub fn operation(&self) -> Operation {
@@ -109,6 +133,7 @@ impl PdfCommand {
             Self::CommitNew { .. } => Operation::PdfCommitNew,
             Self::RetryAttachment { .. } => Operation::PdfRetryAttachment,
             Self::List(_) => Operation::AttachmentList,
+            Self::Render { .. } => Operation::PdfRender,
         }
     }
 }

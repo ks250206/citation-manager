@@ -142,6 +142,9 @@ carries the job status (or `pdf_error` if submission failed — the paper is sti
   attachment write between a capture preview and its commit makes the commit fail with
   `Conflict`; the client must preview again. Clients should commit promptly; the #18 revision
   refinement is the long-term fix.
+- A successful `capture.pdf_fetch` attachment is indexed like any other PDF: when the job
+  ends, papersd submits the #18 `fulltext.extract {scope: pending}` job (no-op while one is
+  active or when no extractor is configured).
 - The `loopback-test-server` feature (loopback-permitting policy, fixture server) is enabled
   only by `cm-daemon`'s dev-dependency. `scripts/check_architecture.py` rejects it on any normal
   or build dependency edge, in any default or feature table; `cargo tree -e normal,build,features`

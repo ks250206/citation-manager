@@ -12,10 +12,13 @@ macro_rules! primary {
         concat!("ctrl-", $key)
     };
 }
+mod annotations_ui;
 mod details_ui;
 mod import_ui;
 mod library_ui;
+mod palette_ui;
 mod pdf_ui;
+mod pdf_viewer_ui;
 mod settings_ui;
 mod text_input;
 use self::text_input::TextInput;
@@ -52,6 +55,13 @@ actions!(
         ShowLibrary,
         ShowImportReview,
         ShowOrganize,
+        OpenPalette,
+        PaletteNext,
+        PalettePrevious,
+        PaletteClose,
+        CopySelection,
+        AnnotationUndo,
+        AnnotationRedo,
     ]
 );
 enum Event {
@@ -68,6 +78,16 @@ enum Event {
     SaveSettings(Result<(), ServiceError>),
     Export(Result<Exported, ServiceError>),
     Progress(PdfReport),
+    /// Page render replies bypass the single-ticket lanes; the viewer tracks them by key.
+    Render(
+        crate::pdf_viewer::RenderKey,
+        u64,
+        Result<PdfReply, ServiceError>,
+    ),
+    Annotation(
+        Box<annotations_ui::AnnOp>,
+        Result<cm_protocol::annotations::AnnotationReply, ServiceError>,
+    ),
 }
 struct Message {
     lane: Lane,
@@ -138,6 +158,23 @@ struct LibraryView {
     editing_tag: Option<TagId>,
     parent: Option<CollectionId>,
     picker_generation: u64,
+    registry: crate::commands::CommandRegistry,
+    keymap: crate::keymap::Keymap,
+    keymap_custom: bool,
+    keymap_diagnostics: Vec<String>,
+    keymap_path: Option<String>,
+    resolver: crate::keymap::KeyResolver,
+    started: std::time::Instant,
+    palette_open: bool,
+    palette_index: usize,
+    palette_query: Entity<TextInput>,
+    palette_scroll: ScrollHandle,
+    viewer: Option<pdf_viewer_ui::Viewer>,
+    ann: annotations_ui::AnnotationState,
+    /// Page to show once the viewer for that attachment is ready (from the Notes list).
+    pending_jump: Option<(AttachmentId, u32)>,
+    viewer_focus: FocusHandle,
+    page_input: Entity<TextInput>,
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Screen {
@@ -148,7 +185,7 @@ enum Screen {
     Report,
 }
 impl LibraryView {
-    fn new(client: Arc<dyn LibraryClient>, cx: &mut Context<Self>) -> Self {
+    fn new(client: Arc<dyn LibraryClient>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let (sender, receiver) = mpsc::channel();
         let fields = crate::details::FIELDS
             .iter()
@@ -208,7 +245,44 @@ impl LibraryView {
             editing_tag: None,
             parent: None,
             picker_generation: 0,
+            registry: crate::commands::CommandRegistry::m1(),
+            keymap: crate::keymap::Keymap::defaults(&crate::commands::CommandRegistry::m1())
+                .expect("built-in keymap is valid"),
+            keymap_custom: false,
+            keymap_diagnostics: vec![],
+            keymap_path: None,
+            resolver: crate::keymap::KeyResolver::new(
+                crate::keymap::Keymap::defaults(&crate::commands::CommandRegistry::m1())
+                    .expect("built-in keymap is valid"),
+            ),
+            started: std::time::Instant::now(),
+            palette_open: false,
+            palette_index: 0,
+            palette_query: cx.new(|cx| TextInput::new("Type a command…", cx)),
+            palette_scroll: ScrollHandle::new(),
+            viewer: None,
+            ann: annotations_ui::AnnotationState::new(cx),
+            pending_jump: None,
+            viewer_focus: cx.focus_handle(),
+            page_input: cx.new(|cx| TextInput::new("Page", cx)),
         };
+        view.subscribe_viewer_inputs(window, cx);
+        view.subscribe_annotation_inputs(window, cx);
+        cx.subscribe(
+            &view.palette_query,
+            |this, _, _: &text_input::Edited, cx| {
+                this.palette_index = 0;
+                this.palette_scroll.scroll_to_item(0);
+                cx.notify();
+            },
+        )
+        .detach();
+        cx.subscribe_in(
+            &view.palette_query,
+            window,
+            |this, _, _: &text_input::Submitted, window, cx| this.palette_confirm(window, cx),
+        )
+        .detach();
         for field in &view.fields {
             cx.subscribe(field, |this, _, _: &text_input::Edited, cx| {
                 this.dirty = true;
@@ -333,6 +407,17 @@ impl LibraryView {
         cx.notify();
     }
     fn receive(&mut self, message: Message, cx: &mut Context<Self>) {
+        let message = match message.event {
+            Event::Render(key, serial, result) => {
+                self.render_reply(key, serial, result, cx);
+                return;
+            }
+            Event::Annotation(op, result) => {
+                self.annotation_reply(*op, result, cx);
+                return;
+            }
+            event => Message { event, ..message },
+        };
         if let Event::Progress(report) = message.event {
             if self.pending.get(&message.lane) == Some(&message.ticket) {
                 self.pdf_report = report;
@@ -414,17 +499,32 @@ impl LibraryView {
             },
             Event::LoadSettings(result) => match result {
                 Ok(loaded) => {
+                    self.apply_keymap(loaded.keymap.as_deref(), loaded.keymap_path.as_deref());
                     self.settings = loaded.settings;
                     self.library.query.sort = self.settings.sort;
                     self.reload(cx);
                     if let Some(warning) = loaded.warning {
                         self.status(warning, true, cx);
+                    } else if !self.keymap_diagnostics.is_empty() {
+                        self.status(
+                            format!(
+                                "keymap.json ignored ({} problem(s)); using built-in keys. Details: Organize & export › Keyboard",
+                                self.keymap_diagnostics.len()
+                            ),
+                            true,
+                            cx,
+                        );
+                    } else if self.keymap_custom {
+                        self.status("Custom keymap loaded", false, cx);
+                    } else if self.message.starts_with("Reloading") {
+                        self.status("Settings reloaded; using the built-in keymap", false, cx);
                     }
                 }
                 Err(e) => self.status(format!("Using default layout: {e}"), true, cx),
             },
             Event::SaveSettings(result) => match result {
-                Ok(()) => self.status("Layout saved", false, cx),
+                // Saves are frequent (layout, history); only failures need attention.
+                Ok(()) => (),
                 Err(e) => self.status(format!("Layout changed but not saved: {e}"), true, cx),
             },
             Event::Import(result) => self.import_reply(result, cx),
@@ -455,7 +555,7 @@ impl LibraryView {
                 }
                 Err(e) => self.status(format!("Export failed: {e}"), true, cx),
             },
-            Event::Progress(_) => (),
+            Event::Progress(_) | Event::Render(..) | Event::Annotation(..) => (),
         }
         self.lock_fields(cx);
         cx.notify();
@@ -513,7 +613,16 @@ impl LibraryView {
         }
     }
     fn discard_edits(&mut self, cx: &mut Context<Self>) {
-        if self.locked() || !self.dirty {
+        if !self.dirty {
+            self.status("No unsaved metadata edits to discard", false, cx);
+            return;
+        }
+        if self.locked() {
+            self.status(
+                "Wait for the current operation before discarding edits",
+                true,
+                cx,
+            );
             return;
         }
         self.set_editor(self.editor.clone(), Some(self.draft.clone()), cx);
@@ -554,6 +663,7 @@ impl LibraryView {
         self.membership = Organization::default();
         self.host = AttachmentHost::default();
         self.load_membership();
+        self.reset_annotations();
         if let Some(p) = &self.editor {
             let id = p.id;
             self.call(Lane::Attachments, Event::Attachments, |c, done| {
@@ -941,7 +1051,8 @@ impl LibraryView {
                         .text_color(rgb(MUTED))
                         .whitespace_nowrap()
                         .child(format!(
-                            "{} new · {} search · ↑↓ select · ↩ edit · {} save · esc back",
+                            "{} commands · {} new · {} search · ↑↓ select · ↩ edit · {} save",
+                            shortcut("K"),
                             shortcut("N"),
                             shortcut("F"),
                             shortcut("S")
@@ -966,14 +1077,12 @@ impl Render for LibraryView {
             };
             window.defer(cx, move |window, cx| target.focus(window, cx));
         }
-        div()
+        // The palette is a sibling of the "Library" key context, so while it has focus no
+        // workbench shortcut (⌘N/⌘S/⌘1, Tab, Esc→Back…) fires behind it.
+        let workbench = div()
             .size_full()
             .flex()
             .flex_col()
-            .bg(rgb(CANVAS))
-            .text_color(rgb(TEXT))
-            .font_family(".SystemUIFont")
-            .text_size(px(13.))
             .track_focus(&self.focus)
             .key_context("Library")
             .on_action(cx.listener(Self::new_paper))
@@ -983,6 +1092,9 @@ impl Render for LibraryView {
             .on_action(cx.listener(Self::next_field))
             .on_action(cx.listener(Self::previous_field))
             .on_action(cx.listener(Self::back))
+            .on_action(cx.listener(|this, _: &OpenPalette, window, cx| {
+                this.run_command(crate::commands::ids::PALETTE, window, cx)
+            }))
             .on_action(
                 cx.listener(|this, _: &ShowLibrary, w, cx| this.show(Screen::Library, w, cx)),
             )
@@ -994,7 +1106,7 @@ impl Render for LibraryView {
             )
             .child(self.toolbar(cx))
             .child(match self.screen {
-                Screen::Library => self.library_screen(cx).into_any_element(),
+                Screen::Library => self.library_screen(window, cx).into_any_element(),
                 Screen::Import => self.import_screen(cx).into_any_element(),
                 Screen::Pdf => self.pdf_screen(cx).into_any_element(),
                 Screen::Settings => self.settings_screen(cx).into_any_element(),
@@ -1011,7 +1123,16 @@ impl Render for LibraryView {
                     .children(self.diagnostics.iter().cloned().map(line))
                     .into_any_element(),
             })
-            .child(self.status_bar(cx))
+            .child(self.status_bar(cx));
+        div()
+            .size_full()
+            .relative()
+            .bg(rgb(CANVAS))
+            .text_color(rgb(TEXT))
+            .font_family(".SystemUIFont")
+            .text_size(px(13.))
+            .child(workbench)
+            .when(self.palette_open, |el| el.child(self.palette_overlay(cx)))
     }
 }
 pub fn run(client: Arc<dyn LibraryClient>) {
@@ -1035,6 +1156,13 @@ fn key_bindings() -> Vec<KeyBinding> {
         KeyBinding::new(primary!("s"), Save, Some("Library")),
         KeyBinding::new(primary!("r"), Refresh, Some("Library")),
         KeyBinding::new(primary!("f"), Find, Some("Library")),
+        KeyBinding::new(primary!("k"), OpenPalette, Some("Library")),
+        KeyBinding::new("down", PaletteNext, Some("Palette")),
+        KeyBinding::new("up", PalettePrevious, Some("Palette")),
+        KeyBinding::new("escape", PaletteClose, Some("Palette")),
+        KeyBinding::new(primary!("c"), CopySelection, Some("PdfViewer")),
+        KeyBinding::new(primary!("z"), AnnotationUndo, Some("PdfViewer")),
+        KeyBinding::new(primary!("shift-z"), AnnotationRedo, Some("PdfViewer")),
         KeyBinding::new("tab", NextField, Some("Library")),
         KeyBinding::new("shift-tab", PreviousField, Some("Library")),
         KeyBinding::new(primary!("q"), Quit, None),
@@ -1059,7 +1187,7 @@ fn open_main_window(client: Arc<dyn LibraryClient>, bounds: Bounds<Pixels>, cx: 
                 }),
                 ..Default::default()
             },
-            |_, cx| cx.new(|cx| LibraryView::new(client, cx)),
+            |window, cx| cx.new(|cx| LibraryView::new(client, window, cx)),
         )
         .expect("open native window");
     window

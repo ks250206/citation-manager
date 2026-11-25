@@ -1,11 +1,13 @@
 //! Descriptions and UI availability only. Command IDs are never authorization grants.
 mod deferred;
 mod library;
+mod workbench;
 
 use std::collections::BTreeMap;
 
 pub use deferred::deferred_commands;
 pub use library::{ids, library_commands};
+pub use workbench::{ids as workbench_ids, workbench_commands};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DisabledReason {
@@ -124,7 +126,11 @@ impl CommandRegistry {
 
     pub fn m1() -> Self {
         let mut registry = Self::default();
-        for command in library_commands().into_iter().chain(deferred_commands()) {
+        for command in library_commands()
+            .into_iter()
+            .chain(workbench_commands())
+            .chain(deferred_commands())
+        {
             registry
                 .register(command)
                 .expect("built-in IDs are unique and valid");

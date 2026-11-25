@@ -5,6 +5,7 @@
 //! past the small handshake limit) before the daemon has authenticated the credential.
 //! Commands are grouped by feature module and `#[non_exhaustive]`: later issues add
 //! variants and bump `PROTOCOL_VERSION` only for incompatible changes.
+pub mod b64;
 pub mod frame;
 mod pdf;
 pub use frame::{FrameError, read_frame, write_frame};
@@ -18,6 +19,7 @@ use crate::{
     library::{LibraryReply, LibraryRequest, ServiceError},
     library_query::{LibraryPage, LibraryQuery},
     organization::{Organization, OrganizationRequest},
+    search::{FulltextReply, FulltextRequest, SearchReply, SearchRequest},
     settings::{Settings, SettingsLoaded},
 };
 pub use cm_core::policy::{Capability, CapabilitySet, Denial, GrantId, Operation};
@@ -125,6 +127,12 @@ pub enum Command {
     Pdf(PdfCommand),
     Jobs(JobCommand),
     Grants(GrantCommand),
+    /// #18 full-text search (bibliographic records, annotations, PDF page text).
+    Search(Box<SearchRequest>),
+    /// #18 extraction status and bounded page text reads.
+    Fulltext(FulltextRequest),
+    /// #19 highlights, comments and notes.
+    Annotations(crate::annotations::AnnotationRequest),
     /// #22 browser/MCP capture (preview, preview-bound commit, PDF job status/retry).
     Capture(CaptureCommand),
 }
@@ -169,6 +177,7 @@ impl Command {
             Self::Resolve { .. } => O::MetadataResolve,
             Self::Export(_) => O::Export,
             Self::Pdf(c) => c.operation(),
+            Self::Annotations(r) => r.operation(),
             Self::Jobs(c) => match c {
                 JobCommand::Submit(_) => O::JobSubmit,
                 JobCommand::Get(_) | JobCommand::List { .. } => O::JobRead,
@@ -179,6 +188,13 @@ impl Command {
                 GrantCommand::Issue { .. } => O::GrantIssue,
                 GrantCommand::List => O::GrantList,
                 GrantCommand::Revoke(_) => O::GrantRevoke,
+            },
+            Self::Search(_) => O::FulltextSearch,
+            Self::Fulltext(r) => match r {
+                FulltextRequest::Status(_) | FulltextRequest::AttachmentStatus(_) => {
+                    O::FulltextStatus
+                }
+                FulltextRequest::Pages(_) => O::FulltextRead,
             },
             Self::Capture(c) => c.operation(),
         }
@@ -201,6 +217,9 @@ pub enum Reply {
     Pdf(PdfReply),
     Jobs(JobReply),
     Grants(GrantReply),
+    Search(SearchReply),
+    Fulltext(FulltextReply),
+    Annotations(crate::annotations::AnnotationReply),
     Capture(CaptureReply),
 }
 

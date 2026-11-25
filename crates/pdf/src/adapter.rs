@@ -22,7 +22,7 @@ pub(crate) fn load(path: &Path) -> Result<Pdfium, PdfError> {
     claim_process()?;
     Ok(Pdfium::new(bindings))
 }
-fn native(e: PdfiumError) -> PdfError {
+pub(crate) fn native(e: PdfiumError) -> PdfError {
     match e {
         PdfiumError::PdfiumLibraryInternalError(PdfiumInternalError::PasswordError) => {
             PdfError::PasswordRequiredOrIncorrect
@@ -37,7 +37,7 @@ fn native(e: PdfiumError) -> PdfError {
         _ => PdfError::NativeFailure,
     }
 }
-fn read(source: &Source, ctx: &Context) -> Result<Vec<u8>, PdfError> {
+pub(crate) fn read(source: &Source, ctx: &Context) -> Result<Vec<u8>, PdfError> {
     ctx.check()?;
     let f = File::open(&source.path).map_err(|_| PdfError::Io)?;
     if !f.metadata().map_err(|_| PdfError::Io)?.is_file() {
@@ -260,8 +260,8 @@ pub(crate) fn execute(pdfium: &Pdfium, op: Operation, ctx: &Context) -> Result<O
                 let (w, h) = v.size();
                 if w < 1.
                     || h < 1.
-                    || w.ceil() > 8192.
-                    || h.ceil() > 8192.
+                    || w.ceil() > cm_core::geometry::MAX_RENDER_SIDE
+                    || h.ceil() > cm_core::geometry::MAX_RENDER_SIDE
                     || w.ceil() * h.ceil() > MAX_PIXELS as f32
                 {
                     return Err(PdfError::LimitExceeded);
@@ -303,6 +303,13 @@ pub(crate) fn execute(pdfium: &Pdfium, op: Operation, ctx: &Context) -> Result<O
                 bitmap,
             })))
         }
+        Operation::Text {
+            source,
+            first_page,
+            max_pages,
+            max_chars,
+        } => crate::extract::text(pdfium, &source, first_page, max_pages, max_chars, ctx)
+            .map(|batch| Output::Text(Box::new(batch))),
         Operation::Export {
             source,
             highlights,
