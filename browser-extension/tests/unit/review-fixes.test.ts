@@ -13,7 +13,7 @@ import type { Outcome, PageSnapshot } from '../../src/shared/types';
 import { utf8Length } from '../../src/shared/utf8';
 import { parseDestinations, parseHello, parsePreview } from '../../src/shared/validate';
 import { dom } from './helpers';
-import { CHILD, COLLECTION, DESTINATIONS, HELLO, previewResult } from './samples';
+import { CHILD, COLLECTION, DESTINATIONS, HELLO, TAG, previewResult } from './samples';
 
 const SNAPSHOT: PageSnapshot = {
   page_url: 'https://proceedings.example.org/a',
@@ -172,6 +172,62 @@ test('too_large: the HTML is cut by a quarter and the preview retried once', asy
   assert.equal(ctl.state.phase.kind as string, 'review');
   assert.equal(ctl.state.snapshot?.html_truncated, true);
   assert.ok(!(shrinkSnapshot(SNAPSHOT).html ?? '').includes('�'));
+});
+
+test('a retryable preview failure keeps the corrections: Retry re-applies them, Back keeps the last preview', async () => {
+  const replies: Outcome<unknown>[] = [
+    okOf(parsePreview(previewResult())),
+    { ok: false, error: { code: 'busy', message: 'busy', retryable: true } },
+    { ok: false, error: { code: 'timeout', message: 'timed out', retryable: true } },
+    okOf(parsePreview(previewResult({ id: 'preview-2' }))),
+  ];
+  const { ctl, calls } = controller({ ...base(), preview: () => replies.shift() as Outcome<unknown> });
+  await ctl.start();
+  await ctl.save();
+  await ctl.correct({ title: 'Fixed title' });
+  assert.equal(ctl.state.phase.kind === 'error' && ctl.state.phase.recovery, 'retry');
+  // Back returns to the last good preview, made without the failed corrections.
+  ctl.dispatch({ type: 'back' });
+  assert.equal(ctl.state.phase.kind as string, 'review');
+  assert.equal(ctl.state.preview?.preview_id, 'preview-1');
+  assert.deepEqual(ctl.state.corrections, {});
+  assert.equal(canCommit(ctl.state), true);
+  await ctl.correct({ title: 'Fixed title' });
+  assert.equal(ctl.state.phase.kind === 'error' && ctl.state.phase.recovery, 'retry');
+  await ctl.recover();
+  const previews = calls.filter((c) => c.op === 'preview') as { capture: { meta: { name: string; content: string }[] } }[];
+  assert.equal(previews.length, 4);
+  assert.deepEqual(previews[3]?.capture.meta.find((m) => m.name === 'citation_title'), { name: 'citation_title', content: 'Fixed title' });
+  assert.equal(ctl.state.phase.kind as string, 'review');
+  assert.equal(ctl.state.preview?.preview_id, 'preview-2');
+  assert.equal(ctl.state.corrections.title, 'Fixed title');
+});
+
+test('the PDF choice survives a re-preview after a destination change; first PDF only when it is gone', async () => {
+  const A = { url: 'https://cdn.example.org/a.pdf', origin: 'highwire' };
+  const B = { url: 'https://cdn.example.org/b.pdf', origin: 'json-ld' };
+  const C = { url: 'https://cdn.example.org/c.pdf', origin: 'highwire' };
+  const pdfs = [[A, B], [B, A], [A, B], [C], [], [A]];
+  const { ctl, calls } = controller({ ...base(), preview: () => okOf(parsePreview(previewResult({ pdfs: pdfs.shift() }))), commit: () => ({ ok: false, error: { code: 'busy', message: 'busy', retryable: true } }) });
+  await ctl.start();
+  await ctl.save();
+  assert.equal(ctl.state.pdf, 0, 'the first PDF by default');
+  ctl.dispatch({ type: 'pdf', index: 1 }); // B
+  await ctl.setCollection(CHILD); // [B, A]: B is matched by URL
+  assert.equal(ctl.state.pdf, 0);
+  ctl.dispatch({ type: 'pdf', index: null }); // Do not download a PDF
+  await ctl.setTag(TAG, true); // [A, B]
+  assert.equal(ctl.state.pdf, null, 'the opt-out is kept');
+  await ctl.commit();
+  assert.equal(calls.filter((c) => c.op === 'commit').at(-1)?.pdf, null);
+  ctl.dispatch({ type: 'back' });
+  ctl.dispatch({ type: 'pdf', index: 0 }); // A
+  await ctl.setTag(TAG, false); // [C]: A is gone, so the first PDF
+  assert.equal(ctl.state.pdf, 0);
+  await ctl.setCollection(null); // []: nothing to choose
+  assert.equal(ctl.state.pdf, null);
+  await ctl.setCollection(CHILD); // [A]: no earlier PDF to keep, so the first PDF
+  assert.equal(ctl.state.pdf, 0);
 });
 
 test('corrections: clearing removes page tags, the title cannot be cleared, the container type is kept', () => {
