@@ -2,7 +2,7 @@
 
 Status: adopted for M4 on Linux/Unix (subprocess-tested on Linux). macOS `.app` placement of
 `papers` next to `papersd` is #34. MCP tools (#29), REST (#27) and the CLI token flow (#26)
-are separate issues; this ADR records the seams they plug into.
+are separate issues (all merged); this ADR records the seams they plug into.
 
 ## Shape
 
@@ -101,7 +101,7 @@ Paths placed in JSON output use a lossy string (U+FFFD for invalid bytes), never
 | 4 | `conflict`, `duplicate`, `confirmation_required`, `unresolved` | stale/conflicting state, duplicate candidate needing a decision, write without `--yes` when non-interactive, metadata needing input |
 | 5 | `permission_denied` | grant scope refusal, unknown/revoked/expired credential, unsafe credential file or endpoint, export into the library |
 | 6 | `daemon_unavailable` | papersd missing/not starting/not running with `--no-start`, timeouts, `Unavailable`/`Busy` |
-| 7 | `feature_unavailable` | `papers mcp` before #29, `server start --rest` before #27 |
+| 7 | `feature_unavailable` | `server start --rest` (REST follows the API settings), MCP server failure |
 
 Limits: `search --limit` 1–100 (default 20), `list --limit` 1–500 (default 50, keyset
 `--cursor`), `fulltext` `--page N` / `--pages A-B` (1-based, ≤50 pages) and `--max-chars`
@@ -160,7 +160,9 @@ authenticated socket equals the PID reported by `Status` (non-Linux: refused wit
 peer PIDs are verified there, #34); then waits until the socket is gone or refuses connections
 (other probe errors are "not yet stopped"). There is no daemon-side graceful `Shutdown` command
 yet: SIGTERM ends papersd immediately and its crash recovery (#25/#51, job lease reclaim)
-covers in-flight work. There is no REST listener; `--rest` exits 7.
+covers in-flight work. The REST listener (#27) is not a start option: papersd binds it from the
+persisted API settings (API & integrations, or `papersd api set --enable`), so `--rest` exits 7
+with that hint.
 
 `papers mcp` serves MCP (#29) for the library the CLI resolved: it builds its `Target`
 (`--library`/`PAPERS_LIBRARY`, `--runtime-dir`, `--credential-file`, `--no-start`, idle timeout)
