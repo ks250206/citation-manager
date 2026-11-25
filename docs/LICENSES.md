@@ -7,7 +7,7 @@ about signing. Installation: [INSTALL](INSTALL.md).
 
 | Component | Where in `Citation Manager.app/Contents` | License | Notice shipped |
 |---|---|---|---|
-| Citation Manager executables (`citation-manager`, `papersd`, `papers`, `papers-mcp`, `papers-native-host`) | `MacOS/` | project license not yet chosen (the repository has no LICENSE file; `publish = false`) | — |
+| Citation Manager executables (`citation-manager`, `papersd`, `papers`, `papers-mcp`, `papers-native-host`) | `MacOS/` | MIT ([LICENSE](../LICENSE)) | `Resources/licenses/LICENSE` |
 | Rust crates linked into those executables (≈420, incl. GPUI from Zed at a pinned revision, SQLite via rusqlite `bundled`, rustls, tokio, axum, rmcp, pdfium-render) | inside the executables | per crate; MIT/Apache-2.0 dominate, also BSD-2/3-Clause, ISC, Zlib, Unicode-3.0, Unlicense, CC0-1.0, BSL-1.0, MPL-2.0 (`option-ext`) | `Resources/licenses/THIRD_PARTY_NOTICES.md` (+ `third-party-licenses.json`) |
 | PDFium chromium/8125 (bblanchon/pdfium-binaries, universal) | `Frameworks/libpdfium.dylib` | BSD-3-Clause, with bundled third-party code (FreeType, ICU, libjpeg-turbo, OpenJPEG, libpng, zlib, Little CMS, HarfBuzz, abseil, highway, simdutf, fast_float, dragonbox, AGG, llvm-libc) | `Resources/licenses/pdfium/` (LICENSE + all 18 upstream notices, hashes pinned in [pdfium-licenses/manifest.json](ADR/pdfium-licenses/manifest.json)) |
 | App icon | `Resources/AppIcon.icns` | project asset | — |
@@ -40,8 +40,9 @@ The notices are generated at packaging time, never edited by hand:
 Fonts used by test fixtures (Noto Sans JP, OFL) and PDF validation tools (pypdf, ReportLab,
 fontTools, Pillow) are development-only and not bundled.
 
-Open legal items (not decided by engineering): the project's own license, review of the
-generated notices by the rights holder, and the missing copyright lines above.
+The project itself is MIT-licensed ([LICENSE](../LICENSE), decided by the owner; #80).
+Open legal items (not decided by engineering): review of the generated notices by the rights
+holder, and the missing copyright lines above.
 
 ## Signing and notarization
 
