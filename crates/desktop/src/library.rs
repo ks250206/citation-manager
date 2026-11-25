@@ -87,6 +87,15 @@ impl Library {
         };
         Some(self.papers[index].id)
     }
+    /// First or last row of the loaded page (Vim `gg` / `G`).
+    pub fn edge(&self, last: bool) -> Option<PaperId> {
+        if last {
+            self.papers.last()
+        } else {
+            self.papers.first()
+        }
+        .map(|p| p.id)
+    }
     /// Position of a paper in the loaded page, used to keep it scrolled into view.
     pub fn index_of(&self, id: PaperId) -> Option<usize> {
         self.papers.iter().position(|p| p.id == id)

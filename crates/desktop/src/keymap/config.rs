@@ -7,7 +7,8 @@ pub const MAX_BINDINGS: usize = 256;
 pub const MAX_SEQUENCE_KEYS: usize = 4;
 pub const MAX_JSON_DEPTH: usize = 8;
 const MAX_DIAGNOSTICS: usize = 64;
-const DEFAULT_JSON: &[u8] = include_bytes!("default.json");
+/// Built-in keymap document; also offered to users as a starting `keymap.json`.
+pub const DEFAULT_JSON: &[u8] = include_bytes!("default.json");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DiagnosticCode {
@@ -206,6 +207,21 @@ impl Keymap {
 
     pub fn binding_count(&self) -> usize {
         self.bindings.len()
+    }
+
+    /// First binding for `command` in this context/mode, as space-separated canonical tokens
+    /// (`g g`, `Cmd+k`). Display only; hosts may localize `Cmd` for the platform.
+    pub fn shortcut(&self, command: &str, context: Context, mode: Mode) -> Option<String> {
+        self.bindings
+            .iter()
+            .find(|b| b.command == command && b.context == context && b.mode == mode)
+            .map(|b| {
+                b.keys
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            })
     }
 }
 

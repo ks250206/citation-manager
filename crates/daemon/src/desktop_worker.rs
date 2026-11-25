@@ -336,6 +336,28 @@ impl LibraryClient for InProcessLibraryClient {
         progress: PdfProgress,
         complete: Reply<PdfReply>,
     ) -> Result<(), ServiceError> {
+        if let PdfRequest::Render(request) = request {
+            // Resolve and submit on the library worker; wait for PDFium elsewhere so a slow
+            // page never blocks library reads/writes.
+            return self
+                .sender
+                .try_send(Box::new(move |worker| match worker {
+                    Err(e) => complete(Err(e)),
+                    Ok(worker) => match worker.begin_render(request) {
+                        Err(failure) => complete(Ok(PdfReply::Page(Err(failure)))),
+                        Ok(pending) => {
+                            let spawned = thread::Builder::new()
+                                .name("pdf-render-wait".into())
+                                .spawn(move || complete(Ok(PdfReply::Page(pending.finish()))));
+                            if spawned.is_err() {
+                                // `complete` moved into the closure; the caller's lost-reply
+                                // guard reports Unavailable when it is dropped.
+                            }
+                        }
+                    },
+                }))
+                .map_err(|_| ServiceError::Unavailable);
+        }
         self.enqueue(complete, move |w| w.pdf(request, progress))
     }
 }

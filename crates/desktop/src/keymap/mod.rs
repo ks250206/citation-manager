@@ -4,8 +4,9 @@ mod key;
 mod resolver;
 
 pub use config::{
-    ConfigSource, DefaultKeymapError, Diagnostic, DiagnosticCode, Keymap, LoadedKeymap,
-    MAX_BINDINGS, MAX_CONFIG_BYTES, MAX_JSON_DEPTH, MAX_SEQUENCE_KEYS, load_or_default,
+    ConfigSource, DEFAULT_JSON, DefaultKeymapError, Diagnostic, DiagnosticCode, Keymap,
+    LoadedKeymap, MAX_BINDINGS, MAX_CONFIG_BYTES, MAX_JSON_DEPTH, MAX_SEQUENCE_KEYS,
+    load_or_default,
 };
 pub use key::{InvalidKey, KeyStroke, MAX_KEY_BYTES};
 pub use resolver::{InputState, KeyResolver, Resolution, SEQUENCE_TIMEOUT_MS};

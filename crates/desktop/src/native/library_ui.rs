@@ -45,16 +45,10 @@ impl LibraryView {
                         )
                         .on_click(cx.listener(|this, _, w, cx| this.show(Screen::Import, w, cx))),
                     )
-                    .child(tab("pdfs", "PDFs", Screen::Pdf).on_click(cx.listener(
-                        |this, _, _, cx| {
-                            if !this.locked() {
-                                this.invalidate_doi();
-                                this.load_pdf_form(this.pdf_row, cx);
-                                this.screen = Screen::Pdf;
-                                cx.notify();
-                            }
-                        },
-                    )))
+                    .child(
+                        tab("pdfs", "PDFs", Screen::Pdf)
+                            .on_click(cx.listener(|this, _, _, cx| this.open_pdfs(cx))),
+                    )
                     .child(
                         tab("layout", "Organize & export", Screen::Settings).on_click(
                             cx.listener(|this, _, w, cx| this.show(Screen::Settings, w, cx)),
@@ -86,6 +80,30 @@ impl LibraryView {
                 button("reload", "↻", !self.busy(Lane::Query))
                     .on_click(cx.listener(|this, _, _, cx| this.reload(cx))),
             )
+    }
+    pub(super) fn open_pdfs(&mut self, cx: &mut Context<Self>) {
+        if !self.locked() {
+            self.invalidate_doi();
+            self.load_pdf_form(self.pdf_row, cx);
+            self.screen = Screen::Pdf;
+            cx.notify();
+        }
+    }
+    pub(super) fn clear_filters(&mut self, cx: &mut Context<Self>) {
+        self.library.query.filter = LibraryFilter {
+            visibility: self.library.query.filter.visibility,
+            ..LibraryFilter::default()
+        };
+        for field in [
+            &self.search,
+            &self.author,
+            &self.year_from,
+            &self.year_to,
+            &self.paper_type,
+        ] {
+            field.update(cx, |f, cx| f.set_text(String::new(), cx));
+        }
+        self.reload(cx);
     }
     pub(super) fn filter(&mut self, cx: &mut Context<Self>) {
         let text = |field: &Entity<TextInput>| {
@@ -132,7 +150,8 @@ impl LibraryView {
         self.library.query = query;
         self.reload(cx);
     }
-    pub(super) fn library_screen(&self, cx: &mut Context<Self>) -> Div {
+    pub(super) fn library_screen(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Div {
+        let details = self.details_screen(window, cx);
         let filter = &self.library.query.filter;
         let filtered = filter.keyword.is_some()
             || filter.author.is_some()
@@ -204,24 +223,7 @@ impl LibraryView {
                             )
                             .child(
                                 button("reset-filter", "Clear filters", filtered).on_click(
-                                    cx.listener(|this, _, _, cx| {
-                                        this.library.query.filter = LibraryFilter {
-                                            visibility: this.library.query.filter.visibility,
-                                            ..LibraryFilter::default()
-                                        };
-                                        for field in [
-                                            &this.search,
-                                            &this.author,
-                                            &this.year_from,
-                                            &this.year_to,
-                                            &this.paper_type,
-                                        ] {
-                                            field.update(cx, |f, cx| {
-                                                f.set_text(String::new(), cx)
-                                            });
-                                        }
-                                        this.reload(cx);
-                                    }),
+                                    cx.listener(|this, _, _, cx| this.clear_filters(cx)),
                                 ),
                             )
                             .child(hint(
@@ -230,7 +232,7 @@ impl LibraryView {
                     )
                     .child(self.table(cx)),
             ))
-            .child(self.details_screen(cx))
+            .child(details)
     }
     fn navigation(&self, cx: &mut Context<Self>) -> Stateful<Div> {
         let filter = &self.library.query.filter;
@@ -372,6 +374,7 @@ impl LibraryView {
             .on_action(cx.listener(Self::select_next))
             .on_action(cx.listener(Self::select_previous))
             .on_action(cx.listener(Self::edit_selected))
+            .on_key_down(cx.listener(Self::table_key))
             .flex()
             .flex_col()
             .flex_1()
