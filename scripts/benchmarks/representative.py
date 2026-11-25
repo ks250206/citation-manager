@@ -232,16 +232,25 @@ def summarize(queries, warm, index, stats, oracle, gui):
     def p95(values):
         return quantile(values, .95) if values else None
 
+    metadata_rows = [r['elapsed_ms'] for r in queries['rows']
+                     if r['case'] in ('metadata_keyword', 'metadata_no_hit', 'metadata_combined')]
+    window_calls = [ms for r in queries['recall'] if r['scope'] == 'AllPages' and r['scalars'] < 3
+                    for ms in r['final_coverage'].get('call_ms', [])]
+
     measured = {
         'warm_start_ms': quantile(starts, .5),
         'warm_start_p95_ms': quantile(starts, .95),
         'collection_switch_p95_ms': cases['collection_switch']['p95_ms'],
         'tag_and_switch_p95_ms': cases['tag_and_switch']['p95_ms'],
-        'metadata_search_p95_ms': cases['metadata_keyword']['p95_ms'],
+        # Worst honest reading: every literal metadata case (hit, no-hit scan, combined).
+        'metadata_search_p95_ms': p95(metadata_rows),
+        'metadata_keyword_p95_ms': cases['metadata_keyword']['p95_ms'],
         'metadata_fts_p95_ms': cases['fts_bibliographic:needle']['p95_ms'],
         'fulltext_search_p95_ms': p95(all_fulltext_rows('fulltext_default:', True)),
         'fulltext_search_p95_ms_all_terms_default_scope': p95(all_fulltext_rows('fulltext_default:', False)),
         'fulltext_in_collection_p95_ms': p95(all_fulltext_rows('fulltext_in_collection:', False)),
+        # Explicit complete scan of 1-2 character terms: every window/result-page call.
+        'short_term_all_pages_call_p95_ms': p95(window_calls),
         'daemon_idle_rss_mib_after_warm_start': max(warm_rss) / 1024 if warm_rss else None,
         'daemon_peak_rss_mib_indexing': index['peak_rss_kib'] / 1024 if index.get('peak_rss_kib') else None,
         'daemon_max_rss_mib_queries': queries['rusage']['max_rss_kib'] / 1024,
@@ -256,14 +265,16 @@ def summarize(queries, warm, index, stats, oracle, gui):
                                status='unmeasured' if value is None else ('met' if value < limit else 'missed')))
     recall = [dict(term=r['term'], scalars=r['scalars'], scope=r['scope'], expected=r['expected_pages'],
                    found=r['found_pages'], recall=r['recall'], false_positives=r['false_positive_pages'],
-                   windows=r['windows'], total_ms=r['total_ms'], complete=r['final_coverage']['complete'],
+                   windows=r['windows'], calls=len(r['final_coverage'].get('call_ms', [])),
+                   call_p95_ms=p95(r['final_coverage'].get('call_ms', [])),
+                   total_ms=r['total_ms'], complete=r['final_coverage']['complete'],
                    unsearched=r['final_coverage']['unsearched']) for r in queries['recall']]
     return dict(quantile='nearest rank sorted[ceil(p*N)-1]', measured=measured, targets=comparison,
                 cases=cases, recall=recall, fulltext_complete_cases=len(fulltext_complete),
                 fulltext_cases=len(fulltext))
 
 
-def gui_measure(bin_dir, library, out, settle_s, link):
+def gui_measure(bin_dir, library, out, settle_s, link, label='gui'):
     """Linux/Xvfb only: the real GUI on the indexed library. Phase 1 idle (library list
     loaded, no PDF): GUI + lazily started papersd RSS. Phase 2 (xdotool/xclip available):
     open the first corpus PDF through the GUI's own `paper://` link command (Ctrl+K palette,
@@ -275,10 +286,10 @@ def gui_measure(bin_dir, library, out, settle_s, link):
         return dict(skipped='GUI measurement needs Linux with an X display (Xvfb)')
     runtime = Path(tempfile.mkdtemp(prefix='cmg-', dir='/tmp'))
     env = dict(os.environ, XDG_RUNTIME_DIR=str(runtime))
-    log = (out / 'gui.log').open('w')
+    log = (out / f'{label}.log').open('w')
     start = time.monotonic()
     gui = subprocess.Popen([str(bin_dir / 'citation-manager'), '--library', str(library),
-                            '--settings', str(out / 'gui-settings.json')],
+                            '--settings', str(out / f'{label}-settings.json')],
                            stdin=subprocess.DEVNULL, stdout=log, stderr=log, env=env)
     daemon_pid = {}
 
@@ -297,7 +308,7 @@ def gui_measure(bin_dir, library, out, settle_s, link):
 
     def shot(name):
         if shutil.which('import'):
-            subprocess.run(['import', '-window', 'root', str(out / f'gui-{name}.png')], check=False)
+            subprocess.run(['import', '-window', 'root', str(out / f'{label}-{name}.png')], check=False)
 
     phases = {}
     tools = all(shutil.which(t) for t in ('xdotool', 'xclip'))
@@ -333,6 +344,16 @@ def gui_measure(bin_dir, library, out, settle_s, link):
                                               daemon_rss_mib=rss(sampler, 'papersd'),
                                               peak_gui_rss_mib=sampler.peak('gui') / 1024)
                 shot('pdf-scrolled')
+                # Page through the whole document with the toolbar's next-page button so
+                # every page is rendered once and the render cache reaches its bound.
+                for _ in range(24):
+                    subprocess.run(['xdotool', 'mousemove', '201', '317', 'click', '1'], check=False)
+                    time.sleep(0.7)
+                time.sleep(settle_s)
+                phases['pdf_paged'] = dict(t=time.monotonic() - start, gui_rss_mib=rss(sampler, 'gui'),
+                                           daemon_rss_mib=rss(sampler, 'papersd'),
+                                           peak_gui_rss_mib=sampler.peak('gui') / 1024)
+                shot('pdf-paged')
     gui.terminate()
     try:
         gui.wait(20)
@@ -350,11 +371,31 @@ def gui_measure(bin_dir, library, out, settle_s, link):
         # Total process RSS while one PDF is open (GUI + papersd, both run PDFium).
         result['pdf_view_rss_mib'] = max(
             (phases[k]['gui_rss_mib'] or 0) + (phases[k]['daemon_rss_mib'] or 0)
-            for k in ('pdf_open', 'pdf_scrolled') if k in phases)
-        result['pdf_view_note'] = ('verify gui-pdf-open.png / gui-pdf-scrolled.png show the PDF; '
+            for k in ('pdf_open', 'pdf_scrolled', 'pdf_paged') if k in phases)
+        result['pdf_view_note'] = (f'verify {label}-pdf-*.png show the PDF and its last page; '
                                    'otherwise this value is not a PDF-view measurement')
     shutil.rmtree(runtime, ignore_errors=True)
     return result
+
+
+def gui_rerun(args):
+    """Rebuilds only the GUI from the current source and repeats the GUI phases on the
+    library of an earlier run, so render-cache settings can be compared on identical data."""
+    out = ROOT / 'target/representative-benchmark' / args.reuse
+    if not args.label.replace('-', '').isalnum() or (out / f'{args.label}.json').exists():
+        raise ValueError('--label must be new and alphanumeric')
+    bin_dir = out / 'prefix/bin'
+    gui, evidence = build(['-p', 'cm-daemon', '--bin', 'citation-manager', '--features', 'desktop-bootstrap'],
+                          'citation-manager')
+    shutil.copy2(gui, bin_dir / 'citation-manager')
+    seed = json.loads((out / 'seed.json').read_text())
+    link = f"paper://{uuid.UUID(int=(1 << 96) | 1)}/attachment/{seed['attachments'][0]}/page/1"
+    result = gui_measure(bin_dir, out / 'library', out, args.gui_settle, link, args.label)
+    result['artifact'] = evidence
+    result['git_head'] = capture(['git', 'rev-parse', 'HEAD'])
+    result['git_diff_stat'] = capture(['git', 'diff', '--stat'])
+    (out / f'{args.label}.json').write_text(json.dumps(result, indent=2) + '\n')
+    print({k: v for k, v in result.items() if k in ('phases', 'gui_idle_rss_mib', 'pdf_view_rss_mib')})
 
 
 def main():
@@ -369,7 +410,11 @@ def main():
     parser.add_argument('--pdfium', help='pinned PDFium library; default: fetch with scripts/pdfium/fetch.py')
     parser.add_argument('--gui', action='store_true', help='Linux/Xvfb: also build and launch the GUI')
     parser.add_argument('--gui-settle', type=float, default=20.0)
+    parser.add_argument('--reuse', help='GUI-only rerun on an earlier --out (e.g. another render cache build)')
+    parser.add_argument('--label', default='gui', help='file prefix for a --reuse GUI rerun')
     args = parser.parse_args()
+    if args.reuse:
+        return gui_rerun(args)
     if args.small:
         args.papers, args.pdfs, args.pages, args.samples, args.warm_repeats = 200, 20, 4, 5, 3
     if not args.out or Path(args.out).name != args.out or args.out in ('.', '..'):

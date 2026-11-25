@@ -14,8 +14,12 @@ pub const MIN_SCALE: f32 = 0.25;
 pub const MAX_SCALE: f32 = 4.0;
 /// Pages kept rendered around the visible range.
 pub const PREFETCH: u32 = 1;
-/// Decoded bitmaps kept in memory (RGBA bytes).
-pub const CACHE_BUDGET_BYTES: usize = 192 * 1024 * 1024;
+/// Decoded bitmaps kept in memory (RGBA bytes). DESIGN §16.2 asks for 64–128 MB. #30
+/// measured that every cached bitmap is also held as a GPU atlas texture once drawn, so
+/// the process cost is about twice this budget: 192 MB let one 20-page PDF at fit-width
+/// grow the GUI to 573 MiB RSS. 64 MB still holds the visible pages plus `PREFETCH` on
+/// each side at the 4 Mpx render cap (16 MiB per page).
+pub const CACHE_BUDGET_BYTES: usize = 64 * 1024 * 1024;
 pub const CACHE_MAX_ENTRIES: usize = 48;
 /// Gap between pages in logical pixels.
 pub const PAGE_GAP: f32 = 12.0;

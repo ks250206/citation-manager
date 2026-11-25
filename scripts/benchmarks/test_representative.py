@@ -78,6 +78,20 @@ class Summary(unittest.TestCase):
         status = {r['metric']: r['status'] for r in gui['targets']}
         self.assertEqual((status['gui_idle_rss_mib'], status['pdf_view_rss_mib']), ('met', 'missed'))
 
+    def test_metadata_target_uses_every_literal_case(self):
+        rows = [dict(case=c, sample=0, elapsed_ms=ms, returned=0, detail={})
+                for c, ms in [('collection_switch', 1.0), ('tag_and_switch', 1.0), ('metadata_keyword', 5.0),
+                              ('metadata_no_hit', 120.0), ('metadata_combined', 60.0),
+                              ('fts_bibliographic:needle', 2.0)]]
+        recall = [dict(term='電', scalars=1, scope='AllPages', expected_pages=1, found_pages=1, recall=1.0,
+                       false_positive_pages=0, windows=2, total_ms=3.0,
+                       final_coverage=dict(complete=True, unsearched='[]', call_ms=[1.0, 400.0]))]
+        warm = dict(runs=[dict(first_page_ms=1.0, rss_kib_after_first_page=None)])
+        summary = rep.summarize(dict(rows=rows, recall=recall, rusage=dict(max_rss_kib=1)), warm, {}, {}, {}, None)
+        self.assertEqual(summary['measured']['metadata_search_p95_ms'], 120.0)
+        self.assertEqual(summary['measured']['short_term_all_pages_call_p95_ms'], 400.0)
+        self.assertEqual(summary['recall'][0]['calls'], 2)
+
 
 if __name__ == '__main__':
     unittest.main()

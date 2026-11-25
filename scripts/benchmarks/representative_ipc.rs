@@ -182,11 +182,14 @@ fn all_page_hits(
     let mut found = BTreeSet::new();
     let mut other = 0;
     let mut windows = 0;
+    let mut calls = Vec::new();
     let mut coverage: Option<SearchCoverage>;
     loop {
         windows += 1;
         loop {
+            let started = Instant::now();
             let page = search(session, &request)?;
+            calls.push(ms(started));
             coverage = Some(page.coverage.clone());
             for hit in &page.hits {
                 match (hit.source, hit.attachment_id, hit.page_index) {
@@ -218,6 +221,7 @@ fn all_page_hits(
             "complete": coverage.complete, "fts_truncated": coverage.fts_truncated,
             "timed_out": coverage.timed_out, "short_terms": coverage.short_terms,
             "unsearched": format!("{:?}", coverage.unsearched),
+            "call_ms": calls,
         }),
     ))
 }

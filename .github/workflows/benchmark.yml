@@ -4,11 +4,6 @@ name: Representative benchmark
 # GitHub-hosted runners are NOT the DESIGN §16.1 target (Apple Silicon, 16 GB RAM); the
 # runner's real hardware is recorded in the uploaded artifact.
 on:
-  # TEMPORARY (removed before review): lets GitHub register this workflow from the
-  # feature branch; it never matches main or pull requests.
-  push:
-    branches: [claude/issue-30-reliability]
-    paths: ['.github/workflows/benchmark.yml']
   workflow_dispatch:
     inputs:
       papers:
