@@ -2,7 +2,8 @@
 use super::*;
 use crate::{
     commands::{
-        Availability, CommandContext, DisabledReason, ids, pdf_ids as pdf, workbench_ids as wb,
+        Availability, CommandContext, DisabledReason, api_ids, ids, pdf_ids as pdf,
+        workbench_ids as wb,
     },
     keymap::{self, InputState, KeyStroke, Mode, Resolution},
     palette,
@@ -55,6 +56,9 @@ pub(super) const CONNECTED: &[&str] = &[
     wb::TOGGLE_VIM,
     wb::RELOAD_KEYMAP,
     wb::COPY_DEFAULT_KEYMAP,
+    api_ids::OPEN_SETTINGS,
+    api_ids::NEW_TOKEN,
+    api_ids::NEW_MCP_PROFILE,
     pdf_export_ui::SAVE_PDF,
 ];
 
@@ -406,6 +410,9 @@ impl LibraryView {
                     .unwrap_or_default();
                 self.open_link(&text, cx);
             }
+            api_ids::OPEN_SETTINGS => self.open_api(api_ui::ApiFocus::Settings, window, cx),
+            api_ids::NEW_TOKEN => self.open_api(api_ui::ApiFocus::NewToken, window, cx),
+            api_ids::NEW_MCP_PROFILE => self.open_api(api_ui::ApiFocus::NewMcpProfile, window, cx),
             pdf_export_ui::SAVE_PDF => self.save_current_pdf(cx),
             _ => self.status(format!("{id} is not connected"), true, cx),
         }

@@ -67,6 +67,11 @@ impl Target {
             credential,
         })
     }
+    /// Library paths, launch and credential for an embedded MCP server (`papers mcp`). The MCP
+    /// server requests its own session ceiling, so nothing is requested here.
+    pub fn mcp_connector(&self) -> Result<LocalConnector, CliError> {
+        self.connector(CapabilitySet::new(), self.start)
+    }
     fn connector(&self, requested: CapabilitySet, start: bool) -> Result<LocalConnector, CliError> {
         let mut connector = LocalConnector::new(self.paths.clone(), self.uid, CLIENT_KIND);
         connector.requested = Some(requested);

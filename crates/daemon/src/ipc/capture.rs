@@ -3,7 +3,7 @@
 //! grant that created it, its PDF can only be one of the candidates that preview offered,
 //! and without LibraryWrite only Create/Skip decisions are accepted (no merge into an
 //! existing paper the client cannot even read).
-use super::{Session, auth::now_ms, redact_matches};
+use super::{PreviewOwner, Session, auth::now_ms, redact_matches};
 use cm_core::{
     ServiceError,
     policy::{self, Capability, CapabilitySet, Denial, GrantId, Operation},
@@ -114,11 +114,21 @@ impl Session {
                         done(
                             result
                                 .map(|(mut preview, resolution)| {
+                                    // #27: the same redaction as import previews; the
+                                    // unredacted exact-duplicate rows stay with the binding.
+                                    let hidden_duplicates =
+                                        redact.then(|| redact_matches(&mut preview));
                                     shared
                                         .previews
                                         .lock()
                                         .unwrap_or_else(|e| e.into_inner())
-                                        .insert(preview.id.clone(), grant);
+                                        .insert(
+                                            preview.id.clone(),
+                                            PreviewOwner {
+                                                grant,
+                                                hidden_duplicates,
+                                            },
+                                        );
                                     shared
                                         .captures
                                         .lock()
@@ -135,9 +145,6 @@ impl Session {
                                                 created: Instant::now(),
                                             },
                                         );
-                                    if redact {
-                                        redact_matches(&mut preview);
-                                    }
                                     Reply::Capture(CaptureReply::Preview(Box::new(
                                         CapturePreview {
                                             preview,

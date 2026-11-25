@@ -184,7 +184,7 @@ Infrastructure
 | `fulltext_pages` | id, attachment_id, page_index, text, extraction_status, updated_at |
 | `annotations` | id, attachment_id, page_index, type, quote_text, context_before, context_after, quads_json, color, comment, created_at, updated_at |
 | `jobs` | id, type, payload_json, state, progress, attempts, last_error, created_at, updated_at |
-| `api_tokens` | id, name, token_hash, scopes_json, created_at, revoked_at |
+| `daemon_grants` | id, token_sha256, label, capabilities_json, client_kind, scopes_json, expires_at_ms, revoked_at_ms（#26: 当初案の `api_tokens` は廃止し #25 の grant に統合） |
 | `schema_migrations` | version, applied_at |
 
 ### 6.2 主要な制約
@@ -1005,7 +1005,7 @@ unicode61 token と、範囲・件数・時間上限付きの literal scan で�
 書込は preview → 明示 decision → `--yes`（非対話時は必須）で commit し、merge は `--merge <id>` のみ。
 credential/要求 capability は `credentials` module に集約し（既定は owner の desktop bootstrap credential、
 `client_kind=cli`、subcommand ごとの最小 `requested`）、#26 の CLI token をそこへ追加する。
-`papers mcp` は #7 の `cm_mcp::run_stdio` を呼び、#29 未実装の間は exit 7。REST は #27。
+`papers mcp` は解決済みの library/接続設定で #29 の `cm_mcp::run_stdio_with` を呼ぶ（既定 read-only、owner credential は渡さない）。REST は #27。
 
 ## 35. #22 Browser/URL 取り込みと安全な PDF 取得
 
@@ -1021,7 +1021,34 @@ HTTPS・全 DNS 応答/redirect の公開 IP 検査・接続先 pin・cookie/認
 上限付き自動再試行、それ以外は理由付き failed と明示 retry。認証が必要な PDF は迂回せず、
 ブラウザでのダウンロード後の明示取り込みを案内する。
 
-## 36. #23 Native Messaging host と Chrome/Firefox 登録
+## 36. #26 token/grant 管理・scope・API 設定
+
+[api-tokens-grants ADR](docs/ADR/api-tokens-grants.md) が §13.1–13.4/§14.1/§17 の実装上の明確化となる。
+API/MCP/CLI token は #25 の daemon grant で、scope は `cm_core::policy::scopes` の固定 capability 集合と
+REST/MCP/CLI 対応表（#27–#29 が import）。§13.2 の `/search` は本文・注釈 snippet を返すため
+`papers:read files:read annotations:read` を要する。token は常に期限付き（read 90/最大365日、write 30/最大90日）、
+平文は一度だけ表示し OS secret store（Keychain/Secret Service、無ければ弱い 0600 file）、DB は SHA-256 のみ。
+失効・scope 変更は live session の次の要求から即時。MCP は read-only 既定、write は確認付き別操作。
+一括削除/移動は grant 毎 60 秒 10/25 件を超えると最大 15 分の明示 elevation が必要。API は既定 OFF、
+127.0.0.1/::1 と 1024–65535 のみ保存（listener は #27）。export は許可フォルダ限定。監査ログは
+内容・秘密なしの有界 file。GUI「API & integrations」と `papersd token|api` CLI bootstrap を提供する。
+証跡は [ISSUE_26](docs/validation/ISSUE_26.md)。
+
+## 37. #27 認証付き REST API・OpenAPI 契約
+
+[rest-api ADR](docs/ADR/rest-api.md) が §13/§17/§21.3 の実装上の明確化となる。listener は `papersd` 内の
+tokio runtime（専用 thread）で、永続 `ApiSettings` が有効な間だけ 127.0.0.1/::1 に bind し、設定変更に追従、
+有効中は daemon を idle 終了させない。全 endpoint は #26 `ENDPOINTS` の REST 行そのもので、Bearer token を
+`Authenticator` で毎要求検証（失効は keep-alive 接続の次要求から 401）、行の全 operation を事前認可し、
+各 command は IPC と同じ `Session::dispatch`（共有 `ipc::admit`/`ipc::guard`）を通る。HTTP は scoped token
+（api/mcp/cli）のみ。Host 完全一致・Origin 既定拒否・CORS 既定無効、body/URI/header/timeout/同時実行上限、
+`{error:{code,message,details,request_id}}`、内容・token なしの request log。§13.2 からの差分: export は
+`POST /exports`（許可フォルダへの書き込みのみ、#26）、import は本文の BibTeX/RIS（≤2 MiB、1 回 ≤100 件、
+完全重複は skip）、ページ描画・bulk・restore・job cancel は #26 表の追加行。下位 scope へ本文・注釈を返さず、
+書き込み応答は読めない token に保存済みレコードを返さない。契約は [OpenAPI](docs/openapi.json)（route 表と
+`ENDPOINTS` から生成、相互一致と全応答の schema 適合を試験）。証跡は [ISSUE_27](docs/validation/ISSUE_27.md)。
+
+## 38. #23 Native Messaging host と Chrome/Firefox 登録
 
 [native messaging ADR](docs/ADR/native-messaging.md) が §5.1/§12.2–12.3 の実装上の明確化となる。
 `papers-native-host` は `papersd` の兄弟実行ファイルとして配置し（`<prefix>/bin`、`.app/Contents/MacOS`）、

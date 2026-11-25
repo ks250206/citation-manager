@@ -59,10 +59,13 @@ No grant id is ever forgotten while the grant may still be live:
 - `unregister --keep-grant` removes only the manifests and marks the config `unregistered`,
   keeping config and credential and contacting no daemon; `register` restores browser access
   with the same grant, a plain `unregister` revokes it.
-- Native-host grants have no expiry. The grant is capture-only, and an expiry would silently
-  stop browser saving with no renewal flow until the #26 consent/rotation UI; instead it ends
-  by explicit revocation (`unregister`, re-pairing, or a GrantAdmin), and failed revocations
-  are tracked as above. Registering another library while a grant is held is refused until
+- `pair` requests no explicit expiry. Since #26 every delegated grant expires
+  ([api-tokens-grants](api-tokens-grants.md): `CaptureCommit` is a write capability, so the
+  native-host grant gets the write lifetime, 30 days by default); once it has expired the
+  browser gets `unauthorized` and a plain `pair` (no `--force` needed) issues a new grant and
+  revokes the old one. Before that it ends by explicit revocation (`unregister`, re-pairing,
+  or a GrantAdmin / the #26 "API & integrations" settings), and failed revocations are tracked
+  as above. Registering another library while a grant is held is refused until
   `unregister` revoked it in its own library.
 
 Browser messages map to a closed set of commands (`message::Request` -> `daemon::command`):

@@ -56,7 +56,7 @@ passed every check:
 ## After merging main (#62) through #22
 
 Merged `claude/issue-22-capture` @ `f827762` (contains main #19/#25/#18 and the #22 capture →
-#18 extraction trigger). Only TEST_MATRIX conflicted; the DESIGN #23 section is now §35. Linux:
+#18 extraction trigger). Only TEST_MATRIX conflicted; the DESIGN #23 section was then §35 (now §38, after #26 §36 and #27 §37). Linux:
 
 | Command | Result |
 |---|---|

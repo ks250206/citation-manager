@@ -21,6 +21,11 @@ sha2.workspace = true
 tempfile.workspace = true
 rustix = { workspace = true, features = ["fs", "net"] }
 uuid = { workspace = true, features = ["v7"] }
+# #27 in-process REST listener (docs/ADR/rest-api.md): HTTP/1.1 only, no TLS, no CORS layer.
+axum = { workspace = true, features = ["http1", "json", "query", "tokio", "matched-path"] }
+tokio = { workspace = true, features = ["net", "time", "sync"] }
+hyper = { workspace = true, features = ["server", "http1"] }
+hyper-util = { workspace = true, features = ["tokio", "service"] }
 
 [features]
 default = []
@@ -70,6 +75,18 @@ path = "../../tests/integration/daemon/lifecycle.rs"
 [[test]]
 name = "daemon_jobs"
 path = "../../tests/integration/daemon/jobs.rs"
+
+# #26 scoped tokens, revocation/scope changes on live sessions, elevation, export folders,
+# settings across restart and the papersd CLI bootstrap (memory secret store).
+[[test]]
+name = "daemon_api"
+path = "../../tests/integration/daemon/api_tokens.rs"
+
+# #27 REST API on an ephemeral loopback port: every endpoint (normal/401/403/revoked/
+# invalid JSON/Host/Origin/limits), OpenAPI conformance, REST-IPC parity, request log.
+[[test]]
+name = "daemon_rest"
+path = "../../tests/integration/daemon/rest.rs"
 
 # #18 extraction jobs, search IPC and authorization (deterministic extractor, no PDFium).
 [[test]]

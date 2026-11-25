@@ -14,10 +14,10 @@ Rust + GPUI のローカル文献管理アプリを実装中です。#7 の 12-c
 [保存と worker 境界](docs/ADR/library-workbench.md)）。#25 で library ごとの `papersd`（唯一の writer、
 認可付きローカル IPC、永続 job）を追加し、GUI は IPC 経由で使います（[daemon-ipc ADR](docs/ADR/daemon-ipc.md)、
 [Linux 検証](docs/validation/ISSUE_25.md)）。#28 の CLI `papers` は GUI なしで同じ daemon を遅延起動して使えます
-（[CLI ADR](docs/ADR/cli.md)、[検証](docs/validation/ISSUE_28.md)）。MCP tools、REST はまだ利用できません。
+（[CLI ADR](docs/ADR/cli.md)、[検証](docs/validation/ISSUE_28.md)）。REST はまだ利用できません。
 #11 の PDFium runtime は [再現可能な検証PoC](docs/validation/PDFIUM_POC.md) を追加し、
 専用worker・継承CropBox/回転/Unicode・注釈搬出をPDFKitと独立照合しました。製品viewer/exportは後続です。
-`cm_mcp::run_stdio()` は #29 未実装を明示するエラーを返し、MCP stdout を出力しません。
+#29 で既定 read-only の MCP stdio サーバー `papers-mcp`（papersd IPC 経由、12 tools、出典付き結果）を追加しました（[mcp-server ADR](docs/ADR/mcp-server.md)）。書き込みは所有者が別途承認した grant が必要です。
 
 設計は [DESIGN.md](DESIGN.md)、依存方向と信頼境界は [ADR](docs/ADR/boundaries.md) /
 [security](docs/ADR/security.md)、変更ルールは [CONTRIBUTING](docs/CONTRIBUTING.md) を参照してください。
@@ -90,7 +90,8 @@ Linux では ⌘ の代わりに Ctrl を使います（Ctrl+N / Ctrl+S / Ctrl+F
 テーブルでは ↑/↓ で選択移動、↩ で Title 欄へ移動、Esc で入力欄からテーブルへ戻ります。
 ⌘1 Library、⌘2 Import review、⌘, Organize & export。未保存の編集は下部ステータスバーに表示されます。
 ⌘Q で完全終了し、同じ library/settings で再起動します。
-既定の実ライブラリは自動接続しません。HTTP listener はありません。GUI は library ごとの `papersd` を
+既定の実ライブラリは自動接続しません。HTTP は既定で無効です（API & integrations で有効化すると
+`papersd` が 127.0.0.1/::1 の REST API を提供: [rest-api ADR](docs/ADR/rest-api.md)、[OpenAPI](docs/openapi.json)）。GUI は library ごとの `papersd` を
 同じディレクトリから遅延起動し、0700 の runtime directory 内 0600 Unix socket と library 内の
 bootstrap credential（0600）で接続します。GUI 終了後、client と active job が無ければ daemon は idle 終了します。
 

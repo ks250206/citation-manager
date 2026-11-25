@@ -188,6 +188,8 @@ fn default_timeout() -> u32 {
 #[serde(deny_unknown_fields)]
 pub struct SearchRequest {
     /// Search DSL (docs/ADR/search-dsl.md): terms, "phrases", doi:, tag:, year:, collection:, has:pdf.
+    /// May be blank only when `collection` or `papers` scopes the request: it then lists the
+    /// scope's papers (a blank query without a scope is an `EmptyInput` diagnostic).
     pub query: String,
     #[serde(default)]
     pub visibility: PaperVisibility,

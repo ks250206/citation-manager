@@ -2,12 +2,19 @@
 //!
 //! Start order: private dirs -> exclusive library lock -> migrations (with pre-migration
 //! backup) -> grant registry + owner bootstrap credential -> library worker + job runner ->
-//! stale socket cleanup -> bind (0600 socket in a 0700 directory). No HTTP listener.
+//! stale socket cleanup -> bind (0600 socket in a 0700 directory) -> #27 REST listener
+//! manager (listens only while the persisted API settings enable it).
 //!
 //! Per connection: OS peer check, a bounded/timed Hello, credential -> stored grant, then
 //! every request is authorized against the *current* grant (default deny).
+//!
+//! #26: the same per-request decision covers scoped API/MCP/CLI tokens. On top of it the
+//! daemon applies the bulk guard (`policy::elevation`), restricts `exports:write` tokens to
+//! the allowed export folders, and records denials and non-read operations in the audit log.
 pub mod auth;
 mod capture;
+/// #27 in-process adapters (REST) dispatch through the same `Session::dispatch`.
+pub mod gateway;
 
 use crate::{
     desktop_worker::InProcessLibraryClient,
@@ -19,14 +26,22 @@ use auth::{Authenticator, IssueError, now_ms};
 use cm_core::{
     ServiceError,
     metadata_resolve::Cancellation,
-    policy::{self, Capability, CapabilitySet, Denial, GrantId, Operation},
+    policy::{
+        self, Capability, CapabilitySet, Denial, GrantId, Operation,
+        elevation::{BulkGuard, BulkKind},
+    },
     search::extraction::PageTextExtractor,
 };
 use cm_metadata::fetch_policy::{FetchPolicy, HostResolver, PdfFetcher, SystemResolver};
 use cm_protocol::{
+    api::{AuditEntry, AuditOutcome},
+    client::secrets::{PlatformSecretStore, SecretStore},
+    organization::OrganizationRequest,
+};
+use cm_protocol::{
     attachments::PdfReply,
     exchange::{ImportReply, ImportRequestUi},
-    import::{ImportPreview, PreviewId},
+    import::{ImportAction, ImportCommit, ImportPreview, PreviewId},
     ipc::{
         ClientFrame, Command, DaemonStatus, GrantCommand, GrantReply, HandshakeRejection,
         MAX_HANDSHAKE_FRAME, MAX_IN_FLIGHT, MAX_REQUEST_FRAME, MAX_RESPONSE_FRAME,
@@ -35,7 +50,7 @@ use cm_protocol::{
     },
     jobs::{JobCommand, JobReply},
     library::LibraryClient,
-    search::{FulltextReply, FulltextRequest, SearchReply, SearchRequest},
+    search::{FulltextReply, FulltextRequest, PageTextRequest, SearchReply, SearchRequest},
 };
 use cm_storage::{LibraryDb, LibraryDirectory, SqlFault, StorageError, fts::SearchReader};
 use std::{
@@ -72,6 +87,14 @@ pub struct DaemonConfig {
     /// extraction of pending PDF attachments; `None` (no PDF runtime) leaves PDF text
     /// unindexed and searches report it as `PendingExtraction`.
     pub extractor: Option<Arc<dyn PageTextExtractor>>,
+    /// #26 store for issued token plaintext. `None` = the platform store (Keychain /
+    /// Secret Service) with the private-file fallback. Tests inject a memory store.
+    pub secret_store: Option<Arc<dyn SecretStore>>,
+    /// #26 size of each of the two audit log files.
+    pub audit_max_bytes: u64,
+    /// #27 REST listener options (origins, limits, request log). Whether it listens, and
+    /// where, comes only from the persisted API settings.
+    pub rest: crate::rest::RestConfig,
     /// #22 capture PDF fetch policy and name resolution.
     pub capture: CaptureConfig,
 }
@@ -100,6 +123,9 @@ impl DaemonConfig {
             handlers: default_handlers(),
             capture: CaptureConfig::default(),
             extractor: None,
+            secret_store: None,
+            audit_max_bytes: crate::audit::DEFAULT_MAX_BYTES,
+            rest: crate::rest::RestConfig::default(),
         }
     }
 }
@@ -140,9 +166,15 @@ struct Shared {
     activity: Arc<Activity>,
     sessions: AtomicU64,
     /// Import preview handle -> grant that created it (preview grant binding).
-    previews: Mutex<HashMap<PreviewId, GrantId>>,
+    previews: Mutex<HashMap<PreviewId, PreviewOwner>>,
     /// Live authenticated connections, closed on explicit shutdown.
     streams: Mutex<HashMap<u64, UnixStream>>,
+    /// #26 token management, API settings and the audit log.
+    api: crate::api::ApiService,
+    /// #26 per-grant burst limit for trash/delete and membership changes.
+    bulk: Mutex<BulkGuard>,
+    /// #27 in-process adapter sessions (closed and drained before the lock is released).
+    internal: Arc<gateway::Tracker>,
     /// #22 capture preview -> creating grant and offered PDF candidates.
     captures: Mutex<capture::Bindings>,
     capture: CaptureConfig,
@@ -192,6 +224,24 @@ pub fn start(config: DaemonConfig) -> Result<RunningDaemon, StartError> {
         ReaderPool::new(directory.clone(), MAX_SEARCH_READERS).map_err(StartError::Storage)?;
     let auth = Arc::new(Authenticator::load(control.clone()).map_err(StartError::Service)?);
     auth.bootstrap_desktop(&paths.desktop_credential, now_ms())?;
+    let secrets = match config.secret_store {
+        Some(store) => store,
+        None => Arc::new(PlatformSecretStore::detect(
+            paths.secrets_dir(),
+            lifecycle::euid(),
+        )),
+    };
+    let api = crate::api::ApiService::new(
+        auth.clone(),
+        secrets,
+        paths.library_key(),
+        paths.library.clone(),
+        Arc::new(crate::audit::AuditLog::new(
+            paths.audit_log(),
+            config.audit_max_bytes,
+        )),
+    )
+    .map_err(StartError::Service)?;
     let activity = Arc::new(Activity::default());
     let (engine, engine_exit) =
         InProcessLibraryClient::start_with_exit(paths.library.clone(), config.settings)?;
@@ -236,9 +286,13 @@ pub fn start(config: DaemonConfig) -> Result<RunningDaemon, StartError> {
         sessions: AtomicU64::new(0),
         previews: Mutex::new(HashMap::new()),
         streams: Mutex::new(HashMap::new()),
+        api,
+        bulk: Mutex::new(BulkGuard::default()),
+        internal: Arc::default(),
         captures: Mutex::new(capture::Bindings::default()),
         capture: config.capture,
     });
+    let rest = crate::rest::Manager::start(gateway::Gateway(shared.clone()), config.rest)?;
     let stop = Arc::new(AtomicBool::new(false));
     let accept_stop = stop.clone();
     let idle = config.idle_timeout;
@@ -246,7 +300,10 @@ pub fn start(config: DaemonConfig) -> Result<RunningDaemon, StartError> {
         .name("papersd-accept".into())
         .spawn(move || {
             accept_loop(&listener, &shared, &accept_stop, idle);
-            // Stop accepting first, then remove our socket while still holding the lock.
+            // Stop the REST listener (its runtime and every in-flight request session, so no
+            // adapter thread keeps `shared` alive), stop accepting, then remove our socket while
+            // still holding the lock.
+            rest.stop();
             drop(listener);
             let _ = std::fs::remove_file(&shared.paths.socket);
             for stream in shared
@@ -262,6 +319,8 @@ pub fn start(config: DaemonConfig) -> Result<RunningDaemon, StartError> {
                 thread::sleep(Duration::from_millis(10));
             }
             shared.jobs.stop();
+            shared.auth.flush_last_used();
+            shared.api.audit.flush();
             drop(shared);
             // Release the single-writer lock only after the library worker has closed its
             // connections; otherwise the next daemon could open the library (and see its
@@ -353,7 +412,7 @@ fn serve(mut stream: UnixStream, shared: &Arc<Shared>) {
         daemon_version: env!("CARGO_PKG_VERSION").into(),
         session,
         grant: grant.id,
-        capabilities: policy::effective(&grant, hello.requested.as_ref()),
+        capabilities: policy::effective_at(&grant, hello.requested.as_ref(), now_ms()),
         max_request_frame: MAX_REQUEST_FRAME,
         max_in_flight: MAX_IN_FLIGHT as u32,
     };
@@ -474,7 +533,32 @@ impl Session {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .get(preview)
-            == Some(&self.grant)
+            .map(|owner| owner.grant)
+            == Some(self.grant)
+    }
+    /// #27: a caller that cannot read papers gets exact duplicates skipped on commit,
+    /// decided from the unredacted preview (it never learned which rows matched).
+    fn skip_hidden_duplicates(&self, commit: &mut ImportCommit, redacted: bool) {
+        if !redacted {
+            return;
+        }
+        let hidden = self
+            .shared
+            .previews
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&commit.preview_id)
+            .and_then(|owner| owner.hidden_duplicates.clone());
+        let Some(hidden) = hidden else {
+            return;
+        };
+        for decision in &mut commit.decisions {
+            if hidden.get(decision.candidate_index) == Some(&true)
+                && decision.action == ImportAction::Create
+            {
+                decision.action = ImportAction::Skip;
+            }
+        }
     }
     fn cancellation(&self, id: u64) -> Cancellation {
         let cancel = Cancellation::default();
@@ -491,17 +575,23 @@ impl Session {
             return;
         }
         let operation = command.operation();
-        let held = match self.shared.auth.authorize(
+        let held = match admit(
+            &self.shared,
             self.grant,
             self.requested.as_ref(),
-            operation,
+            &command,
             now_ms(),
         ) {
             Ok(held) => held,
-            Err(denial) => {
-                self.respond_now(id, Err(WireError::Denied(denial)));
+            Err(error) => {
+                self.respond_now(id, Err(error));
                 return;
             }
+        };
+        let target = match &command {
+            Command::Api(c) => api_target(c),
+            Command::Grants(GrantCommand::Revoke(g)) => Some(*g),
+            _ => None,
         };
         self.in_flight.fetch_add(1, Ordering::SeqCst);
         let responder = Responder(Arc::new(Mutex::new(Some((
@@ -512,11 +602,21 @@ impl Session {
         let cancels = self.cancels.clone();
         let done = {
             let responder = responder.clone();
+            let audit = crate::api::audited(operation).then(|| {
+                (
+                    self.shared.api.audit.clone(),
+                    self.grant,
+                    self.shared.auth.kind_of(self.grant),
+                )
+            });
             move |result: Result<Reply, WireError>| {
                 cancels
                     .lock()
                     .unwrap_or_else(|e| e.into_inner())
                     .remove(&id);
+                if let Some((log, grant, kind)) = audit {
+                    log.record(audit_entry(grant, kind, operation, &result, target));
+                }
                 responder.send(result);
             }
         };
@@ -559,7 +659,12 @@ impl Session {
                 settings,
                 Box::new(move |r| done(r.map(|()| Reply::Unit).map_err(Into::into))),
             ),
-            Command::Import(request) => {
+            Command::Import(mut request) => {
+                let redact = !held.contains(&Capability::LibraryRead)
+                    && !held.contains(&Capability::MetadataRead);
+                if let ImportRequestUi::Commit(commit) = &mut request {
+                    self.skip_hidden_duplicates(commit, redact);
+                }
                 match &request {
                     ImportRequestUi::Commit(c) if !self.preview_owned(&c.preview_id) => {
                         done(denied(Operation::ImportCommit));
@@ -573,21 +678,24 @@ impl Session {
                 }
                 let previews = self.shared.clone();
                 let grant = self.grant;
-                let redact = !held.contains(&Capability::LibraryRead);
                 self.engine.import(
                     request,
                     Box::new(move |r| {
                         done(
                             r.map(|reply| match reply {
                                 ImportReply::Preview(mut p) => {
+                                    let hidden_duplicates = redact.then(|| redact_matches(&mut p));
                                     previews
                                         .previews
                                         .lock()
                                         .unwrap_or_else(|e| e.into_inner())
-                                        .insert(p.id.clone(), grant);
-                                    if redact {
-                                        redact_matches(&mut p);
-                                    }
+                                        .insert(
+                                            p.id.clone(),
+                                            PreviewOwner {
+                                                grant,
+                                                hidden_duplicates,
+                                            },
+                                        );
                                     Reply::Import(ImportReply::Preview(p))
                                 }
                                 other => Reply::Import(other),
@@ -611,7 +719,12 @@ impl Session {
                 request,
                 Box::new(move |r| done(r.map(Reply::Exported).map_err(Into::into))),
             ),
-            Command::Pdf(command) => {
+            Command::Pdf(mut command) => {
+                let redact = !held.contains(&Capability::LibraryRead)
+                    && !held.contains(&Capability::MetadataRead);
+                if let PdfCommand::CommitNew { commit, .. } = &mut command {
+                    self.skip_hidden_duplicates(commit, redact);
+                }
                 if let PdfCommand::CommitNew { commit, .. } = &command
                     && !self.preview_owned(&commit.preview_id)
                 {
@@ -627,7 +740,6 @@ impl Session {
                         | PdfCommand::CommitNew { .. }
                         | PdfCommand::RetryAttachment { .. }
                 );
-                let redact = !held.contains(&Capability::LibraryRead);
                 self.engine.pdf(
                     command.into_request(self.cancellation(id)),
                     Box::new(move |report| {
@@ -635,15 +747,19 @@ impl Session {
                     }),
                     Box::new(move |mut r| {
                         if let Ok(PdfReply::Preview(p)) = &mut r {
+                            // Same rule as import previews: no read scope, no existing matches.
+                            let hidden_duplicates = redact.then(|| redact_matches(p));
                             previews
                                 .previews
                                 .lock()
                                 .unwrap_or_else(|e| e.into_inner())
-                                .insert(p.id.clone(), grant);
-                            // Same rule as import previews: no LibraryRead, no existing matches.
-                            if redact {
-                                redact_matches(p);
-                            }
+                                .insert(
+                                    p.id.clone(),
+                                    PreviewOwner {
+                                        grant,
+                                        hidden_duplicates,
+                                    },
+                                );
                         }
                         if adds_attachments && r.is_ok() {
                             previews.jobs.ensure_extraction();
@@ -705,6 +821,7 @@ impl Session {
                         }),
                     GrantCommand::List => Ok(GrantReply::Grants(auth.list())),
                     GrantCommand::Revoke(grant) => {
+                        // Same order as `ApiService::revoke`: registry, jobs, then the secret.
                         let revoked = auth.revoke(grant, now_ms());
                         // Fail closed: the grant is revoked in memory even if persisting failed,
                         // and its jobs must not keep running with its authority.
@@ -712,6 +829,14 @@ impl Session {
                             Ok(false) => Ok(0),
                             Ok(true) | Err(_) => self.shared.jobs.owner_revoked(grant),
                         };
+                        if !matches!(revoked, Ok(false)) {
+                            self.shared.api.forget_secret(grant);
+                            self.shared
+                                .bulk
+                                .lock()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .forget(grant);
+                        }
                         match (revoked, jobs) {
                             (Ok(true), Ok(_)) => Ok(GrantReply::Revoked(grant)),
                             (Ok(false), _) => Err(WireError::Service(ServiceError::NotFound)),
@@ -724,6 +849,29 @@ impl Session {
                     ))),
                 };
                 done(result.map(Reply::Grants));
+                Ok(())
+            }
+            Command::Api(command) => {
+                let revoked = match &command {
+                    cm_protocol::api::ApiCommand::Revoke(g)
+                    | cm_protocol::api::ApiCommand::Reissue(g) => Some(*g),
+                    _ => None,
+                };
+                let result = self.shared.api.handle(
+                    self.grant,
+                    self.requested.as_ref(),
+                    command,
+                    &self.shared.jobs,
+                    now_ms(),
+                );
+                if let Some(g) = revoked.filter(|_| result.is_ok()) {
+                    self.shared
+                        .bulk
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .forget(g);
+                }
+                done(result.map(Reply::Api));
                 Ok(())
             }
             Command::Search(request) => {
@@ -741,6 +889,10 @@ impl Session {
                     &mut request
                 {
                     *cancel = self.cancellation(id);
+                }
+                if let Err(error) = annotation_provenance(&request, &held) {
+                    done(Err(error));
+                    return;
                 }
                 self.engine.annotations(
                     request,
@@ -764,6 +916,82 @@ impl Session {
                 .remove(&id);
         }
     }
+}
+
+/// The per-request decision shared by every transport (IPC sessions and the in-process REST
+/// adapter, which dispatches through `Session::dispatch` as well): the operation's capability
+/// requirement against the grant's *current* state, then the #26 guards. Denials are audited.
+fn admit(
+    shared: &Shared,
+    grant: GrantId,
+    requested: Option<&CapabilitySet>,
+    command: &Command,
+    now: i64,
+) -> Result<CapabilitySet, WireError> {
+    let operation = command.operation();
+    let held = match shared.auth.authorize(grant, requested, operation, now) {
+        Ok(held) => held,
+        Err(denial) => {
+            let error = WireError::Denied(denial);
+            record_denial(shared, grant, operation, &error);
+            return Err(error);
+        }
+    };
+    if let Err(error) = guard(shared, grant, command, &held) {
+        // Bulk refusals are recorded as the bulk decision (admin audit sink).
+        let decided = match &error {
+            WireError::Denied(Denial::Forbidden(op)) => *op,
+            _ => operation,
+        };
+        record_denial(shared, grant, decided, &error);
+        return Err(error);
+    }
+    Ok(held)
+}
+
+/// #26 checks after the operation's capability requirement passed: the per-kind bulk guard
+/// (decided as `BulkTrash`/`BulkMove`) and export folders for tokens without
+/// `LocalFileWrite` (real-directory containment, `.bib`/`.ris` only).
+fn guard(
+    shared: &Shared,
+    grant: GrantId,
+    command: &Command,
+    held: &CapabilitySet,
+) -> Result<(), WireError> {
+    let kind = bulk_kind(command);
+    // Exempt: the owner's permanent BulkElevated, or a running elevation for exactly this
+    // kind (and the session was not narrowed to exclude BulkElevated).
+    let exempt = kind.is_some_and(|kind| {
+        held.contains(&Capability::BulkElevated)
+            && (shared
+                .auth
+                .stored(grant)
+                .is_some_and(|s| s.grant.capabilities.contains(&Capability::BulkElevated))
+                || shared.auth.elevation_of(grant) == Some(kind))
+    });
+    shared
+        .bulk
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .check(grant, kind, exempt, Instant::now())
+        .map_err(|bulk| WireError::Denied(Denial::Forbidden(bulk)))?;
+    if let Command::Export(request) = command
+        && !held.contains(&Capability::LocalFileWrite)
+        && !export_allowed(request, &shared.api.export_dirs())
+    {
+        return Err(WireError::Denied(Denial::Forbidden(Operation::Export)));
+    }
+    Ok(())
+}
+
+fn record_denial(shared: &Shared, grant: GrantId, operation: Operation, error: &WireError) {
+    shared.api.audit.record(audit_entry(
+        grant,
+        shared.auth.kind_of(grant),
+        operation,
+        &Err(error.clone()),
+        None,
+    ));
 }
 
 impl Session {
@@ -833,6 +1061,29 @@ impl Session {
             FulltextRequest::Pages(request) => {
                 FulltextReply::Pages(Box::new(reader.pages(&request)?))
             }
+            FulltextRequest::PaperPages(request) => {
+                // Same limits as `Pages`, checked before anything is looked up.
+                PageTextRequest {
+                    attachment: cm_protocol::domain::AttachmentId(request.paper.0),
+                    from_page: request.from_page,
+                    max_pages: request.max_pages,
+                    max_chars: request.max_chars,
+                }
+                .validate()?;
+                let attachments = reader.for_paper(request.paper)?;
+                let attachment = match request.attachment {
+                    Some(wanted) => attachments.iter().find(|a| a.attachment_id == wanted),
+                    None => attachments.first(),
+                }
+                .ok_or(ServiceError::NotFound)?
+                .attachment_id;
+                FulltextReply::Pages(Box::new(reader.pages(&PageTextRequest {
+                    attachment,
+                    from_page: request.from_page,
+                    max_pages: request.max_pages,
+                    max_chars: request.max_chars,
+                })?))
+            }
             _ => {
                 return Err(WireError::Service(ServiceError::InvalidInput(
                     "unsupported full-text request".into(),
@@ -842,20 +1093,220 @@ impl Session {
     }
 }
 
+/// Which burst limit a command counts toward (`policy::elevation`).
+fn bulk_kind(command: &Command) -> Option<BulkKind> {
+    use cm_protocol::annotations::AnnotationRequest;
+    match command {
+        Command::Lifecycle { .. }
+        | Command::Organization(
+            OrganizationRequest::DeleteCollection(_) | OrganizationRequest::DeleteTag(_),
+        )
+        | Command::Annotations(AnnotationRequest::Delete(_)) => Some(BulkKind::Delete),
+        Command::Organization(
+            OrganizationRequest::CollectionMember(..) | OrganizationRequest::TagMember(..),
+        ) => Some(BulkKind::Move),
+        _ => None,
+    }
+}
+
+/// `exports:write` destinations: lexically inside an allowed folder, the parent chain
+/// really contains that folder (same device and inode, so bind mounts or case-folding
+/// spellings cannot fake containment), and the extension matches the format.
+fn export_allowed(request: &cm_protocol::exchange::ExportRequest, allowed: &[PathBuf]) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    let extension = match request.format {
+        cm_protocol::exchange::Format::Bibtex => "bib",
+        cm_protocol::exchange::Format::Ris => "ris",
+    };
+    if !policy::export::destination_allowed(&request.path, allowed)
+        || !policy::export::extension_allowed(&request.path, &[extension])
+    {
+        return false;
+    }
+    let ids = |p: &std::path::Path| {
+        std::fs::symlink_metadata(p)
+            .ok()
+            .map(|m| (m.dev(), m.ino()))
+    };
+    let roots: Vec<(u64, u64)> = allowed.iter().filter_map(|d| ids(d)).collect();
+    let mut current = request.path.parent();
+    while let Some(dir) = current {
+        match ids(dir) {
+            Some(id) if roots.contains(&id) => return true,
+            Some(_) => current = dir.parent(),
+            None => return false,
+        }
+    }
+    false
+}
+
+/// The grant a token-management command acts on (recorded in the audit log).
+fn api_target(command: &cm_protocol::api::ApiCommand) -> Option<GrantId> {
+    use cm_protocol::api::ApiCommand as A;
+    match command {
+        A::Reissue(g) | A::Revoke(g) | A::EndElevation(g) => Some(*g),
+        A::SetScopes { grant, .. } | A::Elevate { grant, .. } => Some(*grant),
+        _ => None,
+    }
+}
+/// Ids and fixed codes only: never request content, paths, labels or secrets.
+fn audit_entry(
+    grant: GrantId,
+    kind: Option<policy::ClientKind>,
+    operation: Operation,
+    result: &Result<Reply, WireError>,
+    target: Option<GrantId>,
+) -> AuditEntry {
+    let target = match result {
+        Ok(Reply::Api(cm_protocol::api::ApiReply::Issued { token, .. })) => Some(token.id),
+        Ok(Reply::Grants(GrantReply::Issued { grant, .. })) => Some(grant.id),
+        _ => target,
+    };
+    AuditEntry {
+        at_ms: now_ms(),
+        grant: Some(grant),
+        kind,
+        operation,
+        outcome: match result {
+            Ok(_) => AuditOutcome::Succeeded,
+            Err(WireError::Denied(_)) => AuditOutcome::Denied,
+            Err(_) => AuditOutcome::Failed,
+        },
+        reason: result
+            .as_ref()
+            .err()
+            .map(|e| crate::api::reason_code(e).to_owned()),
+        target,
+        count: 1,
+    }
+}
+
 /// How long a full-text status/page read waits for a free search reader.
 const FULLTEXT_READ_WAIT: Duration = Duration::from_secs(5);
 
-/// Without LibraryRead a preview must not reveal existing papers (native host capture).
-fn redact_matches(preview: &mut ImportPreview) {
-    let mut hidden = 0;
+/// #27 provenance: `source` decides whether the GUI shows an annotation as an unreviewed AI
+/// proposal; `ConfirmAi` is the person's review and `Undo`/`Redo` replay a whole client-supplied
+/// row (source and confirmation included). Only the owner (GrantAdmin, i.e. the desktop) may do
+/// those; token clients (API/MCP/CLI) create `ai` annotations and edit/delete them.
+fn annotation_provenance(
+    request: &cm_protocol::annotations::AnnotationRequest,
+    held: &CapabilitySet,
+) -> Result<(), WireError> {
+    use cm_protocol::annotations::{AnnotationRequest as A, Source};
+    if held.contains(&Capability::GrantAdmin) {
+        return Ok(());
+    }
+    match request {
+        A::Create(new) if new.source != Source::Ai => {
+            Err(WireError::Service(ServiceError::InvalidInput(
+                "annotations created with a token are always source=ai".into(),
+            )))
+        }
+        A::ConfirmAi(_) | A::Undo(_) | A::Redo(_) => Err(WireError::Denied(Denial::Forbidden(
+            Operation::AnnotationWrite,
+        ))),
+        _ => Ok(()),
+    }
+}
+
+/// The grant that created a preview (preview binding) and, for a caller that cannot read
+/// papers, which rows exactly duplicate existing papers (skipped on its commit).
+struct PreviewOwner {
+    grant: GrantId,
+    hidden_duplicates: Option<Vec<bool>>,
+}
+
+/// Same text for every redacted preview: it must not say whether anything matched.
+pub const REDACTED_PREVIEW_WARNING: &str = "Existing-library matches are hidden for this \
+    client; rows that exactly duplicate an existing paper are skipped on commit.";
+
+/// Without a read scope a preview must not reveal existing papers (native host capture,
+/// write-only tokens): matches, the exact-match id, citation-key collision notes and the
+/// re-allocated key are removed, and the warning is constant. Returns which rows were exact
+/// duplicates of existing papers, decided before redaction.
+fn redact_matches(preview: &mut ImportPreview) -> Vec<bool> {
+    let mut duplicates = Vec::with_capacity(preview.candidates.len());
     for candidate in &mut preview.candidates {
-        hidden += candidate.matches.len();
+        duplicates.push(
+            candidate.existing_match.is_some() || candidate.matches.iter().any(|m| m.kind.exact()),
+        );
         candidate.matches.clear();
         candidate.existing_match = None;
+        candidate.draft.bibliography.citation_key = None;
+        candidate
+            .diagnostics
+            .retain(|d| !(d.field == "citation_key" && !d.error));
     }
-    if hidden > 0 {
-        preview.warnings.push(format!(
-            "{hidden} possible existing-library matches hidden for this client"
+    preview.warnings.push(REDACTED_PREVIEW_WARNING.into());
+    duplicates
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cm_protocol::{
+        annotations::{AnnotationId, AnnotationRequest},
+        exchange::{ExportRequest, ExportSelection, Format},
+    };
+
+    #[test]
+    fn annotation_deletes_count_toward_the_delete_burst() {
+        let id = AnnotationId(uuid::Uuid::nil());
+        assert_eq!(
+            bulk_kind(&Command::Annotations(AnnotationRequest::Delete(id))),
+            Some(BulkKind::Delete)
+        );
+        assert_eq!(
+            bulk_kind(&Command::Annotations(AnnotationRequest::ConfirmAi(id))),
+            None
+        );
+        assert_eq!(bulk_kind(&Command::Status), None);
+    }
+
+    #[test]
+    fn export_containment_uses_the_real_directory_and_the_format_extension() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        let allowed = root.join("exports");
+        std::fs::create_dir_all(allowed.join("sub")).unwrap();
+        let request = |path: PathBuf, format| ExportRequest {
+            selection: ExportSelection::All,
+            format,
+            path,
+        };
+        let dirs = vec![allowed.clone()];
+        assert!(export_allowed(
+            &request(allowed.join("sub/a.bib"), Format::Bibtex),
+            &dirs
+        ));
+        assert!(export_allowed(
+            &request(allowed.join("a.ris"), Format::Ris),
+            &dirs
+        ));
+        assert!(!export_allowed(
+            &request(allowed.join("a.ris"), Format::Bibtex),
+            &dirs
+        ));
+        assert!(!export_allowed(
+            &request(allowed.join("a.json"), Format::Bibtex),
+            &dirs
+        ));
+        // A missing parent cannot prove containment; neither can a deleted allowed folder.
+        assert!(!export_allowed(
+            &request(allowed.join("missing/a.bib"), Format::Bibtex),
+            &dirs
+        ));
+        std::fs::remove_dir_all(&allowed).unwrap();
+        std::fs::create_dir(&allowed).unwrap();
+        // Recreated at the same path: the folder itself is the allowed root again.
+        assert!(export_allowed(
+            &request(allowed.join("a.bib"), Format::Bibtex),
+            &dirs
+        ));
+        std::fs::remove_dir(&allowed).unwrap();
+        assert!(!export_allowed(
+            &request(allowed.join("a.bib"), Format::Bibtex),
+            &dirs
         ));
     }
 }

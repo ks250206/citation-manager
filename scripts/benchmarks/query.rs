@@ -171,7 +171,7 @@ fn seed(directory: &LibraryDirectory, count: usize) -> Result<Value> {
         ("fulltext_pages", 0),
         ("annotations", 0),
         ("jobs", 0),
-        ("api_tokens", 0),
+        ("api_settings", 1),
     ] {
         let actual = db.query_row(&format!("SELECT count(*) FROM {table}"), [], |r| {
             r.get::<_, i64>(0)

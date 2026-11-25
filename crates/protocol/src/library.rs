@@ -3,7 +3,7 @@
 use crate::domain::{Paper, PaperId};
 pub use cm_core::{
     ServiceError,
-    papers::{NewPaper, PaperList},
+    papers::{NewPaper, PaperList, PaperPatch},
 };
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -12,6 +12,8 @@ pub enum LibraryRequest {
     Get(PaperId),
     Create(Box<NewPaper>),
     Update(Box<Paper>),
+    /// #27 merge-patch applied on the library worker (read + update in one step).
+    Patch(PaperId, Box<PaperPatch>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -69,6 +71,14 @@ pub trait LibraryClient: Send + Sync + 'static {
         &self,
         _request: crate::annotations::AnnotationRequest,
         _complete: Reply<crate::annotations::AnnotationReply>,
+    ) -> Result<(), ServiceError> {
+        Err(ServiceError::Unavailable)
+    }
+    /// #26 tokens and API settings. Clients without daemon support report Unavailable.
+    fn api(
+        &self,
+        _command: crate::api::ApiCommand,
+        _complete: Reply<crate::api::ApiReply>,
     ) -> Result<(), ServiceError> {
         Err(ServiceError::Unavailable)
     }

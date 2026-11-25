@@ -1,8 +1,9 @@
 # #25: papersd, authenticated local IPC, single writer, durable jobs
 
 Status: adopted for M4-1 on Linux/Unix. macOS lifecycle/.app placement is not verified here
-(#34). Concrete feature contracts extend this compatibly; HTTP (#27), persistent token UI and
-grant management (#26), CLI (#28) and MCP tools (#29) build on it.
+(#34). Concrete feature contracts extend this compatibly; HTTP (#27), CLI (#28) and MCP tools
+(#29) build on it. Persistent tokens, scopes, elevation, audit and API settings (#26):
+[api-tokens-grants](api-tokens-grants.md).
 
 ## Processes and ownership
 
@@ -19,7 +20,9 @@ SQLite database for writing or migration. Start order (`cm_daemon::ipc::start`):
 4. Load grants, ensure the owner bootstrap credential (below), start the existing library
    worker (`InProcessLibraryClient`, now daemon-internal) and the job runner.
 5. Remove a leftover socket only while holding the lock, bind a 0600 Unix socket inside a
-   0700 runtime directory. No HTTP listener exists.
+   0700 runtime directory. The optional loopback REST listener (#27, [rest-api](rest-api.md))
+   starts only when the persisted API settings enable it and dispatches through the same
+   `Session::dispatch`.
 
 The GUI (`citation-manager`) no longer embeds the worker. It injects
 `cm_protocol::client::IpcLibraryClient` into the unchanged views (`LibraryClient`), and

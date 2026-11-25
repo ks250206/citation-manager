@@ -53,6 +53,11 @@ impl LibraryView {
                         tab("layout", "Organize & export", Screen::Settings).on_click(
                             cx.listener(|this, _, w, cx| this.show(Screen::Settings, w, cx)),
                         ),
+                    )
+                    .child(
+                        tab("api", "API & integrations", Screen::Api).on_click(cx.listener(
+                            |this, _, w, cx| this.open_api(api_ui::ApiFocus::Settings, w, cx),
+                        )),
                     ),
             )
             .child(div().flex_1())
