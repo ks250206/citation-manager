@@ -1,0 +1,16 @@
+     Running tests/mixed_import_review.rs (target/debug/deps/mixed_import_review-03fda3074cf4681a)
+
+running 1 test
+test repeated_mixed_pdf_manual_and_bibliography_reviews_release_real_slots_and_resume_after_prior_commit ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running tests/import_flow_state.rs (target/debug/deps/import_flow_state-0081338b9063bf0a)
+
+running 4 tests
+test a_failed_cancel_submission_keeps_the_original_handle_and_decisions ... ok
+test pdf_reports_preserve_unrelated_previews_and_paused_batch_progress_requires_new_approval ... ok
+test editing_or_cancelling_doi_never_cancels_attach_retry_or_commit_and_reverse_is_isolated ... ok
+test pdf_form_survives_library_selection_and_new_manual_without_borrowing_their_metadata ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s

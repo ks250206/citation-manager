@@ -1,0 +1,99 @@
+{
+  "paper_count": 1003,
+  "synthetic_doi_count": 1000,
+  "doi_lookup_saved": 0,
+  "attachment_count": 502,
+  "retained_paper": [
+    "01a1b310-22d0-7590-b2a4-dd06ea152ae9",
+    "Retained PDF native QA corrected",
+    "10.1234/embedded"
+  ],
+  "integrity": "ok",
+  "all_502_sources_match_managed_blob_hash": true,
+  "selected_title_merge": [
+    "Selected-field merge QA title",
+    2000,
+    "article",
+    "10.99999/gui-qa-0000",
+    "Private QA Journal",
+    "qa0000"
+  ],
+  "id_desc_first_rows": [
+    [
+      "Retained PDF native QA corrected",
+      "10.1234/embedded"
+    ],
+    [
+      "Valid neighbor for skip",
+      null
+    ],
+    [
+      "Manual native QA record",
+      null
+    ],
+    [
+      "Synthetic dc26ff87bebf4ed6b9fa68ab97cf0d9f400841bb62a3491af69d643514800e41",
+      "10.99999/gui-qa-0999"
+    ],
+    [
+      "Synthetic 96c1f9c7972ec07492e03a0214d02db08839ba20a860a9f353bcf4d5455d98dc",
+      "10.99999/gui-qa-0998"
+    ],
+    [
+      "Synthetic 533e6e529e877437483cb91fe3d3fa4790a658ac2533145d4f2664c255b1b102",
+      "10.99999/gui-qa-0997"
+    ]
+  ],
+  "created_at_desc_first_rows": [
+    [
+      "Retained PDF native QA corrected",
+      "10.1234/embedded"
+    ],
+    [
+      "Valid neighbor for skip",
+      null
+    ],
+    [
+      "Manual native QA record",
+      null
+    ],
+    [
+      "Synthetic dc26ff87bebf4ed6b9fa68ab97cf0d9f400841bb62a3491af69d643514800e41",
+      "10.99999/gui-qa-0999"
+    ],
+    [
+      "Synthetic 96c1f9c7972ec07492e03a0214d02db08839ba20a860a9f353bcf4d5455d98dc",
+      "10.99999/gui-qa-0998"
+    ],
+    [
+      "Synthetic 533e6e529e877437483cb91fe3d3fa4790a658ac2533145d4f2664c255b1b102",
+      "10.99999/gui-qa-0997"
+    ]
+  ],
+  "updated_at_desc_first_rows": [
+    [
+      "Retained PDF native QA corrected",
+      "10.1234/embedded"
+    ],
+    [
+      "Manual native QA record",
+      null
+    ],
+    [
+      "Selected-field merge QA title",
+      "10.99999/gui-qa-0000"
+    ],
+    [
+      "Valid neighbor for skip",
+      null
+    ],
+    [
+      "Synthetic 0069eedcd55507138e406a64da869cd4b83236ba3c03cbb31078adac59e2f4dd",
+      "10.99999/gui-qa-0158"
+    ],
+    [
+      "Synthetic dc26ff87bebf4ed6b9fa68ab97cf0d9f400841bb62a3491af69d643514800e41",
+      "10.99999/gui-qa-0999"
+    ]
+  ]
+}

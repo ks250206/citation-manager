@@ -1,0 +1,18 @@
+{
+  "private_root": "/private/var/folders/y1/84n75pz56qg1b36t882r8n900000gn/T/cm-m0-smoke-2ojw6agu",
+  "library": "/private/var/folders/y1/84n75pz56qg1b36t882r8n900000gn/T/cm-m0-smoke-2ojw6agu/library",
+  "settings": "/private/var/folders/y1/84n75pz56qg1b36t882r8n900000gn/T/cm-m0-smoke-2ojw6agu/library/ui-settings.json",
+  "attempted_bundles": [
+    {
+      "path": "/private/var/folders/y1/84n75pz56qg1b36t882r8n900000gn/T/cm-m0-smoke-2ojw6agu/CitationManagerIssue15.app",
+      "executable_sha256": "a480c0b448804cb6bce73715327776863e6c42188b02f8045e51097059895b87"
+    },
+    {
+      "path": "/private/var/folders/y1/84n75pz56qg1b36t882r8n900000gn/T/cm-m0-smoke-2ojw6agu/Citation Manager Smoke.app",
+      "executable_sha256": "a480c0b448804cb6bce73715327776863e6c42188b02f8045e51097059895b87"
+    }
+  ],
+  "pdfium_sha256": "8d1e46a6dbe32d7cb95279ab3def2e71e557a3d4cc49162453afa3e3b250dc5e",
+  "cua_result": "cgWindowNotFound; no native screenshot or GUI operation obtained",
+  "test_processes_running": false
+}

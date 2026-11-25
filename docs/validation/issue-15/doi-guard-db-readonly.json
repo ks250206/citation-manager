@@ -1,0 +1,25 @@
+{
+  "connection": "mode=ro; PRAGMA query_only=ON",
+  "papers": [
+    [
+      "01a1b358-fe4c-747f-b427-aadca331267d",
+      "XMP suggested synthetic title",
+      "10.1234/embedded"
+    ]
+  ],
+  "attachments": [
+    {
+      "relative_path": "attachments/4f/2c/4f2c060f12cc17906795afd46d97611ee2e3fff598650a405c2569b56c69d38a.pdf",
+      "sha256": "4f2c060f12cc17906795afd46d97611ee2e3fff598650a405c2569b56c69d38a",
+      "bytes": 1387
+    }
+  ],
+  "integrity_check": [
+    [
+      "ok"
+    ]
+  ],
+  "foreign_key_check": [],
+  "lookup_doi_saved": false,
+  "bulk_records_committed": 0
+}

@@ -15,10 +15,15 @@ cm-storage.workspace = true
 cm-search.workspace = true
 cm-pdf.workspace = true
 cm-metadata.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tempfile.workspace = true
+rustix.workspace = true
 
 [features]
 default = []
-desktop-bootstrap = ["dep:cm-desktop", "cm-desktop/native-gpui"]
+desktop-bootstrap = ["dep:cm-desktop", "cm-desktop/native-gpui", "pdf-metadata"]
+pdf-metadata = ["cm-pdf/runtime"]
 
 [target.'cfg(target_os = "macos")'.dependencies]
 cm-desktop = { path = "../desktop", optional = true }

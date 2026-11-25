@@ -6,3 +6,6 @@ pub use pdfium_render::prelude::Pdfium;
 mod adapter;
 #[cfg(feature = "runtime")]
 pub mod worker;
+
+#[cfg(feature = "runtime")]
+mod metadata;

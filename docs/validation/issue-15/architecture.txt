@@ -1,0 +1,1 @@
+Architecture: 12 crates, allowed dependency direction and platform isolation passed

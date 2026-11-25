@@ -11,3 +11,4 @@ workspace = true
 [dependencies]
 cm-domain.workspace = true
 cm-core.workspace = true
+serde.workspace = true

@@ -1,0 +1,46 @@
+{
+  "source_head": "12a20771e19d98982e45300d9a6762bf8c6e20e6",
+  "documentation_head_at_run": "8aa87e6bab1c8300910c22a021df8d24f07b1b61",
+  "executable_sha256": "4e7bcf996fc2089cb0454bba0da6731c1ff30391bf9f484694c3e5b0e377e423",
+  "pdfium_sha256": "8d1e46a6dbe32d7cb95279ab3def2e71e557a3d4cc49162453afa3e3b250dc5e",
+  "inputs_sha256": {
+    "info.pdf": "d5eda83d38476cfe08b58598b75001495efedbd11593548255a927856303bc92",
+    "metadata.pdf": "4f2c060f12cc17906795afd46d97611ee2e3fff598650a405c2569b56c69d38a",
+    "scanned.pdf": "dca8e8e5f9dc8843cb4ffd546b33f3d458689221b4848436367d5063433d56c7"
+  },
+  "private_root": "/private/tmp/cm-pr45-doi-guard-180wrumk",
+  "runtime_sources_unchanged": true,
+  "gesture_operator": "user: native Finder cross-window gestures; outcomes observed by root CUA",
+  "followup_operator": "root CUA: explicit Attach, Preview/Create/Commit, quit/relaunch/title Save/host checks",
+  "screenshots_sha256": {
+    "01-human-info-drop-received-as-new.jpg": "5aabe5ad6148fbb5bb8b373abdf6854b4f90df998a4bdde4cc2443bbf41cda99",
+    "02-human-info-repeat-result.jpg": "afb65e9140e980cfed11e17f70b55d8d5a7011386fc0e486088846bb9cc33812",
+    "03-dropped-info-attachment-saved.jpg": "ea0f6f9d4bb662f0ff1add374550dedeb6dbedcebb8a0e1fe99aa5b40c29a97f",
+    "04-human-scanned-new-drop.jpg": "a30d4cd1e40e4b0f7f3c93f014e0a0cd5f8086f26c14c2f4db978b25e62af6c4",
+    "05-scanned-preview-awaiting-decision.jpg": "1ee64e1928409cf85dcdff973503f51eaeaf3470b2c027915747be65ead55f4c",
+    "06-scanned-create-explicitly-chosen.jpg": "f4d6312f68bc2f5631a37fa5f45356f1ebc5782eb6f4bc781f809a6d857531f6",
+    "07-scanned-registration-committed.jpg": "86788bf8ae1115e93226e179c6ff9d7dd5f723c598d0224fba1c0a00c382de08",
+    "08-library-two-papers.jpg": "18cbb3f3e60f50ee7886eaec53fefde6932b2c11403ded3be623b07cdd89e74f",
+    "09-relaunch-two-papers.jpg": "9652aef9e2019de29eefb51c65bd5222e5618a630f9e7559cdd87eafb98bf3ed",
+    "10-filename-title-corrected-after-relaunch.jpg": "184348c17f80170320507b0e6fcab29cd44a3e77b6c7ba9c5903db3c7b303bdc",
+    "11-corrected-title-saved.jpg": "60742eadbedf22f0abc7d8ee675bacca378fd6d378ec13eded6cf17aeeeb72e7",
+    "12-reopened-scanned-attachment-present.jpg": "7b558752b7e498b597dc2ea41d580b2a981bb73fa8f6fe3c642631aee45b1996",
+    "13-reopened-original-two-attachments.jpg": "32dad9bb43e2576411b1b4cf5495c2c323eb31c944ceeac2aa8e435ccddbf4c5"
+  },
+  "sessions": [
+    {
+      "launch_session": 1636,
+      "exit_code": 0
+    },
+    {
+      "launch_session": 28771,
+      "exit_code": 0
+    }
+  ],
+  "limits": [
+    "First info.pdf gesture produced RegisterNew inspection; exact release position unavailable; no dispatch defect or Attach success inferred from it.",
+    "Second blue-centre gesture succeeded without source or binary changes.",
+    "Screenshot10 records an unsaved edit; screenshot11 is the actual save confirmation.",
+    "No network-disabled GUI, real failed-page retry, freely overlapping DOI/PDF pair or 1000-record import rerun."
+  ]
+}

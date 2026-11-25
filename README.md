@@ -8,7 +8,10 @@ Rust + GPUI のローカル文献管理アプリを実装中です。#7 の 12-c
 #8 の SQLite library / 文献 CRUD を追加しました（[利用API・保存境界](docs/ADR/sqlite-library.md)、
 [実DB検証](docs/validation/ISSUE_8.md)）。
 #10 では macOS の実 GPUI window と手動登録/編集/一覧/詳細を追加しました
-（[起動・実機検証](docs/validation/ISSUE_10.md)）。daemon/IPC/CLI、MCP tools はまだ利用できません。
+（[起動・実機検証](docs/validation/ISSUE_10.md)）。#15 は実 library query による分類・metadata 検索・
+ページング、書誌 preview/import/export、PDF 添付/新規登録、private 設定を接続しています。
+**#15 の native CUA acceptance は未完了**です（[検証・blocker](docs/validation/ISSUE_15.md)、
+[保存と worker 境界](docs/ADR/library-workbench.md)）。daemon/IPC/CLI、MCP tools はまだ利用できません。
 #11 の PDFium runtime は [再現可能な検証PoC](docs/validation/PDFIUM_POC.md) を追加し、
 専用worker・継承CropBox/回転/Unicode・注釈搬出をPDFKitと独立照合しました。製品viewer/exportは後続です。
 `cm_mcp::run_stdio()` は #29 未実装を明示するエラーを返し、MCP stdout を出力しません。
@@ -59,7 +62,12 @@ python3 scripts/prepare_native_smoke.py --deny-network
 # 表示された open コマンドを実行。再起動も同じコマンド/同じ library を使う。
 ```
 
-⌘N で新規、タイトル/詳細を入力し ⌘S または Save locally、Tab で入力欄を移動。
-一覧をクリックまたは ⌘↑/⌘↓ で選択して編集できます。⌘Q で完全終了し、同じ library で再起動します。
+⌘N で新規、Info の metadata を入力し ⌘S で共通 preview を開き、明示的な decisions を確認して保存します。
+保存済み文献はテーブルから選んで編集し、⌘S で更新。⌘F で metadata 検索欄へ移動します。
+⌘Q で完全終了し、同じ library/settings で再起動します。
 既定の実ライブラリは自動接続しません。HTTP/IPC listener はありません。
-全書誌情報の編集、複数行/Undo/redo、未保存変更の移動確認、PDF/DOI/import は後続範囲です。
+現在の追加経路は新規 metadata の preview、DOI（read-only）、UTF-8 BibTeX/RIS、PDF files/folder。
+PDF 既存添付と新規文献化は別操作です。Info/Notes/PDF host のうち notes 編集と PDF viewer はまだ利用できません。
+各書誌 batch は最大100件の別承認が必要で、途中 cancel は以前の commit を取り消しません。
+設定の既定保存先は専用 library 内 `ui-settings.json`、明示 absolute `--settings` でも指定できます。
+複数行入力/Undo/redo、未保存変更の移動確認と終了中 write の結果照合には制限が残ります。

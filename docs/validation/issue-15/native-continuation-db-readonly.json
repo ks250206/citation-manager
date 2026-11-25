@@ -1,0 +1,50 @@
+{
+  "mode": "SQLite URI mode=ro after CUA actions and normal app quit",
+  "papers": [
+    {
+      "id": "01a1b32d-8981-7362-bda3-c6c0fe929663",
+      "title": "GUI Delta Anchor",
+      "deleted_at": null
+    },
+    {
+      "id": "01a1b330-b245-75dc-8f81-a077c65a03ce",
+      "title": "Quartz Mountain Reference",
+      "deleted_at": null
+    },
+    {
+      "id": "01a1b337-0d86-7764-b8fa-ecb2254cd544",
+      "title": "Saffron horizon microscopy",
+      "deleted_at": null
+    }
+  ],
+  "collections": [
+    {
+      "id": "01a1b32d-e73c-7252-8a8d-499de423297b",
+      "parent_id": null,
+      "name": "Moved Beta"
+    }
+  ],
+  "attachments": [
+    {
+      "id": "01a1b334-9e9b-73d3-8db5-bd8691f96ce0",
+      "paper_id": "01a1b32d-8981-7362-bda3-c6c0fe929663",
+      "relative_path": "attachments/d5/ed/d5eda83d38476cfe08b58598b75001495efedbd11593548255a927856303bc92.pdf",
+      "original_name": "info.pdf",
+      "byte_size": 751,
+      "source_sha256": "d5eda83d38476cfe08b58598b75001495efedbd11593548255a927856303bc92",
+      "blob_sha256": "d5eda83d38476cfe08b58598b75001495efedbd11593548255a927856303bc92",
+      "equal": true
+    },
+    {
+      "id": "01a1b336-0b3c-7492-b9d4-4a0216985819",
+      "paper_id": "01a1b32d-8981-7362-bda3-c6c0fe929663",
+      "relative_path": "attachments/dc/a8/dca8e8e5f9dc8843cb4ffd546b33f3d458689221b4848436367d5063433d56c7.pdf",
+      "original_name": "scanned.pdf",
+      "byte_size": 769,
+      "source_sha256": "dca8e8e5f9dc8843cb4ffd546b33f3d458689221b4848436367d5063433d56c7",
+      "blob_sha256": "dca8e8e5f9dc8843cb4ffd546b33f3d458689221b4848436367d5063433d56c7",
+      "equal": true
+    }
+  ],
+  "only_expected_records": true
+}

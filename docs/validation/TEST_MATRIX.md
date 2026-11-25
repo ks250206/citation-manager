@@ -68,3 +68,54 @@ GitHub runner の OS/Xcode 差による失敗は PR 上で実結果を確認す�
 
 UI/browser の未実施は自動 contract test で充足した扱いにしない。fallback ユーザーがまだ実行していない項目を
 passed と記さない。Developer ID 不在は将来 #31 の blocker として維持し、#7 の未署名 compile を妨げない。
+
+## #15 library workbench (2026-11-07, draft)
+
+[ISSUE_15](ISSUE_15.md) / [exact command logs and hashes](issue-15/checks.json):
+workspace fmt/clippy/test/build (164 tests plus one subsequent targeted attachment test),
+architecture, immutable migration base fd50af1 and Python 19 validators passed.
+Native-feature check/clippy/service-state tests (53) and executable link passed; a current
+desktop-only 13-test pass follows the final UI label/progress-coalescing changes.
+Real fixed-hash PDFium runtime/metadata tests (8) and runtime clippy passed. All 636 locked
+package identities/checksums remain unchanged. These are headless/compile/ABI results.
+
+**Native GUI works; acceptance remains incomplete.** The historical cgWindowNotFound
+failures above are superseded by the [awake run](issue-15/native-awake.md): actual ten-batch
+1000-row import, classification/search/export, pickers/folder/partial retry, settings
+quit/relaunch and attachment host actions. That report distinguishes earlier-binary proof
+from affected-control retests. The [fresh continuation](issue-15/native-continuation.md)
+adds exact-executable evidence for collection rename/move/delete, both oversize limits,
+dirty selection/Trash guards, unrelated Attach/Get preservation and six preview/Resume
+cycles. After normally merging main `5f0fb1d`, a fresh binary retested dirty guards, attachment reopening, PDF metadata preview and cancellation; exact phase hashes and integration checks are retained. No command/keymap native handlers were connected. D&D on the PDF files / folder screen subsequently passed both intents in the assisted
+run below; duplicate Details/PDF zones remain untested. Offline DOI, simultaneous DOI/PDF
+cancellation and failed page-query retry remain unverified. Keep PR45 Draft and #15 open. #34 remains HELD; #23/#25 gates remain
+closed. Root owns independent final review, CI and any merge.
+
+The [DOI/PDF ownership follow-up](issue-15/doi-pdf-ownership.md) supersedes the previous
+incomplete concurrency guard explanation: the reachable review-tab race was fixed,
+with actual pending-lookup cancellation/retained-PDF commit and disabled DOI controls
+during PDF inspection observed. Already-queued reply rejection/token isolation is
+automated state evidence; native late-arrival/simultaneous-operation proof is not claimed.
+Final integrated local checks: workspace227, native desktop43, Python28; #53 main
+integration preserves all 636 pins and migrations. D&D was subsequently exercised on the dedicated PDF screen; offline DOI/failed-page retry
+remain incomplete; Draft/#15 and held #34 gates are unchanged.
+
+[Assisted native Finder D&D](issue-15/native-dnd.md) subsequently passed both explicit
+Attach and NEW intents: user gestures, root CUA review/save/relaunch/title correction,
+and read-only DB/hash checks are separately identified. Two papers/three attachments
+remain correct with original bytes intact. This supersedes D&D's earlier unverified
+status only. Offline DOI / real failed-page / native queued-late-arrival evidence remains
+unverified. No runtime changes or full-suite rerun; final acceptance review/CI pending,
+PR45 Draft and #15 open, #34 HELD and #23/#25 gates unchanged.
+
+
+[Latest-runtime bulk retest](issue-15/native-bulk.md) now covers the native 1000-record
+import/classify/search/re-export sequence on the final unchanged runtime in a fresh
+private library. Ten explicit 100-row approvals committed all 1000 records; native
+navigation/scrolling responded during preview work. All/selected/collection RIS outputs
+reparsed to 1000/1/1 exact normalized records. This is debug-build functional evidence,
+not release latency/p95/RSS proof. Root accepts the offline PDF filename/edit criterion
+by the documented network-free path plus actual fallback/editing; a network-disabled
+GUI experiment, offline DOI, failed-page retry and native queued-late-arrival remain
+unverified. PR45 stays Draft and #15 open pending independent acceptance review/current
+CI. No #34 or #23/#25 gate is opened by this evidence.

@@ -80,6 +80,8 @@ jobs:
         run: cargo clippy -p cm-pdf --all-targets --features runtime --locked -- -D warnings
       - name: Pinned dylib runtime and independent PDFKit gate (missing prerequisites fail)
         run: target/pdfium-tools/bin/python scripts/pdfium/run.py --out target/pdfium-validation/ci
+      - name: Exercise bounded PDF metadata operation on the verified runtime
+        run: CM_PDFIUM_LIBRARY="$GITHUB_WORKSPACE/target/pdfium-poc/lib/libpdfium.dylib" cargo test -p cm-pdf --test metadata_runtime --features runtime --locked
       - name: Preserve runtime reports and independently rendered exports
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

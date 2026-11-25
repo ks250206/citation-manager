@@ -1,0 +1,9 @@
+{
+  "license": "CC0-1.0 original generated content",
+  "generator": "scripts/generate_library_fixtures.py",
+  "files": {
+    "info.pdf": "d5eda83d38476cfe08b58598b75001495efedbd11593548255a927856303bc92",
+    "metadata.pdf": "4f2c060f12cc17906795afd46d97611ee2e3fff598650a405c2569b56c69d38a",
+    "scanned.pdf": "dca8e8e5f9dc8843cb4ffd546b33f3d458689221b4848436367d5063433d56c7"
+  }
+}

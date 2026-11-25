@@ -37,8 +37,9 @@ def validate(metadata):
                         enabled.extend(features.get(feature, []))
                 if (not dep.get('optional') or dep.get('target') != 'cfg(target_os = "macos")'
                         or dep.get('kind') is not None
-                        or set(bootstrap) != {'dep:cm-desktop', 'cm-desktop/native-gpui'}
-                        or visited & {'desktop-bootstrap', 'dep:cm-desktop', 'cm-desktop/native-gpui'}):
+                        or set(bootstrap) != {'dep:cm-desktop', 'cm-desktop/native-gpui', 'pdf-metadata'}
+                        or features.get('pdf-metadata') != ['cm-pdf/runtime']
+                        or visited & {'desktop-bootstrap', 'dep:cm-desktop', 'cm-desktop/native-gpui', 'pdf-metadata', 'cm-pdf/runtime'}):
                     raise ValueError('daemon desktop bootstrap must be optional, macOS-only and disabled by default')
                 continue
             if target.startswith('cm-'):

@@ -115,6 +115,88 @@ fn check_points(q: Quad, crop: Rect) -> Result<(), PdfError> {
 }
 pub(crate) fn execute(pdfium: &Pdfium, op: Operation, ctx: &Context) -> Result<Output, PdfError> {
     match op {
+        Operation::Metadata { source } => {
+            let data = read(&source, ctx)?;
+            let digest = Sha256::digest(&data).into();
+            let (xmp, mut warnings) = crate::metadata::xmp(&data);
+            let doc = pdfium
+                .load_pdf_from_byte_vec(data, source.password.as_deref())
+                .map_err(native)?;
+            ctx.check()?;
+            let mut draft = xmp.unwrap_or_default();
+            use pdfium_render::prelude::PdfDocumentMetadataTagType as Tag;
+            if draft.title.trim().is_empty() {
+                draft.title = doc
+                    .metadata()
+                    .get(Tag::Title)
+                    .map(|t| t.value().to_owned())
+                    .unwrap_or_default();
+            }
+            if draft.bibliography.authors.is_empty()
+                && let Some(author) = doc.metadata().get(Tag::Author)
+                && !author.value().trim().is_empty()
+            {
+                draft.bibliography.authors.push(cm_domain::Contributor {
+                    given_name: None,
+                    family_name: None,
+                    literal_name: Some(author.value().to_owned()),
+                    orcid: None,
+                    role: "author".into(),
+                });
+            }
+            if draft.bibliography.doi.is_none() {
+                for tag in [Tag::Subject, Tag::Keywords] {
+                    if let Some(value) = doc.metadata().get(tag)
+                        && let Ok(doi) = cm_core::papers::normalize_doi(value.value())
+                    {
+                        draft.bibliography.doi = Some(doi);
+                        break;
+                    }
+                }
+            }
+            // Expose competing Info values instead of silently treating a packet hint as authority.
+            if let Some(info_title) = doc.metadata().get(Tag::Title)
+                && !info_title.value().trim().is_empty()
+                && info_title.value() != draft.title
+            {
+                warnings.push(if info_title.value().len() <= 4096 {
+                    format!(
+                        "Alternative Info title (not selected): {}",
+                        info_title.value()
+                    )
+                } else {
+                    "Alternative Info title exceeds display limits".into()
+                });
+            }
+            if let Some(selected_doi) = &draft.bibliography.doi {
+                for tag in [Tag::Subject, Tag::Keywords] {
+                    if let Some(value) = doc.metadata().get(tag)
+                        && let Ok(alternative) = cm_core::papers::normalize_doi(value.value())
+                        && &alternative != selected_doi
+                    {
+                        warnings.push(format!(
+                            "Conflicting embedded Info DOI (not selected): {alternative}"
+                        ));
+                    }
+                }
+            }
+            if cm_core::import::normalize::validate_limits(&draft).is_err() {
+                draft = Default::default();
+                warnings.push(
+                    "Embedded metadata exceeds review limits; use filename/manual metadata".into(),
+                );
+            }
+            warnings.push(
+                "Embedded PDF metadata is an untrusted suggestion; review before saving".into(),
+            );
+            ctx.check()?;
+            Ok(Output::Metadata(Box::new(MetadataSnapshot {
+                sha256: digest,
+                draft,
+                page_count: doc.pages().len(),
+                warnings,
+            })))
+        }
         Operation::Page {
             source,
             page_index: index,

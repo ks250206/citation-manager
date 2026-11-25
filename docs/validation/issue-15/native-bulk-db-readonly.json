@@ -1,0 +1,61 @@
+{
+  "observed_utc": "2026-11-07T01:29:08.243561+00:00",
+  "method": "Python sqlite3 URI mode=ro; PRAGMA query_only=ON; only SELECT and read-only PRAGMA",
+  "database": "/private/tmp/cm-pr45-latest-bulk-cjxuh0og/library/library.sqlite",
+  "papers": 1000,
+  "active_papers": 1000,
+  "distinct_dois": 1000,
+  "attachments": 0,
+  "collections": [
+    {
+      "id": "01a1b39c-239c-740c-9f2b-0e7a2e3b30b4",
+      "parent_id": null,
+      "name": "Latest bulk reviewed",
+      "sort_order": 0
+    }
+  ],
+  "tags": [
+    {
+      "id": "01a1b39c-45ea-70c7-b904-778a0252ce58",
+      "name": "latest-bulk",
+      "normalized_name": "latest-bulk",
+      "color": null
+    }
+  ],
+  "collection_members": [
+    {
+      "paper_id": "01a1b39b-cb4e-7685-adb1-9c05936ad292",
+      "collection_id": "01a1b39c-239c-740c-9f2b-0e7a2e3b30b4",
+      "doi_normalized": "10.9999/fixture.999"
+    }
+  ],
+  "tag_members": [
+    {
+      "paper_id": "01a1b39b-cb4e-7685-adb1-9c05936ad292",
+      "tag_id": "01a1b39c-45ea-70c7-b904-778a0252ce58",
+      "doi_normalized": "10.9999/fixture.999"
+    }
+  ],
+  "integrity": [
+    "ok"
+  ],
+  "foreign_key_violations": [],
+  "intermediate_counts": [
+    {
+      "utc": "2026-11-07T01:12:12.346172+00:00",
+      "papers": 100,
+      "method": "mode=ro;query_only"
+    },
+    {
+      "utc": "2026-11-07T01:14:01.602185+00:00",
+      "papers": 300,
+      "method": "mode=ro;query_only"
+    },
+    {
+      "utc": "2026-11-07T01:24:32.113834+00:00",
+      "method": "Python sqlite3 mode=ro; PRAGMA query_only=ON; SELECT counts only",
+      "papers": 900
+    }
+  ],
+  "all_fixture_dois_exactly_present": true
+}
