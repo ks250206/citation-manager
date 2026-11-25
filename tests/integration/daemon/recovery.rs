@@ -239,7 +239,8 @@ fn sigkill_during_ipc_writes_then_integrity_orphans_backup_and_restore() {
     );
     let restored = Env {
         library: restored_path,
-        runtime: elsewhere_root.join("run"),
+        // Beside, not inside, `private`: macOS caps Unix socket paths at 104 bytes.
+        runtime: elsewhere.path().canonicalize().unwrap().join("run"),
         temp: elsewhere,
     };
     let mut daemon = restored.spawn_papersd(800);
@@ -325,7 +326,8 @@ fn migration_history_failure_refuses_start_and_backup_restore_recovers() {
     validate_bundle(&LibraryDirectory::prepare(&bundle).unwrap()).unwrap();
     let restored = Env {
         library: elsewhere_root.join("restored"),
-        runtime: elsewhere_root.join("run"),
+        // Beside, not inside, `private`: macOS caps Unix socket paths at 104 bytes.
+        runtime: elsewhere.path().canonicalize().unwrap().join("run"),
         temp: elsewhere,
     };
     restore_library(&bundle, &restored.library).unwrap();
