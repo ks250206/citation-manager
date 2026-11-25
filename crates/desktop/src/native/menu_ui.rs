@@ -232,7 +232,7 @@ impl LibraryView {
             .library
             .focused()
             .and_then(|id| self.library.index_of(id))
-            .map_or(0., |i| (i + 1) as f32 * 32.);
+            .map_or(0., |i| (i + 1) as f32 * dims().row_height);
         let y = (bounds.origin.y + offset.y + px(row))
             .clamp(bounds.origin.y, bounds.origin.y + bounds.size.height);
         point(bounds.origin.x + px(160.), y)
