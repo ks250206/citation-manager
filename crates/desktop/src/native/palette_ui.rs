@@ -1,13 +1,32 @@
 //! Command Palette overlay, command dispatch and Vim-key routing for the library table.
 use super::*;
 use crate::{
-    commands::{Availability, CommandContext, DisabledReason, ids, workbench_ids as wb},
+    commands::{
+        Availability, CommandContext, DisabledReason, ids, pdf_ids as pdf, workbench_ids as wb,
+    },
     keymap::{self, InputState, KeyStroke, Mode, Resolution},
     palette,
 };
 
 /// Every non-deferred command this host dispatches. Deferred descriptors stay disabled.
 pub(super) const CONNECTED: &[&str] = &[
+    pdf::NEXT_PAGE,
+    pdf::PREVIOUS_PAGE,
+    pdf::FIRST_PAGE,
+    pdf::LAST_PAGE,
+    pdf::FIND,
+    pdf::FIND_NEXT,
+    pdf::FIND_PREVIOUS,
+    pdf::ZOOM_IN,
+    pdf::ZOOM_OUT,
+    pdf::FIT_WIDTH,
+    pdf::ROTATE,
+    pdf::HIGHLIGHT,
+    pdf::ADD_NOTE,
+    pdf::SHOW_ANNOTATIONS,
+    pdf::FULL_TEXT,
+    pdf::COPY_LINK,
+    pdf::OPEN_LINK,
     ids::NEXT,
     ids::PREVIOUS,
     ids::FIRST,
@@ -46,6 +65,13 @@ fn fixed_shortcut(id: &str) -> Option<&'static str> {
         ids::SAVE => "Cmd+s",
         ids::SEARCH => "Cmd+f",
         ids::PALETTE => "Cmd+k",
+        pdf::FIND => "/",
+        pdf::NEXT_PAGE => "J",
+        pdf::PREVIOUS_PAGE => "K",
+        pdf::HIGHLIGHT => "h",
+        pdf::SHOW_ANNOTATIONS => "a",
+        pdf::FIND_NEXT => "n",
+        pdf::FIND_PREVIOUS => "N",
         ids::OPEN => "Enter",
         ids::NEXT => "Down",
         ids::PREVIOUS => "Up",
@@ -167,7 +193,7 @@ impl LibraryView {
         }
         self.palette_open = false;
         if self.screen == Screen::Library {
-            self.table_focus.focus(window, cx);
+            self.list_focus().focus(window, cx);
         } else {
             self.focus.focus(window, cx);
         }
@@ -325,6 +351,60 @@ impl LibraryView {
                     false,
                     cx,
                 );
+            }
+            pdf::NEXT_PAGE | pdf::PREVIOUS_PAGE | pdf::FIRST_PAGE | pdf::LAST_PAGE => {
+                self.show_pdf_tab(cx);
+                if let Some(v) = &mut self.viewer {
+                    let current = v.current_page();
+                    v.jump(match id {
+                        pdf::NEXT_PAGE => current + 1,
+                        pdf::PREVIOUS_PAGE => current.saturating_sub(1),
+                        pdf::FIRST_PAGE => 0,
+                        _ => u32::MAX,
+                    });
+                }
+            }
+            pdf::FIND => {
+                if self.host.selected.is_none() {
+                    self.status("Open a PDF attachment first", true, cx);
+                    return;
+                }
+                self.show_pdf_tab(cx);
+                self.focus_layout = (self.screen, self.settings.details_tab.clone());
+                self.find.open = true;
+                self.find.input.focus_handle(cx).focus(window, cx);
+            }
+            pdf::FIND_NEXT | pdf::FIND_PREVIOUS => self.find_step(id == pdf::FIND_NEXT, cx),
+            pdf::ZOOM_IN | pdf::ZOOM_OUT | pdf::FIT_WIDTH | pdf::ROTATE => {
+                self.show_pdf_tab(cx);
+                self.viewer_command(id, cx);
+            }
+            pdf::HIGHLIGHT => self.highlight_selection_command(cx),
+            pdf::ADD_NOTE => {
+                self.show_pdf_tab(cx);
+                self.focus_layout = (self.screen, self.settings.details_tab.clone());
+                self.ann.note_open = true;
+                self.ann.note.focus_handle(cx).focus(window, cx);
+            }
+            pdf::SHOW_ANNOTATIONS => {
+                self.show(Screen::Library, window, cx);
+                self.settings.details_tab = "Notes".into();
+                self.persist(cx);
+            }
+            pdf::FULL_TEXT => {
+                self.show(Screen::Library, window, cx);
+                self.find_search.fulltext = true;
+                self.focus_layout = (self.screen, self.settings.details_tab.clone());
+                self.search.focus_handle(cx).focus(window, cx);
+                self.status("Full-text search: type and press ↩", false, cx);
+            }
+            pdf::COPY_LINK => self.copy_link(cx),
+            pdf::OPEN_LINK => {
+                let text = cx
+                    .read_from_clipboard()
+                    .and_then(|item| item.text())
+                    .unwrap_or_default();
+                self.open_link(&text, cx);
             }
             pdf_export_ui::SAVE_PDF => self.save_current_pdf(cx),
             _ => self.status(format!("{id} is not connected"), true, cx),

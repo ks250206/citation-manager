@@ -162,23 +162,63 @@ fn availability_requires_connection_and_current_resources_without_grant_semantic
 #[test]
 fn known_pdf_api_commands_remain_disabled_even_when_host_claims_connection() {
     let registry = CommandRegistry::m1();
-    for (id, owner) in [
-        ("pdf.highlight_selection", 21),
-        ("pdf.show_annotations", 21),
-        ("api.open_settings", 26),
+    // #20 connected `pdf.save`; #21 connected the PDF selection/annotation and full-text
+    // placeholders. They are registered providers now, not deferred descriptors.
+    for id in [
+        "pdf.save",
+        "pdf.highlight_selection",
+        "pdf.show_annotations",
+        "search.full_text",
+    ] {
+        let command = registry.get(id).expect(id);
+        assert!(
+            !matches!(command.requirement, Requirement::Deferred { .. }),
+            "{id}"
+        );
+    }
+    let (id, owner) = ("api.open_settings", 26);
+    let handlers = [id];
+    let context = CommandContext {
+        connected_handlers: &handlers,
+        ..connected()
+    };
+    match registry.availability(id, &context) {
+        Availability::Disabled(DisabledReason::Deferred { issue, reason }) => {
+            assert_eq!(issue, owner);
+            assert!(!reason.is_empty());
+        }
+        other => panic!("expected deferred {id}: {other:?}"),
+    }
+}
+
+#[test]
+fn issue_21_pdf_and_search_commands_are_connectable_descriptors() {
+    let registry = CommandRegistry::m1();
+    for id in [
+        "pdf.highlight_selection",
+        "pdf.show_annotations",
+        "search.full_text",
+        "pdf.next_page",
+        "pdf.find",
+        "link.open_clipboard",
     ] {
         let handlers = [id];
         let context = CommandContext {
             connected_handlers: &handlers,
+            has_selection: true,
             ..connected()
         };
-        match registry.availability(id, &context) {
-            Availability::Disabled(DisabledReason::Deferred { issue, reason }) => {
-                assert_eq!(issue, owner);
-                assert!(!reason.is_empty());
-            }
-            other => panic!("expected deferred {id}: {other:?}"),
-        }
+        assert_eq!(
+            registry.availability(id, &context),
+            Availability::Enabled,
+            "{id}"
+        );
+        // Not connected by the host: still disabled, never silently enabled.
+        assert_eq!(
+            registry.availability(id, &connected()),
+            Availability::Disabled(DisabledReason::NotConnected),
+            "{id}"
+        );
     }
 }
 
