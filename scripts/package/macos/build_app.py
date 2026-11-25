@@ -17,8 +17,10 @@ Layout (docs/ADR/app-layout.md; what `cm_pdf::worker::bundled_library` and the s
     Resources/native-messaging/extension-ids.json
     Resources/pdfium-runtime.json build, archive and library digests of the bundled PDFium
 
-Nothing is signed here (see codesign.py); the dylib keeps its upstream bytes because the
-loader enforces the pinned checksum. Binaries come from
+Nothing is signed here (see codesign.py). By default the dylib keeps its upstream bytes
+(the loader enforces the pinned checksum). For a bundle that will be signed, pass the copy
+signed by `codesign.py pdfium` with `--signed-pdfium FILE --signed-pdfium-sha256 DIGEST`; the
+binaries must have been built with `CM_PDFIUM_SIGNED_SHA256=DIGEST`. Binaries come from
   cargo build --release --locked -p cm-daemon --bins --features desktop-bootstrap
   cargo build --release --locked -p cm-cli -p cm-mcp -p cm-native-host
 and PDFium from `python3 scripts/pdfium/fetch.py DIR` (checksum-verified).
@@ -104,16 +106,20 @@ def make_icns(svg, destination):
     return destination.is_file()
 
 
-def copy_pdfium(pdfium_dir, contents):
-    """Copy the verified dylib and its notices; fail closed on any checksum drift."""
+def copy_pdfium(pdfium_dir, contents, signed=None, signed_sha256=None):
+    """Copy the verified dylib (or its signed copy) and its notices; fail closed on drift."""
     pin = pdfium.artifact('macos')
     source = pdfium_dir / pin['library']
     if not source.is_file() or sha256(source) != pin['library_sha256']:
         raise ValueError(f'{source}: not the pinned PDFium library (run scripts/pdfium/fetch.py)')
     pdfium.verify_notices(pdfium_dir, pin['notice_overrides_sha256'])
+    if (signed is None) != (signed_sha256 is None):
+        raise ValueError('--signed-pdfium and --signed-pdfium-sha256 go together')
+    if signed is not None and sha256(signed) != signed_sha256:
+        raise ValueError(f'{signed}: digest differs from --signed-pdfium-sha256 (the binaries pin that digest)')
     target = contents / PDFIUM
     target.parent.mkdir(parents=True)
-    shutil.copy2(source, target)
+    shutil.copy2(signed if signed is not None else source, target)
     target.chmod(0o755)
     licenses = contents / 'Resources/licenses/pdfium'
     licenses.mkdir(parents=True)
@@ -123,11 +129,15 @@ def copy_pdfium(pdfium_dir, contents):
     runtime = {key: pin[key] for key in ('build', 'binding', 'features', 'release', 'url',
                                          'artifact_sha256', 'library_sha256', 'platform')}
     runtime['bundle_path'] = PDFIUM
+    # The digest of the file actually bundled: upstream, or the build-time pinned signed copy.
+    runtime['bundled_sha256'] = signed_sha256 or pin['library_sha256']
+    runtime['signed_copy'] = signed is not None
     (contents / 'Resources/pdfium-runtime.json').write_text(json.dumps(runtime, indent=2) + '\n')
     return target
 
 
-def build(bin_dir, pdfium_dir, out, version=None, build_number='1', icon=True):
+def build(bin_dir, pdfium_dir, out, version=None, build_number='1', icon=True,
+          signed_pdfium=None, signed_pdfium_sha256=None):
     """Create `<out>/Citation Manager.app` (replacing an earlier build) and return its path."""
     bin_dir, pdfium_dir, out = Path(bin_dir), Path(pdfium_dir), Path(out)
     missing = [name for name in EXECUTABLES if not (bin_dir / name).is_file()]
@@ -143,7 +153,7 @@ def build(bin_dir, pdfium_dir, out, version=None, build_number='1', icon=True):
     for name in EXECUTABLES:
         shutil.copy2(bin_dir / name, contents / 'MacOS' / name)
         (contents / 'MacOS' / name).chmod(0o755)
-    copy_pdfium(pdfium_dir, contents)
+    copy_pdfium(pdfium_dir, contents, signed_pdfium and Path(signed_pdfium), signed_pdfium_sha256)
     messaging = contents / 'Resources/native-messaging'
     messaging.mkdir()
     shutil.copy2(EXTENSION_IDS, messaging / 'extension-ids.json')
@@ -168,8 +178,11 @@ def main():
     parser.add_argument('--version', help='CFBundleShortVersionString (default: workspace version)')
     parser.add_argument('--build-number', default='1', help='CFBundleVersion')
     parser.add_argument('--no-icon', action='store_true')
+    parser.add_argument('--signed-pdfium', type=Path, help='dylib signed by `codesign.py pdfium`')
+    parser.add_argument('--signed-pdfium-sha256', help='its digest (= CM_PDFIUM_SIGNED_SHA256 of the build)')
     args = parser.parse_args()
-    app = build(args.bin_dir, args.pdfium_dir, args.out, args.version, args.build_number, not args.no_icon)
+    app = build(args.bin_dir, args.pdfium_dir, args.out, args.version, args.build_number, not args.no_icon,
+                args.signed_pdfium, args.signed_pdfium_sha256)
     print(app)
 
 

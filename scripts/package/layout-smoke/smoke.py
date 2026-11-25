@@ -58,7 +58,8 @@ def parse_linked_libraries(otool_l_output):
     libraries = []
     for line in otool_l_output.splitlines()[1:]:
         line = line.strip()
-        if line:
+        # Universal files repeat the list per architecture under "<file> (architecture x):".
+        if line and not line.endswith(':'):
             libraries.append(line.split(' (compatibility version')[0].strip())
     return libraries
 
@@ -187,8 +188,11 @@ def phase_static(ev, app, expect_signed):
     notices = sorted(p.name for p in (contents / 'Resources/licenses/pdfium').iterdir())
     ev.check('pdfium_notices_bundled', 'LICENSE' in notices and len(notices) >= 19, notices)
     pin = build_app.pdfium.artifact('macos')
+    runtime = json.loads((contents / 'Resources/pdfium-runtime.json').read_text())
     digest = hashlib.sha256((contents / build_app.PDFIUM).read_bytes()).hexdigest()
-    ev.check('pdfium_pinned_sha256', digest == pin['library_sha256'], digest)
+    ev.check('pdfium_pinned_sha256', digest == runtime['bundled_sha256'] and
+             (digest == pin['library_sha256'] or runtime['signed_copy']),
+             {'bundled': digest, 'upstream': pin['library_sha256'], 'signed_copy': runtime['signed_copy']})
     for path in macho_files(app):
         name = path.name
         lipo = ev.run(['lipo', '-info', path])
@@ -235,6 +239,14 @@ def papers_json(ev, papers, args, env, timeout=120):
     except ValueError:
         document = {}
     return result.returncode, document
+
+
+def wait_daemon_gone(ev, pid, timeout):
+    """Wait for the daemon process to end without connecting: every IPC connection, even a
+    `server status` probe, is activity that restarts the idle timer."""
+    began = time.monotonic()
+    gone = wait_for(lambda: not daemon_process(pid), timeout, step=1)
+    return gone, round(time.monotonic() - began, 1)
 
 
 def daemon_process(pid):
@@ -334,11 +346,10 @@ def phase_cli(ev, app, work):
     disabled = ev.run([papersd, 'api', 'set', '--library', library, '--disable'], env=env)
     ev.check('rest_disabled_again', disabled.returncode == 0, disabled.returncode)
     pid = data.get('pid')
-    began = time.monotonic()
-    gone = wait_for(lambda: papers_json(ev, link, ['server', 'status'], env)[1].get('data', {}).get('running') is False,
-                    IDLE_MS / 1000 + 60, step=3)
-    ev.check('daemon_idle_exit', gone and not (pid and daemon_process(pid)),
-             {'idle_timeout_ms': IDLE_MS, 'seconds_after_last_client': round(time.monotonic() - began, 1)})
+    gone, seconds = wait_daemon_gone(ev, pid, IDLE_MS / 1000 + 60) if pid else (False, None)
+    code, status = papers_json(ev, link, ['--no-start', 'server', 'status'], env)
+    ev.check('daemon_idle_exit', gone and status.get('data', {}).get('running') is False,
+             {'idle_timeout_ms': IDLE_MS, 'pid': pid, 'seconds_after_last_client': seconds})
     shutil.rmtree(env['TMPDIR'], ignore_errors=True)
 
 
@@ -380,10 +391,12 @@ def phase_gui(ev, app, work, moved_parent):
              {'before': before, 'after': json.loads(manifest.read_text())['path'] if manifest.is_file() else None})
     status_env = dict(env, PAPERS_LIBRARY=str(library))
     papers = moved / 'Contents/MacOS/papers'
-    running = wait_for(lambda: papers_json(ev, papers, ['--no-start', 'server', 'status'], status_env)[1]
-                       .get('data', {}).get('running'), 45, step=3)
-    ev.check('gui_started_daemon_for_bundle_default_library', running and library.is_dir(),
-             {'library': str(library), 'exists': library.is_dir()})
+    status = wait_for(lambda: (lambda d: d if d.get('running') else None)(
+        papers_json(ev, papers, ['--no-start', 'server', 'status'], status_env)[1].get('data', {})), 45, step=3)
+    daemon_pid = (status or {}).get('pid')
+    ev.check('gui_started_daemon_for_bundle_default_library', bool(daemon_pid) and library.is_dir(),
+             {'library': str(library), 'exists': library.is_dir(),
+              'process': daemon_process(daemon_pid) if daemon_pid else None})
     time.sleep(8)
     shot = ev.run(['screencapture', '-x', ev.out / 'gui.png'], timeout=60)
     ev.check('gui_screenshot', shot.returncode == 0 and (ev.out / 'gui.png').is_file(), 'gui.png', required=False)
@@ -396,10 +409,9 @@ def phase_gui(ev, app, work, moved_parent):
     if process:
         process.wait(timeout=30)
     ev.check('gui_quit', wait_for(lambda: not pids_of(exe), 30), None)
-    began = time.monotonic()
-    idle = wait_for(lambda: papers_json(ev, papers, ['--no-start', 'server', 'status'], status_env)[1]
-                    .get('data', {}).get('running') is False, 120, step=5)
-    ev.check('daemon_idle_exit_after_gui_quit', idle, {'seconds': round(time.monotonic() - began, 1)})
+    gone, seconds = wait_daemon_gone(ev, daemon_pid, 120) if daemon_pid else (False, None)
+    ev.check('daemon_idle_exit_after_gui_quit', gone,
+             {'pid': daemon_pid, 'seconds_after_gui_quit': seconds, 'default_idle_timeout_s': 30})
     ev.run([new_host, 'unregister', '--keep-grant'], env=env)
     shutil.rmtree(env['TMPDIR'], ignore_errors=True)
     return moved

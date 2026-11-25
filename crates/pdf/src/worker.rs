@@ -26,6 +26,39 @@ pub const MACOS_PDFIUM_SHA256: &str =
     "8d1e46a6dbe32d7cb95279ab3def2e71e557a3d4cc49162453afa3e3b250dc5e";
 pub const LINUX_PDFIUM_SHA256: &str =
     "1c251efce460d67437a4c76d4be9033ae2f17bf5603f5bff1af10209b94ca723";
+/// #34/#31: SHA-256 of the bundled dylib **after** the packaging job signed it. A signed
+/// `.app` must carry a real signature on its nested code (even ad hoc; the upstream linker
+/// signature is refused by `codesign`), and signing rewrites the file, so the release job
+/// signs the dylib first and builds with `CM_PDFIUM_SIGNED_SHA256=<digest>`. The value is
+/// compiled into the (then signed) executables, so it is as trusted as the upstream pin.
+/// Unset in development builds: only [`PDFIUM_SHA256`] is accepted.
+pub const PDFIUM_SIGNED_SHA256: Option<&str> = option_env!("CM_PDFIUM_SIGNED_SHA256");
+const _: () = assert!(
+    match PDFIUM_SIGNED_SHA256 {
+        Some(digest) => is_sha256_hex(digest),
+        None => true,
+    },
+    "CM_PDFIUM_SIGNED_SHA256 must be 64 lowercase hex digits"
+);
+const fn is_sha256_hex(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    if bytes.len() != 64 {
+        return false;
+    }
+    let mut i = 0;
+    while i < bytes.len() {
+        if !matches!(bytes[i], b'0'..=b'9' | b'a'..=b'f') {
+            return false;
+        }
+        i += 1;
+    }
+    true
+}
+/// Whether a library with this lowercase hex SHA-256 may be loaded: the pinned upstream
+/// build, or its build-time pinned signed copy ([`PDFIUM_SIGNED_SHA256`]).
+pub fn trusted_library_digest(digest: &str) -> bool {
+    digest == PDFIUM_SHA256 || PDFIUM_SIGNED_SHA256 == Some(digest)
+}
 pub const MAX_INPUT_BYTES: usize = 32 * 1024 * 1024;
 pub const MAX_PIXELS: usize = cm_core::geometry::MAX_RENDER_PIXELS;
 pub const MAX_CHARS: usize = 100_000;
@@ -512,6 +545,18 @@ fn linux_bundled_library(executable: &Path) -> Result<PathBuf, PdfError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn only_pinned_digests_are_trusted() {
+        assert!(trusted_library_digest(PDFIUM_SHA256));
+        assert!(!trusted_library_digest(&"0".repeat(64)));
+        assert!(!trusted_library_digest(""));
+        assert!(is_sha256_hex(MACOS_PDFIUM_SHA256) && is_sha256_hex(LINUX_PDFIUM_SHA256));
+        assert!(!is_sha256_hex(&"A".repeat(64)));
+        assert!(!is_sha256_hex(&"a".repeat(63)));
+        if let Some(signed) = PDFIUM_SIGNED_SHA256 {
+            assert!(trusted_library_digest(signed));
+        }
+    }
     fn op() -> Operation {
         Operation::Page {
             source: Source {

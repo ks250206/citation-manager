@@ -80,6 +80,8 @@ class BuildApp(unittest.TestCase):
             runtime = json.loads((contents / 'Resources/pdfium-runtime.json').read_text())
             self.assertEqual(runtime['bundle_path'], 'Frameworks/libpdfium.dylib')
             self.assertEqual(runtime['library_sha256'], pin['library_sha256'])
+            self.assertEqual(runtime['bundled_sha256'], pin['library_sha256'])
+            self.assertFalse(runtime['signed_copy'])
             ids = json.loads((contents / 'Resources/native-messaging/extension-ids.json').read_text())
             self.assertIn('release', ids)
             # The native host refuses group/other-writable executables or directories.
@@ -91,6 +93,32 @@ class BuildApp(unittest.TestCase):
                     mock.patch.object(build_app.pdfium, 'verify_notices'):
                 build_app.build(bin_dir, pdfium, root / 'out dir', icon=False)
             self.assertFalse((contents / 'stale').exists())
+
+    def test_a_signed_copy_is_bundled_only_with_its_build_time_digest(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bin_dir, pdfium = fake_inputs(root)
+            signed = root / 'signed/libpdfium.dylib'
+            signed.parent.mkdir()
+            signed.write_bytes(b'pdfium + signature')
+            digest = hashlib.sha256(b'pdfium + signature').hexdigest()
+            pin = dict(build_app.pdfium.artifact('macos'),
+                       library_sha256=hashlib.sha256(b'pdfium').hexdigest())
+            with mock.patch.object(build_app.pdfium, 'artifact', return_value=pin), \
+                    mock.patch.object(build_app.pdfium, 'verify_notices'):
+                with self.assertRaisesRegex(ValueError, 'go together'):
+                    build_app.build(bin_dir, pdfium, root / 'out', icon=False, signed_pdfium=signed)
+                with self.assertRaisesRegex(ValueError, 'digest differs'):
+                    build_app.build(bin_dir, pdfium, root / 'out', icon=False, signed_pdfium=signed,
+                                    signed_pdfium_sha256='0' * 64)
+                app = build_app.build(bin_dir, pdfium, root / 'out', icon=False, signed_pdfium=signed,
+                                      signed_pdfium_sha256=digest)
+            contents = app / 'Contents'
+            self.assertEqual((contents / 'Frameworks/libpdfium.dylib').read_bytes(), b'pdfium + signature')
+            runtime = json.loads((contents / 'Resources/pdfium-runtime.json').read_text())
+            self.assertEqual(runtime['bundled_sha256'], digest)
+            self.assertTrue(runtime['signed_copy'])
+            self.assertEqual(runtime['library_sha256'], pin['library_sha256'], 'provenance stays upstream')
 
     def test_an_unpinned_dylib_or_missing_binary_is_refused(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -130,6 +158,12 @@ class SmokeParsers(unittest.TestCase):
         self.assertEqual(linked, ['/usr/lib/libSystem.B.dylib',
                                   '/System/Library/Frameworks/Security.framework/Versions/A/Security'])
         self.assertEqual(smoke.dependency_problems(linked), [])
+        universal = smoke.parse_linked_libraries(
+            '/A/libpdfium.dylib (architecture x86_64):\n\t./libpdfium.dylib (compatibility version 0.0.0, current version 0.0.0)\n'
+            '/A/libpdfium.dylib (architecture arm64):\n\t./libpdfium.dylib (compatibility version 0.0.0, current version 0.0.0)\n'
+            '\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1.0.0)\n')
+        self.assertEqual(universal, ['./libpdfium.dylib', './libpdfium.dylib', '/usr/lib/libSystem.B.dylib'])
+        self.assertEqual(smoke.dependency_problems(universal, own_id='./libpdfium.dylib'), [])
         self.assertEqual(smoke.dependency_problems(['@rpath/libpdfium.dylib', '/opt/homebrew/lib/libz.dylib',
                                                     './libpdfium.dylib']),
                          ['@rpath/libpdfium.dylib', '/opt/homebrew/lib/libz.dylib', './libpdfium.dylib'])

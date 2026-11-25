@@ -1,21 +1,28 @@
 #!/usr/bin/env python3
-"""Sign `Citation Manager.app` inside-out (#34 ad-hoc; Developer ID is #31).
+"""Sign `Citation Manager.app` inside-out (#34 ad-hoc; Developer ID via release_sign.py, #31).
 
-Order: every helper executable in Contents/MacOS, then the bundle (which signs the main
-executable and seals Info.plist/Resources). `Frameworks/libpdfium.dylib` is NOT re-signed by
-default: it keeps the upstream bytes (and upstream ad-hoc signature) because the PDF worker
-only loads a dylib whose SHA-256 equals the pinned original (docs/ADR/pdfium-runtime.md).
-`--sign-pdfium` re-signs it anyway, which is required for notarization and is expected to
-make the bundled PDFium fail the pinned-hash gate until #31 changes the trust policy.
+A signed bundle needs a real signature on every nested Mach-O: `codesign` refuses to seal a
+bundle whose `Frameworks/libpdfium.dylib` only has the upstream linker signature ("code
+object is not signed at all"). Signing rewrites the dylib, and the PDF worker loads only a
+dylib whose SHA-256 is pinned at compile time, so the order is:
 
-  python3 scripts/package/macos/codesign.py APP                    # ad-hoc
-  python3 scripts/package/macos/codesign.py APP --hardened-runtime # ad-hoc + hardened runtime
+  1. `codesign.py pdfium SRC DEST` signs a copy of the verified upstream dylib and prints
+     its new SHA-256;
+  2. the release binaries are built with `CM_PDFIUM_SIGNED_SHA256=<that digest>`
+     (cm_pdf::worker::PDFIUM_SIGNED_SHA256) — they then accept the upstream and the signed
+     copy, nothing else;
+  3. build_app.py --signed-pdfium DEST --signed-pdfium-sha256 <digest> assembles the bundle;
+  4. `codesign.py app APP` signs the helper executables, then the bundle (main executable,
+     Info.plist and Resources sealed). The already signed dylib is left as is.
 
-The identity is "-" (ad-hoc). Ad-hoc signatures carry no Team ID and are never accepted by
-Gatekeeper for a downloaded app; they only make the bundle structurally verifiable.
+The identity is "-" (ad-hoc): no Team ID, never accepted by Gatekeeper for a downloaded app;
+it only makes the bundle structurally verifiable. `--hardened-runtime` adds
+`--options runtime` to the executables.
 """
 import argparse
+import hashlib
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 
@@ -23,15 +30,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import build_app  # noqa: E402
 
 
+def base_command(identity='-', hardened_runtime=False, timestamp=False):
+    command = ['codesign', '--force', '--sign', identity]
+    command += ['--timestamp'] if timestamp else ['--timestamp=none']
+    if hardened_runtime:
+        command += ['--options', 'runtime']
+    return command
+
+
 def plan(app, identity='-', hardened_runtime=False, sign_pdfium=False, timestamp=False,
          entitlements=None):
-    """The codesign invocations, inside-out. Pure: unit-tested without codesign."""
+    """The codesign invocations for a bundle, inside-out. Pure: unit-tested without codesign."""
     app = Path(app)
     contents = app / 'Contents'
-    base = ['codesign', '--force', '--sign', identity]
-    base += ['--timestamp'] if timestamp else ['--timestamp=none']
-    if hardened_runtime:
-        base += ['--options', 'runtime']
+    base = base_command(identity, hardened_runtime, timestamp)
     steps = []
     if sign_pdfium:
         steps.append(base + [str(contents / build_app.PDFIUM)])
@@ -53,16 +65,42 @@ def sign(app, **options):
     subprocess.run(verify_command(app), check=True)
 
 
+def sign_pdfium_copy(source, destination, identity='-', timestamp=False, keychain=None):
+    """Sign a copy of the pinned upstream dylib; return the SHA-256 of the signed copy."""
+    source, destination = Path(source), Path(destination)
+    pin = build_app.pdfium.artifact('macos')
+    if build_app.sha256(source) != pin['library_sha256']:
+        raise ValueError(f'{source}: not the pinned upstream PDFium')
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, destination)
+    command = base_command(identity, timestamp=timestamp)
+    if keychain:
+        command += ['--keychain', str(keychain)]
+    subprocess.run(command + [str(destination)], check=True)
+    subprocess.run(['codesign', '--verify', '--strict', str(destination)], check=True)
+    return hashlib.sha256(destination.read_bytes()).hexdigest()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('app', type=Path)
-    parser.add_argument('--hardened-runtime', action='store_true')
-    parser.add_argument('--sign-pdfium', action='store_true',
-                        help='also re-sign the PDFium dylib (changes its hash; see above)')
+    commands = parser.add_subparsers(dest='command', required=True)
+    app = commands.add_parser('app', help='sign the helpers and the bundle (ad-hoc)')
+    app.add_argument('app', type=Path)
+    app.add_argument('--hardened-runtime', action='store_true')
+    app.add_argument('--entitlements', type=Path)
+    app.add_argument('--sign-pdfium', action='store_true',
+                     help='also (re-)sign the bundled dylib; its digest then no longer matches the build-time pin')
+    pdfium = commands.add_parser('pdfium', help='sign a copy of the upstream dylib, print its SHA-256')
+    pdfium.add_argument('source', type=Path)
+    pdfium.add_argument('destination', type=Path)
     args = parser.parse_args()
     if sys.platform != 'darwin':
         parser.error('codesign is only available on macOS')
-    sign(args.app, hardened_runtime=args.hardened_runtime, sign_pdfium=args.sign_pdfium)
+    if args.command == 'pdfium':
+        print(sign_pdfium_copy(args.source, args.destination))
+    else:
+        sign(args.app, hardened_runtime=args.hardened_runtime, sign_pdfium=args.sign_pdfium,
+             entitlements=args.entitlements)
 
 
 if __name__ == '__main__':

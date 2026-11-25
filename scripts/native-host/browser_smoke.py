@@ -362,6 +362,9 @@ def main():
         log(f'after browser quit: papersd pids {daemon_pids}, host pids {processes_running(host)}')
         checks['papersd_outlived_host_and_browser'] = bool(daemon_pids) or job is None
 
+        if paper is None:
+            checks['paper_persisted'] = False
+            raise SystemExit(1)
         inspect = subprocess.run(
             [str(bin_dir / 'examples/inspect_capture'), '--library', str(library), '--runtime-dir', str(runtime),
              '--papersd', str(papersd), '--paper', str(paper)] + (['--job', job] if job else []) +
