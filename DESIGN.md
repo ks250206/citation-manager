@@ -1034,7 +1034,7 @@ REST/MCP/CLI 対応表（#27–#29 が import）。§13.2 の `/search` は本�
 内容・秘密なしの有界 file。GUI「API & integrations」と `papersd token|api` CLI bootstrap を提供する。
 証跡は [ISSUE_26](docs/validation/ISSUE_26.md)。
 
-## 35. #27 認証付き REST API・OpenAPI 契約
+## 37. #27 認証付き REST API・OpenAPI 契約
 
 [rest-api ADR](docs/ADR/rest-api.md) が §13/§17/§21.3 の実装上の明確化となる。listener は `papersd` 内の
 tokio runtime（専用 thread）で、永続 `ApiSettings` が有効な間だけ 127.0.0.1/::1 に bind し、設定変更に追従、
@@ -1047,3 +1047,17 @@ tokio runtime（専用 thread）で、永続 `ApiSettings` が有効な間だけ
 完全重複は skip）、ページ描画・bulk・restore・job cancel は #26 表の追加行。下位 scope へ本文・注釈を返さず、
 書き込み応答は読めない token に保存済みレコードを返さない。契約は [OpenAPI](docs/openapi.json)（route 表と
 `ENDPOINTS` から生成、相互一致と全応答の schema 適合を試験）。証跡は [ISSUE_27](docs/validation/ISSUE_27.md)。
+
+## 38. #23 Native Messaging host と Chrome/Firefox 登録
+
+[native messaging ADR](docs/ADR/native-messaging.md) が §5.1/§12.2–12.3 の実装上の明確化となる。
+`papers-native-host` は `papersd` の兄弟実行ファイルとして配置し（`<prefix>/bin`、`.app/Contents/MacOS`）、
+ブラウザ起動時は argv の拡張 ID（Chrome origin / Firefox ID）を自前の許可リストでも検査する。
+4-byte native-endian 長 + UTF-8 JSON（受信 8 MiB、送信 1 MiB）、`v: 1` の閉じた message type
+（hello/destinations/capture.preview/commit/cancel/pdf_job/retry_pdf）と固定 error code を持ち、
+各 type は 1 つの capture/保存先 command にだけ対応する（汎用 IPC proxy ではない）。daemon には
+`pair` で発行された `native_host` preset grant だけで接続し、未起動なら GUI と同じく自身の隣の
+`papersd` を絶対パスで遅延起動する。要求ごとに session を閉じ、stdin close/60 s idle で終了するため、
+PDF 取得 job は host・ブラウザ・GUI の終了後も daemon が完了させる。PDF バイナリは Native Messaging で
+運ばない。manifest は実行中の実行ファイルの絶対パスから生成し（開発 tree は拒否）、移動/更新後は
+`refresh` で再登録する。Linux の Chromium/Firefox ESR 実機 smoke は [ISSUE_23](docs/validation/ISSUE_23.md)。

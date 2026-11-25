@@ -8,5 +8,24 @@ publish.workspace = true
 [lints]
 workspace = true
 
+# #23: browser Native Messaging host. Talks to papersd only through cm-protocol IPC with
+# its own limited capture grant; never opens the library or core services directly.
 [dependencies]
 cm-protocol.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+rustix.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+uuid.workspace = true
+
+# Installed as a sibling of papersd (`<prefix>/bin` or `.app/Contents/MacOS`).
+[[bin]]
+name = "papers-native-host"
+path = "src/main.rs"
+
+# Real host executable driven like a browser; doubles as a fake sibling papersd.
+[[test]]
+name = "host_process"
+harness = false

@@ -1052,6 +1052,11 @@ name = "cm-native-host"
 version = "0.1.0"
 dependencies = [
  "cm-protocol",
+ "rustix",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "uuid",
 ]
 
 [[package]]
