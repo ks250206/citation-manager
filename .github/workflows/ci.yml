@@ -139,7 +139,7 @@ jobs:
         run: |
           python3 scripts/pdfium/fetch.py --platform linux-x64 target/pdfium-linux
           export CM_PDFIUM_LIBRARY="$GITHUB_WORKSPACE/target/pdfium-linux/lib/libpdfium.so"
-          cargo test -p cm-pdf --features runtime --locked --test metadata_runtime --test runtime --test extract_runtime --test export_runtime
+          cargo test -p cm-pdf --features runtime --locked --test metadata_runtime --test runtime --test extract_runtime --test export_runtime --test layouts_runtime
           cargo test -p cm-daemon --features pdfium-runtime-tests --locked --test fulltext_runtime --test pdf_export_runtime
       - name: Independent check of the annotated export (pypdf structure + poppler rendering, no PDFium)
         run: |

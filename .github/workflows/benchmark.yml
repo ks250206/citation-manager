@@ -1,0 +1,71 @@
+name: Representative benchmark
+# #30: manual only. Never runs on push/pull_request (it builds release binaries, generates
+# 1,000 PDFs / 20,000 pages, indexes them with the pinned PDFium and measures over IPC).
+# GitHub-hosted runners are NOT the DESIGN §16.1 target (Apple Silicon, 16 GB RAM); the
+# runner's real hardware is recorded in the uploaded artifact.
+on:
+  workflow_dispatch:
+    inputs:
+      papers:
+        description: Synthetic papers
+        default: '10000'
+      pdfs:
+        description: Synthetic PDFs (one per paper, spread evenly)
+        default: '1000'
+      pages:
+        description: Pages per PDF
+        default: '20'
+      samples:
+        description: Timed repeats per query case
+        default: '21'
+permissions:
+  contents: read
+concurrency:
+  group: benchmark-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  macos-arm64:
+    runs-on: macos-15
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.14'
+      - name: Exact Rust toolchain
+        run: |
+          rustup toolchain install 1.99.1 --profile minimal
+          rustup show active-toolchain
+      - name: Runner hardware (not the 16 GB target machine)
+        run: |
+          mkdir -p target/representative-benchmark
+          {
+            echo "hw.model=$(sysctl -n hw.model)"
+            echo "machdep.cpu.brand_string=$(sysctl -n machdep.cpu.brand_string)"
+            echo "hw.memsize=$(sysctl -n hw.memsize)"
+            echo "hw.physicalcpu=$(sysctl -n hw.physicalcpu)"
+            echo "hw.logicalcpu=$(sysctl -n hw.logicalcpu)"
+            echo "kern.hv_vmm_present=$(sysctl -n kern.hv_vmm_present)"
+            sw_vers
+            uname -a
+            df -h .
+          } | tee target/representative-benchmark/runner-hardware.txt
+      - name: Representative run (release; pinned PDFium fetched and checksum-verified)
+        env:
+          PAPERS: ${{ inputs.papers }}
+          PDFS: ${{ inputs.pdfs }}
+          PAGES: ${{ inputs.pages }}
+          SAMPLES: ${{ inputs.samples }}
+        run: |
+          python3 scripts/benchmarks/representative.py --out macos-ci \
+            --papers "$PAPERS" --pdfs "$PDFS" --pages "$PAGES" --samples "$SAMPLES"
+      - name: Keep results, not the generated library/corpus
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: representative-benchmark-macos
+          path: |
+            target/representative-benchmark/runner-hardware.txt
+            target/representative-benchmark/*/*.json
+            target/representative-benchmark/*/*.log
+          if-no-files-found: error
