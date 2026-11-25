@@ -1,6 +1,8 @@
 //! Desktop views depend only on the replaceable protocol client.
 pub mod commands;
 pub mod deep_links;
+/// #86 Opt-in frame-time/span recorder (disabled unless `CM_FRAME_TIMING` is set).
+pub mod frame_timing;
 pub mod keymap;
 pub mod palette;
 pub mod pdf_viewer;

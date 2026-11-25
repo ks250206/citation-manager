@@ -1,0 +1,65 @@
+{
+  "started_unix": 1795613704.5383003,
+  "phases": {
+    "startup": {
+      "start_unix": 1795613704.5383003,
+      "expect": null,
+      "end_unix": 1795613720.0502517
+    },
+    "list_wheel": {
+      "start_unix": 1795613720.21474,
+      "expect": "list_scroll",
+      "end_unix": 1795613731.500347
+    },
+    "list_keys": {
+      "start_unix": 1795613731.500377,
+      "expect": "list_scroll",
+      "end_unix": 1795613744.364723
+    },
+    "list_pages": {
+      "start_unix": 1795613744.3647504,
+      "expect": null,
+      "end_unix": 1795613754.384008
+    },
+    "pdf_open": {
+      "start_unix": 1795613754.5484982,
+      "expect": "pdf_first_page",
+      "input_unix": 1795613757.5839326,
+      "first_page_seen": true,
+      "end_unix": 1795613759.6466258
+    },
+    "page_turn_forward": {
+      "start_unix": 1795613766.1336098,
+      "expect": "page_turn",
+      "end_unix": 1795613780.9634602
+    },
+    "page_turn_back": {
+      "start_unix": 1795613781.078104,
+      "expect": "page_turn",
+      "end_unix": 1795613795.9050808
+    },
+    "page_jump": {
+      "start_unix": 1795613795.9051094,
+      "expect": "page_turn",
+      "end_unix": 1795613813.3659794
+    },
+    "pdf_wheel": {
+      "start_unix": 1795613814.4707773,
+      "expect": "pdf_scroll",
+      "end_unix": 1795613826.0125115
+    },
+    "pdf_keys": {
+      "start_unix": 1795613826.0125463,
+      "expect": "pdf_scroll",
+      "end_unix": 1795613834.0437517
+    },
+    "idle": {
+      "start_unix": 1795613834.2117925,
+      "expect": null,
+      "end_unix": 1795613839.211992
+    }
+  },
+  "notes": [],
+  "exit_code": 0,
+  "driver": "xdotool"
+}
