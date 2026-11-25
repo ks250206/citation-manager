@@ -22,7 +22,7 @@ use crate::{
     search::{FulltextReply, FulltextRequest, SearchReply, SearchRequest},
     settings::{Settings, SettingsLoaded},
 };
-pub use cm_core::policy::{Capability, CapabilitySet, Denial, GrantId, Operation};
+pub use cm_core::policy::{Capability, CapabilitySet, Denial, GrantId, Operation, Requirement};
 use serde::{Deserialize, Serialize};
 
 pub const PROTOCOL_VERSION: u32 = 1;

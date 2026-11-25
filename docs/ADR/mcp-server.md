@@ -59,7 +59,8 @@ go to stderr (`PAPERS_MCP_LOG`), never secrets or library text.
 ## Credentials (interim; `credential.rs` is what #26 replaces)
 
 - Hello: `client_kind = "mcp"`, `requested` = the MCP ceiling {LibraryRead, JobsRead,
-  LibraryWrite, NetworkLookup, LocalFileWrite} (`--read-only`: only the first two). Requested
+  LibraryWrite, NetworkLookup, AnnotationsWrite, LocalFileWrite} (`--read-only`: only the
+  first two). Requested
   scopes only narrow: even a misplaced owner credential can never delete, administer grants,
   read local paths, change settings or control jobs through MCP.
 - The secret is read from a private file (0600, single link, owned by the user, ≤ 256 bytes):
@@ -68,8 +69,13 @@ go to stderr (`PAPERS_MCP_LOG`), never secrets or library text.
   re-read before each call: replacing it reconnects with the new grant without restart.
 - Dev/bootstrap path (like #23's `pair`): `papers-mcp grant` opens a session with the owner's
   desktop bootstrap credential (GrantAdmin) and issues `mcp read-only` = `presets::mcp_read_only`
-  (LibraryRead, JobsRead). `--write` adds LibraryWrite + NetworkLookup; `--export` adds
-  LocalFileWrite. The secret is written atomically; the grant the file held before is revoked.
+  (LibraryRead, JobsRead). `--write` adds LibraryWrite + NetworkLookup + AnnotationsWrite
+  (#26's `profiles::mcp_write`: `papers:write` + `annotations:write`; since #26 LibraryWrite
+  alone no longer writes annotations, so add_annotation needs AnnotationsWrite). `--export`
+  adds LocalFileWrite: with the read base that is #26's `Export` alternative {LibraryRead,
+  LocalFileWrite} (`ExportAllowedDir` cannot work, the server's private temp dir is not an
+  allowed export folder). The secret is written atomically; the grant the file held before
+  is revoked.
 - Every issued grant expires. Write/export grants: default **8 h**, maximum 90 days; read-only:
   default 90 days, maximum 365 days (`--ttl Nm|Nh|Nd`). The maxima and the read-only default
   follow #26's `scopes::lifetime` (write 30 d default / 90 d max, read 90 d / 365 d) without
@@ -97,7 +103,7 @@ go to stderr (`PAPERS_MCP_LOG`), never secrets or library text.
 | create_collection | Organization List/CreateCollection | write |
 | move_paper_to_collection | Organization ForPaper/CollectionMember | write |
 | add_tag_to_paper | Organization List/CreateTag/TagMember | write |
-| add_annotation | Pdf List, Fulltext Pages (stored label), Annotations Create | write |
+| add_annotation | Pdf List, Fulltext Pages (stored label), Annotations Create | write (AnnotationsWrite) |
 | export_citations | Export into a private 0700 temp dir, read back | export (LibraryRead + LocalFileWrite) |
 
 Common contract:
@@ -140,7 +146,9 @@ Common contract:
 - Annotations are always `source=ai` (not caller-selectable) and unconfirmed until the owner
   confirms them; positions without rects become unresolved text anchors for the owner to place.
 - `Forbidden(op)` names the operation, the capabilities it needs and the owner command
-  (`--write`/`--export`); `Revoked`/`Expired` say a new grant is needed. Delete/trash and bulk
+  (`--write`/`--export`). For #26's any-of requirements (e.g. Export) the message offers only
+  the alternatives an MCP grant can carry and the cheapest grant flags; the structured
+  `required_capabilities` carries `all_of`, `any_of` and the complete `alternatives`; `Revoked`/`Expired` say a new grant is needed. Delete/trash and bulk
   operations have no tool and LibraryDelete is never requested (elevation is out of scope).
 
 ## Lifecycle, cancellation, restart
