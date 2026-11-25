@@ -95,7 +95,7 @@ pub enum Command {
     /// Inspect, start or stop the library's papersd.
     #[command(subcommand)]
     Server(Server),
-    /// Serve MCP over stdio (requires the #29 MCP server; unavailable until then).
+    /// Serve MCP over stdio for this library (through papersd; never the desktop credential).
     Mcp,
     /// Print a shell completion script.
     Completions(CompletionsArgs),
@@ -357,7 +357,7 @@ pub enum Server {
     Status,
     /// Start papersd now (it exits by itself once idle).
     Start {
-        /// REST API listener (not available yet: #27).
+        /// Not a start option: REST follows the persisted API settings (`papersd api set`). Exits 7.
         #[arg(long)]
         rest: bool,
     },

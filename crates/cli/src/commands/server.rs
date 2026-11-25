@@ -1,4 +1,5 @@
-//! `server status|start|stop`: the local papersd only. There is no REST listener (#27).
+//! `server status|start|stop`: the local papersd only. The REST listener (#27) follows the
+//! persisted API settings, not a start flag.
 use super::unexpected;
 use crate::{
     args::Server,
@@ -10,7 +11,8 @@ use cm_protocol::ipc::{Command as Ipc, DaemonStatus, GrantCommand, Reply};
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
 
-const REST: &str = "not available yet (REST API is issue #27; papersd serves local IPC only)";
+const REST: &str = "follows the persisted API settings: enable it in API & integrations or with \
+                    `papersd api set --library DIR --enable` (papersd api show reports it)";
 
 pub fn run(target: &Target, read_only: bool, command: &Server) -> Result<Report, CliError> {
     // Status needs only an authenticated live grant: request no capabilities at all.

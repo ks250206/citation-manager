@@ -14,7 +14,8 @@ Rust + GPUI のローカル文献管理アプリを実装中です。#7 の 12-c
 [保存と worker 境界](docs/ADR/library-workbench.md)）。#25 で library ごとの `papersd`（唯一の writer、
 認可付きローカル IPC、永続 job）を追加し、GUI は IPC 経由で使います（[daemon-ipc ADR](docs/ADR/daemon-ipc.md)、
 [Linux 検証](docs/validation/ISSUE_25.md)）。#28 の CLI `papers` は GUI なしで同じ daemon を遅延起動して使えます
-（[CLI ADR](docs/ADR/cli.md)、[検証](docs/validation/ISSUE_28.md)）。REST はまだ利用できません。
+（[CLI ADR](docs/ADR/cli.md)、[検証](docs/validation/ISSUE_28.md)）。`papers mcp` で同じ library の MCP stdio サーバーも起動できます。
+REST（#27）は API 設定で有効化します（GUI の API & integrations、または `papersd api set --enable`）。
 #11 の PDFium runtime は [再現可能な検証PoC](docs/validation/PDFIUM_POC.md) を追加し、
 専用worker・継承CropBox/回転/Unicode・注釈搬出をPDFKitと独立照合しました。製品viewer/exportは後続です。
 #29 で既定 read-only の MCP stdio サーバー `papers-mcp`（papersd IPC 経由、12 tools、出典付き結果）を追加しました（[mcp-server ADR](docs/ADR/mcp-server.md)）。書き込みは所有者が別途承認した grant が必要です。
