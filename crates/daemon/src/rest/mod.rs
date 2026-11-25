@@ -134,11 +134,21 @@ impl Manager {
     pub fn stop(mut self) {
         self.shutdown();
     }
+    /// Stops the listener and waits for every request's blocking work, so nothing of the
+    /// REST side holds the daemon's services afterwards (papersd then lets the library
+    /// worker exit before releasing the lock).
     fn shutdown(&mut self) {
+        let Some(thread) = self.thread.take() else {
+            return;
+        };
+        self.gateway.close_sessions();
         self.stop.store(true, Ordering::SeqCst);
         self.gateway.api().notify_listener();
-        if let Some(t) = self.thread.take() {
-            let _ = t.join();
+        let _ = thread.join();
+        // Waiting calls return within 50 ms once closed; a running search is bounded by
+        // its own time budget (at most 10 s).
+        if !self.gateway.drain_sessions(Duration::from_secs(15)) {
+            eprintln!("papersd rest: request work still running at shutdown");
         }
     }
 }

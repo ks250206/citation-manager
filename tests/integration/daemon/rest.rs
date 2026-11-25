@@ -1973,3 +1973,36 @@ fn timeouts_connection_and_concurrency_limits() {
     assert_eq!((resp.status, resp.code().as_str()), (503, "busy"));
     assert_eq!(resp.header("retry-after"), Some("1"));
 }
+
+/// Shutdown drains the REST side before the library worker exits and the lock is released:
+/// a new daemon can take the library at once and serves the persisted API again.
+#[test]
+fn shutdown_with_the_api_enabled_releases_the_library_promptly() {
+    let mut a = Api::start();
+    let (_, token) = a.token("restart", &[Scope::PapersRead, Scope::PapersWrite]);
+    create_paper(&a, &token, MARKER_TITLE, "10.1234/restart");
+    // An idle keep-alive connection must not hold the daemon open.
+    let mut idle = Conn::open(a.port);
+    assert_eq!(
+        idle.send(&Req::new("GET", format!("{API}/health"))).status,
+        200
+    );
+    let started = std::time::Instant::now();
+    a.daemon.take().unwrap().shutdown();
+    assert!(
+        started.elapsed() < Duration::from_secs(10),
+        "{:?}",
+        started.elapsed()
+    );
+    let mut config = a.env.config();
+    config.secret_store = Some(Arc::new(MemorySecretStore::default()));
+    let again = start(config).expect("library lock released");
+    assert!(wait_until(Duration::from_secs(10), || {
+        TcpStream::connect(("127.0.0.1", a.port)).is_ok()
+    }));
+    let resp = a.send(&Req::new("GET", format!("{API}/papers")).token(&token));
+    assert_eq!(resp.status, 200);
+    assert!(resp.text().contains(MARKER_TITLE));
+    drop(idle);
+    again.shutdown();
+}

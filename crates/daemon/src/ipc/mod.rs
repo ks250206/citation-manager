@@ -150,6 +150,8 @@ struct Shared {
     api: crate::api::ApiService,
     /// #26 per-grant burst limit for trash/delete and membership changes.
     bulk: Mutex<BulkGuard>,
+    /// #27 in-process adapter sessions (closed and drained before the lock is released).
+    internal: Arc<gateway::Tracker>,
 }
 
 /// A started daemon. `wait` blocks until idle exit or `shutdown`.
@@ -249,6 +251,7 @@ pub fn start(config: DaemonConfig) -> Result<RunningDaemon, StartError> {
         streams: Mutex::new(HashMap::new()),
         api,
         bulk: Mutex::new(BulkGuard::default()),
+        internal: Arc::default(),
     });
     let rest = crate::rest::Manager::start(gateway::Gateway(shared.clone()), config.rest)?;
     let stop = Arc::new(AtomicBool::new(false));
@@ -258,8 +261,9 @@ pub fn start(config: DaemonConfig) -> Result<RunningDaemon, StartError> {
         .name("papersd-accept".into())
         .spawn(move || {
             accept_loop(&listener, &shared, &accept_stop, idle);
-            // Stop the REST listener and stop accepting, then remove our socket while still
-            // holding the lock.
+            // Stop the REST listener (its runtime and every in-flight request session, so no
+            // adapter thread keeps `shared` alive), stop accepting, then remove our socket while
+            // still holding the lock.
             rest.stop();
             drop(listener);
             let _ = std::fs::remove_file(&shared.paths.socket);

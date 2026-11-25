@@ -15,11 +15,28 @@ use std::{
     collections::HashMap,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         mpsc,
     },
     time::{Duration, Instant},
 };
+
+/// Open adapter sessions. At daemon shutdown they are closed (waiting calls return
+/// `Unavailable` within `POLL`) and drained, so no adapter thread still holds the daemon's
+/// services when the library worker must exit and the lock is released.
+#[derive(Default)]
+pub struct Tracker {
+    closing: AtomicBool,
+    active: AtomicUsize,
+}
+struct Active(Arc<Tracker>);
+impl Drop for Active {
+    fn drop(&mut self) {
+        self.0.active.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+/// How often a waiting call re-checks for shutdown.
+const POLL: Duration = Duration::from_millis(50);
 
 /// Cloneable handle to the running daemon's services for in-process adapters.
 #[derive(Clone)]
@@ -79,8 +96,25 @@ impl Gateway {
     pub fn activity(&self) -> &Arc<crate::lifecycle::Activity> {
         &self.0.activity
     }
+    /// Shutdown: waiting calls give up and new calls fail with `Unavailable`.
+    pub fn close_sessions(&self) {
+        self.0.internal.closing.store(true, Ordering::SeqCst);
+    }
+    /// Waits until every adapter session has been dropped (true) or `timeout` passed.
+    pub fn drain_sessions(&self, timeout: Duration) -> bool {
+        let deadline = Instant::now() + timeout;
+        while self.0.internal.active.load(Ordering::SeqCst) > 0 {
+            if Instant::now() >= deadline {
+                return false;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        true
+    }
     /// A short-lived session for one adapter request (its own retained parse/PDF state).
     pub fn session(&self, grant: GrantId) -> InternalSession {
+        self.0.internal.active.fetch_add(1, Ordering::SeqCst);
+        let active = Active(self.0.internal.clone());
         let id = self.0.sessions.fetch_add(1, Ordering::Relaxed) + 1;
         let (tx, rx) = mpsc::channel();
         let cancels: Arc<Mutex<HashMap<u64, Cancellation>>> = Arc::default();
@@ -98,6 +132,7 @@ impl Gateway {
             rx,
             next: 0,
             canceller: Canceller(cancels),
+            _active: active,
         }
     }
 }
@@ -119,8 +154,13 @@ pub struct InternalSession {
     rx: mpsc::Receiver<ServerFrame>,
     next: u64,
     canceller: Canceller,
+    /// Declared last: released only after `session` (and its `Arc<Shared>`) is dropped.
+    _active: Active,
 }
 impl InternalSession {
+    fn closing(&self) -> bool {
+        self.session.shared.internal.closing.load(Ordering::SeqCst)
+    }
     pub fn grant(&self) -> GrantId {
         self.session.grant
     }
@@ -130,6 +170,9 @@ impl InternalSession {
     /// Runs one command through `Session::dispatch` and waits for its reply until
     /// `deadline`. Progress frames are ignored.
     pub fn call(&mut self, command: Command, deadline: Instant) -> Result<Reply, CallError> {
+        if self.closing() {
+            return Err(CallError::Wire(WireError::Unavailable));
+        }
         if Instant::now() >= deadline {
             return Err(CallError::TimedOut);
         }
@@ -138,12 +181,16 @@ impl InternalSession {
         self.session.dispatch(id, command);
         loop {
             let left = deadline.saturating_duration_since(Instant::now());
-            match self.rx.recv_timeout(left.max(Duration::from_millis(1))) {
+            match self
+                .rx
+                .recv_timeout(left.clamp(Duration::from_millis(1), POLL))
+            {
                 Ok(ServerFrame::Response { id: got, result }) if got == id => {
                     return result.map_err(CallError::Wire);
                 }
                 Ok(_) => {}
-                Err(mpsc::RecvTimeoutError::Timeout) if Instant::now() < deadline => {}
+                Err(mpsc::RecvTimeoutError::Timeout)
+                    if Instant::now() < deadline && !self.closing() => {}
                 Err(_) => {
                     if let Some(c) = self
                         .session
@@ -154,7 +201,11 @@ impl InternalSession {
                     {
                         c.cancel();
                     }
-                    return Err(CallError::TimedOut);
+                    return Err(if self.closing() {
+                        CallError::Wire(WireError::Unavailable)
+                    } else {
+                        CallError::TimedOut
+                    });
                 }
             }
         }
