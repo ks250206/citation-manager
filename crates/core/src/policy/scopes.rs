@@ -69,8 +69,8 @@ impl Scope {
     }
     /// The daemon capabilities a token with this scope holds. Never `GrantAdmin`,
     /// `UiSettings`, `LocalFileRead`/`LocalFileWrite`/`LocalFileReplace`, `CapturePreview`,
-    /// `DestinationRead` or the `LibraryRead` bundle: those stay with the owner and the
-    /// native host.
+    /// `CaptureCommit` (#22), `DestinationRead` or the `LibraryRead` bundle: those stay with
+    /// the owner and the native host.
     pub fn capabilities(self) -> &'static [Capability] {
         use Capability as C;
         match self {
@@ -384,9 +384,11 @@ impl std::fmt::Display for TokenPolicyError {
 }
 
 /// Capabilities that change data, write files or start work. Delegated grants holding any of
-/// them get the shorter write lifetime.
-const WRITE_CAPABILITIES: [Capability; 10] = [
+/// them get the shorter write lifetime. `CaptureCommit` (#22) creates papers and starts the
+/// `capture.pdf_fetch` job; `CapturePreview` never persists and stays read-like.
+const WRITE_CAPABILITIES: [Capability; 11] = [
     Capability::LibraryWrite,
+    Capability::CaptureCommit,
     Capability::LibraryDelete,
     Capability::AnnotationsWrite,
     Capability::ExportAllowedDir,
@@ -545,18 +547,37 @@ mod tests {
             Capability::LocalFileWrite,
             Capability::LocalFileReplace,
             Capability::CapturePreview,
+            Capability::CaptureCommit,
             Capability::DestinationRead,
             Capability::LibraryRead,
         ] {
             assert!(!all.contains(&cap), "{cap:?}");
         }
-        // The #25 native-host preset is unchanged by #26.
+        // The native-host preset (#25, plus #22's preview-bound commit) is unchanged by #26.
         assert_eq!(
             presets::native_host(),
-            [Capability::CapturePreview, Capability::DestinationRead]
-                .into_iter()
-                .collect()
+            [
+                Capability::CapturePreview,
+                Capability::CaptureCommit,
+                Capability::DestinationRead
+            ]
+            .into_iter()
+            .collect()
         );
+        // No scope combination reaches any capture operation.
+        let every_scope = grant(all.clone());
+        for op in [
+            Operation::CaptureSubmit,
+            Operation::CaptureSave,
+            Operation::CaptureCancel,
+            Operation::CapturePdfStatus,
+            Operation::CapturePdfRetry,
+        ] {
+            assert!(
+                authorize(Some(&every_scope), None, op, 0).is_err(),
+                "{op:?}"
+            );
+        }
         assert_eq!(
             validate_token(ClientKind::NativeHost, &profiles::mcp_read_only(), None, 0),
             Err(TokenPolicyError::KindNotIssuable)
@@ -646,6 +667,16 @@ mod tests {
         assert_eq!(
             expiry_after_scope_change(&read, Some(now + DAY_MS), now),
             now + DAY_MS
+        );
+        // Delegated raw-capability grants: a capture commit is a write (#22 creates papers),
+        // a non-persisting capture preview alone is not.
+        let native_host = lifetime_for_capabilities(&presets::native_host());
+        assert_eq!(native_host.max_ms, 90 * DAY_MS);
+        let preview_only: CapabilitySet =
+            [Capability::CapturePreview, Capability::DestinationRead].into();
+        assert_eq!(
+            lifetime_for_capabilities(&preview_only).max_ms,
+            365 * DAY_MS
         );
     }
 }

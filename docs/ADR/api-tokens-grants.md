@@ -40,7 +40,10 @@ satisfies every read. `Requirement::AnyOf` expresses "the bundle, or these fine 
 | `bulk:elevated` | BulkElevated | **not issuable**; only during a time-limited elevation |
 
 Never reachable by scopes: `GrantAdmin`, `UiSettings`, `LocalFileRead`, `LocalFileWrite`,
-`LocalFileReplace` (#20), `CapturePreview`, `DestinationRead`, `LibraryRead`. The native-host preset is unchanged.
+`LocalFileReplace` (#20), `CapturePreview`, `CaptureCommit` (#22), `DestinationRead`, `LibraryRead`.
+The capture operations (`CaptureSubmit/Save/Cancel/PdfStatus/PdfRetry`) are therefore reachable
+only through the native-host preset (`CapturePreview + CaptureCommit + DestinationRead`, #22) or the
+owner's bootstrap grant; #26 leaves that preset unchanged and adds no capture scope.
 
 `ENDPOINTS` maps every REST endpoint (DESIGN §13.2), MCP tool (§14.2) and CLI command (§15)
 to its operations and required scopes (`Access::Scoped`), `Public` (`GET /health`) or
@@ -122,7 +125,9 @@ only `policy::elevation::elevatable_kinds` of the token) and sends exactly that 
 them, and `GrantCommand::Issue` refuses them, so a delegate can never mint grants, change
 the API exposure or approve elevations. Every delegated grant also expires
 (`scopes::lifetime_for_capabilities`, same limits as scoped tokens; omitted expiry = the
-default); only the bootstrap grant lives until revoked.
+default); only the bootstrap grant lives until revoked. `CaptureCommit` counts as a write
+capability there (a capture commit creates papers and starts `capture.pdf_fetch`), so a
+delegated native-host grant gets the write lifetime; `CapturePreview` alone never persists.
 
 ## API settings (listener: [rest-api](rest-api.md), #27)
 

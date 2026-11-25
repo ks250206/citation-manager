@@ -21,7 +21,8 @@ Keychain/保護された credential store と token hash 保存を候補とし�
 
 ## 最小権限
 
-- Native host の grant は capture/preview と、保存先選択に必要な最小 collection/tag 名・ID の読取のみ。
+- Native host の grant は capture/preview、#22 の preview 束縛 capture commit（`CaptureCommit`）と、
+  保存先選択に必要な最小 collection/tag 名・ID の読取のみ。
   任意の Paper/PDF 全文読取、任意パス、一般的な更新/削除/commit の権限を与えない。
   capture の保存確定は user-approved preview と許可された destination に結び付く限定操作として
   daemon が検証する。preview handle は credential ではない。具体的な確認経路と operation は #25 と
@@ -47,6 +48,15 @@ PDFium は native parser であり、worker 直列化だけで sandbox になら
 #25 の必須テスト: 未認証/未知/失効/不足 grant の拒否、client kind/scope/UID/PID 偽装の無効性、
 native host の読取制限、preview の grant binding、MCP read-only と write の独立許可。
 これらは #7 で実行済みとしない。
+
+## #22 実装状態
+
+`CaptureCommit` capability と `CaptureSubmit/CaptureSave/CaptureCancel/CapturePdfStatus/CapturePdfRetry`
+operation を追加した。capture preview は作成 grant に束縛し、LibraryWrite なしでは Create/Skip のみ
+（Merge は `Forbidden(ImportCommit)`）、PDF は preview が提示した候補の index でのみ選べる。
+`capture.pdf_fetch` は `JobCommand::Submit` では作れない。PDF 取得は SSRF 対策付き fetch policy
+（HTTPS、全 DNS 応答と redirect の公開 unicast 検査、接続先 pin、cookie/credential なし、サイズ/時間/MIME/
+`%PDF-` 検査）を通る。詳細は [browser capture ADR](browser-capture.md)。
 
 ## #25 実装状態
 

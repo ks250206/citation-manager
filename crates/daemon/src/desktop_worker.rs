@@ -11,7 +11,61 @@ use cm_protocol::{
 use cm_storage::{LibraryDb, LibraryDirectory};
 use std::{collections::HashMap, path::PathBuf, sync::mpsc, thread};
 type Work = Box<dyn for<'a> FnOnce(Result<&mut Worker<'a>, ServiceError>) + Send>;
-type ResolveWork = (String, Cancellation, Reply<MetadataResolution>);
+type Resolver = cm_core::metadata_resolve::MetadataResolveService<cm_metadata::doi::HttpProviders>;
+/// Work for the network worker: DOI resolution and (#22) capture extraction + complement.
+/// The provider service (and its runtime) is created lazily on this thread and only when
+/// a lookup is actually needed.
+type ResolveWork = Box<dyn FnOnce(&mut Option<Resolver>) + Send>;
+fn resolver_slot(slot: &mut Option<Resolver>) -> Result<&mut Resolver, ServiceError> {
+    if slot.is_none() {
+        let provider = cm_metadata::doi::HttpProviders::new(Default::default())?;
+        *slot = Some(cm_core::metadata_resolve::MetadataResolveService::new(
+            provider,
+        ));
+    }
+    Ok(slot.as_mut().expect("constructed"))
+}
+/// Delivers a reply exactly once: `finish` sends the result; if every holder is dropped
+/// without finishing (e.g. the work panicked and unwound), the caller gets an error instead
+/// of waiting forever.
+struct ReplyOnce<T>(std::sync::Mutex<Option<Reply<T>>>);
+impl<T> ReplyOnce<T> {
+    fn new(reply: Reply<T>) -> std::sync::Arc<Self> {
+        std::sync::Arc::new(Self(std::sync::Mutex::new(Some(reply))))
+    }
+    fn finish(&self, result: Result<T, ServiceError>) {
+        let reply = self.0.lock().unwrap_or_else(|e| e.into_inner()).take();
+        if let Some(reply) = reply {
+            reply(result);
+        }
+    }
+    /// Drops the reply without calling it (the caller reports the failure another way).
+    fn disarm(&self) {
+        drop(self.0.lock().unwrap_or_else(|e| e.into_inner()).take());
+    }
+}
+impl<T> Drop for ReplyOnce<T> {
+    fn drop(&mut self) {
+        let reply = self.0.get_mut().unwrap_or_else(|e| e.into_inner()).take();
+        if let Some(reply) = reply {
+            reply(Err(ServiceError::InvalidInput(
+                "the request could not be processed (internal error)".into(),
+            )));
+        }
+    }
+}
+/// Runs network-worker items one at a time. A panicking item (a bug triggered by one
+/// request) is contained: its reply resolves to an error through `ReplyOnce`, the provider
+/// service is rebuilt on next use, and later requests keep being served.
+fn serve_resolver(lookups: mpsc::Receiver<ResolveWork>) {
+    let mut service = None;
+    while let Ok(work) = lookups.recv() {
+        let run = std::panic::AssertUnwindSafe(|| work(&mut service));
+        if std::panic::catch_unwind(run).is_err() {
+            service = None;
+        }
+    }
+}
 pub(super) struct Worker<'a> {
     db: LibraryDb,
     directory: LibraryDirectory,
@@ -62,6 +116,11 @@ impl Worker<'_> {
         }
     }
 }
+/// Result of a capture preview: the common #33 preview plus the capture resolution.
+pub type CapturePreviewed = (
+    cm_protocol::import::ImportPreview,
+    cm_protocol::capture::CaptureResolution,
+);
 /// Signals that the library worker thread has finished (its database is closed).
 pub struct WorkerExit(mpsc::Receiver<()>);
 impl WorkerExit {
@@ -149,31 +208,7 @@ impl InProcessLibraryClient {
         let (resolver, lookups) = mpsc::sync_channel::<ResolveWork>(8);
         thread::Builder::new()
             .name("doi-worker".into())
-            .spawn(move || {
-                let mut service = None;
-                while let Ok((doi, cancel, complete)) = lookups.recv() {
-                    if service.is_none() {
-                        match cm_metadata::doi::HttpProviders::new(Default::default()) {
-                            Ok(provider) => {
-                                service =
-                                    Some(cm_core::metadata_resolve::MetadataResolveService::new(
-                                        provider,
-                                    ))
-                            }
-                            Err(e) => {
-                                complete(Err(e));
-                                continue;
-                            }
-                        }
-                    }
-                    complete(
-                        service
-                            .as_mut()
-                            .expect("constructed")
-                            .resolve(&doi, &cancel),
-                    );
-                }
-            })?;
+            .spawn(move || serve_resolver(lookups))?;
         Ok((
             Self {
                 sender,
@@ -182,6 +217,50 @@ impl InProcessLibraryClient {
             },
             WorkerExit(exit),
         ))
+    }
+    /// #22 capture preview: extraction and the DOI complement run on the network worker,
+    /// then the draft enters the SAME common #33 coordinator as every other import (no
+    /// write). `complete` runs exactly once.
+    pub fn capture_preview(
+        &self,
+        request: cm_protocol::capture::CaptureRequest,
+        policy: cm_metadata::fetch_policy::FetchPolicy,
+        cancel: Cancellation,
+        complete: Reply<CapturePreviewed>,
+    ) -> Result<(), ServiceError> {
+        let client = self.clone();
+        let once = ReplyOnce::new(complete);
+        let finish = |once: &ReplyOnce<CapturePreviewed>, result| once.finish(result);
+        let work_once = once.clone();
+        let sent = self.resolver.try_send(Box::new(move |slot| {
+            let mut lookup = |doi: &str, cancel: &Cancellation| {
+                resolver_slot(slot).and_then(|s| s.resolve(doi, cancel))
+            };
+            let resolution =
+                cm_metadata::capture::resolve_with(&request, &policy, Some(&mut lookup), &cancel);
+            let resolution = match resolution {
+                Ok(r) if !cancel.is_cancelled() => r,
+                Ok(_) => {
+                    return finish(
+                        &work_once,
+                        Err(ServiceError::InvalidInput("cancelled".into())),
+                    );
+                }
+                Err(e) => return finish(&work_once, Err(e)),
+            };
+            let preview_once = work_once.clone();
+            let enqueued = client.enqueue(Box::new(move |r| finish(&preview_once, r)), move |w| {
+                let request = resolution.request(request.destination.clone());
+                w.imports.preview(request).map(|p| (p, resolution))
+            });
+            if let Err(e) = enqueued {
+                finish(&work_once, Err(e));
+            }
+        }));
+        if sent.is_err() {
+            finish(&once, Err(ServiceError::Unavailable));
+        }
+        Ok(())
     }
     /// Same worker and database, separate retained parse/PDF state.
     pub fn for_session(&self, session: u64) -> Self {
@@ -377,9 +456,17 @@ impl LibraryClient for InProcessLibraryClient {
         cancel: Cancellation,
         complete: Reply<MetadataResolution>,
     ) -> Result<(), ServiceError> {
-        self.resolver
-            .try_send((doi, cancel, complete))
-            .map_err(|_| ServiceError::Unavailable)
+        let once = ReplyOnce::new(complete);
+        let reply = once.clone();
+        let sent = self.resolver.try_send(Box::new(move |slot| {
+            reply.finish(resolver_slot(slot).and_then(|s| s.resolve(&doi, &cancel)))
+        }));
+        if sent.is_err() {
+            // Not queued: the caller reports the error itself.
+            once.disarm();
+            return Err(ServiceError::Unavailable);
+        }
+        Ok(())
     }
     fn export(
         &self,
@@ -520,5 +607,48 @@ impl Worker<'_> {
                 .collect(),
             migration_notice: report.migration_notice,
         })
+    }
+}
+
+#[cfg(test)]
+mod resolver_tests {
+    use super::*;
+    use std::{sync::mpsc::channel, time::Duration};
+
+    /// Regression (#22 review P1): a panic in one network-worker item used to kill the
+    /// thread, so that request never got a reply and every later one got `Unavailable`.
+    #[test]
+    fn a_panicking_item_replies_with_an_error_and_the_worker_keeps_serving() {
+        let dir = tempfile::tempdir().unwrap();
+        let client = InProcessLibraryClient::start(dir.path().join("library")).unwrap();
+        let (tx, rx) = channel();
+        let reply = ReplyOnce::<u32>::new(Box::new(move |r| tx.send(r).unwrap()));
+        client
+            .resolver
+            .try_send(Box::new(move |_| {
+                let _held = reply;
+                panic!("simulated extractor bug");
+            }))
+            .unwrap();
+        let first = rx.recv_timeout(Duration::from_secs(10)).unwrap();
+        assert!(
+            matches!(first, Err(ServiceError::InvalidInput(_))),
+            "{first:?}"
+        );
+        assert!(
+            rx.recv_timeout(Duration::from_millis(100)).is_err(),
+            "replied twice"
+        );
+        // The thread survived and serves the next item.
+        let (tx, rx) = channel();
+        let reply = ReplyOnce::<u32>::new(Box::new(move |r| tx.send(r).unwrap()));
+        client
+            .resolver
+            .try_send(Box::new(move |_| reply.finish(Ok(7))))
+            .unwrap();
+        assert_eq!(
+            rx.recv_timeout(Duration::from_secs(10)).unwrap().unwrap(),
+            7
+        );
     }
 }

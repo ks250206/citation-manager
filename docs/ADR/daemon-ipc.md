@@ -107,9 +107,10 @@ through the `LibraryClient` adapter. Core/domain DTOs gained additive serde deri
   still holds only `CapturePreview + DestinationRead`.
 - Peer check: Linux `SO_PEERCRED` UID must equal the daemon's; on macOS the private 0700
   directory is the OS boundary (rustix exposes no `LOCAL_PEERCRED`; to verify in #34).
-- Presets: `desktop` (all capabilities, GrantAdmin), `native_host` (capture preview,
-  destination names/IDs; no paper reads, delete, export, commits or local paths; previews hide
-  duplicate matches without LibraryRead), `mcp_read_only` (LibraryRead, JobsRead).
+- Presets: `desktop` (all capabilities, GrantAdmin), `native_host` (capture preview, the
+  preview-bound capture commit added by #22, destination names/IDs; no paper reads, delete,
+  export, general commits, merges or local paths; previews hide duplicate matches without
+  LibraryRead), `mcp_read_only` (LibraryRead, JobsRead). See [browser capture](browser-capture.md).
 - Elevation is a separate path: only a live `GrantAdmin` session can `GrantCommand::Issue`, and
   only a non-empty subset of its own (narrowed) capabilities. MCP cannot mint itself write.
 - Preview binding: an import/PDF preview handle is bound to the grant that created it; commit or
@@ -170,7 +171,10 @@ lease owner/generation/expiry, next attempt, deadline, owner grant, and a unique
   detect committed results: `attachment.import` keys its effect by `(paper, sha256)` and returns
   `AlreadyCommitted` (`detected_committed = true`) instead of registering twice.
 - Built-in kinds: `attachment.import`, `diagnostic.wait` (no library effect; used to test
-  lifecycle/retry/lease recovery). #18 adds extraction kinds via `JobHandler`.
+  lifecycle/retry/lease recovery), `capture.pdf_fetch` (#22). #18 adds extraction kinds via
+  `JobHandler`. A kind whose payload must come from a daemon-validated operation returns
+  `JobHandler::ipc_submittable() == false`: `JobCommand::Submit` refuses it
+  (`Forbidden(JobSubmit)`) and the daemon creates it with `JobEngine::submit_internal`.
 
 ## Verification and limits
 

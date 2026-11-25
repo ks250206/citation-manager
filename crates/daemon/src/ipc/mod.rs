@@ -12,13 +12,14 @@
 //! daemon applies the bulk guard (`policy::elevation`), restricts `exports:write` tokens to
 //! the allowed export folders, and records denials and non-read operations in the audit log.
 pub mod auth;
+mod capture;
 /// #27 in-process adapters (REST) dispatch through the same `Session::dispatch`.
 pub mod gateway;
 
 use crate::{
     desktop_worker::InProcessLibraryClient,
     fulltext::readers::{MAX_SEARCH_READERS, ReaderPool},
-    jobs::{JobEngine, JobHandler, JobPolicy, default_handlers},
+    jobs::{CapturePdfFetchHandler, JobEngine, JobHandler, JobPolicy, default_handlers},
     lifecycle::{self, Activity, DaemonPaths, LibraryLock},
 };
 use auth::{Authenticator, IssueError, now_ms};
@@ -31,6 +32,7 @@ use cm_core::{
     },
     search::extraction::PageTextExtractor,
 };
+use cm_metadata::fetch_policy::{FetchPolicy, HostResolver, PdfFetcher, SystemResolver};
 use cm_protocol::{
     api::{AuditEntry, AuditOutcome},
     client::secrets::{PlatformSecretStore, SecretStore},
@@ -79,6 +81,7 @@ pub struct DaemonConfig {
     /// Exit after this long with no connection and no active job.
     pub idle_timeout: Duration,
     pub jobs: JobPolicy,
+    /// Extra/overriding job handlers (registered after the built-in capture handler).
     pub handlers: Vec<Arc<dyn JobHandler>>,
     /// #18 page text extractor. `Some` registers `fulltext.extract` and automatic
     /// extraction of pending PDF attachments; `None` (no PDF runtime) leaves PDF text
@@ -92,6 +95,22 @@ pub struct DaemonConfig {
     /// #27 REST listener options (origins, limits, request log). Whether it listens, and
     /// where, comes only from the persisted API settings.
     pub rest: crate::rest::RestConfig,
+    /// #22 capture PDF fetch policy and name resolution.
+    pub capture: CaptureConfig,
+}
+/// #22: how capture previews filter PDF candidates and how `capture.pdf_fetch` downloads.
+#[derive(Clone)]
+pub struct CaptureConfig {
+    pub fetch: FetchPolicy,
+    pub resolver: Arc<dyn HostResolver>,
+}
+impl Default for CaptureConfig {
+    fn default() -> Self {
+        Self {
+            fetch: FetchPolicy::default(),
+            resolver: Arc::new(SystemResolver),
+        }
+    }
 }
 impl DaemonConfig {
     pub fn new(library: PathBuf) -> Self {
@@ -102,6 +121,7 @@ impl DaemonConfig {
             idle_timeout: Duration::from_secs(30),
             jobs: JobPolicy::default(),
             handlers: default_handlers(),
+            capture: CaptureConfig::default(),
             extractor: None,
             secret_store: None,
             audit_max_bytes: crate::audit::DEFAULT_MAX_BYTES,
@@ -155,6 +175,9 @@ struct Shared {
     bulk: Mutex<BulkGuard>,
     /// #27 in-process adapter sessions (closed and drained before the lock is released).
     internal: Arc<gateway::Tracker>,
+    /// #22 capture preview -> creating grant and offered PDF candidates.
+    captures: Mutex<capture::Bindings>,
+    capture: CaptureConfig,
 }
 
 /// A started daemon. `wait` blocks until idle exit or `shutdown`.
@@ -192,6 +215,8 @@ pub fn start(config: DaemonConfig) -> Result<RunningDaemon, StartError> {
     let directory = LibraryDirectory::prepare(&paths.library).map_err(StartError::Storage)?;
     lifecycle::prepare_private_dir(&paths.state_dir)?;
     let lock = LibraryLock::try_acquire(&paths.lock)?.ok_or(StartError::AlreadyRunning)?;
+    // Only the lock holder runs jobs, so no fetch can be writing these right now.
+    crate::jobs::sweep_stale_downloads(directory.path());
     // The lock holder is the only migration runner. Upgrades take a pre-migration backup.
     let control = LibraryDb::open_with_safety_backups(&directory).map_err(StartError::Storage)?;
     let control = Arc::new(Mutex::new(control));
@@ -220,7 +245,15 @@ pub fn start(config: DaemonConfig) -> Result<RunningDaemon, StartError> {
     let activity = Arc::new(Activity::default());
     let (engine, engine_exit) =
         InProcessLibraryClient::start_with_exit(paths.library.clone(), config.settings)?;
-    let mut handlers = config.handlers;
+    // Built-in #22 capture handler first, then the configured (possibly overriding) handlers,
+    // then #18 extraction when a page text extractor is available.
+    let mut handlers: Vec<Arc<dyn JobHandler>> = vec![Arc::new(CapturePdfFetchHandler::new(
+        PdfFetcher::with_resolver(
+            config.capture.fetch.clone(),
+            config.capture.resolver.clone(),
+        ),
+    ))];
+    handlers.extend(config.handlers);
     if let Some(extractor) = config.extractor {
         handlers.push(Arc::new(crate::fulltext::FulltextExtractHandler {
             extractor,
@@ -256,6 +289,8 @@ pub fn start(config: DaemonConfig) -> Result<RunningDaemon, StartError> {
         api,
         bulk: Mutex::new(BulkGuard::default()),
         internal: Arc::default(),
+        captures: Mutex::new(capture::Bindings::default()),
+        capture: config.capture,
     });
     let rest = crate::rest::Manager::start(gateway::Gateway(shared.clone()), config.rest)?;
     let stop = Arc::new(AtomicBool::new(false));
@@ -864,6 +899,7 @@ impl Session {
                     Box::new(move |r| done(r.map(Reply::Annotations).map_err(Into::into))),
                 )
             }
+            Command::Capture(command) => self.capture(id, command, held, done),
             _ => {
                 done(Err(WireError::Service(ServiceError::InvalidInput(
                     "unsupported command".into(),

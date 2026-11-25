@@ -15,7 +15,7 @@
 | protocol | core, domain | 機能別 wire DTO。IPC envelope/JobStatus は #25 |
 | desktop | protocol | GPUI (#10)、command/keymap (#16) |
 | daemon | protocol, core, storage, search, pdf, metadata | composition root、唯一の永続化操作主体、認可 (#25) |
-| cli | protocol, mcp | 将来の papers executable (#28) |
+| cli | protocol, mcp | `papers` executable、daemon IPC client (#28, [cli ADR](cli.md)) |
 | mcp | protocol | stdio 入口のみ、サーバー/tools は #29 |
 | native-host | protocol | browser capture 境界 |
 
@@ -63,3 +63,13 @@ No new crate edge. `core::search` gains transport-neutral search/extraction DTOs
 re-exports the DTOs; `daemon::fulltext` composes job handlers and the PDFium extractor
 (`pdf-metadata` feature). `cm-search` stays an empty placeholder: SQL must stay in storage
 and the orchestration is pure core. See [fulltext-search](fulltext-search.md).
+
+## #22 additions
+
+No new crate edge and no new external dependency. `core::capture` holds the shared
+Browser/MCP capture DTO and the pure resolution policy (serde/serde_json only).
+`metadata` gains `html` (inert scanner/extractor), `capture` (composition with #14) and
+`fetch_policy` (SSRF-safe PDF fetcher on the existing reqwest/tokio pins). Its
+`loopback-test-server` feature (fixture HTTP server + loopback-only policy) is enabled only by
+`daemon`'s dev-dependency. `protocol::capture` adds `Command::Capture`; `daemon` composes it
+and registers the `capture.pdf_fetch` job. See [browser capture](browser-capture.md).
