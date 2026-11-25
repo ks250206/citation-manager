@@ -95,15 +95,16 @@ impl From<FrameError> for ClientError {
 
 impl ClientError {
     /// The daemon went away right after accepting (e.g. it was in the middle of its idle
-    /// exit): worth exactly one fresh connect, unlike a rejection or a malformed reply.
+    /// exit): worth exactly one fresh connect, unlike a rejection, a malformed reply or a
+    /// timeout. Only consulted for failures *after* the socket connected, so any transport
+    /// error on that fresh connection counts: platforms disagree on how a just-closed Unix
+    /// socket fails (EOF, EPIPE, ECONNRESET, and on macOS also ENOTCONN, EINVAL from
+    /// setsockopt or EPROTOTYPE from a racing send).
     fn closed_during_handshake(&self) -> bool {
         let io = |e: &io::Error| {
-            matches!(
+            !matches!(
                 e.kind(),
-                io::ErrorKind::UnexpectedEof
-                    | io::ErrorKind::BrokenPipe
-                    | io::ErrorKind::ConnectionReset
-                    | io::ErrorKind::ConnectionAborted
+                io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted
             )
         };
         match self {
@@ -128,6 +129,8 @@ pub fn handshake_within(
     hello: Hello,
     timeout: Duration,
 ) -> Result<Welcome, ClientError> {
+    // On macOS this fails with EINVAL when the daemon already closed the connection; the
+    // resulting I/O error is retried once by `connect_and_handshake`.
     stream.set_io_timeouts(Some(timeout), Some(timeout))?;
     let result = (|| {
         write_frame(stream, &ClientFrame::Hello(hello), MAX_HANDSHAKE_FRAME)?;
@@ -151,13 +154,16 @@ pub fn connect_and_handshake(
     connector: &dyn Connector,
     timeout: Duration,
 ) -> Result<(Box<dyn Stream>, Welcome), ClientError> {
-    let attempt = || -> Result<(Box<dyn Stream>, Welcome), ClientError> {
+    // `Ok(Err(_))` is a failure after the connection was established (retryable once when it
+    // looks like the daemon went away); `Err(_)` is a connect failure (never retried here:
+    // the connector already decides whether to start a daemon).
+    type Connected = Result<(Box<dyn Stream>, Welcome), ClientError>;
+    let attempt = || -> Result<Connected, ClientError> {
         let (mut stream, hello) = connector.connect()?;
-        let welcome = handshake_within(stream.as_mut(), hello, timeout)?;
-        Ok((stream, welcome))
+        Ok(handshake_within(stream.as_mut(), hello, timeout).map(|welcome| (stream, welcome)))
     };
-    match attempt() {
-        Err(e) if e.closed_during_handshake() => attempt(),
+    match attempt()? {
+        Err(e) if e.closed_during_handshake() => attempt()?,
         other => other,
     }
 }
