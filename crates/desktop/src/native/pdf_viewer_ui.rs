@@ -4,8 +4,8 @@ use super::annotations_ui::page_of;
 use super::*;
 use crate::annotations::{MARKER_H, MARKER_W, is_marker, marker_origin, quads_of};
 use crate::pdf_viewer::{
-    self, RenderCache, RenderKey, TextPos, ZoomMode, capped_zoom, hit_char, page_offsets,
-    page_range, render_zoom, rotate, rotate_rgba, rotated_points, scale_for, selected_text,
+    self, RenderCache, RenderKey, TextPos, ZoomMode, capped_zoom, hit_char, layout_scale,
+    page_offsets, page_range, render_zoom, rotate, rotate_rgba, rotated_points, selected_text,
     step_zoom, visible_pages, wanted_pages,
 };
 use cm_protocol::annotations::{
@@ -261,10 +261,7 @@ impl LibraryView {
         let pane_h = if pane_h < 1.0 { 800.0 } else { pane_h };
         // Fit modes use the first page so the zoom does not jump while paging through
         // documents that mix page sizes/orientations.
-        let reference = v.page_points(0);
-        if let Some(page) = reference.filter(|_| pane_w > 1.0) {
-            v.scale = scale_for(v.mode, page, (pane_w, pane_h));
-        }
+        v.scale = layout_scale(v.mode, v.page_points(0), (pane_w, pane_h), v.scale);
         let base_zoom = render_zoom(v.scale, v.device_scale);
         let top = -f32::from(v.scroll.offset().y);
         let visible = visible_pages(&v.layout(), top, pane_h.max(1.0));
@@ -403,9 +400,7 @@ impl LibraryView {
             let page = v.current_page();
             v.mode = mode;
             v.reset_attempts();
-            if let Some(reference) = v.page_points(0) {
-                v.scale = scale_for(mode, reference, v.pane());
-            }
+            v.scale = layout_scale(mode, v.page_points(0), v.pane(), v.scale);
             v.scroll_to_page(page);
         }
         cx.notify();

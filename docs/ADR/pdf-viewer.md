@@ -27,7 +27,9 @@ Status: accepted for #17. Builds on #11 (PDFium worker), #15 (Details › PDF sl
 - User rotation is applied to the bitmap client-side (`rotate_rgba`); the effective rotation for
   geometry is page /Rotate + user turns. A test proves the rotated bitmap and the effective
   `Viewport` agree pixel-for-pixel for all 16 combinations.
-- Fit Width/Page use the first page as reference so zoom does not jump while paging.
+- Fit Width/Page use the first page as reference so zoom does not jump while paging. Explicit
+  −/+ zoom applies even before any page has rendered (`layout_scale`), so a first page that is
+  too large at 100% (`TooLarge`, no geometry yet) is recovered by zooming out.
 - Selection uses PDFium character quads in PDF space: hit-test the character under the pointer
   (or the nearest on the same line), select an inclusive range in text order across pages, and
   copy only characters PDFium mapped to Unicode (never guessed).

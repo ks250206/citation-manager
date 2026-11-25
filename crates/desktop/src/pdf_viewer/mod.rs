@@ -57,6 +57,22 @@ pub fn scale_for(mode: ZoomMode, page: (f32, f32), pane: (f32, f32)) -> f32 {
     }
 }
 
+/// Scale to lay pages out with. An explicit zoom applies at once, even before any page has
+/// rendered (a first page too large at 100% must be recoverable by zooming out); fit modes need
+/// the reference page size and a measured pane, and keep `current` until both are known.
+pub fn layout_scale(
+    mode: ZoomMode,
+    reference: Option<(f32, f32)>,
+    pane: (f32, f32),
+    current: f32,
+) -> f32 {
+    match (mode, reference) {
+        (ZoomMode::Scale(_), _) => scale_for(mode, (1.0, 1.0), pane),
+        (_, Some(page)) if pane.0 > 1.0 => scale_for(mode, page, pane),
+        _ => current,
+    }
+}
+
 /// Next/previous zoom step from the current scale.
 pub fn step_zoom(scale: f32, up: bool) -> f32 {
     if up {

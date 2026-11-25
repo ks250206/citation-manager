@@ -177,6 +177,38 @@ fn cache_is_lru_bounded_by_bytes_and_entries() {
 }
 
 #[test]
+fn explicit_zoom_applies_before_the_first_page_has_rendered() {
+    // First page too large at 100%: no geometry yet, and the pane may not be measured.
+    let mut scale = 1.0;
+    for expected in [0.8, 0.67, 0.5, MIN_SCALE] {
+        let mode = ZoomMode::Scale(step_zoom(scale, false));
+        scale = layout_scale(mode, None, (0.0, 0.0), scale);
+        assert_eq!(scale, expected);
+    }
+    assert_eq!(
+        layout_scale(ZoomMode::Scale(9.0), None, (500.0, 500.0), 1.0),
+        MAX_SCALE
+    );
+    // Fit modes need the reference page and a measured pane; until then the scale is kept.
+    for mode in [ZoomMode::FitWidth, ZoomMode::FitPage] {
+        assert_eq!(layout_scale(mode, None, (624.0, 900.0), 0.67), 0.67);
+        assert_eq!(
+            layout_scale(mode, Some((600.0, 800.0)), (0.0, 0.0), 0.67),
+            0.67
+        );
+    }
+    assert_eq!(
+        layout_scale(
+            ZoomMode::FitWidth,
+            Some((600.0, 800.0)),
+            (624.0, 900.0),
+            0.67
+        ),
+        1.0
+    );
+}
+
+#[test]
 fn building_the_page_column_does_not_evict_the_working_set() {
     let a = attachment(1);
     let key = |p: u32| RenderKey::new(a, p, 1.0);
