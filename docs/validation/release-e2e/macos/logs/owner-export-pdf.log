@@ -1,0 +1,6 @@
+$ <repo>/target/release/examples/release_e2e_owner --library <work>/home/.local/share/citation-manager/library --runtime-dir <runtime>/citation-manager --papersd <work>/Applications/Citation Manager.app/Contents/MacOS/papersd export-pdf --attachment 01a212bc-a45c-7637-8425-77cbbdfd3ada --out <work>/Exports/corpus (annotated).pdf
+exit 0 (0.4s)
+--- stdout
+{"complete":true,"ok":true,"report":{"highlights":1,"max_position_error":0.0,"notes":1,"omitted":[],"original_sha256":"1842ec1c966b74fd73d9dd75ec1f8a199e14e9935b002e2c037206a0496f8910","path":"<work>/Exports/corpus (annotated).pdf","preserved":0,"replaced":false}}
+
+--- stderr

@@ -1,0 +1,8 @@
+$ <work>/prefix/bin/papersd token issue --library <work>/home/.local/share/citation-manager/library --label release e2e --kind api --allow-non-tty --scope papers:read --scope files:read --scope annotations:read --scope annotations:write --scope papers:write
+exit 0 (0.0s)
+--- stdout
+<token>
+
+--- stderr
+Issued api token 01a212b4-974b-70c6-aea1-690d37d95533 "release e2e" scopes [papers:read papers:write files:read annotations:read annotations:write] expires in 30 days.
+Shown once. Stored in: private 0600 file outside the library (weaker fallback) (account f99ef58dd052c5e2:01a212b4-974b-70c6-aea1-690d37d95533).

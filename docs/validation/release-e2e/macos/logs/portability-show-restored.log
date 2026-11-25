@@ -1,0 +1,6 @@
+$ <work>/Applications/Citation Manager.app/Contents/MacOS/papers --library <work>/Restored/library show 01a212bc-a452-75a4-81d9-ee5a3097c64b
+exit 0 (0.0s)
+--- stdout
+{"command":"show","data":{"attachments":[{"byte_size":13918,"id":"01a212bc-a45c-7637-8425-77cbbdfd3ada","media_type":"application/pdf","original_name":"corpus.pdf","sha256":"1842ec1c966b74fd73d9dd75ec1f8a199e14e9935b002e2c037206a0496f8910","status":"present","uri":"paper://01a212bc-a452-75a4-81d9-ee5a3097c64b/attachment/01a212bc-a45c-7637-8425-77cbbdfd3ada"}],"collections":[],"paper":{"citation_key":"AnonRelease","created_at":"2026-11-25T12:44:42.450Z","external_ids":[],"extra_json":{},"id":"01a212bc-a452-75a4-81d9-ee5a3097c64b","title":"Release E2E corpus","type":"journal-article","updated_at":"2026-11-25T12:44:42.450Z"},"tags":[]},"ok":true,"schema":"papers.v1","warnings":[]}
+
+--- stderr

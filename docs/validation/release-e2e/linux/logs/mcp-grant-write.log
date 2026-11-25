@@ -1,0 +1,6 @@
+$ <work>/prefix/bin/papers-mcp grant --library <work>/home/.local/share/citation-manager/library --write --ttl 1h
+exit 0 (0.0s)
+--- stdout
+{"capabilities":["library_read","library_write","network_lookup","jobs_read","annotations_write"],"credential_file":"<work>/home/.local/share/citation-manager/library/daemon/mcp.credential","expires_at_ms":1795613754971,"grant_id":"01a212b4-9800-763d-a795-1eb762c29dc2","label":"mcp write"}
+
+--- stderr

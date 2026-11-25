@@ -28,10 +28,17 @@ LIB="$HOME/Library/Application Support/Citation Manager/library"   # default lib
 1. Open `Citation-Manager-<version>.dmg`.
 2. Drag **Citation Manager** onto the **Applications** link in the window, then eject the
    disk image.
-3. First start of an unsigned build: in Finder, Control-click the app → **Open** → **Open**
-   (or System Settings → Privacy & Security → **Open Anyway**). For a build you produced
-   yourself you can instead remove the download quarantine:
-   `xattr -dr com.apple.quarantine "$APP"`.
+3. First start of an unsigned build (verified on macOS 27.2,
+   [real-Mac evidence](validation/real-mac/README.md)):
+   1. Double-click the app once. macOS blocks it and offers only **Move to Trash** and **Done**;
+      choose **Done**.
+   2. Open System Settings → Privacy & Security and click **Open Anyway** next to the message
+      about Citation Manager.
+   3. Authenticate, then confirm **Open**. Later launches open without a prompt.
+
+   On older macOS versions, Control-click the app → **Open** → **Open** may also work; this
+   route was not verified on current macOS. For a build you produced yourself you can instead
+   remove the download quarantine: `xattr -dr com.apple.quarantine "$APP"`.
 
 Do not run the app from the mounted disk image or straight from Downloads without moving it:
 macOS then runs a temporary, read-only copy ("App Translocation"), and browser registration

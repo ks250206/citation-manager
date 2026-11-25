@@ -1,0 +1,6 @@
+$ <work>/Applications/Citation Manager.app/Contents/MacOS/papers --library <work>/Restored/library fulltext 01a212bc-a452-75a4-81d9-ee5a3097c64b --page 1
+exit 0 (0.2s)
+--- stdout
+{"command":"fulltext","data":{"attachment_id":"01a212bc-a45c-7637-8425-77cbbdfd3ada","attachments":[{"id":"01a212bc-a45c-7637-8425-77cbbdfd3ada","page_count":6,"state":"complete"}],"extraction":{"detail":null,"page_count":6,"pages_done":6,"pages_with_text":5,"state":"complete","truncated_pages":0},"limits":{"from_page_number":1,"max_chars":20000,"max_pages":1},"next_page_number":2,"pages":[{"page_index":0,"page_label":"iv","page_number":1,"text":"Unicode 日本語 αβ café\r\nsecond line: coordinate proof","truncated":false,"uri":"paper://01a212bc-a452-75a4-81d9-ee5a3097c64b/attachment/01a212bc-a45c-7637-8425-77cbbdfd3ada?page=1"}],"paper_id":"01a212bc-a452-75a4-81d9-ee5a3097c64b"},"ok":true,"schema":"papers.v1","warnings":[]}
+
+--- stderr

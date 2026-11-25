@@ -1,0 +1,7 @@
+$ <work>/prefix/bin/papers add doi 10.1000/release-e2e-offline --yes
+exit 4 (0.5s)
+--- stdout
+{"command":"add doi","data":{"lookup":{"canonical_doi":"10.1000/release-e2e-offline","fields":[],"manual_add":true,"pdf_candidates":[],"providers":[{"attempts":2,"cached":false,"provider":"crossref","status":"Network"},{"attempts":2,"cached":false,"provider":"datacite","status":"Network"}]},"saved":false,"unresolved":["title"]},"error":{"code":"unresolved","exit_code":4,"message":"DOI metadata unavailable or has no title; nothing saved. Pass --title to register it manually"},"ok":false,"schema":"papers.v1","warnings":[]}
+
+--- stderr
+papers: error: DOI metadata unavailable or has no title; nothing saved. Pass --title to register it manually

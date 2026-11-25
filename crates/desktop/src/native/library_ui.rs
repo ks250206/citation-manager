@@ -593,20 +593,7 @@ impl LibraryView {
                     .border_color(rgb(BORDER))
                     .bg(rgb(0xf8f9fb))
                     .child(
-                        hint(format!(
-                            "Page {} · {} papers{}{}",
-                            self.library.previous.len() + 1,
-                            self.library.papers.len(),
-                            match self.library.selected.len() {
-                                0 => String::new(),
-                                n => format!(" · {n} selected"),
-                            },
-                            if self.busy(Lane::Query) {
-                                " · loading…"
-                            } else {
-                                ""
-                            }
-                        ))
+                        hint(self.library.page_summary(self.busy(Lane::Query)))
                         .flex_1(),
                     )
                     .child(

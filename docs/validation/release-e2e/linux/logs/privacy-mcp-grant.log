@@ -1,0 +1,6 @@
+$ <work>/prefix/bin/papers-mcp grant --library <work>/home/.local/share/citation-manager/library
+exit 0 (0.0s)
+--- stdout
+{"capabilities":["library_read","jobs_read"],"credential_file":"<work>/home/.local/share/citation-manager/library/daemon/mcp.credential","expires_at_ms":1803386014489,"grant_id":"01a212b2-732a-7522-9719-c9c69b90793e","label":"mcp read-only"}
+
+--- stderr
