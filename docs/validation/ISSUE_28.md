@@ -8,7 +8,7 @@ dev/test debuginfo 0, `cargo clean` before the final pass. Contract: [cli ADR](.
 |---|---|
 | `cargo fmt --all -- --check` | passed |
 | `cargo clippy --workspace --all-targets --locked -- -D warnings` | passed |
-| `cargo test --workspace --locked --no-fail-fast` | passed: 352 tests in 66 suites, 0 failed (cm-cli: 21 unit + 3 subprocess) |
+| `cargo test --workspace --locked --no-fail-fast` | passed: 360 tests in 66 suites, 0 failed (cm-cli: 27 unit + 5 subprocess) |
 | `python3 scripts/check_architecture.py` | passed (cli depends only on protocol, mcp) |
 | `python3 scripts/check_migrations.py --base origin/main` | passed (no migration added) |
 | `python3 -m unittest discover -s scripts -p 'test_*.py'` | passed: 32 tests |
@@ -69,3 +69,25 @@ again exit 4 → `--read-only add file --yes` exit 5 → `mcp` exit 7 → `serve
 - macOS (`.app` placement of `papers` beside `papersd`, peer credentials) — #34.
 - MCP serving (#29) and the MCP/CLI/REST combination (#30); MVP final acceptance needs them.
 - `server stop` while another client/job is active is guarded but not covered by a test.
+- `server stop` on macOS (refused until peer PIDs can be verified there) and a daemon-side
+  graceful shutdown command (not added; SIGTERM + papersd crash recovery).
+- A stdout write error other than a closed pipe on the real binary (unit-tested only).
+
+## Review fixes (second pass, same commands re-run after `cargo clean`)
+
+Regression tests added: non-UTF-8 import/add/export paths exit 2 with a JSON envelope and a
+non-UTF-8 library is reported lossily (subprocess, Linux); closed pipe / other stdout write
+errors (unit); duplicate DOI across `--batch 1` batches needs a decision and commits nothing,
+`--on-duplicate skip` creates one (subprocess + unit); `server stop` refused for a read-only
+grant and under `--read-only` while the daemon keeps running, peer-PID verification (unit);
+`add file --dry-run` succeeds with a LocalFileRead+LibraryRead+CapturePreview grant (0400
+credential file) and the commit is refused; credential file symlink/0700/0400/unsafe-parent
+cases; export containment by (dev, inode) and uninspectable library; published file mode equals
+the umask-derived mode; merge into a trashed paper refused; text-mode control characters
+stripped; typed handshake retry classification.
+
+Manual smoke (fresh library, no papersd before): status, `add file --dry-run`/`--yes`,
+cross-batch duplicate import exit 4 then `--on-duplicate skip` (1 created, 1 skipped),
+`list | head -c 1` and `export | head -c 1` exit 0, export into the library exit 5, `-o out.ris`
+published as `-rw-r--r--` (umask 022), `--read-only server stop` exit 5, `mcp` exit 7,
+`server stop`; no papersd left.
