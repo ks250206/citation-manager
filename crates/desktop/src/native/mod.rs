@@ -300,6 +300,11 @@ impl LibraryView {
             api_inputs: api_ui::ApiInputs::new(cx),
         };
         view.subscribe_viewer_inputs(window, cx);
+        // The resolver belongs to the table focus owner: a prefix never survives focus loss.
+        cx.on_blur(&view.table_focus, window, |this, _, _| {
+            this.resolver.reset()
+        })
+        .detach();
         // An edited port is part of the unsaved API settings draft (kept across refreshes).
         cx.subscribe(
             &view.api_inputs.port,
@@ -840,6 +845,7 @@ impl LibraryView {
         self.reload(cx);
     }
     fn find(&mut self, _: &Find, window: &mut Window, cx: &mut Context<Self>) {
+        self.resolver.reset();
         if self.screen != Screen::Library {
             self.screen = Screen::Library;
             cx.notify();
@@ -873,6 +879,9 @@ impl LibraryView {
         fields[next].focus_handle(cx).focus(window, cx);
     }
     fn select(&mut self, id: PaperId, multiple: bool, cx: &mut Context<Self>) {
+        // Any selection change (mouse, palette, keymap) ends a pending key sequence, so the
+        // first `g` of `gg` cannot complete against a paper chosen afterwards.
+        self.resolver.reset();
         if self.locked() || !self.can_replace_editor(cx) {
             return;
         }
@@ -1035,6 +1044,7 @@ impl LibraryView {
     }
     /// Escape leaves a secondary screen, or returns focus from a field to the table.
     fn back(&mut self, _: &Back, window: &mut Window, cx: &mut Context<Self>) {
+        self.resolver.reset();
         if self.screen != Screen::Library && self.screen != Screen::Import {
             self.screen = Screen::Library;
             cx.notify();

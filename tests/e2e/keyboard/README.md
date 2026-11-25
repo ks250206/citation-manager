@@ -19,3 +19,6 @@ Native checks (run on a real desktop; record results in docs/validation):
    status warning and per-binding diagnostics under Organize & export › Keyboard; a valid file
    replaces the defaults after Reload Keymap.
 7. Mouse: clicking palette rows runs them; clicking table rows still selects.
+8. A pending prefix never outlives an unrelated interaction: press `g`, then click another row
+   (or ⌘F / Ctrl+F into search and Esc back) and press `g` within a second — the selection must
+   not jump to the first paper.
