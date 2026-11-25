@@ -34,9 +34,22 @@ go to stderr (`PAPERS_MCP_LOG`), never secrets or library text.
 ## Entry point (contract for `papers mcp`, #28)
 
 - Binary `papers-mcp`, installed next to `papersd` (which it starts on demand from its own
-  directory, never via PATH). `papers mcp ARGS` must call `cm_mcp::main(ARGS)` (returns the exit
-  code: 0 ok, 1 failure, 2 usage) — identical behaviour; `cm_mcp::run_stdio()` (environment-only
-  configuration) and `cm_mcp::serve(ServeConfig)` remain for embedding.
+  directory, never via PATH). Either embedding works for `papers mcp`:
+  - `cm_mcp::main(args: Vec<OsString>) -> u8` — exactly `papers-mcp ARGS` (exit 0 ok,
+    1 failure, 2 usage); the grant decides, `--read-only` narrows.
+  - `cm_mcp::run_stdio_with(config: cm_mcp::StdioConfig) -> Result<(), cm_mcp::StdioError>`
+    for a CLI that already resolved the library/connection. Build the config with
+    `StdioConfig::new(library: &Path, runtime_dir: Option<&Path>) -> Result<StdioConfig, StdioError>`
+    or `StdioConfig::from_connector(&LocalConnector) -> StdioConfig` (paths, uid, launch reused;
+    an explicit connector credential becomes `McpCredential::Fixed`, a `DesktopBootstrap`
+    owner source is never presented and falls back to `McpCredential::DefaultFile`). Public
+    fields: `paths`, `uid`, `launch: Option<Launch>`, `credential: McpCredential`
+    (`DefaultFile | File(PathBuf) | Fixed(Credential) | Store(Arc<dyn CredentialStore>)`),
+    `read_only: bool` (**default true**: only the MCP read-only preset is requested; set false
+    to let an owner-approved write/export grant act), `idle_disconnect: Option<Duration>`
+    (default 60 s). Blocks until stdin EOF; stdout carries protocol frames only.
+  - `cm_mcp::run_stdio()` is a thin wrapper: `StdioConfig::new($PAPERS_LIBRARY,
+    $PAPERS_RUNTIME_DIR)` (read-only session) passed to `run_stdio_with`.
 - `papers-mcp [serve] --library ABS [--runtime-dir ABS] [--credential-file ABS] [--read-only]
   [--papersd ABS] [--daemon-idle-timeout-ms N] [--idle-disconnect-ms N]`
 - Environment: `PAPERS_LIBRARY`, `PAPERS_RUNTIME_DIR`, `PAPERS_MCP_CREDENTIAL_FILE` (a path),
