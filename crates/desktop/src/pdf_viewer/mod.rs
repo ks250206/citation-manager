@@ -6,7 +6,10 @@ use cm_protocol::{
     attachments::{PageChar, Quad, Rect, Rotation},
     domain::AttachmentId,
 };
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::{
+    collections::{BTreeMap, HashMap, VecDeque},
+    time::{Duration, Instant},
+};
 
 /// Zoom steps offered by −/+ (logical pixels per PDF point; 1.0 = 100%).
 pub const ZOOM_STEPS: &[f32] = &[0.5, 0.67, 0.8, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0];
@@ -23,6 +26,8 @@ pub const CACHE_BUDGET_BYTES: usize = 64 * 1024 * 1024;
 pub const CACHE_MAX_ENTRIES: usize = 48;
 /// Gap between pages in logical pixels.
 pub const PAGE_GAP: f32 = 12.0;
+/// Delay before re-requesting a page the PDF worker rejected as `Busy`.
+pub const BUSY_RETRY: Duration = Duration::from_millis(300);
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ZoomMode {
@@ -58,6 +63,22 @@ pub fn scale_for(mode: ZoomMode, page: (f32, f32), pane: (f32, f32)) -> f32 {
         scale.clamp(MIN_SCALE, MAX_SCALE)
     } else {
         1.0
+    }
+}
+
+/// Scale to lay pages out with. An explicit zoom applies at once, even before any page has
+/// rendered (a first page too large at 100% must be recoverable by zooming out); fit modes need
+/// the reference page size and a measured pane, and keep `current` until both are known.
+pub fn layout_scale(
+    mode: ZoomMode,
+    reference: Option<(f32, f32)>,
+    pane: (f32, f32),
+    current: f32,
+) -> f32 {
+    match (mode, reference) {
+        (ZoomMode::Scale(_), _) => scale_for(mode, (1.0, 1.0), pane),
+        (_, Some(page)) if pane.0 > 1.0 => scale_for(mode, page, pane),
+        _ => current,
     }
 }
 
@@ -229,6 +250,11 @@ impl<V> RenderCache<V> {
         }
         self.entries.get(key).map(|(v, _)| v)
     }
+    /// Reads without refreshing recency. Building the page column touches every page, so it
+    /// must not reorder the LRU; only the visible/prefetch working set is refreshed (`get`).
+    pub fn peek(&self, key: &RenderKey) -> Option<&V> {
+        self.entries.get(key).map(|(v, _)| v)
+    }
     pub fn contains(&self, key: &RenderKey) -> bool {
         self.entries.contains_key(key)
     }
@@ -296,6 +322,36 @@ impl<V> RenderCache<V> {
     }
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
+    }
+}
+
+/// Renders the worker rejected as `Busy`, held back until their retry deadline so a repaint
+/// in the meantime does not resubmit them at once.
+#[derive(Debug, Default)]
+pub struct BusyBackoff {
+    until: HashMap<RenderKey, Instant>,
+}
+impl BusyBackoff {
+    /// Records a `Busy` reply; the key may be requested again from `now + BUSY_RETRY`.
+    pub fn defer(&mut self, key: RenderKey, now: Instant) {
+        self.until.insert(key, now + BUSY_RETRY);
+    }
+    /// Forgets expired deadlines (call once per scheduling pass).
+    pub fn prune(&mut self, now: Instant) {
+        self.until.retain(|_, deadline| now < *deadline);
+    }
+    /// Whether the key is still waiting for its retry deadline.
+    pub fn is_deferred(&self, key: &RenderKey, now: Instant) -> bool {
+        self.until.get(key).is_some_and(|deadline| now < *deadline)
+    }
+    pub fn clear(&mut self) {
+        self.until.clear();
+    }
+    pub fn len(&self) -> usize {
+        self.until.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.until.is_empty()
     }
 }
 

@@ -1,8 +1,8 @@
 //! Framework-free helpers that turn a viewer selection into an annotation (#19).
 use cm_protocol::{
     annotations::{
-        Anchor, Annotation, AnnotationId, AnnotationKind, Edit, History, MAX_CONTEXT_CHARS,
-        NewAnnotation, Source, merge_line_quads,
+        Anchor, Annotation, AnnotationId, AnnotationKind, AnnotationRequest, Edit, History,
+        MAX_CONTEXT_CHARS, NewAnnotation, Source, merge_line_quads,
     },
     attachments::{PageChar, Quad},
     domain::{AttachmentId, PaperId},
@@ -123,6 +123,40 @@ pub fn annotation_at(
             })
         })
         .map(|a| a.id)
+}
+
+/// How an unresolved annotation can be placed on its PDF again (None once it is placed).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Placement {
+    /// It has quoted text, so `Propose` can search the PDF for it.
+    pub search: bool,
+    /// A note can be put on any page the person chooses (a page note has no quads). Page notes
+    /// copied from a replaced PDF have no quote, so this is their only way back onto a page.
+    pub manual: bool,
+}
+pub fn placement(a: &Annotation) -> Option<Placement> {
+    match a.anchor {
+        Anchor::Resolved { .. } => None,
+        Anchor::Unresolved { .. } => Some(Placement {
+            search: !a.quote.trim().is_empty(),
+            manual: a.kind == AnnotationKind::Note,
+        }),
+    }
+}
+/// The `Resolve` request that places an unresolved note on the page the person chose, as a
+/// page note (no quads). None for highlights (they need text quads) and placed annotations.
+pub fn place_on_page(
+    a: &Annotation,
+    page_index: u32,
+    page_label: Option<String>,
+) -> Option<AnnotationRequest> {
+    placement(a).filter(|p| p.manual)?;
+    Some(AnnotationRequest::Resolve {
+        id: a.id,
+        page_index,
+        page_label,
+        quads: vec![],
+    })
 }
 
 /// What to do with an annotation that a search hit or deep link asked to select.

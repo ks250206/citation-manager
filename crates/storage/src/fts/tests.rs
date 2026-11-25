@@ -465,6 +465,47 @@ fn short_term_scan_stops_at_the_deadline_between_chunks() {
     }
 }
 
+/// Two short clauses matching different documents of one paper that fall into different
+/// scan windows still satisfy the paper-level AND: following every continuation returns
+/// each matching document exactly once, in its own window.
+#[test]
+fn short_clauses_matched_in_different_windows_keep_their_paper() {
+    let mut db = LibraryDb::in_memory().unwrap();
+    let both = paper(&mut db, "zabz", 2020, "nothing here");
+    let att = attachment(&db, both, 5);
+    annotate(&db, att, "quoted zcdz", "a comment");
+    // Only one of the two substrings: never a hit.
+    let half = paper(&mut db, "qabq", 2020, "nothing here");
+    let mut request = SearchRequest::new("ab cd");
+    request.candidate_limit = 1;
+    let mut seen = Vec::new();
+    let mut windows = 0;
+    loop {
+        let page = results(&db, &request);
+        windows += 1;
+        assert!(windows < 20, "continuations must end");
+        assert!(!page.coverage.timed_out);
+        seen.extend(page.hits.iter().map(|h| (h.paper_id, h.source)));
+        match page.coverage.continuation {
+            Some(next) => request.cursor = Some(next),
+            None => break,
+        }
+    }
+    assert!(windows >= 2);
+    assert_eq!(
+        seen,
+        vec![
+            (both, DocumentSource::Paper),
+            (both, DocumentSource::Annotation)
+        ]
+    );
+    assert!(!seen.iter().any(|(p, _)| *p == half));
+    // One window over everything gives the same documents.
+    let page = results(&db, &SearchRequest::new("ab cd"));
+    assert_eq!(page.hits.len(), 2);
+    assert_eq!(page.coverage.scan, ScanStatus::Complete);
+}
+
 #[test]
 fn short_term_scan_is_bounded_with_continuation_and_explicit_scope() {
     let mut db = LibraryDb::in_memory().unwrap();

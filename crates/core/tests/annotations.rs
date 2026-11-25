@@ -205,6 +205,35 @@ fn undo_redo_replays_the_same_operations_and_refuses_stale_state() {
     assert!(!history.can_redo());
 }
 
+/// Another client deleted the annotation after our create/update was recorded: replaying
+/// either edit is a Conflict (skipped by the history), not a NotFound kept for retry forever.
+#[test]
+fn replaying_edits_of_an_annotation_deleted_elsewhere_is_a_conflict() {
+    let mut memory = Memory {
+        attachments: vec![attachment(1)],
+        ..Default::default()
+    };
+    let mut service = AnnotationService::new(&mut memory);
+    let creation = service.create(highlight(attachment(1))).unwrap();
+    let a = created(creation.clone());
+    let update = service
+        .update(
+            a.id,
+            AnnotationPatch {
+                color: Some(Some("green".into())),
+                comment: None,
+            },
+        )
+        .unwrap();
+    // Someone else removes it.
+    service.delete(a.id).unwrap();
+    assert_eq!(service.undo(&update).unwrap_err(), ServiceError::Conflict);
+    assert_eq!(service.redo(&update).unwrap_err(), ServiceError::Conflict);
+    // Undoing the creation replays a delete of a row that is already gone.
+    assert_eq!(service.undo(&creation).unwrap_err(), ServiceError::Conflict);
+    assert!(service.get(a.id).unwrap().is_none());
+}
+
 #[test]
 fn ai_annotations_keep_provenance_and_need_confirmation() {
     let mut memory = Memory {

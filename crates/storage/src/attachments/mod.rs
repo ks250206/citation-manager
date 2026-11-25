@@ -3,7 +3,9 @@ pub(crate) mod files;
 use crate::{LibraryDb, LibraryDirectory, StorageError, error::service_error};
 use cm_core::{
     ServiceError,
-    attachments::{AttachmentError, AttachmentLibrary, AttachmentStatus, ImportAttachment},
+    attachments::{
+        AttachmentError, AttachmentLibrary, AttachmentStatus, ImportAttachment, Imported,
+    },
     ports::{AttachmentRepository, AttachmentStore},
 };
 use cm_domain::{Attachment, AttachmentId, StorageKey};
@@ -143,30 +145,42 @@ impl ManagedAttachments<'_> {
         request: ImportAttachment,
         cut: Cut,
     ) -> Result<Attachment, AttachmentError> {
+        self.ingest_with(request, cut, false)
+            .map(|imported| imported.attachment)
+    }
+    /// `once`: reuse the paper's existing reference to the same content (see `import_once`).
+    fn ingest_with(
+        &mut self,
+        request: ImportAttachment,
+        cut: Cut,
+        once: bool,
+    ) -> Result<Imported, AttachmentError> {
         if request.original_name.trim().is_empty() || request.media_type.trim().is_empty() {
             return Err(AttachmentError::Service(ServiceError::InvalidInput(
                 "attachment name and media type required".into(),
             )));
         }
-        self.ingest_storage(request, cut).map_err(|e| match e {
-            StorageError::UnsafePath(_) => AttachmentError::UnsafePath,
-            StorageError::DigestMismatch => AttachmentError::HashMismatch,
-            StorageError::CorruptBlob => AttachmentError::CorruptBlob,
-            StorageError::MissingSource => AttachmentError::Service(ServiceError::InvalidInput(
-                "attachment source does not exist".into(),
-            )),
-            StorageError::Sqlite(rusqlite::Error::QueryReturnedNoRows) => {
-                AttachmentError::Service(ServiceError::NotFound)
-            }
-            StorageError::Sqlite(e) => AttachmentError::Service(service_error(e)),
-            _ => AttachmentError::Unavailable,
-        })
+        self.ingest_storage(request, cut, once)
+            .map_err(|e| match e {
+                StorageError::UnsafePath(_) => AttachmentError::UnsafePath,
+                StorageError::DigestMismatch => AttachmentError::HashMismatch,
+                StorageError::CorruptBlob => AttachmentError::CorruptBlob,
+                StorageError::MissingSource => AttachmentError::Service(
+                    ServiceError::InvalidInput("attachment source does not exist".into()),
+                ),
+                StorageError::Sqlite(rusqlite::Error::QueryReturnedNoRows) => {
+                    AttachmentError::Service(ServiceError::NotFound)
+                }
+                StorageError::Sqlite(e) => AttachmentError::Service(service_error(e)),
+                _ => AttachmentError::Unavailable,
+            })
     }
     fn ingest_storage(
         &mut self,
         request: ImportAttachment,
         cut: Cut,
-    ) -> Result<Attachment, StorageError> {
+        once: bool,
+    ) -> Result<Imported, StorageError> {
         self.db.check_directory(&self.store.directory)?;
         let mut original = source(&request.source).map_err(|error| match error {
             StorageError::Io(ref e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -247,6 +261,17 @@ impl ManagedAttachments<'_> {
         if !active {
             return Err(StorageError::Sqlite(rusqlite::Error::QueryReturnedNoRows));
         }
+        // Decided under this write transaction: a concurrent importer of the same content
+        // for the same paper either committed before (found here) or waits for us.
+        if once
+            && let Some(existing) =
+                crate::repositories::reference_with_content(&tx, attachment.paper_id, &digest)?
+        {
+            return Ok(Imported {
+                attachment: existing,
+                existing: true,
+            });
+        }
         tx.execute("INSERT INTO attachments(id,paper_id,relative_path,file_hash,original_name,mime_type,byte_size,added_at) VALUES (?1,?2,?3,?4,?5,?6,?7,strftime('%Y-%m-%dT%H:%M:%fZ','now'))", params![attachment.id.0.to_string(), attachment.paper_id.0.to_string(), attachment.storage_key.as_str(), digest.as_slice(), attachment.original_name, attachment.media_type, i64::try_from(size).map_err(|_| invalid("attachment too large"))?])?;
         #[cfg(all(test, unix))]
         crate::crash_recovery::checkpoint("attachment-transaction", tx.path());
@@ -267,7 +292,10 @@ impl ManagedAttachments<'_> {
         if cut == Cut::AfterCommit {
             return Err(injected());
         }
-        Ok(attachment)
+        Ok(Imported {
+            attachment,
+            existing: false,
+        })
     }
 }
 fn injected() -> StorageError {
@@ -276,6 +304,9 @@ fn injected() -> StorageError {
 impl AttachmentLibrary for ManagedAttachments<'_> {
     fn import(&mut self, request: ImportAttachment) -> Result<Attachment, AttachmentError> {
         self.ingest(request, Cut::None)
+    }
+    fn import_once(&mut self, request: ImportAttachment) -> Result<Imported, AttachmentError> {
+        self.ingest_with(request, Cut::None, true)
     }
     fn status(&self, id: AttachmentId) -> Result<AttachmentStatus, AttachmentError> {
         let attachment = self

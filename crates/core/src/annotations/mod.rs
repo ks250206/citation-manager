@@ -610,15 +610,18 @@ impl<R: AnnotationRepository> AnnotationService<R> {
                 }
                 self.repo.insert(&a)
             }
+            // A target that no longer exists (deleted by another client) is a Conflict, not
+            // NotFound: the state the edit expects is gone for good, so retrying cannot help
+            // and the step must not stay on top of the history.
             Edit::Deleted(a) => {
-                if self.existing(a.id)? != a {
+                if self.repo.get(a.id)?.as_ref() != Some(&a) {
                     return Err(ServiceError::Conflict);
                 }
                 if self.repo.delete(a.id)? {
                     self.confirmations.note(&a);
                     Ok(())
                 } else {
-                    Err(ServiceError::NotFound)
+                    Err(ServiceError::Conflict)
                 }
             }
             Edit::Updated { before, after } => {
@@ -628,7 +631,7 @@ impl<R: AnnotationRepository> AnnotationService<R> {
                     ));
                 }
                 validate_row(&after)?;
-                if self.existing(after.id)? != before {
+                if self.repo.get(after.id)?.as_ref() != Some(&before) {
                     return Err(ServiceError::Conflict);
                 }
                 self.check_confirmation(&after, Some(&before))?;

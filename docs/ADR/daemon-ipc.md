@@ -48,7 +48,9 @@ the connector launches again, at most every 500 ms, until its timeout. A connect
 during the handshake (the daemon accepted just before its idle exit) is retried exactly once
 (`connect_and_handshake`). Lifetime: a connection or any active job (queued/running/retry_wait) keeps the
 daemon alive. Idle time counts from when both reached zero; after `--idle-timeout-ms`
-(default 30 s) the daemon removes its socket and exits. The GUI keeps one connection open for
+(default 30 s) the daemon removes its socket and exits. A #22 capture preview awaiting its
+commit/cancel (bound to this daemon, at most the 330 s binding lifetime) also prevents the
+exit, because the native host disconnects right after `capture.preview`. The GUI keeps one connection open for
 its lifetime. A lost daemon fails in-flight requests with `Unavailable`; the next request
 reconnects (and restarts it).
 
@@ -77,7 +79,11 @@ start.
 Frames are a 4-byte big-endian length plus UTF-8 JSON (`cm_protocol::ipc::frame`), with
 limits per direction: first (pre-auth) frame 64 KiB, requests 8 MiB, responses 64 MiB. A
 declared oversized length is rejected before allocation. At most 64 in-flight requests per
-connection (`Busy`), 64 connections, 5 s to complete the handshake.
+connection (`Busy`), 64 connections, 5 s to complete the handshake. A request stays in flight
+until its reply has been written to the socket, and each connection's outbound queue is
+bounded (128 frames, never waited on by the library worker): a client that keeps sending but
+stops reading fills it and is disconnected; progress frames are dropped rather than queued
+when it is full.
 
 ```text
 client: Hello{protocol_version, client_kind, requested?, library?, credential}
@@ -169,7 +175,10 @@ lease owner/generation/expiry, next attempt, deadline, owner grant, and a unique
   "lease expired; attempt limit reached"; otherwise retry_wait due now.
 - This is **at-least-once execution, not exactly-once**. Handlers keep effects idempotent and
   detect committed results: `attachment.import` keys its effect by `(paper, sha256)` and returns
-  `AlreadyCommitted` (`detected_committed = true`) instead of registering twice.
+  `AlreadyCommitted` (`detected_committed = true`) instead of registering twice. The check is
+  repeated inside the registering write transaction (`AttachmentLibrary::import_once`, also
+  used by `capture.pdf_fetch` and the GUI attach), so a job and a GUI attach of the same
+  content racing on their separate connections still leave one reference.
 - Built-in kinds: `attachment.import`, `diagnostic.wait` (no library effect; used to test
   lifecycle/retry/lease recovery), `capture.pdf_fetch` (#22). #18 adds extraction kinds via
   `JobHandler`. A kind whose payload must come from a daemon-validated operation returns

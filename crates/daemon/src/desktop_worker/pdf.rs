@@ -447,13 +447,16 @@ impl Worker<'_> {
                     .managed_attachments(&self.directory)
                     .map_err(|e| invalid(e.to_string()))?,
             )
-            .import(ImportAttachment {
+            // Checked again inside the registering transaction: an attachment job of the same
+            // content running on the job connection cannot add a second reference.
+            .import_once(ImportAttachment {
                 paper_id: paper,
                 source: file.path,
                 original_name: file.name,
                 media_type: "application/pdf".into(),
                 expected_sha256: file.sha256,
             })
+            .map(|imported| imported.attachment)
             .map_err(|e| invalid(e.to_string()))
         })();
         let file = &mut self.pdfs.files[index];

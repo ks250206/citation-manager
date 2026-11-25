@@ -4,7 +4,7 @@ Automated: `crates/core/tests/annotations.rs` (validation, exact-state undo/redo
 refusal, AI provenance/confirmation, carry-over + proposal search), `crates/daemon/tests/annotations.rs`
 (SQLite persistence across reopen, page order, undo/redo/delete-restore, stale undo refused, AI
 confirm, unresolved carry-over and explicit placement), `crates/desktop/tests/annotations.rs`
-(selection → per-line quads, quote, bounded context).
+(selection → per-line quads, quote, bounded context, search/manual placement of unresolved notes).
 
 Native (installed bundle):
 1. Drag across text (multi-line, Japanese, rotated page) → choose a colour → Highlight. Restart:
@@ -16,3 +16,7 @@ Native (installed bundle):
 4. AI annotations (source=ai via API/MCP) show "AI · review" with Confirm / Remove.
 5. Attach a replacement PDF: "Copy annotations from …" creates unresolved copies; "Find position"
    proposes a page (context match shown); nothing moves until "Place here".
+6. A copied page note (no quoted text) shows "Place in PDF…" instead of a search. It opens the PDF
+   with the note selected; go to a page (‹ ›, page field ↩, or J/K with Vim keys) and choose
+   "Place on p. N", or run "Place Note on Current Page" from ⌘K/Ctrl+K. The 📝 marker appears on
+   that page; undo unplaces it.

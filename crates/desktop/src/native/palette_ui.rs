@@ -24,6 +24,7 @@ pub(super) const CONNECTED: &[&str] = &[
     pdf::ROTATE,
     pdf::HIGHLIGHT,
     pdf::ADD_NOTE,
+    pdf::PLACE_NOTE,
     pdf::SHOW_ANNOTATIONS,
     pdf::FULL_TEXT,
     pdf::COPY_LINK,
@@ -390,6 +391,7 @@ impl LibraryView {
                 self.ann.note_open = true;
                 self.ann.note.focus_handle(cx).focus(window, cx);
             }
+            pdf::PLACE_NOTE => self.ann_place_selected(window, cx),
             pdf::SHOW_ANNOTATIONS => {
                 self.show(Screen::Library, window, cx);
                 self.settings.details_tab = "Notes".into();

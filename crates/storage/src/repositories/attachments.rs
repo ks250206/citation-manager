@@ -34,6 +34,21 @@ impl AttachmentRepository for SqliteAttachments<'_> {
             .map_err(service_error)
     }
 }
+/// The paper's first reference to exactly this content, if any. Ingestion calls it inside
+/// its write transaction so `(paper, sha256)` is registered at most once even when several
+/// importers (job runner, library worker) race.
+pub(crate) fn reference_with_content(
+    db: &Connection,
+    paper: PaperId,
+    sha256: &[u8; 32],
+) -> rusqlite::Result<Option<Attachment>> {
+    db.query_row(
+        &format!("{COLUMNS} AND a.paper_id=?1 AND a.file_hash=?2 ORDER BY a.added_at,a.id LIMIT 1"),
+        rusqlite::params![paper.0.to_string(), sha256.as_slice()],
+        decode,
+    )
+    .optional()
+}
 fn decode(row: &Row<'_>) -> rusqlite::Result<Attachment> {
     fn parse<T: std::str::FromStr>(row: &Row<'_>, index: usize) -> rusqlite::Result<T>
     where

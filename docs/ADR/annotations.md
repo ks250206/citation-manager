@@ -11,8 +11,8 @@ Status: accepted for #19. Builds on #8 (annotations table), #17 (viewer, shared 
   needs non-blank text however it is anchored; whitespace-only comments are stored as none.
 - **Service** is the only writer. Every change returns an `Edit` (Created/Updated/Deleted with full
   rows). Undo applies the inverse, redo the edit, both restoring *exact* rows (ids, timestamps) and
-  only from the state the edit expects — otherwise `Conflict`, so an AI agent's or another window's
-  newer change is never clobbered. `History` (bounded 200) lives in the UI.
+  only from the state the edit expects — otherwise `Conflict` (including a target annotation that
+  was deleted meanwhile), so an AI agent's or another window's newer change is never clobbered. `History` (bounded 200) lives in the UI.
 - **Replayed edits are untrusted input.** Every row an undo/redo writes passes the same validation
   as a new write; `confirmed_at` is only valid on `source=ai`; an `Updated` edit may not change
   id, attachment, kind, source, quote, context or `created_at`. A written `confirmed_at` must be
@@ -32,8 +32,12 @@ Status: accepted for #19. Builds on #8 (annotations table), #17 (viewer, shared 
   Notes tab only offers a source that still has something to copy (`pending_carry_over`).
   `Propose` searches the new PDF's characters for the quote (preferring matching context) and
   returns a proposal; nothing is placed until `Resolve` after the person confirms, and `Resolve`
-  only places unresolved annotations. Quote and context use one text rule everywhere:
-  characters without Unicode are skipped. Matches are counted up to 1000.
+  only places unresolved annotations. A note can also be placed by hand: page notes have no quote,
+  so their copies cannot be searched for. The Notes tab offers "Place in PDF…", which opens the PDF
+  with the note selected; "Place on p. N" in the viewer (or the `pdf.place_note` palette command)
+  sends `Resolve` for the page being viewed with no quads (`desktop::annotations::place_on_page`).
+  Highlights still need a search proposal, since they need text quads. Quote and context use one
+  text rule everywhere: characters without Unicode are skipped. Matches are counted up to 1000.
 - **Propose off the library worker**: the worker only looks up rows; checksum verification and
   text-only page snapshots (`zoom: None`, no bitmap) run on a helper thread through a cloneable
   PDF-worker submitter, under a 120 s overall deadline and the request's `Cancellation` (the GUI
