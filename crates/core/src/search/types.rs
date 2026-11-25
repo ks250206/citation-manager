@@ -159,8 +159,11 @@ pub enum ShortTermScope {
     AllPages,
 }
 
-/// Continuation/page position. `scan_after` is the last document id the previous short-term
-/// window examined (0 = start); `offset` pages through that window's ranked results.
+/// Continuation/page position. The short-term scan reads two lanes, each in document id
+/// order with its own position (0 = start): `scan_after` is the last bibliographic or
+/// annotation document the previous window examined, `pages_after` the last PDF page
+/// document (used only when the scan examines pages; otherwise page hits follow
+/// `scan_after`). `offset` pages through that window's ranked results.
 /// Separate calls do not share a snapshot: concurrent edits can shift results, and a
 /// `search.rebuild` renumbers documents, so a cursor taken before a rebuild may skip or
 /// repeat hits (restart from no cursor after a rebuild; see docs/ADR/fulltext-search.md).
@@ -169,6 +172,9 @@ pub enum ShortTermScope {
 pub struct SearchCursor {
     pub scan_after: i64,
     pub offset: u32,
+    /// Absent in cursors written before the page lane existed (= 0, start of the lane).
+    #[serde(default)]
+    pub pages_after: i64,
 }
 
 fn default_limit() -> u32 {
@@ -266,6 +272,7 @@ impl SearchRequest {
         }
         if let Some(cursor) = self.cursor
             && (cursor.scan_after < 0
+                || cursor.pages_after < 0
                 || cursor.offset > MAX_CANDIDATE_LIMIT + 2 * MAX_FTS_CANDIDATES)
         {
             return invalid("invalid cursor");
