@@ -17,6 +17,20 @@ fn display_line(content: &str) -> SharedString {
     content.replace(['\n', '\r'], " ").into()
 }
 
+/// Clamps a byte range of `current` to the prefix it shares with `laid_out` (the text of the
+/// last painted layout), so the range can be measured on that layout. Identical texts keep the
+/// range; a layout of the placeholder (empty content) shares nothing, which measures at the
+/// start of the field.
+fn stale_layout_range(laid_out: &str, current: &str, range: Range<usize>) -> Range<usize> {
+    let shared = laid_out
+        .char_indices()
+        .zip(current.chars())
+        .find(|((_, a), b)| a != b)
+        .map_or(laid_out.len().min(current.len()), |((index, _), _)| index);
+    let start = range.start.min(shared);
+    start..range.end.clamp(start, shared)
+}
+
 actions!(
     text_input,
     [
@@ -462,10 +476,15 @@ impl EntityInputHandler for TextInput {
         _cx: &mut Context<Self>,
     ) -> Option<Bounds<Pixels>> {
         let last_layout = self.last_layout.as_ref()?;
-        if last_layout.text != display_line(&self.content) {
-            return None;
-        }
-        let range = self.range_from_utf16(&range_utf16);
+        // macOS asks for the marked text's rectangle (to place the IME candidate window) right
+        // after `setMarkedText`, before the next paint, so the cached layout is usually one edit
+        // behind. Returning `None` then makes AppKit put the candidates at the screen origin;
+        // measure on the part the stale layout still shares with the content instead.
+        let range = stale_layout_range(
+            &last_layout.text,
+            &display_line(&self.content),
+            self.range_from_utf16(&range_utf16),
+        );
         Some(Bounds::from_corners(
             point(
                 bounds.left() + last_layout.x_for_index(range.start),
@@ -780,7 +799,25 @@ pub(super) fn key_bindings() -> Vec<KeyBinding> {
 
 #[cfg(test)]
 mod tests {
-    use super::display_line;
+    use super::{display_line, stale_layout_range};
+
+    #[test]
+    fn ime_rectangle_range_survives_a_layout_one_edit_behind() {
+        // Same text: unchanged.
+        assert_eq!(stale_layout_range("日本語", "日本語", 3..9), 3..9);
+        // Composition grew after the last paint ("日本語に" → "日本語にほ", marked 9..15):
+        // measured from the marked start up to what the old layout still has.
+        assert_eq!(stale_layout_range("日本語に", "日本語にほ", 9..15), 9..12);
+        // Composition replaced after the last paint ("にほんご" → "日本語"): both ends fall
+        // back to the start of the field, never outside the old layout or off a char boundary.
+        assert_eq!(stale_layout_range("にほんご", "日本語", 0..9), 0..0);
+        // First keystroke into an empty field: the layout is the placeholder.
+        assert_eq!(stale_layout_range("Metadata keywords", "n", 0..1), 0..0);
+        // Text deleted after the last paint: clamped to the shorter text.
+        assert_eq!(stale_layout_range("abcdef", "abc", 1..3), 1..3);
+        assert_eq!(stale_layout_range("abc", "abcdef", 4..6), 3..3);
+    }
+
     #[test]
     fn multiline_display_keeps_stored_unicode_and_all_offsets() {
         let stored = "日本語\nsecond\r\n🙂 e\u{301}";
