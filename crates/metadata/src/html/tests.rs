@@ -404,3 +404,27 @@ fn unterminated_tags_and_quotes_scan_in_bounded_work() {
     let scanned = scan("1 < 2 <3 <meta name=a content=b>");
     assert_eq!(scanned.meta.len(), 1);
 }
+
+#[test]
+fn json_ld_bare_doi_identifier_is_kept() {
+    let request = CaptureRequest {
+        page_url: "https://example.org/article/1".into(),
+        json_ld: vec![
+            r#"{"@type":"ScholarlyArticle","headline":"Bare","identifier":"10.9999/Example"}"#
+                .into(),
+        ],
+        ..Default::default()
+    };
+    let page = extract(&request, &FetchPolicy::default());
+    assert_eq!(
+        id(&page, "doi"),
+        Some(("10.9999/example".into(), MetadataTier::JsonLd))
+    );
+    // A plain string that is not a DOI is still ignored.
+    let request = CaptureRequest {
+        page_url: "https://example.org/article/2".into(),
+        json_ld: vec![r#"{"@type":"ScholarlyArticle","identifier":"ISBN 978-0"}"#.into()],
+        ..Default::default()
+    };
+    assert_eq!(id(&extract(&request, &FetchPolicy::default()), "doi"), None);
+}

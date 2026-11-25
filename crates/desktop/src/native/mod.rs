@@ -17,8 +17,10 @@ mod details_ui;
 mod import_ui;
 mod library_ui;
 mod palette_ui;
+mod pdf_export_ui;
 mod pdf_ui;
 mod pdf_viewer_ui;
+mod search_ui;
 mod settings_ui;
 mod text_input;
 use self::text_input::TextInput;
@@ -84,9 +86,22 @@ enum Event {
         u64,
         Result<PdfReply, ServiceError>,
     ),
+    Search(
+        Box<search_ui::SearchOp>,
+        Box<Result<cm_protocol::search::SearchReply, ServiceError>>,
+    ),
+    Find(
+        Box<search_ui::SearchOp>,
+        Box<Result<cm_protocol::search::FulltextReply, ServiceError>>,
+    ),
     Annotation(
         Box<annotations_ui::AnnOp>,
         Result<cm_protocol::annotations::AnnotationReply, ServiceError>,
+    ),
+    /// #20 export replies bypass the lanes too (a save never blocks other PDF work).
+    PdfExport(
+        crate::pdf_export::ExportTarget,
+        Result<PdfReply, ServiceError>,
     ),
 }
 struct Message {
@@ -171,6 +186,9 @@ struct LibraryView {
     palette_scroll: ScrollHandle,
     viewer: Option<pdf_viewer_ui::Viewer>,
     ann: annotations_ui::AnnotationState,
+    find_search: search_ui::SearchState,
+    find: search_ui::FindState,
+    pdf_export: pdf_export_ui::PdfExportState,
     /// Page to show once the viewer for that attachment is ready (from the Notes list).
     pending_jump: Option<(AttachmentId, u32)>,
     viewer_focus: FocusHandle,
@@ -262,12 +280,16 @@ impl LibraryView {
             palette_scroll: ScrollHandle::new(),
             viewer: None,
             ann: annotations_ui::AnnotationState::new(cx),
+            find_search: search_ui::SearchState::new(),
+            find: search_ui::FindState::new(cx),
+            pdf_export: Default::default(),
             pending_jump: None,
             viewer_focus: cx.focus_handle(),
             page_input: cx.new(|cx| TextInput::new("Page", cx)),
         };
         view.subscribe_viewer_inputs(window, cx);
         view.subscribe_annotation_inputs(window, cx);
+        view.subscribe_search_inputs(window, cx);
         cx.subscribe(
             &view.palette_query,
             |this, _, _: &text_input::Edited, cx| {
@@ -300,7 +322,7 @@ impl LibraryView {
             &view.paper_type,
         ] {
             cx.subscribe(field, |this, _, _: &text_input::Submitted, cx| {
-                this.filter(cx)
+                this.search_or_filter(cx)
             })
             .detach();
         }
@@ -416,6 +438,18 @@ impl LibraryView {
                 self.annotation_reply(*op, result, cx);
                 return;
             }
+            Event::Search(op, result) => {
+                self.search_reply(*op, *result, cx);
+                return;
+            }
+            Event::Find(op, result) => {
+                self.find_reply(*op, *result, cx);
+                return;
+            }
+            Event::PdfExport(target, result) => {
+                self.pdf_export_reply(target, result, cx);
+                return;
+            }
             event => Message { event, ..message },
         };
         if let Event::Progress(report) = message.event {
@@ -475,15 +509,26 @@ impl LibraryView {
                             cx,
                         );
                     } else {
+                        // The editor now shows this paper (search hit, `paper://` link or
+                        // import): selection-based actions such as export Selected must
+                        // target it, not the row selected before.
+                        self.library.select_only(p.id);
                         self.set_editor(Some(*p), None, cx);
                     }
                 }
-                Ok(_) => self.status("Unexpected load reply", true, cx),
-                Err(e) => self.status(
-                    format!("{}; paper load failed: {e}", self.message),
-                    true,
-                    cx,
-                ),
+                Ok(_) => {
+                    self.find_search.open = None;
+                    self.status("Unexpected load reply", true, cx)
+                }
+                Err(e) => {
+                    // A hit/link open that failed must not fire later on another selection.
+                    self.find_search.open = None;
+                    self.status(
+                        format!("{}; paper load failed: {e}", self.message),
+                        true,
+                        cx,
+                    )
+                }
             },
             Event::Organization(result) => match result {
                 Ok(org) => {
@@ -535,6 +580,7 @@ impl LibraryView {
                     if let Some(p) = &self.editor {
                         self.host.set(p.id, a);
                     }
+                    self.continue_open(cx);
                 }
                 Ok(_) => (),
                 Err(e) => self.status(format!("Attachment read failed: {e}"), true, cx),
@@ -555,7 +601,12 @@ impl LibraryView {
                 }
                 Err(e) => self.status(format!("Export failed: {e}"), true, cx),
             },
-            Event::Progress(_) | Event::Render(..) | Event::Annotation(..) => (),
+            Event::Progress(_)
+            | Event::Render(..)
+            | Event::Annotation(..)
+            | Event::Search(..)
+            | Event::Find(..)
+            | Event::PdfExport(..) => (),
         }
         self.lock_fields(cx);
         cx.notify();
@@ -563,6 +614,10 @@ impl LibraryView {
     fn reload(&mut self, cx: &mut Context<Self>) {
         let query = self.library.reload();
         self.call(Lane::Query, Event::Query, |c, done| c.query(query, done));
+        // Full-text results follow the sidebar scope (collection / Trash) too.
+        if self.find_search.fulltext && self.find_search.request.is_some() {
+            self.run_fulltext(cx);
+        }
         cx.notify();
     }
     fn organize(&mut self, request: OrganizationRequest, cx: &mut Context<Self>) {
@@ -959,7 +1014,7 @@ impl LibraryView {
             cx.notify();
         }
         if self.screen == Screen::Library {
-            self.table_focus.focus(window, cx);
+            self.list_focus().focus(window, cx);
         }
     }
     fn show(&mut self, screen: Screen, window: &mut Window, cx: &mut Context<Self>) {
@@ -976,7 +1031,7 @@ impl LibraryView {
                     );
                 }
             }
-            Screen::Library => self.table_focus.focus(window, cx),
+            Screen::Library => self.list_focus().focus(window, cx),
             _ => (),
         }
         self.screen = screen;
@@ -1071,7 +1126,7 @@ impl Render for LibraryView {
         if layout != self.focus_layout {
             self.focus_layout = layout;
             let target = if self.screen == Screen::Library {
-                self.table_focus.clone()
+                self.list_focus()
             } else {
                 self.focus.clone()
             };

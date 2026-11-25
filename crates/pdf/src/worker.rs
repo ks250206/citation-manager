@@ -108,17 +108,32 @@ pub struct Bitmap {
     pub height: u32,
     pub rgba: Vec<u8>,
 }
+/// A standard Highlight annotation to create (#20). Quads are axis-aligned Z-order boxes in
+/// unrotated PDF space inside the page's effective crop.
 #[derive(Debug, Clone, Serialize)]
 pub struct Highlight {
+    /// `/NM`, used to match the re-read output to the plan; empty for none.
+    pub name: String,
     pub page_index: PageIndex,
     pub quads: Vec<Quad>,
+    /// `/Contents`.
     pub comment: String,
+    /// `/C` and the appearance fill.
+    pub color: [u8; 3],
+    /// `/CA` in (0, 1].
+    pub opacity: f32,
 }
+/// A standard Text ("sticky note") annotation to create (#20).
 #[derive(Debug, Clone, Serialize)]
 pub struct Note {
+    /// `/NM`; empty for none.
+    pub name: String,
     pub page_index: PageIndex,
-    pub bounds: Rect,
+    /// Icon rectangle; `None`, or one outside the crop, is placed by
+    /// `cm_core::pdf_export::note_slot` in the visible top-left corner.
+    pub bounds: Option<Rect>,
     pub contents: String,
+    pub color: [u8; 3],
 }
 #[derive(Debug, Clone)]
 pub struct MetadataSnapshot {
@@ -144,28 +159,46 @@ pub enum Operation {
         max_pages: u32,
         max_chars: u32,
     },
-    /// Returns a separate PDF in memory; the caller must write with create_new/atomic storage.
+    /// Returns a separate PDF in memory with the annotations appended after any existing
+    /// ones; the source file is only read. The caller writes it with create-new/atomic
+    /// storage and re-reads it (`Annotations`) before calling it a success.
     Export {
         source: Source,
         highlights: Vec<Highlight>,
         notes: Vec<Note>,
     },
+    /// #20: every annotation of every page as PDFium re-reads it, including the parsed
+    /// normal appearance, for export verification. At most `MAX_READ_ANNOTATIONS` in total.
+    Annotations {
+        source: Source,
+    },
 }
-/// Native output is an intermediate: PDFium 8125 does not generate persistent /AP here.
-/// The PoC's explicit appearance completion script is required for portable export.
+/// Export bytes. Every created annotation carries a persistent normal appearance stream
+/// (`/AP /N`) generated in Rust with `FPDFAnnot_SetAP` (#20); PDFium 8125 does not write one.
 pub struct NativeExport {
     pub bytes: Vec<u8>,
     pub appearance: AppearanceStatus,
+    /// Final icon rectangle of each requested note, in request order.
+    pub note_rects: Vec<Rect>,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppearanceStatus {
-    RequiresExportCompletion,
+    /// Highlight polygons / note icons written as `/AP /N` form XObjects.
+    NormalAppearanceGenerated,
+}
+pub const MAX_READ_ANNOTATIONS: usize = 4096;
+#[derive(Debug, Clone)]
+pub struct AnnotationsSnapshot {
+    pub sha256: [u8; 32],
+    pub page_count: i32,
+    pub annotations: Vec<cm_core::pdf_export::ReadAnnotation>,
 }
 pub enum Output {
     Metadata(Box<MetadataSnapshot>),
     Page(Box<PageSnapshot>),
     Text(Box<crate::extract::TextBatch>),
     Export(NativeExport),
+    Annotations(Box<AnnotationsSnapshot>),
 }
 #[derive(Clone, Default)]
 pub struct Cancellation(Arc<AtomicBool>);
@@ -372,7 +405,8 @@ fn validate_operation(op: &Operation) -> Result<(), PdfError> {
         Operation::Page { source, .. }
         | Operation::Export { source, .. }
         | Operation::Text { source, .. }
-        | Operation::Metadata { source } => source,
+        | Operation::Metadata { source }
+        | Operation::Annotations { source } => source,
     };
     if let Operation::Text {
         first_page,
@@ -395,10 +429,20 @@ fn validate_operation(op: &Operation) -> Result<(), PdfError> {
         highlights, notes, ..
     } = op
     {
-        if highlights.iter().any(|h| h.comment.contains('\0'))
-            || notes.iter().any(|n| n.contents.contains('\0'))
+        if highlights
+            .iter()
+            .any(|h| h.comment.contains('\0') || !valid_name(&h.name))
+            || notes
+                .iter()
+                .any(|n| n.contents.contains('\0') || !valid_name(&n.name))
         {
             return Err(PdfError::InvalidText);
+        }
+        if highlights
+            .iter()
+            .any(|h| !(h.opacity.is_finite() && h.opacity > 0.0 && h.opacity <= 1.0))
+        {
+            return Err(PdfError::InvalidGeometry);
         }
         let count = highlights.len().saturating_add(notes.len());
         let quads = highlights
@@ -421,6 +465,10 @@ fn validate_operation(op: &Operation) -> Result<(), PdfError> {
         }
     }
     Ok(())
+}
+/// `/NM` values are short printable ASCII (the export uses UUIDs).
+fn valid_name(name: &str) -> bool {
+    name.len() <= 128 && name.bytes().all(|b| b.is_ascii_graphic())
 }
 /// #34: pass current_exe(), no CWD/PATH/system-library fallback or implicit env override.
 /// macOS: `X.app/Contents/MacOS/<exe>` -> `X.app/Contents/Frameworks/libpdfium.dylib`.
@@ -559,23 +607,53 @@ mod tests {
             password: None,
         };
         let note = Note {
+            name: String::new(),
             page_index: PageIndex::try_from(0).unwrap(),
-            bounds: Rect {
+            bounds: Some(Rect {
                 left: 1.,
                 bottom: 1.,
                 right: 3.,
                 top: 3.,
-            },
+            }),
             contents: "before\0after".into(),
+            color: [255, 204, 0],
+        };
+        let export = |highlights, notes| {
+            validate_operation(&Operation::Export {
+                source: source.clone(),
+                highlights,
+                notes,
+            })
         };
         assert_eq!(
-            validate_operation(&Operation::Export {
-                source,
-                highlights: vec![],
-                notes: vec![note]
-            }),
+            export(vec![], vec![note.clone()]),
             Err(PdfError::InvalidText)
         );
+        let named = |name: &str| Note {
+            name: name.into(),
+            contents: "ok".into(),
+            ..note.clone()
+        };
+        assert_eq!(
+            export(vec![], vec![named("id with space")]),
+            Err(PdfError::InvalidText)
+        );
+        assert_eq!(export(vec![], vec![named("0190-uuid")]), Ok(()));
+        let highlight = |opacity| Highlight {
+            name: String::new(),
+            page_index: PageIndex::try_from(0).unwrap(),
+            quads: vec![note.bounds.unwrap().quad()],
+            comment: String::new(),
+            color: [255, 255, 0],
+            opacity,
+        };
+        for bad in [0.0, 1.5, f32::NAN] {
+            assert_eq!(
+                export(vec![highlight(bad)], vec![]),
+                Err(PdfError::InvalidGeometry)
+            );
+        }
+        assert_eq!(export(vec![highlight(0.5)], vec![]), Ok(()));
     }
     #[test]
     fn ticket_drop_cancels_and_wait_is_bounded() {

@@ -31,18 +31,18 @@ def bounds(quad):
 def check(out, inherited=False):
     pdfium = json.loads((out/'pdfium-report.json').read_text())
     independent = json.loads((out/'pdfkit-portable/report.json').read_text())
-    # The export-only fallback refuses existing appearances rather than silently rewriting them.
+    # #20: the Rust export carries its own /AP /N. The retired M0 pypdf completion helper must
+    # refuse it (existing appearances are never rewritten), proving the appearances are there.
     from complete_appearances import complete
     rejected = out/'must-not-be-created.pdf'
     try:
-        complete(out/'portable-export.pdf', rejected)
+        complete(out/'pdfium-export.pdf', rejected)
     except ValueError as error:
         assert 'existing appearance' in str(error)
     else:
         raise AssertionError('existing appearances unexpectedly overwritten')
     assert not rejected.exists()
-    final = PdfReader(out/'portable-export.pdf')
-    raw = PdfReader(out/'pdfium-export.pdf')
+    final = PdfReader(out/'pdfium-export.pdf')
     fixture = json.loads((ROOT/'fixtures/pdf/manifest.json').read_text())
     for name, expected in fixture['files'].items():
         assert hashlib.sha256((ROOT/'fixtures/pdf'/name).read_bytes()).hexdigest() == expected
@@ -51,9 +51,9 @@ def check(out, inherited=False):
     page_count = 2 if inherited else 6
     rotations = fixture['inherited']['rotations'] if inherited else fixture['rotations'][:4]
     assert len(final.pages) == page_count and len(independent['pages']) == page_count
-    # Both engines must preserve the effective crop/rotation through native and completed export.
+    # Both engines must preserve the effective crop/rotation through the export.
     # Expectations come from synthetic PDF-space constants, not from the adapter's Viewport.
-    for name in ['original', 'native', 'portable']:
+    for name in ['original', 'portable']:
         report = json.loads((out/f'pdfkit-{name}/report.json').read_text())
         assert len(report['pages']) == page_count
         for i, rotation in enumerate(rotations):
@@ -125,13 +125,12 @@ def check(out, inherited=False):
             char_error = max(char_error,near(box,g['bounds'],tolerance=2.0))
         assert not remaining
         # Verify persisted AP forms for both highlight and independent note, not a viewer-only synthesis.
-        for raw_ref,ref in zip(raw.pages[i]['/Annots'],final.pages[i]['/Annots']):
-            assert '/AP' not in raw_ref.get_object()
+        for ref in final.pages[i]['/Annots']:
             a=ref.get_object()
             assert a['/AP']['/N']['/Subtype'] == '/Form'
             assert len(a['/AP']['/N'].get_data()) > 30
             if a['/Subtype'] == '/Highlight':
-                near(a['/C'],[1,1,0]); assert float(a['/CA']) == 0.5
+                near(a['/C'],[1,1,0]); near([a['/CA']],[0.5],1/255)  # /CA = 128/255
                 near(a['/QuadPoints'],[v for p in expected_points for v in (p['x'],p['y'])])
         image = Image.open(out/f'pdfkit-portable/page-{i}.png').convert('RGB')
         original = Image.open(out/f'pdfkit-original/page-{i}.png').convert('RGB')
@@ -187,8 +186,8 @@ def check(out, inherited=False):
         assert independent['pages'][4]['text'] == '' and independent['pages'][4]['annotations'] == []
     report={'status':'passed','independent_renderer':independent['renderer'],'os':independent['os'],
         'corpus':source_name,'appearance_forms':2*len(rotations),'original_unchanged':True,'checks':results,
-        'observed_native_limit':'PDFium export has no /AP; explicit export-only pypdf completion verified',
-        'portable_sha256':hashlib.sha256((out/'portable-export.pdf').read_bytes()).hexdigest()}
+        'appearance_source':'Rust FPDFAnnot_SetAP (#20); PDFium 8125 alone writes no /AP',
+        'portable_sha256':hashlib.sha256((out/'pdfium-export.pdf').read_bytes()).hexdigest()}
     (out/'verification.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
     print(json.dumps(report,ensure_ascii=False,indent=2))
 
