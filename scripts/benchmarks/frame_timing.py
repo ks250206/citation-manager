@@ -183,7 +183,12 @@ class Quartz:
     Accessibility permission macOS drops them silently; the summary then shows the phases
     as not observed instead of pretending they were measured."""
     name = 'quartz-cgevent'
-    KEYS = {'Return': 36, 'j': 38, 'k': 40, 'J': 38, 'K': 40, 'q': 12}
+    # ANSI (US) virtual key codes; shifted characters map to their base key + Shift.
+    CODES = dict(zip('asdfhgzxcv', (0, 1, 2, 3, 4, 5, 6, 7, 8, 9)),
+                 **dict(zip('bqweryt123465', (11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23))),
+                 **{'9': 25, '7': 26, '8': 28, '0': 29, 'o': 31, 'u': 32, 'i': 34, 'p': 35, 'l': 37,
+                    'j': 38, 'k': 40, ';': 41, '/': 44, 'n': 45, 'm': 46, '.': 47, ' ': 49})
+    SHIFTED = {':': ';'}
     SHIFT, COMMAND = 0x20000, 0x100000
 
     class Point(ctypes.Structure):
@@ -290,28 +295,36 @@ class Quartz:
             self._post(self.cg.CGEventCreateScrollWheelEvent2(None, 1, 1, -3 if down else 3, 0, 0))
             time.sleep(delay_ms / 1000)
 
-    def _key(self, code, flags=0):
+    def _stroke(self, char, flags=0):
+        """One key press with a real key code, the Shift flag when needed and the produced
+        character set explicitly (an event's characters are otherwise fixed at creation)."""
+        if char == 'Return':
+            code, text = 36, '\r'
+        else:
+            base = self.SHIFTED.get(char, char.lower())
+            code, text = self.CODES[base], char
+            if char != base:
+                flags |= self.SHIFT
         for down in (True, False):
             event = self.cg.CGEventCreateKeyboardEvent(None, code, down)
             if flags:
                 self.cg.CGEventSetFlags(event, flags)
+            if not flags & self.COMMAND:
+                units = (ctypes.c_uint16 * 1)(ord(text))
+                self.cg.CGEventKeyboardSetUnicodeString(event, 1, units)
             self._post(event)
 
     def key(self, key, count=1, delay_ms=50):
         for _ in range(count):
-            self._key(self.KEYS[key], self.SHIFT if key.isupper() else 0)
+            self._stroke(key)
             time.sleep(delay_ms / 1000)
 
     def primary(self, key):
-        self._key(self.KEYS.get(key, 40), self.COMMAND)
+        self._stroke(key, self.COMMAND)
 
     def type(self, text):
         for char in text:
-            for down in (True, False):
-                event = self.cg.CGEventCreateKeyboardEvent(None, 0, down)
-                units = (ctypes.c_uint16 * 1)(ord(char))
-                self.cg.CGEventKeyboardSetUnicodeString(event, 1, units)
-                self._post(event)
+            self._stroke(char)
             time.sleep(0.03)
 
     def clipboard(self, text):

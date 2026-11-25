@@ -59,6 +59,12 @@ class Points(unittest.TestCase):
         self.assertEqual(ft.resolve((10, -63), (40, 20), (1320, 860)), (50, 817))
         self.assertEqual(ft.resolve((-436, 5), (0, 53), (1024, 680)), (588, 58))
 
+    def test_macos_key_table_covers_every_typed_character(self):
+        typed = 'Open paper:// Link' + ''.join(str(p) for p in ft.JUMPS) + 'jkJKq'
+        for char in typed:
+            self.assertIn(ft.Quartz.SHIFTED.get(char, char.lower()), ft.Quartz.CODES, char)
+        self.assertEqual((ft.Quartz.CODES['j'], ft.Quartz.CODES['5'], ft.Quartz.CODES[' ']), (38, 23, 49))
+
 
 if __name__ == '__main__':
     unittest.main()
