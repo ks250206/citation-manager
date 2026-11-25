@@ -160,7 +160,7 @@ impl LibraryState {
                     "Saving…".into()
                 } else {
                     format!(
-                        "{}{} papers loaded • offline",
+                        "{}{} loaded • offline",
                         if self.dirty {
                             "Unsaved changes • "
                         } else if self.save_confirmed {
@@ -168,7 +168,7 @@ impl LibraryState {
                         } else {
                             ""
                         },
-                        self.papers.len()
+                        crate::library::papers_count(self.papers.len())
                     )
                 };
                 false

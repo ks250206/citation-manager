@@ -1,0 +1,5 @@
+$ cp -a <work>/home/.local/share/citation-manager/library <work>/Backups/library-copy
+exit 0 (0.0s)
+--- stdout
+
+--- stderr

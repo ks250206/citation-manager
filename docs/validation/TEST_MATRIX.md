@@ -139,3 +139,13 @@ Apple Silicon 16 GB release 実機の値ではない。
 | フレーム落ち（一覧スクロール） | なし | — | **未測定**（フレーム時間の計測手段なし） |
 | PDFium 以外での注釈表示 | Linux CI（pypdf + poppler） | 既存 `scripts/pdfium/validate_export.py`（ci.yml linux-native）、[pdf-export ADR](../ADR/pdf-export.md) | ISSUE_30 に再実行結果 |
 | host/daemon 寿命、lease/retry_wait 復帰 | Linux 自動 | 既存 `daemon_lifecycle`、`crates/native-host/tests/host_process.rs` | passed（既存、本 PR の全体実行で再確認） |
+
+## #32 MVP 受け入れ（2026-11-25）
+
+§24 の 17 条件の対応表・blocker・release E2E の結果は [MVP_ACCEPTANCE](MVP_ACCEPTANCE.md)。
+
+| 対象 | 実行主体 / 環境 | 証跡 | 状態 |
+|---|---|---|---|
+| 新規 install → ブラウザ保存（GUI/daemon 停止）→ GUI 再起動・検索 → CLI/REST/MCP → 注釈付き PDF → 可搬性・privacy・offline | implementing agent、Linux コンテナ（release build、Xvfb、Playwright Chromium、loopback のみの network namespace） | `tests/e2e/release/run.py`、[release-e2e/linux](release-e2e/linux/) | passed |
+| 同（ブラウザと GUI を除く）、`.dmg` から取り出した `.app` | GitHub hosted macOS VM（`package-macos.yml`） | run 45613061723、[release-e2e/macos](release-e2e/macos/) | passed（66 checks） |
+| 実機 Mac・Developer ID 署名・store 拡張・16 GB 実機計測 | 上表の fallback 担当（owner）/ 権限を持つ担当 | — | **未実施**（MVP 完了の blocker） |

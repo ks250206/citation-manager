@@ -1,0 +1,7 @@
+$ <work>/Applications/Citation Manager.app/Contents/MacOS/papers-native-host unregister
+exit 0 (0.3s)
+--- stdout
+removed <work>/host-manifests/dev.citation_manager.native_host.json
+revoked grant 01a212bc-bca4-7497-a943-1d57c074abf7
+
+--- stderr

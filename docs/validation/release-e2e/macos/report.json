@@ -1,0 +1,622 @@
+{
+  "schema": "release-e2e.v1",
+  "passed": true,
+  "checks": {
+    "install.pdfium_bundled": true,
+    "install.licenses_bundled": true,
+    "install.citation-manager_installed": true,
+    "install.papersd_installed": true,
+    "install.papers_installed": true,
+    "install.papers-mcp_installed": true,
+    "install.papers-native-host_installed": true,
+    "privacy.daemon_started_lazily_from_install": true,
+    "privacy.library_owner_only": true,
+    "privacy.database_owner_only": true,
+    "privacy.owner_credential_0600": true,
+    "privacy.initial_backup_created": true,
+    "privacy.http_api_disabled_by_default": true,
+    "privacy.daemon_has_no_tcp_listener": true,
+    "privacy.mcp_default_grant_issued": true,
+    "privacy.mcp_lists_12_tools_4_read_only": true,
+    "privacy.mcp_default_refuses_writes": true,
+    "privacy.no_telemetry_crates_in_lockfile": true,
+    "cli.add_file_saved": true,
+    "cli.attachment_stored_unchanged": true,
+    "cli.import_bibtex": true,
+    "cli.import_ris": true,
+    "cli.fulltext_extracted": true,
+    "host.daemon_stopped_before_save": true,
+    "host.daemon_stopped_after_pairing": true,
+    "host.hello_paired": true,
+    "host.preview": true,
+    "host.commit": true,
+    "host.exits_when_port_closes": true,
+    "host.paper_persisted": true,
+    "rest.listening": true,
+    "rest.loopback_listener_only_when_enabled": true,
+    "rest.unauthenticated_refused": true,
+    "rest.foreign_host_header_refused": true,
+    "search.fulltext.cli_rest_mcp_agree": true,
+    "search.browser.cli_rest_mcp_agree": true,
+    "search.japanese.cli_rest_mcp_agree": true,
+    "search.fulltext_hit_has_page_jump_target": true,
+    "mcp.fulltext_with_source": true,
+    "rest.fulltext": true,
+    "cli.papers_mcp_wrapper_serves_tools": true,
+    "rest.write_without_scope_refused": true,
+    "rest.annotation_created": true,
+    "rest.paper_created": true,
+    "mcp.read_only_grant_refuses_annotation": true,
+    "mcp.owner_grants_write": true,
+    "mcp.annotation_after_write_grant": true,
+    "mcp.annotations_read_back_with_source": true,
+    "cli.annotations_listed": true,
+    "owner.ai_annotations_confirmed": true,
+    "export.annotated_pdf_written_and_verified": true,
+    "export.highlight_and_note_in_copy": true,
+    "export.original_unchanged": true,
+    "export.position_error_below_half_point": true,
+    "cli.export_bibtex": true,
+    "cli.export_ris": true,
+    "rest.listener_closed_after_disable": true,
+    "portability.bibtex_round_trip_titles": true,
+    "portability.ris_round_trip_titles": true,
+    "portability.daemon_stopped_for_backup": true,
+    "portability.restored_same_papers": true,
+    "portability.restored_fulltext": true,
+    "portability.restored_annotations": true,
+    "portability.restored_attachment": true,
+    "teardown.no_daemon_left": true,
+    "teardown.no_host_left": true
+  },
+  "counts": {
+    "passed": 66,
+    "failed": 0,
+    "skipped_steps": [
+      "gui_restart",
+      "offline_doi"
+    ]
+  },
+  "steps": [
+    {
+      "name": "install",
+      "status": "completed",
+      "seconds": 0.4,
+      "checks": {
+        "install.pdfium_bundled": true,
+        "install.licenses_bundled": true,
+        "install.citation-manager_installed": true,
+        "install.papersd_installed": true,
+        "install.papers_installed": true,
+        "install.papers-mcp_installed": true,
+        "install.papers-native-host_installed": true
+      }
+    },
+    {
+      "name": "privacy_defaults",
+      "status": "completed",
+      "seconds": 0.8,
+      "checks": {
+        "privacy.daemon_started_lazily_from_install": true,
+        "privacy.library_owner_only": true,
+        "privacy.database_owner_only": true,
+        "privacy.owner_credential_0600": true,
+        "privacy.initial_backup_created": true,
+        "privacy.http_api_disabled_by_default": true,
+        "privacy.daemon_has_no_tcp_listener": true,
+        "privacy.mcp_default_grant_issued": true,
+        "privacy.mcp_lists_12_tools_4_read_only": true,
+        "privacy.mcp_default_refuses_writes": true,
+        "privacy.no_telemetry_crates_in_lockfile": true
+      }
+    },
+    {
+      "name": "seed_with_cli",
+      "status": "completed",
+      "seconds": 1.4,
+      "checks": {
+        "cli.add_file_saved": true,
+        "cli.attachment_stored_unchanged": true,
+        "cli.import_bibtex": true,
+        "cli.import_ris": true,
+        "cli.fulltext_extracted": true
+      }
+    },
+    {
+      "name": "host_save",
+      "status": "completed",
+      "seconds": 35.5,
+      "checks": {
+        "host.daemon_stopped_before_save": true,
+        "host.daemon_stopped_after_pairing": true,
+        "host.hello_paired": true,
+        "host.preview": true,
+        "host.commit": true,
+        "host.exits_when_port_closes": true,
+        "host.paper_persisted": true
+      }
+    },
+    {
+      "name": "gui_restart",
+      "status": "skipped",
+      "reason": "GUI step needs --gui, Linux, DISPLAY and xdotool (macOS: covered by the package smoke)"
+    },
+    {
+      "name": "search_everywhere",
+      "status": "completed",
+      "seconds": 40.9,
+      "checks": {
+        "rest.listening": true,
+        "rest.loopback_listener_only_when_enabled": true,
+        "rest.unauthenticated_refused": true,
+        "rest.foreign_host_header_refused": true,
+        "search.fulltext.cli_rest_mcp_agree": true,
+        "search.browser.cli_rest_mcp_agree": true,
+        "search.japanese.cli_rest_mcp_agree": true,
+        "search.fulltext_hit_has_page_jump_target": true,
+        "mcp.fulltext_with_source": true,
+        "rest.fulltext": true,
+        "cli.papers_mcp_wrapper_serves_tools": true
+      }
+    },
+    {
+      "name": "annotate_and_export",
+      "status": "completed",
+      "seconds": 1.8,
+      "checks": {
+        "rest.write_without_scope_refused": true,
+        "rest.annotation_created": true,
+        "rest.paper_created": true,
+        "mcp.read_only_grant_refuses_annotation": true,
+        "mcp.owner_grants_write": true,
+        "mcp.annotation_after_write_grant": true,
+        "mcp.annotations_read_back_with_source": true,
+        "cli.annotations_listed": true,
+        "owner.ai_annotations_confirmed": true,
+        "export.annotated_pdf_written_and_verified": true,
+        "export.highlight_and_note_in_copy": true,
+        "export.original_unchanged": true,
+        "export.position_error_below_half_point": true,
+        "cli.export_bibtex": true,
+        "cli.export_ris": true,
+        "rest.listener_closed_after_disable": true
+      }
+    },
+    {
+      "name": "portability",
+      "status": "completed",
+      "seconds": 31.5,
+      "checks": {
+        "portability.bibtex_round_trip_titles": true,
+        "portability.ris_round_trip_titles": true,
+        "portability.daemon_stopped_for_backup": true,
+        "portability.restored_same_papers": true,
+        "portability.restored_fulltext": true,
+        "portability.restored_annotations": true,
+        "portability.restored_attachment": true
+      }
+    },
+    {
+      "name": "offline_doi",
+      "status": "skipped",
+      "reason": "only meaningful in the loopback-only namespace (--offline)"
+    },
+    {
+      "name": "teardown",
+      "status": "completed",
+      "seconds": 31.0,
+      "checks": {
+        "teardown.no_daemon_left": true,
+        "teardown.no_host_left": true
+      }
+    }
+  ],
+  "ids": {
+    "corpus": "01a212bc-a452-75a4-81d9-ee5a3097c64b",
+    "attachment": "01a212bc-a45c-7637-8425-77cbbdfd3ada",
+    "browser": "01a212bd-3317-76b4-876a-6e15648dd815",
+    "rest_paper": "01a212bd-d412-74f1-b80f-97a14129839b"
+  },
+  "results": {
+    "platform": {
+      "system": "Darwin",
+      "machine": "arm64",
+      "release": "24.6.0",
+      "python": "3.14.10"
+    },
+    "network_namespace": {
+      "loopback_only": false,
+      "interfaces": null
+    },
+    "papers_version": "papers 0.1.0",
+    "install_root": "<work>/Applications/Citation Manager.app/Contents/MacOS",
+    "daemon_status": {
+      "command": "server start",
+      "data": {
+        "active_jobs": 0,
+        "connections": 1,
+        "daemon_version": "0.1.0",
+        "library": "<work>/home/.local/share/citation-manager/library",
+        "pid": 32651,
+        "protocol_version": 1,
+        "rest": "follows the persisted API settings: enable it in API & integrations or with `papersd api set --library DIR --enable` (papersd api show reports it)",
+        "running": true,
+        "session_capabilities": [],
+        "socket": "<runtime>/citation-manager/6fdd96f677c9cc8e.sock",
+        "started": true
+      },
+      "ok": true,
+      "schema": "papers.v1",
+      "warnings": []
+    },
+    "check_details": {
+      "privacy.daemon_started_lazily_from_install": [
+        32651
+      ],
+      "privacy.library_owner_only": "0o700",
+      "privacy.http_api_disabled_by_default": "enabled=false bind=127.0.0.1 port=39271 export_dirs=0 secret_store=Keychain listener=Stopped",
+      "privacy.daemon_has_no_tcp_listener": [],
+      "privacy.mcp_lists_12_tools_4_read_only": [
+        "get_paper",
+        "get_paper_annotations",
+        "get_paper_fulltext",
+        "search_papers"
+      ],
+      "privacy.mcp_default_refuses_writes": {
+        "error": {
+          "denial": "forbidden",
+          "hint": "This MCP server is read-only unless the library owner approves a separate grant: `papers mcp grant --library <work>/home/.local/share/citation-manager/library --write` (or `papers-mcp grant ...`). The running server uses the new credential on its next call.",
+          "kind": "permission_denied",
+          "message": "this MCP connection's grant does not allow organization_write (needs library_write). This MCP server is read-only unless the library owner approves a separate grant: `papers mcp grant --library <work>/home/.local/share/citation-manager/library --write` (or `papers-mcp grant ...`). The running server uses the new credential on its next call.",
+          "operation": "organization_write",
+          "required_capabilities": {
+            "all_of": [
+              "library_write"
+            ],
+            "alternatives": [
+              [
+                "library_write"
+              ]
+            ],
+            "any_of": [
+              "library_write"
+            ]
+          }
+        }
+      },
+      "privacy.no_telemetry_crates_in_lockfile": [],
+      "cli.import_bibtex": {
+        "create": 2
+      },
+      "cli.import_ris": {
+        "create": 3
+      },
+      "host.daemon_stopped_before_save": [],
+      "host.daemon_stopped_after_pairing": [],
+      "host.hello_paired": {
+        "id": "h",
+        "ok": true,
+        "result": {
+          "browser": "chrome",
+          "host_version": "0.1.0",
+          "limits": {
+            "max_request_bytes": 8388608,
+            "max_response_bytes": 1048576
+          },
+          "paired": true,
+          "protocol": 1,
+          "types": [
+            "hello",
+            "destinations",
+            "capture.preview",
+            "capture.commit",
+            "capture.cancel",
+            "capture.pdf_job",
+            "capture.retry_pdf"
+          ]
+        },
+        "type": "hello",
+        "v": 1
+      },
+      "rest.unauthenticated_refused": 401,
+      "rest.foreign_host_header_refused": 400,
+      "search.fulltext.cli_rest_mcp_agree": {
+        "cli": [
+          "01a212bc-a452-75a4-81d9-ee5a3097c64b"
+        ],
+        "rest": [
+          "01a212bc-a452-75a4-81d9-ee5a3097c64b"
+        ],
+        "mcp": [
+          "01a212bc-a452-75a4-81d9-ee5a3097c64b"
+        ],
+        "rest_status": 200,
+        "mcp_error": false
+      },
+      "search.browser.cli_rest_mcp_agree": {
+        "cli": [
+          "01a212bd-3317-76b4-876a-6e15648dd815"
+        ],
+        "rest": [
+          "01a212bd-3317-76b4-876a-6e15648dd815"
+        ],
+        "mcp": [
+          "01a212bd-3317-76b4-876a-6e15648dd815"
+        ],
+        "rest_status": 200,
+        "mcp_error": false
+      },
+      "search.japanese.cli_rest_mcp_agree": {
+        "cli": [
+          "01a212bc-a452-75a4-81d9-ee5a3097c64b"
+        ],
+        "rest": [
+          "01a212bc-a452-75a4-81d9-ee5a3097c64b"
+        ],
+        "mcp": [
+          "01a212bc-a452-75a4-81d9-ee5a3097c64b"
+        ],
+        "rest_status": 200,
+        "mcp_error": false
+      },
+      "search.fulltext_hit_has_page_jump_target": [
+        {
+          "annotation_id": null,
+          "attachment_id": "01a212bc-a45c-7637-8425-77cbbdfd3ada",
+          "deleted": false,
+          "doi": null,
+          "highlights": [
+            [
+              43,
+              53
+            ],
+            [
+              54,
+              59
+            ]
+          ],
+          "matched_fields": [
+            "body"
+          ],
+          "page_index": 0,
+          "page_label": "iv",
+          "page_number": 1,
+          "paper_id": "01a212bc-a452-75a4-81d9-ee5a3097c64b",
+          "score": 1.282686418192996,
+          "snippet": "Unicode 日本語 αβ café  second line: coordinate proof",
+          "snippet_truncated": false,
+          "source": "page",
+          "title": "Release E2E corpus",
+          "uri": "paper://01a212bc-a452-75a4-81d9-ee5a3097c64b/attachment/01a212bc-a45c-7637-8425-77cbbdfd3ada?page=1"
+        }
+      ],
+      "rest.fulltext": 200,
+      "rest.write_without_scope_refused": 403,
+      "rest.annotation_created": {
+        "annotation": {
+          "id": "01a212bd-d404-77b8-a14b-bf69f7dcd45d",
+          "attachment_id": "01a212bc-a45c-7637-8425-77cbbdfd3ada",
+          "kind": "note",
+          "source": "ai",
+          "anchor": {
+            "state": "resolved",
+            "page_index": 0,
+            "page_label": null,
+            "quads": []
+          },
+          "quote": "",
+          "context_before": null,
+          "context_after": null,
+          "color": null,
+          "comment": "REST note from the release E2E",
+          "confirmed_at": null,
+          "created_at": "2026-11-25T12:46:00.196Z",
+          "updated_at": "2026-11-25T12:46:00.196Z"
+        }
+      },
+      "rest.paper_created": {
+        "paper": {
+          "id": "01a212bd-d412-74f1-b80f-97a14129839b",
+          "title": "Added over REST",
+          "external_ids": [],
+          "type": "journal-article",
+          "extra_json": {},
+          "created_at": "2026-11-25T12:46:00.210Z",
+          "updated_at": "2026-11-25T12:46:00.210Z"
+        }
+      },
+      "mcp.read_only_grant_refuses_annotation": {
+        "error": {
+          "denial": "forbidden",
+          "hint": "This MCP server is read-only unless the library owner approves a separate grant: `papers mcp grant --library <work>/home/.local/share/citation-manager/library --write` (or `papers-mcp grant ...`). The running server uses the new credential on its next call.",
+          "kind": "permission_denied",
+          "message": "this MCP connection's grant does not allow annotation_write (needs annotations_write). This MCP server is read-only unless the library owner approves a separate grant: `papers mcp grant --library <work>/home/.local/share/citation-manager/library --write` (or `papers-mcp grant ...`). The running server uses the new credential on its next call.",
+          "operation": "annotation_write",
+          "required_capabilities": {
+            "all_of": [
+              "annotations_write"
+            ],
+            "alternatives": [
+              [
+                "annotations_write"
+              ]
+            ],
+            "any_of": [
+              "annotations_write"
+            ]
+          }
+        }
+      },
+      "mcp.owner_grants_write": "",
+      "mcp.annotation_after_write_grant": {
+        "annotation": {
+          "ai_confirmed": false,
+          "anchor": {
+            "page_index": 0,
+            "page_label": "iv",
+            "resolved": true,
+            "unresolved_reason": null
+          },
+          "annotation_id": "01a212bd-d5f7-71eb-94c4-30f2e5d0b7f2",
+          "color": "yellow",
+          "comment": "MCP highlight from the release E2E",
+          "confirmed_at": null,
+          "context_after": null,
+          "context_before": null,
+          "created_at": "2026-11-25T12:46:00.695Z",
+          "kind": "highlight",
+          "origin": "ai",
+          "quote": "coordinate proof",
+          "source": {
+            "attachment_id": "01a212bc-a45c-7637-8425-77cbbdfd3ada",
+            "authors": [],
+            "doi": null,
+            "page_index": 0,
+            "page_label": "iv",
+            "paper_id": "01a212bc-a452-75a4-81d9-ee5a3097c64b",
+            "title": "Release E2E corpus",
+            "uri": "paper://01a212bc-a452-75a4-81d9-ee5a3097c64b/attachment/01a212bc-a45c-7637-8425-77cbbdfd3ada?page=1",
+            "year": null
+          },
+          "text": "coordinate proof",
+          "truncated": false,
+          "untrusted": true,
+          "updated_at": "2026-11-25T12:46:00.695Z",
+          "uri": "paper://01a212bc-a452-75a4-81d9-ee5a3097c64b/attachment/01a212bc-a45c-7637-8425-77cbbdfd3ada?page=1&annotation=01a212bd-d5f7-71eb-94c4-30f2e5d0b7f2"
+        },
+        "note": "Stored with origin=ai and unconfirmed; the library owner can confirm or remove it in the app.",
+        "status": "created"
+      },
+      "owner.ai_annotations_confirmed": {
+        "annotations": 2,
+        "confirmed": [
+          "01a212bd-d404-77b8-a14b-bf69f7dcd45d",
+          "01a212bd-d5f7-71eb-94c4-30f2e5d0b7f2"
+        ],
+        "ok": true
+      },
+      "export.annotated_pdf_written_and_verified": {
+        "complete": true,
+        "ok": true,
+        "report": {
+          "highlights": 1,
+          "max_position_error": 0.0,
+          "notes": 1,
+          "omitted": [],
+          "original_sha256": "1842ec1c966b74fd73d9dd75ec1f8a199e14e9935b002e2c037206a0496f8910",
+          "path": "<work>/Exports/corpus (annotated).pdf",
+          "preserved": 0,
+          "replaced": false
+        }
+      },
+      "export.position_error_below_half_point": 0.0,
+      "portability.bibtex_round_trip_titles": {
+        "source": 8,
+        "reimported": 8
+      },
+      "portability.ris_round_trip_titles": {
+        "source": 8,
+        "reimported": 8
+      }
+    },
+    "api_show_default": "enabled=false bind=127.0.0.1 port=39271 export_dirs=0 secret_store=Keychain listener=Stopped",
+    "mcp_default_grant": "{\"capabilities\":[\"library_read\",\"jobs_read\"],\"credential_file\":\"<work>/home/.local/share/citation-manager/library/daemon/mcp.credential\",\"expires_at_ms\":1803386682198,\"grant_id\":\"01a212bc-a3d7-7793-9bae-59840e2ea939\",\"label\":\"mcp read-only\"}",
+    "mcp_tools": [
+      "add_annotation",
+      "add_paper_by_doi",
+      "add_paper_from_url",
+      "add_tag_to_paper",
+      "create_collection",
+      "export_citations",
+      "get_paper",
+      "get_paper_annotations",
+      "get_paper_fulltext",
+      "move_paper_to_collection",
+      "search_papers",
+      "update_paper"
+    ],
+    "mcp_default_write": {
+      "error": {
+        "denial": "forbidden",
+        "hint": "This MCP server is read-only unless the library owner approves a separate grant: `papers mcp grant --library <work>/home/.local/share/citation-manager/library --write` (or `papers-mcp grant ...`). The running server uses the new credential on its next call.",
+        "kind": "permission_denied",
+        "message": "this MCP connection's grant does not allow organization_write (needs library_write). This MCP server is read-only unless the library owner approves a separate grant: `papers mcp grant --library <work>/home/.local/share/citation-manager/library --write` (or `papers-mcp grant ...`). The running server uses the new credential on its next call.",
+        "operation": "organization_write",
+        "required_capabilities": {
+          "all_of": [
+            "library_write"
+          ],
+          "alternatives": [
+            [
+              "library_write"
+            ]
+          ],
+          "any_of": [
+            "library_write"
+          ]
+        }
+      }
+    },
+    "papers_after_seed": 6,
+    "rest_listeners": [
+      "papersd 33995 runner   20u  IPv4 0x92ffc61c02f9c63c      0t0  TCP 127.0.0.1:49285 (LISTEN)"
+    ],
+    "search_fulltext": {
+      "cli": [
+        "01a212bc-a452-75a4-81d9-ee5a3097c64b"
+      ],
+      "rest": [
+        "01a212bc-a452-75a4-81d9-ee5a3097c64b"
+      ],
+      "mcp": [
+        "01a212bc-a452-75a4-81d9-ee5a3097c64b"
+      ],
+      "rest_status": 200,
+      "mcp_error": false
+    },
+    "search_browser": {
+      "cli": [
+        "01a212bd-3317-76b4-876a-6e15648dd815"
+      ],
+      "rest": [
+        "01a212bd-3317-76b4-876a-6e15648dd815"
+      ],
+      "mcp": [
+        "01a212bd-3317-76b4-876a-6e15648dd815"
+      ],
+      "rest_status": 200,
+      "mcp_error": false
+    },
+    "search_japanese": {
+      "cli": [
+        "01a212bc-a452-75a4-81d9-ee5a3097c64b"
+      ],
+      "rest": [
+        "01a212bc-a452-75a4-81d9-ee5a3097c64b"
+      ],
+      "mcp": [
+        "01a212bc-a452-75a4-81d9-ee5a3097c64b"
+      ],
+      "rest_status": 200,
+      "mcp_error": false
+    },
+    "annotated_export": {
+      "complete": true,
+      "ok": true,
+      "report": {
+        "highlights": 1,
+        "max_position_error": 0.0,
+        "notes": 1,
+        "omitted": [],
+        "original_sha256": "1842ec1c966b74fd73d9dd75ec1f8a199e14e9935b002e2c037206a0496f8910",
+        "path": "<work>/Exports/corpus (annotated).pdf",
+        "preserved": 0,
+        "replaced": false
+      }
+    },
+    "pypdf_page0_annotations": "skipped: pypdf not installed",
+    "library_papers": 8,
+    "reimport_bibtex": 8,
+    "reimport_ris": 8
+  }
+}

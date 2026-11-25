@@ -27,7 +27,28 @@ struct PendingPage {
     after: Option<LibraryCursor>,
     previous: Vec<Option<LibraryCursor>>,
 }
+/// "1 paper" / "N papers" for status texts.
+pub fn papers_count(n: usize) -> String {
+    if n == 1 {
+        "1 paper".into()
+    } else {
+        format!("{n} papers")
+    }
+}
 impl Library {
+    /// Footer of the paper table: "Page 2 · 1 paper · 1 selected · loading…".
+    pub fn page_summary(&self, loading: bool) -> String {
+        format!(
+            "Page {} · {}{}{}",
+            self.previous.len() + 1,
+            papers_count(self.papers.len()),
+            match self.selected.len() {
+                0 => String::new(),
+                n => format!(" · {n} selected"),
+            },
+            if loading { " · loading…" } else { "" }
+        )
+    }
     pub fn reload(&mut self) -> LibraryQuery {
         self.generation += 1;
         self.pending_page = None;

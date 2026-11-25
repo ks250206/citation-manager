@@ -194,6 +194,8 @@ impl Viewer {
     /// Jump to a page (clamped to the document).
     pub(super) fn jump(&mut self, page: u32) {
         self.scroll_to_page(page);
+        let target = page.min(self.page_count.unwrap_or(1).saturating_sub(1));
+        crate::frame_timing::begin(crate::frame_timing::Span::PageTurn, Some(target));
     }
     fn scroll_to_page(&mut self, page: u32) {
         let page = page.min(self.page_count.unwrap_or(1).saturating_sub(1));
@@ -253,6 +255,9 @@ impl LibraryView {
                     }
                 }
                 *viewer = wanted.map(Viewer::new);
+                if viewer.is_some() {
+                    crate::frame_timing::begin(crate::frame_timing::Span::PdfFirstPage, None);
+                }
             }
         }
     }
@@ -441,7 +446,7 @@ impl LibraryView {
     }
     pub(super) fn viewer_jump(&mut self, page: u32, cx: &mut Context<Self>) {
         if let Some(v) = &mut self.viewer {
-            v.scroll_to_page(page);
+            v.jump(page);
         }
         cx.notify();
     }
@@ -630,6 +635,9 @@ impl LibraryView {
                 )
                 .into_any_element();
         }
+        // #86: pages with a bitmap this frame (filled only while recording frame timings).
+        let timing = crate::frame_timing::enabled();
+        let mut painted = Vec::new();
         let pages: Vec<Div> = (0..count.unwrap_or(1))
             .map(|page| {
                 let (top, height) = layout
@@ -644,6 +652,9 @@ impl LibraryView {
                     .cache
                     .peek(&RenderKey::new(v.attachment, page, capped_zoom(zoom, size)))
                     .cloned();
+                if timing && image.is_some() {
+                    painted.push(page);
+                }
                 let failure = v.failures.get(&page).map(ToString::to_string);
                 let image_only = v.has_text.get(&page) == Some(&false);
                 let found: Vec<Div> = match (&find_query, v.geometry.get(&page), v.chars.get(&page))
@@ -819,6 +830,11 @@ impl LibraryView {
                     })
             })
             .collect();
+        if timing {
+            let top = -f32::from(v.scroll.offset().y);
+            crate::frame_timing::motion(crate::frame_timing::Span::PdfScroll, top);
+            crate::frame_timing::pdf_painted(visible_pages(&layout, top, v.pane().1), &painted);
+        }
         let total_height = layout
             .last()
             .map_or(0.0, |(t, h)| t + h + pdf_viewer::PAGE_GAP);

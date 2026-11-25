@@ -1,0 +1,84 @@
+{
+  "started_utc": "2026-11-25T13:34:34.936667+00:00",
+  "system": "Linux",
+  "machine": "x86_64",
+  "platform": "Linux-6.18.44-fc-v880-x86_64-with-glibc2.39",
+  "python": "3.13.18",
+  "rust": "rustc 1.99.1 (58cf8f9c3 2026-10-13)\nbinary: rustc\ncommit-hash: 58cf8f9c35b355199727627d07ae34a4e2846d67\ncommit-date: 2026-10-13\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.1\nLLVM version: 23.1.1",
+  "cargo": "cargo 1.99.1 (5f94df478 2026-08-27)",
+  "git_head": "93cc3d2d6ed46d06215f5984db96334b2946bba0",
+  "git_status": "M scripts/benchmarks/README.md\n M scripts/benchmarks/frame_timing.py",
+  "cargo_lock_sha256": "9cad1156a30d30904f1523dbb0cb2ceacdc383516bf919620433e2d9b7a61cb4",
+  "build_environment": {
+    "RUSTFLAGS": null,
+    "CARGO_ENCODED_RUSTFLAGS": null,
+    "CARGO_BUILD_TARGET": null,
+    "CARGO_TARGET_DIR": "<local-scratch>"
+  },
+  "ci": false,
+  "runner": {
+    "name": null,
+    "os": null,
+    "arch": null,
+    "image": null,
+    "image_version": null
+  },
+  "cpu": [
+    "Intel(R) Xeon(R) Processor @ 2.30GHz"
+  ],
+  "logical_cpu_count": 4,
+  "ram_bytes": 16868675584,
+  "os": "Ubuntu 24.04.5 LTS",
+  "kernel": "6.18.44-fc-v880",
+  "virtualization": "docker",
+  "parameters": {
+    "papers": 10000,
+    "pdfs": 1000,
+    "pages_per_pdf": 20,
+    "seed": 30,
+    "reuse": "linux-full",
+    "xvfb": true,
+    "settle_s": 15.0
+  },
+  "artifacts": {
+    "cargo_args": [
+      "-p",
+      "cm-daemon",
+      "--bin",
+      "citation-manager",
+      "--features",
+      "desktop-bootstrap"
+    ],
+    "features": [
+      "default",
+      "desktop-bootstrap",
+      "pdf-metadata"
+    ],
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 0,
+      "debug_assertions": false,
+      "overflow_checks": false,
+      "test": false
+    },
+    "sha256": "87fc83a35755e625200845817f432f11d0adef3c0ec360c2978117f6e348f73b"
+  },
+  "x_tools": {
+    "Xvfb": true,
+    "xdotool": true,
+    "xclip": true,
+    "import": true
+  },
+  "dev_dri_present": false,
+  "vulkan_icds": [
+    "asahi_icd.json",
+    "gfxstream_vk_icd.json",
+    "intel_hasvk_icd.json",
+    "intel_icd.json",
+    "lvp_icd.json",
+    "nouveau_icd.json",
+    "radeon_icd.json",
+    "virtio_icd.json"
+  ],
+  "display": ":91"
+}

@@ -20,6 +20,9 @@ REST（#27）は API 設定で有効化します（GUI の API & integrations、
 専用worker・継承CropBox/回転/Unicode・注釈搬出をPDFKitと独立照合しました。製品viewer/exportは後続です。
 #29 で既定 read-only の MCP stdio サーバー `papers-mcp`（papersd IPC 経由、12 tools、出典付き結果）を追加しました（[mcp-server ADR](docs/ADR/mcp-server.md)）。書き込みは所有者が別途承認した grant が必要です。
 
+MVP 受け入れ状況（DESIGN §24 の各条件・証跡・blocker）は [MVP_ACCEPTANCE](docs/validation/MVP_ACCEPTANCE.md)、
+新規インストールから全経路を通す release E2E は [tests/e2e/release](tests/e2e/release/README.md)。
+
 設計は [DESIGN.md](DESIGN.md)、依存方向と信頼境界は [ADR](docs/ADR/boundaries.md) /
 [security](docs/ADR/security.md)、変更ルールは [CONTRIBUTING](docs/CONTRIBUTING.md) を参照してください。
 
@@ -76,8 +79,11 @@ sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-dev libx11-xcb-dev lib
   libwayland-dev libfontconfig-dev libfreetype-dev libvulkan-dev mesa-vulkan-drivers
 # citation-manager は同じディレクトリの papersd を必要に応じて起動する（#25）。両方をビルドする。
 cargo build -p cm-daemon --bins --features desktop-bootstrap --release --locked
+# CLI papers / MCP papers-mcp も同じ papersd を使うため、ビルドしてあれば隣に配置される。
+cargo build -p cm-cli -p cm-mcp --release --locked
 # ~/.local/bin と ~/.local/lib/citation-manager/libpdfium.so（chromium/8125, checksum 固定）に配置し、
-# デスクトップエントリを作成。PDFium の取得にはネットワークが必要（--skip-pdfium で省略可）。
+# デスクトップエントリを作成。PDFium の取得にはネットワークが必要（--skip-pdfium で省略可、
+# --pdfium-dir DIR で検証済み archive を保持し再インストール時に再利用）。
 python3 scripts/install_linux.py
 ~/.local/bin/citation-manager --library ~/.local/share/citation-manager/library \
   --settings ~/.config/citation-manager/ui.json

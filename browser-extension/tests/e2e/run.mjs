@@ -29,6 +29,13 @@
 //   node tests/e2e/run.mjs --browser firefox --bin-dir DIR --executable /path/to/firefox
 // DIR holds papersd, papers-native-host and examples/inspect_capture
 // (`cargo build -p cm-daemon --bin papersd -p cm-native-host --bins --examples`).
+//
+// Installed mode (the release E2E, tests/e2e/release): `--installed` uses the executables in
+// --bin-dir where they are (an installed prefix, not copied), the given --library,
+// --runtime-dir, --home and --config-home, and the Chromium profile --chromium-profile whose
+// NativeMessagingHosts the installer already registered and paired (`register` is then
+// skipped and only `status` is checked). --no-inspect leaves the persistence check to the
+// caller (the release E2E reads the papers back with the installed `papers` CLI).
 import { spawn, spawnSync, execFileSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
@@ -75,6 +82,13 @@ function parseArgs() {
     executable: get('--executable', browser === 'chromium' ? '/opt/pw-browsers/chromium-1243/chrome-linux64/chrome' : undefined),
     keep: argv.includes('--keep'),
     report: get('--report'),
+    installed: argv.includes('--installed'),
+    noInspect: argv.includes('--no-inspect'),
+    library: get('--library'),
+    runtimeDir: get('--runtime-dir'),
+    home: get('--home'),
+    configHome: get('--config-home'),
+    chromiumProfile: get('--chromium-profile'),
   };
 }
 
@@ -589,27 +603,34 @@ async function main() {
   const tmp = mkdtempSync(join(tmpdir(), `cm-ext-e2e-${args.browser}-`));
   const checks = {};
   const results = { browser: args.browser };
-  const prefixBin = join(tmp, 'prefix/bin');
+  if (args.installed && !(args.library && args.runtimeDir && args.home && args.configHome)) {
+    throw new Error('--installed needs --library, --runtime-dir, --home and --config-home');
+  }
+  const prefixBin = args.installed ? args.binDir : join(tmp, 'prefix/bin');
   const papersd = join(prefixBin, 'papersd');
   const host = join(prefixBin, 'papers-native-host');
   let browser = null;
   let server = null;
   try {
-    mkdirSync(prefixBin, { recursive: true });
-    for (const name of ['papersd', 'papers-native-host']) {
-      copyFileSync(join(args.binDir, name), join(prefixBin, name));
-      chmodSync(join(prefixBin, name), 0o755);
+    if (!args.installed) {
+      mkdirSync(prefixBin, { recursive: true });
+      for (const name of ['papersd', 'papers-native-host']) {
+        copyFileSync(join(args.binDir, name), join(prefixBin, name));
+        chmodSync(join(prefixBin, name), 0o755);
+      }
     }
-    const library = join(tmp, 'library');
-    const runtime = join(tmp, 'run');
-    mkdirSync(runtime, { mode: 0o700 });
-    mkdirSync(join(tmp, 'home'));
+    const library = args.installed ? resolve(args.library) : join(tmp, 'library');
+    const runtime = args.installed ? resolve(args.runtimeDir) : join(tmp, 'run');
+    if (!args.installed) {
+      mkdirSync(runtime, { mode: 0o700 });
+      mkdirSync(join(tmp, 'home'));
+    }
     const env = {
       PATH: process.env.PATH,
       DISPLAY: process.env.DISPLAY,
       LANG: process.env.LANG ?? 'C.UTF-8',
-      HOME: join(tmp, 'home'),
-      XDG_CONFIG_HOME: join(tmp, 'config'),
+      HOME: args.installed ? resolve(args.home) : join(tmp, 'home'),
+      XDG_CONFIG_HOME: args.installed ? resolve(args.configHome) : join(tmp, 'config'),
       XDG_RUNTIME_DIR: runtime,
       TMPDIR: tmp,
     };
@@ -618,13 +639,22 @@ async function main() {
     // The built extension (development IDs).
     const extDir = join(tmp, 'extension');
     cpSync(join(extRoot, 'dist', args.browser === 'firefox' ? 'firefox' : 'chrome'), extDir, { recursive: true });
-    const chromiumProfile = join(tmp, 'chromium-profile');
+    const chromiumProfile = args.chromiumProfile ? resolve(args.chromiumProfile) : join(tmp, 'chromium-profile');
     const firefoxProfile = join(tmp, 'firefox-profile');
     const manifestSpec = args.browser === 'firefox' ? 'firefox' : `chromium=${join(chromiumProfile, 'NativeMessagingHosts')}`;
-    const register = spawnSync(host, ['register', '--library', library, '--runtime-dir', runtime, '--browser', manifestSpec, '--development-extensions', '--pair'], { env, encoding: 'utf8', timeout: 90000 });
-    log(`register --pair: exit ${register.status}\n${register.stdout}${register.stderr}`);
-    checks.register_and_pair = register.status === 0;
-    if (!checks.register_and_pair) throw new Error('register failed');
+    if (args.installed) {
+      // Registered and paired by the installer: only check that the host agrees.
+      const status = spawnSync(host, ['status'], { env, encoding: 'utf8', timeout: 30000 });
+      log(`status (installer registration): exit ${status.status}\n${status.stdout}${status.stderr}`);
+      results.host_status = status.stdout;
+      checks.installed_registration_healthy = status.status === 0;
+      if (!checks.installed_registration_healthy) throw new Error('installed host registration is not healthy');
+    } else {
+      const register = spawnSync(host, ['register', '--library', library, '--runtime-dir', runtime, '--browser', manifestSpec, '--development-extensions', '--pair'], { env, encoding: 'utf8', timeout: 90000 });
+      log(`register --pair: exit ${register.status}\n${register.stdout}${register.stderr}`);
+      checks.register_and_pair = register.status === 0;
+      if (!checks.register_and_pair) throw new Error('register failed');
+    }
 
     log('waiting for the pairing papersd to idle out');
     checks.papersd_stopped_before_browser = await waitFor(() => processesRunning(papersd).length === 0, 90000, 500);
@@ -659,7 +689,7 @@ async function main() {
 
     // "Launch the app": open the library as its owner, like the desktop app does.
     for (const [key, paper] of [['article', results.article_paper], ['provisional', results.provisional_paper]]) {
-      if (!paper) continue;
+      if (!paper || args.noInspect) continue;
       const inspect = spawnSync(join(args.binDir, 'examples/inspect_capture'), ['--library', library, '--runtime-dir', runtime, '--papersd', papersd, '--paper', paper, '--wait-secs', '5'], { env, encoding: 'utf8', timeout: 120000 });
       log(`inspect ${key}: ${inspect.stdout}${inspect.stderr}`);
       const state = JSON.parse(inspect.stdout || '{}');
@@ -675,7 +705,8 @@ async function main() {
   } finally {
     if (browser) await browser.close().catch(() => undefined);
     server?.close();
-    for (const pid of processesRunning(papersd)) {
+    // Installed mode: the caller owns the library and its daemon (it keeps the PDF job).
+    for (const pid of args.installed ? [] : processesRunning(papersd)) {
       try {
         process.kill(pid, 'SIGTERM');
       } catch {

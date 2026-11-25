@@ -1,0 +1,6 @@
+$ <work>/Applications/Citation Manager.app/Contents/MacOS/papers --version
+exit 0 (0.0s)
+--- stdout
+papers 0.1.0
+
+--- stderr

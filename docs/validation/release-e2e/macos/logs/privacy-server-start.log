@@ -1,0 +1,6 @@
+$ <work>/Applications/Citation Manager.app/Contents/MacOS/papers server start
+exit 0 (0.3s)
+--- stdout
+{"command":"server start","data":{"active_jobs":0,"connections":1,"daemon_version":"0.1.0","library":"<work>/home/.local/share/citation-manager/library","pid":32651,"protocol_version":1,"rest":"follows the persisted API settings: enable it in API & integrations or with `papersd api set --library DIR --enable` (papersd api show reports it)","running":true,"session_capabilities":[],"socket":"<runtime>/citation-manager/6fdd96f677c9cc8e.sock","started":true},"ok":true,"schema":"papers.v1","warnings":[]}
+
+--- stderr

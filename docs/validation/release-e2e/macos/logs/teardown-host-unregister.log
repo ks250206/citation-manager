@@ -1,0 +1,5 @@
+$ <work>/Applications/Citation Manager.app/Contents/MacOS/papers-native-host unregister
+exit 0 (0.0s)
+--- stdout
+
+--- stderr

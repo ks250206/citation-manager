@@ -1,0 +1,6 @@
+$ <work>/prefix/bin/papers --library <work>/Restored/library show 01a212b2-735e-7146-8112-caee1a979cbf
+exit 0 (0.0s)
+--- stdout
+{"command":"show","data":{"attachments":[{"byte_size":13918,"id":"01a212b2-7362-7546-9e32-62a500e2fa48","media_type":"application/pdf","original_name":"corpus.pdf","sha256":"1842ec1c966b74fd73d9dd75ec1f8a199e14e9935b002e2c037206a0496f8910","status":"present","uri":"paper://01a212b2-735e-7146-8112-caee1a979cbf/attachment/01a212b2-7362-7546-9e32-62a500e2fa48"}],"collections":[],"paper":{"citation_key":"AnonRelease","created_at":"2026-11-25T12:33:34.558Z","external_ids":[],"extra_json":{},"id":"01a212b2-735e-7146-8112-caee1a979cbf","title":"Release E2E corpus","type":"journal-article","updated_at":"2026-11-25T12:33:34.558Z"},"tags":[]},"ok":true,"schema":"papers.v1","warnings":[]}
+
+--- stderr

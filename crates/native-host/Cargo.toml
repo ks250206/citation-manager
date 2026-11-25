@@ -31,3 +31,9 @@ path = "src/main.rs"
 [[test]]
 name = "host_process"
 harness = false
+
+# Release E2E (tests/e2e/release): the owner's IPC session for the GUI-only actions
+# (confirm AI annotations, annotated PDF export). Not shipped.
+[[example]]
+name = "release_e2e_owner"
+path = "../../tests/e2e/release/owner.rs"

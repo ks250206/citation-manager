@@ -1,0 +1,12 @@
+$ /usr/local/bin/python3 <repo>/scripts/install_linux.py --prefix <work>/prefix --executable <bin-dir>/citation-manager --library <work>/home/.local/share/citation-manager/library --settings <work>/home/.config/citation-manager/ui.json --pdfium-dir <pdfium-dir> --development-extensions --pair-native-host --browser chromium=<work>/chromium-profile/NativeMessagingHosts
+exit 0 (0.3s)
+--- stdout
+registered chromium manifest <work>/chromium-profile/NativeMessagingHosts/dev.citation_manager.native_host.json
+host <work>/prefix/bin/papers-native-host
+paired: grant 01a212b2-72c6-77a4-931a-0fd8d762ba3c ({DestinationRead, CapturePreview, CaptureCommit})
+<pdfium-dir>/lib/libpdfium.so
+Installed <work>/prefix/bin/citation-manager
+Run: <work>/prefix/bin/citation-manager --library <work>/home/.local/share/citation-manager/library --settings <work>/home/.config/citation-manager/ui.json
+
+--- stderr
+papers-native-host: warning: allowing the development smoke-test extension IDs (baapgkfjfjjagdkpkmocjhfopmaohcdc, citation-manager-dev@citation-manager.invalid). Anyone can load an unpacked/temporary extension with these IDs; use them only for testing.

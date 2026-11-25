@@ -1,0 +1,6 @@
+$ <owner-client-dir>/release_e2e_owner --library <work>/home/.local/share/citation-manager/library --runtime-dir <runtime>/citation-manager --papersd <work>/prefix/bin/papersd confirm-ai --paper 01a212b2-735e-7146-8112-caee1a979cbf
+exit 0 (0.0s)
+--- stdout
+{"annotations":2,"confirmed":["01a212b4-97ce-7146-beae-9f9d9da5b6cf","01a212b4-9815-7495-bc8a-e137ce14bf0f"],"ok":true}
+
+--- stderr
