@@ -116,6 +116,17 @@ pub type CapturePreviewed = (
     cm_protocol::import::ImportPreview,
     cm_protocol::capture::CaptureResolution,
 );
+/// Signals that the library worker thread has finished (its database is closed).
+pub struct WorkerExit(mpsc::Receiver<()>);
+impl WorkerExit {
+    /// Waits up to `timeout` for the worker to exit; `true` once it has.
+    pub fn wait(&self, timeout: std::time::Duration) -> bool {
+        matches!(
+            self.0.recv_timeout(timeout),
+            Err(mpsc::RecvTimeoutError::Disconnected)
+        )
+    }
+}
 
 /// In-process engine. The GUI no longer embeds it (#25): `papersd` owns it behind IPC,
 /// one `for_session` handle per authenticated connection.
@@ -131,10 +142,21 @@ impl InProcessLibraryClient {
     }
     /// Only explicit dedicated paths; no default user library/settings or daemon listener.
     pub fn start_with_settings(path: PathBuf, settings: Option<PathBuf>) -> std::io::Result<Self> {
+        Self::start_with_exit(path, settings).map(|(client, _)| client)
+    }
+    /// Like `start_with_settings`, plus a handle that reports when the library worker has
+    /// exited and therefore closed its database connections (after the last clone is gone).
+    pub fn start_with_exit(
+        path: PathBuf,
+        settings: Option<PathBuf>,
+    ) -> std::io::Result<(Self, WorkerExit)> {
         let (sender, receiver) = mpsc::sync_channel::<Work>(32);
+        let (exited, exit) = mpsc::channel::<()>();
         thread::Builder::new()
             .name("library-worker".into())
             .spawn(move || {
+                // Dropped when this thread ends, after the worker (and its connections).
+                let _exited = exited;
                 while let Ok(first) = receiver.recv() {
                     let opened = (|| {
                         let directory = LibraryDirectory::prepare(&path)?;
@@ -179,11 +201,14 @@ impl InProcessLibraryClient {
         thread::Builder::new()
             .name("doi-worker".into())
             .spawn(move || serve_resolver(lookups))?;
-        Ok(Self {
-            sender,
-            resolver,
-            session: 0,
-        })
+        Ok((
+            Self {
+                sender,
+                resolver,
+                session: 0,
+            },
+            WorkerExit(exit),
+        ))
     }
     /// #22 capture preview: extraction and the DOI complement run on the network worker,
     /// then the draft enters the SAME common #33 coordinator as every other import (no
