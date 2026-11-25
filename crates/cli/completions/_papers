@@ -1,0 +1,847 @@
+#compdef papers
+
+autoload -U is-at-least
+
+_papers() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" : \
+'--library=[Library directory (absolute or relative). Required for library commands]:DIR:_files' \
+'--runtime-dir=[Private runtime directory for the daemon socket (default\: \$XDG_RUNTIME_DIR/citation-manager)]:DIR:_files' \
+'--credential-file=[Present a credential issued by the daemon (0600 file) instead of the owner'\''s desktop credential]:FILE:_files' \
+'--daemon-idle-timeout-ms=[Idle timeout passed to a papersd that this invocation starts]:MS:_default' \
+'--json[Emit the JSON envelope on stdout (default)]' \
+'--text[Emit human-readable text on stdout instead of JSON]' \
+'--read-only[Ask the daemon for LibraryRead only, whatever the command; writes are then refused (exit 5)]' \
+'--no-start[Never start papersd; fail with exit 6 when it is not running]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+":: :_papers_commands" \
+"*::: :->papers" \
+&& ret=0
+    case $state in
+    (papers)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:papers-command-$line[1]:"
+        case $line[1] in
+            (add)
+_arguments "${_arguments_options[@]}" : \
+'--library=[Library directory (absolute or relative). Required for library commands]:DIR:_files' \
+'--runtime-dir=[Private runtime directory for the daemon socket (default\: \$XDG_RUNTIME_DIR/citation-manager)]:DIR:_files' \
+'--credential-file=[Present a credential issued by the daemon (0600 file) instead of the owner'\''s desktop credential]:FILE:_files' \
+'--daemon-idle-timeout-ms=[Idle timeout passed to a papersd that this invocation starts]:MS:_default' \
+'--json[Emit the JSON envelope on stdout (default)]' \
+'--text[Emit human-readable text on stdout instead of JSON]' \
+'--read-only[Ask the daemon for LibraryRead only, whatever the command; writes are then refused (exit 5)]' \
+'--no-start[Never start papersd; fail with exit 6 when it is not running]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+":: :_papers__subcmd__add_commands" \
+"*::: :->add" \
+&& ret=0
+
+    case $state in
+    (add)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:papers-add-command-$line[1]:"
+        case $line[1] in
+            (doi)
+_arguments "${_arguments_options[@]}" : \
+'--title=[Title to use when the lookup has none (or to override it)]:TITLE:_default' \
+'--on-duplicate=[What to do with a duplicate candidate. Merging always needs --merge]:ON_DUPLICATE:((ask\:"Stop with exit 4 and show the candidates (default)"
+skip\:"Skip rows that match an existing paper (exactly or approximately)"
+create\:"Create a separate paper when the match is only approximate. Exact identifier matches (DOI/arXiv/PMID) can never be created twice; they still need skip or \`--merge\`"))' \
+'--merge=[Merge into this reviewed duplicate candidate instead of creating a paper]:PAPER_ID:_default' \
+'--merge-fields=[Fields taken from the incoming record on --merge\: none (default), all, or a list]:none|all|FIELD,...:_default' \
+'--collection=[Add the new paper to this existing collection (name or ID)]:NAME|ID:_default' \
+'*--tag=[Add an existing tag (name or ID); repeatable]:NAME|ID:_default' \
+'--library=[Library directory (absolute or relative). Required for library commands]:DIR:_files' \
+'--runtime-dir=[Private runtime directory for the daemon socket (default\: \$XDG_RUNTIME_DIR/citation-manager)]:DIR:_files' \
+'--credential-file=[Present a credential issued by the daemon (0600 file) instead of the owner'\''s desktop credential]:FILE:_files' \
+'--daemon-idle-timeout-ms=[Idle timeout passed to a papersd that this invocation starts]:MS:_default' \
+'-y[Commit without an interactive prompt (required when stdin is not a terminal)]' \
+'--yes[Commit without an interactive prompt (required when stdin is not a terminal)]' \
+'(-y --yes)--dry-run[Preview only\: report what would happen and save nothing]' \
+'--json[Emit the JSON envelope on stdout (default)]' \
+'--text[Emit human-readable text on stdout instead of JSON]' \
+'--read-only[Ask the daemon for LibraryRead only, whatever the command; writes are then refused (exit 5)]' \
+'--no-start[Never start papersd; fail with exit 6 when it is not running]' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+'-V[Print version]' \
+'--version[Print version]' \
+':doi -- DOI or resolver URL:_default' \
+&& ret=0
+;;
+(file)
+_arguments "${_arguments_options[@]}" : \
+'(--title --doi --merge --collection --tag)--attach-to=[Attach to this existing paper; its metadata is never changed by the file]:PAPER_ID:_default' \
+'--title=[Explicit title (otherwise PDF metadata, else a provisional title from the filename)]:TITLE:_default' \
+'--doi=[Explicit DOI for the new paper]:DOI:_default' \
+'--on-duplicate=[What to do with a duplicate candidate. Merging always needs --merge]:ON_DUPLICATE:((ask\:"Stop with exit 4 and show the candidates (default)"
+skip\:"Skip rows that match an existing paper (exactly or approximately)"
+create\:"Create a separate paper when the match is only approximate. Exact identifier matches (DOI/arXiv/PMID) can never be created twice; they still need skip or \`--merge\`"))' \
+'--merge=[Merge into this reviewed duplicate candidate instead of creating a paper]:PAPER_ID:_default' \
+'--merge-fields=[Fields taken from the incoming record on --merge\: none (default), all, or a list]:none|all|FIELD,...:_default' \
+'--collection=[Add the new paper to this existing collection (name or ID)]:NAME|ID:_default' \
+'*--tag=[Add an existing tag (name or ID); repeatable]:NAME|ID:_default' \
+'--library=[Library directory (absolute or relative). Required for library commands]:DIR:_files' \
+'--runtime-dir=[Private runtime directory for the daemon socket (default\: \$XDG_RUNTIME_DIR/citation-manager)]:DIR:_files' \
+'--credential-file=[Present a credential issued by the daemon (0600 file) instead of the owner'\''s desktop credential]:FILE:_files' \
+'--daemon-idle-timeout-ms=[Idle timeout passed to a papersd that this invocation starts]:MS:_default' \
+'-y[Commit without an interactive prompt (required when stdin is not a terminal)]' \
+'--yes[Commit without an interactive prompt (required when stdin is not a terminal)]' \
+'(-y --yes)--dry-run[Preview only\: report what would happen and save nothing]' \
+'--json[Emit the JSON envelope on stdout (default)]' \
+'--text[Emit human-readable text on stdout instead of JSON]' \
+'--read-only[Ask the daemon for LibraryRead only, whatever the command; writes are then refused (exit 5)]' \
+'--no-start[Never start papersd; fail with exit 6 when it is not running]' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+'-V[Print version]' \
+'--version[Print version]' \
+':path -- PDF file to register or attach:_files' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_papers__subcmd__add__subcmd__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:papers-add-help-command-$line[1]:"
+        case $line[1] in
+            (doi)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(file)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
+(import)
+_arguments "${_arguments_options[@]}" : \
+'--format=[Input format (default\: from the file extension)]:FORMAT:(bibtex ris)' \
+'--batch=[Rows per preview/commit batch]:BATCH:_default' \
+'--on-duplicate=[What to do with a duplicate candidate. Merging always needs --merge]:ON_DUPLICATE:((ask\:"Stop with exit 4 and show the candidates (default)"
+skip\:"Skip rows that match an existing paper (exactly or approximately)"
+create\:"Create a separate paper when the match is only approximate. Exact identifier matches (DOI/arXiv/PMID) can never be created twice; they still need skip or \`--merge\`"))' \
+'--collection=[Add the new paper to this existing collection (name or ID)]:NAME|ID:_default' \
+'*--tag=[Add an existing tag (name or ID); repeatable]:NAME|ID:_default' \
+'--library=[Library directory (absolute or relative). Required for library commands]:DIR:_files' \
+'--runtime-dir=[Private runtime directory for the daemon socket (default\: \$XDG_RUNTIME_DIR/citation-manager)]:DIR:_files' \
+'--credential-file=[Present a credential issued by the daemon (0600 file) instead of the owner'\''s desktop credential]:FILE:_files' \
+'--daemon-idle-timeout-ms=[Idle timeout passed to a papersd that this invocation starts]:MS:_default' \
+'-y[Commit without an interactive prompt (required when stdin is not a terminal)]' \
+'--yes[Commit without an interactive prompt (required when stdin is not a terminal)]' \
+'(-y --yes)--dry-run[Preview only\: report what would happen and save nothing]' \
+'--json[Emit the JSON envelope on stdout (default)]' \
+'--text[Emit human-readable text on stdout instead of JSON]' \
+'--read-only[Ask the daemon for LibraryRead only, whatever the command; writes are then refused (exit 5)]' \
+'--no-start[Never start papersd; fail with exit 6 when it is not running]' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+'-V[Print version]' \
+'--version[Print version]' \
+':path -- BibTeX (.bib) or RIS (.ris) file:_files' \
+&& ret=0
+;;
+(search)
+_arguments "${_arguments_options[@]}" : \
+'*--tag=[Require this tag (adds tag\:"..." to the query); repeatable]:TAG:_default' \
+'--collection=[Restrict to a collection (ID, or name added as collection\:"...")]:NAME|ID:_default' \
+'*--sources=[Sources to search (default\: all)]:SOURCES:(bibliographic annotations pages)' \
+'--limit=[Maximum hits (1-100)]:LIMIT:_default' \
+'--cursor=[Continue from a previous \`next_cursor\`/\`continuation\`]:CURSOR:_default' \
+'--snippet-chars=[Snippet length in characters (32-1000)]:SNIPPET_CHARS:_default' \
+'--library=[Library directory (absolute or relative). Required for library commands]:DIR:_files' \
+'--runtime-dir=[Private runtime directory for the daemon socket (default\: \$XDG_RUNTIME_DIR/citation-manager)]:DIR:_files' \
+'--credential-file=[Present a credential issued by the daemon (0600 file) instead of the owner'\''s desktop credential]:FILE:_files' \
+'--daemon-idle-timeout-ms=[Idle timeout passed to a papersd that this invocation starts]:MS:_default' \
+'--all-pages[Scan PDF pages for 1-2 character terms without a narrowing filter (bounded windows)]' \
+'--include-trash[Include papers in the trash]' \
+'--json[Emit the JSON envelope on stdout (default)]' \
+'--text[Emit human-readable text on stdout instead of JSON]' \
+'--read-only[Ask the daemon for LibraryRead only, whatever the command; writes are then refused (exit 5)]' \
+'--no-start[Never start papersd; fail with exit 6 when it is not running]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+':query -- Search DSL\: terms, "phrases", doi\:, tag\:, year\:, collection\:, has\:pdf:_default' \
+&& ret=0
+;;
+(list)
+_arguments "${_arguments_options[@]}" : \
+'--collection=[Direct members of this collection (name or ID)]:NAME|ID:_default' \
+'*--tag=[Tag filter (name or ID); repeatable]:TAG:_default' \
+'--keyword=[Literal substring filter over bibliographic fields]:KEYWORD:_default' \
+'--author=[]:AUTHOR:_default' \
+'--year-from=[]:YEAR_FROM:_default' \
+'--year-to=[]:YEAR_TO:_default' \
+'--has-pdf=[Only papers with (true) or without (false) a PDF attachment]:HAS_PDF:(true false)' \
+'--sort=[]:SORT:(id title year created updated)' \
+'--limit=[Page size (1-500)]:LIMIT:_default' \
+'--cursor=[Continue after a previous \`next_cursor\`]:CURSOR:_default' \
+'--library=[Library directory (absolute or relative). Required for library commands]:DIR:_files' \
+'--runtime-dir=[Private runtime directory for the daemon socket (default\: \$XDG_RUNTIME_DIR/citation-manager)]:DIR:_files' \
+'--credential-file=[Present a credential issued by the daemon (0600 file) instead of the owner'\''s desktop credential]:FILE:_files' \
+'--daemon-idle-timeout-ms=[Idle timeout passed to a papersd that this invocation starts]:MS:_default' \
+'--any-tag[Match any instead of all of the given tags]' \
+'--desc[]' \
+'(--include-trash)--trash[List papers in the trash instead of active ones]' \
+'--include-trash[Include trashed papers]' \
+'--json[Emit the JSON envelope on stdout (default)]' \
+'--text[Emit human-readable text on stdout instead of JSON]' \
+'--read-only[Ask the daemon for LibraryRead only, whatever the command; writes are then refused (exit 5)]' \
+'--no-start[Never start papersd; fail with exit 6 when it is not running]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+&& ret=0
+;;
+(show)
+_arguments "${_arguments_options[@]}" : \
+'--library=[Library directory (absolute or relative). Required for library commands]:DIR:_files' \
+'--runtime-dir=[Private runtime directory for the daemon socket (default\: \$XDG_RUNTIME_DIR/citation-manager)]:DIR:_files' \
+'--credential-file=[Present a credential issued by the daemon (0600 file) instead of the owner'\''s desktop credential]:FILE:_files' \
+'--daemon-idle-timeout-ms=[Idle timeout passed to a papersd that this invocation starts]:MS:_default' \
+'--json[Emit the JSON envelope on stdout (default)]' \
+'--text[Emit human-readable text on stdout instead of JSON]' \
+'--read-only[Ask the daemon for LibraryRead only, whatever the command; writes are then refused (exit 5)]' \
+'--no-start[Never start papersd; fail with exit 6 when it is not running]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+':paper:_default' \
+&& ret=0
+;;
+(fulltext)
+_arguments "${_arguments_options[@]}" : \
+'(--pages)--page=[One page by its 1-based physical number]:PAGE:_default' \
+'--pages=[Page range, 1-based inclusive (e.g. 3-7), at most 50 pages]:FROM-TO:_default' \
+'--max-pages=[Pages to return when no --page/--pages is given (1-50)]:MAX_PAGES:_default' \
+'--max-chars=[Total characters returned (1-400000)]:MAX_CHARS:_default' \
+'--attachment=[Which PDF attachment (default\: the paper'\''s first)]:ATTACHMENT_ID:_default' \
+'--library=[Library directory (absolute or relative). Required for library commands]:DIR:_files' \
+'--runtime-dir=[Private runtime directory for the daemon socket (default\: \$XDG_RUNTIME_DIR/citation-manager)]:DIR:_files' \
+'--credential-file=[Present a credential issued by the daemon (0600 file) instead of the owner'\''s desktop credential]:FILE:_files' \
+'--daemon-idle-timeout-ms=[Idle timeout passed to a papersd that this invocation starts]:MS:_default' \
+'--json[Emit the JSON envelope on stdout (default)]' \
+'--text[Emit human-readable text on stdout instead of JSON]' \
+'--read-only[Ask the daemon for LibraryRead only, whatever the command; writes are then refused (exit 5)]' \
+'--no-start[Never start papersd; fail with exit 6 when it is not running]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+':paper:_default' \
+&& ret=0
+;;
+(annotations)
+_arguments "${_arguments_options[@]}" : \
+'--attachment=[Only this attachment'\''s annotations]:ATTACHMENT_ID:_default' \
+'--limit=[Maximum annotations returned (1-1000)]:LIMIT:_default' \
+'--library=[Library directory (absolute or relative). Required for library commands]:DIR:_files' \
+'--runtime-dir=[Private runtime directory for the daemon socket (default\: \$XDG_RUNTIME_DIR/citation-manager)]:DIR:_files' \
+'--credential-file=[Present a credential issued by the daemon (0600 file) instead of the owner'\''s desktop credential]:FILE:_files' \
+'--daemon-idle-timeout-ms=[Idle timeout passed to a papersd that this invocation starts]:MS:_default' \
+'--json[Emit the JSON envelope on stdout (default)]' \
+'--text[Emit human-readable text on stdout instead of JSON]' \
+'--read-only[Ask the daemon for LibraryRead only, whatever the command; writes are then refused (exit 5)]' \
+'--no-start[Never start papersd; fail with exit 6 when it is not running]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+':paper:_default' \
+&& ret=0
+;;
+(export)
+_arguments "${_arguments_options[@]}" : \
+'--format=[]:FORMAT:(bibtex ris)' \
+'(--collection)*--ids=[Comma-separated paper IDs]:IDS:_default' \
+'--collection=[Direct members of a collection (name or ID)]:NAME|ID:_default' \
+'-o+[Destination file (outside the library). Without it the bibliography goes to stdout]:FILE:_files' \
+'--output=[Destination file (outside the library). Without it the bibliography goes to stdout]:FILE:_files' \
+'--library=[Library directory (absolute or relative). Required for library commands]:DIR:_files' \
+'--runtime-dir=[Private runtime directory for the daemon socket (default\: \$XDG_RUNTIME_DIR/citation-manager)]:DIR:_files' \
+'--credential-file=[Present a credential issued by the daemon (0600 file) instead of the owner'\''s desktop credential]:FILE:_files' \
+'--daemon-idle-timeout-ms=[Idle timeout passed to a papersd that this invocation starts]:MS:_default' \
+'--force[Replace an existing regular file at --output]' \
+'--json[Emit the JSON envelope on stdout (default)]' \
+'--text[Emit human-readable text on stdout instead of JSON]' \
+'--read-only[Ask the daemon for LibraryRead only, whatever the command; writes are then refused (exit 5)]' \
+'--no-start[Never start papersd; fail with exit 6 when it is not running]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+&& ret=0
+;;
+(server)
+_arguments "${_arguments_options[@]}" : \
+'--library=[Library directory (absolute or relative). Required for library commands]:DIR:_files' \
+'--runtime-dir=[Private runtime directory for the daemon socket (default\: \$XDG_RUNTIME_DIR/citation-manager)]:DIR:_files' \
+'--credential-file=[Present a credential issued by the daemon (0600 file) instead of the owner'\''s desktop credential]:FILE:_files' \
+'--daemon-idle-timeout-ms=[Idle timeout passed to a papersd that this invocation starts]:MS:_default' \
+'--json[Emit the JSON envelope on stdout (default)]' \
+'--text[Emit human-readable text on stdout instead of JSON]' \
+'--read-only[Ask the daemon for LibraryRead only, whatever the command; writes are then refused (exit 5)]' \
+'--no-start[Never start papersd; fail with exit 6 when it is not running]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+":: :_papers__subcmd__server_commands" \
+"*::: :->server" \
+&& ret=0
+
+    case $state in
+    (server)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:papers-server-command-$line[1]:"
+        case $line[1] in
+            (status)
+_arguments "${_arguments_options[@]}" : \
+'--library=[Library directory (absolute or relative). Required for library commands]:DIR:_files' \
+'--runtime-dir=[Private runtime directory for the daemon socket (default\: \$XDG_RUNTIME_DIR/citation-manager)]:DIR:_files' \
+'--credential-file=[Present a credential issued by the daemon (0600 file) instead of the owner'\''s desktop credential]:FILE:_files' \
+'--daemon-idle-timeout-ms=[Idle timeout passed to a papersd that this invocation starts]:MS:_default' \
+'--json[Emit the JSON envelope on stdout (default)]' \
+'--text[Emit human-readable text on stdout instead of JSON]' \
+'--read-only[Ask the daemon for LibraryRead only, whatever the command; writes are then refused (exit 5)]' \
+'--no-start[Never start papersd; fail with exit 6 when it is not running]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+&& ret=0
+;;
+(start)
+_arguments "${_arguments_options[@]}" : \
+'--library=[Library directory (absolute or relative). Required for library commands]:DIR:_files' \
+'--runtime-dir=[Private runtime directory for the daemon socket (default\: \$XDG_RUNTIME_DIR/citation-manager)]:DIR:_files' \
+'--credential-file=[Present a credential issued by the daemon (0600 file) instead of the owner'\''s desktop credential]:FILE:_files' \
+'--daemon-idle-timeout-ms=[Idle timeout passed to a papersd that this invocation starts]:MS:_default' \
+'--rest[REST API listener (not available yet\: #27)]' \
+'--json[Emit the JSON envelope on stdout (default)]' \
+'--text[Emit human-readable text on stdout instead of JSON]' \
+'--read-only[Ask the daemon for LibraryRead only, whatever the command; writes are then refused (exit 5)]' \
+'--no-start[Never start papersd; fail with exit 6 when it is not running]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+&& ret=0
+;;
+(stop)
+_arguments "${_arguments_options[@]}" : \
+'--library=[Library directory (absolute or relative). Required for library commands]:DIR:_files' \
+'--runtime-dir=[Private runtime directory for the daemon socket (default\: \$XDG_RUNTIME_DIR/citation-manager)]:DIR:_files' \
+'--credential-file=[Present a credential issued by the daemon (0600 file) instead of the owner'\''s desktop credential]:FILE:_files' \
+'--daemon-idle-timeout-ms=[Idle timeout passed to a papersd that this invocation starts]:MS:_default' \
+'--force[]' \
+'--json[Emit the JSON envelope on stdout (default)]' \
+'--text[Emit human-readable text on stdout instead of JSON]' \
+'--read-only[Ask the daemon for LibraryRead only, whatever the command; writes are then refused (exit 5)]' \
+'--no-start[Never start papersd; fail with exit 6 when it is not running]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_papers__subcmd__server__subcmd__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:papers-server-help-command-$line[1]:"
+        case $line[1] in
+            (status)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(start)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(stop)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
+(mcp)
+_arguments "${_arguments_options[@]}" : \
+'--library=[Library directory (absolute or relative). Required for library commands]:DIR:_files' \
+'--runtime-dir=[Private runtime directory for the daemon socket (default\: \$XDG_RUNTIME_DIR/citation-manager)]:DIR:_files' \
+'--credential-file=[Present a credential issued by the daemon (0600 file) instead of the owner'\''s desktop credential]:FILE:_files' \
+'--daemon-idle-timeout-ms=[Idle timeout passed to a papersd that this invocation starts]:MS:_default' \
+'--json[Emit the JSON envelope on stdout (default)]' \
+'--text[Emit human-readable text on stdout instead of JSON]' \
+'--read-only[Ask the daemon for LibraryRead only, whatever the command; writes are then refused (exit 5)]' \
+'--no-start[Never start papersd; fail with exit 6 when it is not running]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+&& ret=0
+;;
+(completions)
+_arguments "${_arguments_options[@]}" : \
+'--library=[Library directory (absolute or relative). Required for library commands]:DIR:_files' \
+'--runtime-dir=[Private runtime directory for the daemon socket (default\: \$XDG_RUNTIME_DIR/citation-manager)]:DIR:_files' \
+'--credential-file=[Present a credential issued by the daemon (0600 file) instead of the owner'\''s desktop credential]:FILE:_files' \
+'--daemon-idle-timeout-ms=[Idle timeout passed to a papersd that this invocation starts]:MS:_default' \
+'--json[Emit the JSON envelope on stdout (default)]' \
+'--text[Emit human-readable text on stdout instead of JSON]' \
+'--read-only[Ask the daemon for LibraryRead only, whatever the command; writes are then refused (exit 5)]' \
+'--no-start[Never start papersd; fail with exit 6 when it is not running]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+':shell:(bash zsh fish)' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_papers__subcmd__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:papers-help-command-$line[1]:"
+        case $line[1] in
+            (add)
+_arguments "${_arguments_options[@]}" : \
+":: :_papers__subcmd__help__subcmd__add_commands" \
+"*::: :->add" \
+&& ret=0
+
+    case $state in
+    (add)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:papers-help-add-command-$line[1]:"
+        case $line[1] in
+            (doi)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(file)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(import)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(search)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(list)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(show)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(fulltext)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(annotations)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(export)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(server)
+_arguments "${_arguments_options[@]}" : \
+":: :_papers__subcmd__help__subcmd__server_commands" \
+"*::: :->server" \
+&& ret=0
+
+    case $state in
+    (server)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:papers-help-server-command-$line[1]:"
+        case $line[1] in
+            (status)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(start)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(stop)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(mcp)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(completions)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+}
+
+(( $+functions[_papers_commands] )) ||
+_papers_commands() {
+    local commands; commands=(
+'add:Register a paper by DOI or from a local PDF' \
+'import:Import a BibTeX or RIS file (preview, duplicate review, then commit)' \
+'search:Full-text search over bibliography, annotations and extracted PDF text' \
+'list:List papers with filters, sort and keyset paging' \
+'show:Show one paper with its collections, tags and attachments' \
+'fulltext:Read extracted PDF page text within page and character limits' \
+'annotations:List a paper'\''s highlights, comments and notes' \
+'export:Export BibTeX/RIS to a file or stdout' \
+'server:Inspect, start or stop the library'\''s papersd' \
+'mcp:Serve MCP over stdio (requires the #29 MCP server; unavailable until then)' \
+'completions:Print a shell completion script' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'papers commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__add_commands] )) ||
+_papers__subcmd__add_commands() {
+    local commands; commands=(
+'doi:Look up a DOI (Crossref/DataCite), preview duplicates, then commit' \
+'file:Register a local PDF as a new paper, or attach it to an existing paper' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'papers add commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__add__subcmd__doi_commands] )) ||
+_papers__subcmd__add__subcmd__doi_commands() {
+    local commands; commands=()
+    _describe -t commands 'papers add doi commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__add__subcmd__file_commands] )) ||
+_papers__subcmd__add__subcmd__file_commands() {
+    local commands; commands=()
+    _describe -t commands 'papers add file commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__add__subcmd__help_commands] )) ||
+_papers__subcmd__add__subcmd__help_commands() {
+    local commands; commands=(
+'doi:Look up a DOI (Crossref/DataCite), preview duplicates, then commit' \
+'file:Register a local PDF as a new paper, or attach it to an existing paper' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'papers add help commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__add__subcmd__help__subcmd__doi_commands] )) ||
+_papers__subcmd__add__subcmd__help__subcmd__doi_commands() {
+    local commands; commands=()
+    _describe -t commands 'papers add help doi commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__add__subcmd__help__subcmd__file_commands] )) ||
+_papers__subcmd__add__subcmd__help__subcmd__file_commands() {
+    local commands; commands=()
+    _describe -t commands 'papers add help file commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__add__subcmd__help__subcmd__help_commands] )) ||
+_papers__subcmd__add__subcmd__help__subcmd__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'papers add help help commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__annotations_commands] )) ||
+_papers__subcmd__annotations_commands() {
+    local commands; commands=()
+    _describe -t commands 'papers annotations commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__completions_commands] )) ||
+_papers__subcmd__completions_commands() {
+    local commands; commands=()
+    _describe -t commands 'papers completions commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__export_commands] )) ||
+_papers__subcmd__export_commands() {
+    local commands; commands=()
+    _describe -t commands 'papers export commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__fulltext_commands] )) ||
+_papers__subcmd__fulltext_commands() {
+    local commands; commands=()
+    _describe -t commands 'papers fulltext commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__help_commands] )) ||
+_papers__subcmd__help_commands() {
+    local commands; commands=(
+'add:Register a paper by DOI or from a local PDF' \
+'import:Import a BibTeX or RIS file (preview, duplicate review, then commit)' \
+'search:Full-text search over bibliography, annotations and extracted PDF text' \
+'list:List papers with filters, sort and keyset paging' \
+'show:Show one paper with its collections, tags and attachments' \
+'fulltext:Read extracted PDF page text within page and character limits' \
+'annotations:List a paper'\''s highlights, comments and notes' \
+'export:Export BibTeX/RIS to a file or stdout' \
+'server:Inspect, start or stop the library'\''s papersd' \
+'mcp:Serve MCP over stdio (requires the #29 MCP server; unavailable until then)' \
+'completions:Print a shell completion script' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'papers help commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__help__subcmd__add_commands] )) ||
+_papers__subcmd__help__subcmd__add_commands() {
+    local commands; commands=(
+'doi:Look up a DOI (Crossref/DataCite), preview duplicates, then commit' \
+'file:Register a local PDF as a new paper, or attach it to an existing paper' \
+    )
+    _describe -t commands 'papers help add commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__help__subcmd__add__subcmd__doi_commands] )) ||
+_papers__subcmd__help__subcmd__add__subcmd__doi_commands() {
+    local commands; commands=()
+    _describe -t commands 'papers help add doi commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__help__subcmd__add__subcmd__file_commands] )) ||
+_papers__subcmd__help__subcmd__add__subcmd__file_commands() {
+    local commands; commands=()
+    _describe -t commands 'papers help add file commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__help__subcmd__annotations_commands] )) ||
+_papers__subcmd__help__subcmd__annotations_commands() {
+    local commands; commands=()
+    _describe -t commands 'papers help annotations commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__help__subcmd__completions_commands] )) ||
+_papers__subcmd__help__subcmd__completions_commands() {
+    local commands; commands=()
+    _describe -t commands 'papers help completions commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__help__subcmd__export_commands] )) ||
+_papers__subcmd__help__subcmd__export_commands() {
+    local commands; commands=()
+    _describe -t commands 'papers help export commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__help__subcmd__fulltext_commands] )) ||
+_papers__subcmd__help__subcmd__fulltext_commands() {
+    local commands; commands=()
+    _describe -t commands 'papers help fulltext commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__help__subcmd__help_commands] )) ||
+_papers__subcmd__help__subcmd__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'papers help help commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__help__subcmd__import_commands] )) ||
+_papers__subcmd__help__subcmd__import_commands() {
+    local commands; commands=()
+    _describe -t commands 'papers help import commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__help__subcmd__list_commands] )) ||
+_papers__subcmd__help__subcmd__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'papers help list commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__help__subcmd__mcp_commands] )) ||
+_papers__subcmd__help__subcmd__mcp_commands() {
+    local commands; commands=()
+    _describe -t commands 'papers help mcp commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__help__subcmd__search_commands] )) ||
+_papers__subcmd__help__subcmd__search_commands() {
+    local commands; commands=()
+    _describe -t commands 'papers help search commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__help__subcmd__server_commands] )) ||
+_papers__subcmd__help__subcmd__server_commands() {
+    local commands; commands=(
+'status:Report whether papersd serves this library (never starts it)' \
+'start:Start papersd now (it exits by itself once idle)' \
+'stop:Stop papersd (SIGTERM). Refuses while other clients or jobs are active unless --force' \
+    )
+    _describe -t commands 'papers help server commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__help__subcmd__server__subcmd__start_commands] )) ||
+_papers__subcmd__help__subcmd__server__subcmd__start_commands() {
+    local commands; commands=()
+    _describe -t commands 'papers help server start commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__help__subcmd__server__subcmd__status_commands] )) ||
+_papers__subcmd__help__subcmd__server__subcmd__status_commands() {
+    local commands; commands=()
+    _describe -t commands 'papers help server status commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__help__subcmd__server__subcmd__stop_commands] )) ||
+_papers__subcmd__help__subcmd__server__subcmd__stop_commands() {
+    local commands; commands=()
+    _describe -t commands 'papers help server stop commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__help__subcmd__show_commands] )) ||
+_papers__subcmd__help__subcmd__show_commands() {
+    local commands; commands=()
+    _describe -t commands 'papers help show commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__import_commands] )) ||
+_papers__subcmd__import_commands() {
+    local commands; commands=()
+    _describe -t commands 'papers import commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__list_commands] )) ||
+_papers__subcmd__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'papers list commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__mcp_commands] )) ||
+_papers__subcmd__mcp_commands() {
+    local commands; commands=()
+    _describe -t commands 'papers mcp commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__search_commands] )) ||
+_papers__subcmd__search_commands() {
+    local commands; commands=()
+    _describe -t commands 'papers search commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__server_commands] )) ||
+_papers__subcmd__server_commands() {
+    local commands; commands=(
+'status:Report whether papersd serves this library (never starts it)' \
+'start:Start papersd now (it exits by itself once idle)' \
+'stop:Stop papersd (SIGTERM). Refuses while other clients or jobs are active unless --force' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'papers server commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__server__subcmd__help_commands] )) ||
+_papers__subcmd__server__subcmd__help_commands() {
+    local commands; commands=(
+'status:Report whether papersd serves this library (never starts it)' \
+'start:Start papersd now (it exits by itself once idle)' \
+'stop:Stop papersd (SIGTERM). Refuses while other clients or jobs are active unless --force' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'papers server help commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__server__subcmd__help__subcmd__help_commands] )) ||
+_papers__subcmd__server__subcmd__help__subcmd__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'papers server help help commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__server__subcmd__help__subcmd__start_commands] )) ||
+_papers__subcmd__server__subcmd__help__subcmd__start_commands() {
+    local commands; commands=()
+    _describe -t commands 'papers server help start commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__server__subcmd__help__subcmd__status_commands] )) ||
+_papers__subcmd__server__subcmd__help__subcmd__status_commands() {
+    local commands; commands=()
+    _describe -t commands 'papers server help status commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__server__subcmd__help__subcmd__stop_commands] )) ||
+_papers__subcmd__server__subcmd__help__subcmd__stop_commands() {
+    local commands; commands=()
+    _describe -t commands 'papers server help stop commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__server__subcmd__start_commands] )) ||
+_papers__subcmd__server__subcmd__start_commands() {
+    local commands; commands=()
+    _describe -t commands 'papers server start commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__server__subcmd__status_commands] )) ||
+_papers__subcmd__server__subcmd__status_commands() {
+    local commands; commands=()
+    _describe -t commands 'papers server status commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__server__subcmd__stop_commands] )) ||
+_papers__subcmd__server__subcmd__stop_commands() {
+    local commands; commands=()
+    _describe -t commands 'papers server stop commands' commands "$@"
+}
+(( $+functions[_papers__subcmd__show_commands] )) ||
+_papers__subcmd__show_commands() {
+    local commands; commands=()
+    _describe -t commands 'papers show commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_papers" ]; then
+    _papers "$@"
+else
+    compdef _papers papers
+fi
