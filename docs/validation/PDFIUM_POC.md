@@ -37,6 +37,7 @@ macOS/PDFKit/dylib 不在・検査失敗は非zero exit。skip-as-success はな
 
 CI は既存 `contracts`（PDFiumなし）/`native-dependencies`（bindings compile-only）を保持し、
 `pdfium-runtime` を追加。固定 universal artifact で実行し、`pdfium-runtime-evidence` artifact に上記証跡を保存。
+（後に 3 つの macOS ジョブは単一の `macos` ジョブへ統合した。手順と artifact 名は同じ。[CONTRIBUTING](../CONTRIBUTING.md#ci-の構成)）
 CI の実行状態と異モデルレビューは PR 上で別途確認し、本ローカル結果から推測しない。
 
 固定archiveのSigstore attestationも `gh attestation verify ... --repo bblanchon/pdfium-binaries --bundle ...`
