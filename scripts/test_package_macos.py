@@ -78,6 +78,10 @@ class BuildApp(unittest.TestCase):
             self.assertEqual((contents / 'PkgInfo').read_text(), 'APPL????')
             licenses = contents / 'Resources/licenses/pdfium'
             self.assertEqual(sorted(p.name for p in licenses.iterdir()), ['LICENSE', 'freetype.txt', 'pdfium.txt'])
+            # The project's own license (MIT) is bundled verbatim.
+            self.assertEqual((contents / 'Resources/licenses/LICENSE').read_bytes(),
+                             (build_app.ROOT / 'LICENSE').read_bytes())
+            self.assertIn('MIT License', (contents / 'Resources/licenses/LICENSE').read_text())
             runtime = json.loads((contents / 'Resources/pdfium-runtime.json').read_text())
             self.assertEqual(runtime['bundle_path'], 'Frameworks/libpdfium.dylib')
             self.assertEqual(runtime['library_sha256'], pin['library_sha256'])

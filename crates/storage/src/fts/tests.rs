@@ -567,6 +567,140 @@ fn short_term_scan_is_bounded_with_continuation_and_explicit_scope() {
     assert_eq!(results(&db, &all).hits.len(), 6);
 }
 
+/// #30 finding: papers imported first and PDFs extracted later give every page document a
+/// higher id than every bibliographic document. A short term narrowed to a collection used
+/// to spend the whole first window on the collection's bibliographic documents and return
+/// no page hit (`DocumentsAfterWindow` only). The window now has a bibliographic/annotation
+/// lane and a page lane sharing the budget: page hits appear in the first window, each
+/// window stays within `candidate_limit`, and following the continuation returns every
+/// matching document exactly once (no false zero, no repeat).
+#[test]
+fn narrowed_short_term_first_window_reaches_pages_extracted_after_papers() {
+    let mut db = LibraryDb::in_memory().unwrap();
+    let shelf = CollectionService::new(db.collections())
+        .create(CollectionInput::named("Shelf"))
+        .unwrap();
+    // 1. Papers first: 120 in the collection (every 10th title matches), 30 outside.
+    let mut inside = Vec::new();
+    let mut expected = std::collections::BTreeSet::new();
+    for i in 0..120 {
+        let title = if i % 10 == 0 {
+            format!("電池 survey {i}")
+        } else {
+            format!("plain paper {i}")
+        };
+        let id = paper(&mut db, &title, 2020, "abstract");
+        CollectionService::new(db.collections())
+            .add_paper(id, shelf.id)
+            .unwrap();
+        if i % 10 == 0 {
+            expected.insert((id.0, DocumentSource::Paper, None));
+        }
+        inside.push(id);
+    }
+    let outside: Vec<PaperId> = (0..30)
+        .map(|i| paper(&mut db, &format!("電 elsewhere {i}"), 2020, "abstract"))
+        .collect();
+    // 2. Pages later: 3 PDFs x 20 pages in the collection (even pages match), 1 outside.
+    for (seed, owner) in [(11u8, inside[3]), (12, inside[57]), (13, inside[110])] {
+        let att = attachment(&db, owner, seed);
+        for index in 0..20u32 {
+            let text = if index % 2 == 0 {
+                format!("第{index}頁 電池の容量")
+            } else {
+                format!("第{index}頁 その他")
+            };
+            page(&db, att, index, &(index + 1).to_string(), &text);
+            if index % 2 == 0 {
+                expected.insert((owner.0, DocumentSource::Page, Some(index)));
+            }
+        }
+    }
+    let foreign = attachment(&db, outside[0], 14);
+    page(&db, foreign, 0, "1", "電池 outside the collection");
+    // The ordering of the benchmark: every page document after every paper document.
+    let (last_paper, first_page): (i64, i64) = db
+        .connection
+        .query_row(
+            "SELECT (SELECT max(id) FROM search_documents WHERE source='paper'),
+                    (SELECT min(id) FROM search_documents WHERE source='page')",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert!(last_paper < first_page);
+
+    let mut request = SearchRequest::new("電");
+    request.collection = Some(shelf.id);
+    request.limit = MAX_LIMIT;
+    request.candidate_limit = 60; // half the collection's bibliographic documents
+    let hit_key = |h: &SearchHit| (h.paper_id.0, h.source, h.page_index);
+
+    // First window: both lanes examined, page hits present, coverage explicit.
+    let first = results(&db, &request);
+    assert!(first.next_page.is_none());
+    assert!(
+        first.hits.iter().any(|h| h.source == DocumentSource::Page),
+        "first window must reach the page documents: {:?}",
+        first.coverage
+    );
+    assert!(first.hits.iter().any(|h| h.source == DocumentSource::Paper));
+    assert!(first.hits.iter().all(|h| expected.contains(&hit_key(h))));
+    assert_eq!(first.coverage.scanned_documents, 60);
+    assert_eq!(first.coverage.scan, ScanStatus::Partial);
+    assert!(!first.coverage.complete);
+    assert!(
+        first
+            .coverage
+            .unsearched
+            .contains(&UnsearchedScope::DocumentsAfterWindow)
+    );
+    let next = first.coverage.continuation.expect("continuation");
+    assert!(next.scan_after > 0 && next.scan_after <= last_paper);
+    assert!(next.pages_after >= first_page);
+
+    // Every window size: bounded windows whose union is exactly the expected set.
+    for limit in [1, 7, 60, DEFAULT_CANDIDATE_LIMIT] {
+        let mut request = request.clone();
+        request.candidate_limit = limit;
+        let mut seen = Vec::new();
+        let mut windows = 0;
+        loop {
+            let page = results(&db, &request);
+            windows += 1;
+            assert!(windows <= 400, "continuations must end (limit {limit})");
+            assert!(page.coverage.scanned_documents <= limit);
+            assert!(!page.coverage.timed_out);
+            seen.extend(page.hits.iter().map(hit_key));
+            assert!(page.next_page.is_none());
+            match page.coverage.continuation {
+                Some(next) => request.cursor = Some(next),
+                None => {
+                    assert_eq!(page.coverage.scan, ScanStatus::Complete);
+                    break;
+                }
+            }
+        }
+        let unique: std::collections::BTreeSet<_> = seen.iter().copied().collect();
+        assert_eq!(unique.len(), seen.len(), "no repeated hit (limit {limit})");
+        assert_eq!(unique, expected, "limit {limit}");
+        if limit == DEFAULT_CANDIDATE_LIMIT {
+            assert_eq!(windows, 1);
+        }
+    }
+
+    // Without narrowing, the bounded default still leaves pages unsearched (explicitly).
+    let mut unscoped = SearchRequest::new("電");
+    unscoped.limit = MAX_LIMIT;
+    let page = results(&db, &unscoped);
+    assert!(page.hits.iter().all(|h| h.source != DocumentSource::Page));
+    assert!(
+        page.coverage
+            .unsearched
+            .contains(&UnsearchedScope::PdfPagesForShortTerms)
+    );
+}
+
 #[test]
 fn corrupted_fts_index_is_detected_and_rebuilt_without_touching_sources() {
     let mut db = LibraryDb::in_memory().unwrap();

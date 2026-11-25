@@ -160,6 +160,21 @@ PDF page を「未検索」と返す（0 件表示と区別、#18 の設計ど�
    `DocumentsAfterWindow` を返す（Linux/macOS 共通、p95 69/89 ms）。完全回答には
    continuation が要る。案: 短語走査を page 文書から先に行う、または narrowing 時は対象
    文書数で window を決める（#18/#21 の範囲、本 PR では変更しない）。
+   - **対応済み（追補）**: 短語走査の window を「書誌・注釈」と「PDF page」の 2 lane に分け、
+     `candidate_limit` を共有する（先頭 lane に半分、残りを page lane、使い残しは他方へ。
+     1 call の走査文書数は従来どおり `candidate_limit` 以下）。cursor は lane ごとの位置
+     `scan_after` / `pages_after` を持つ（[ADR](../ADR/fulltext-search.md) の Scan lanes）。
+     回帰テスト `fts::tests::narrowed_short_term_first_window_reaches_pages_extracted_after_papers`
+     （書誌を先に、page を後に投入し collection で絞る。旧動作では 1 window 目の page hit 0 件で
+     失敗することを確認済み）。Linux（4 vCPU コンテナ）での再測定:
+     10,000 文献 / 200 PDF × 20 page（collection 0 = 2,000 文献 + 800 page、同じ並び）で
+     `fulltext_in_collection:電` は 1 call 目 236 件・`電池` 115 件（旧: 0 件）、いずれも
+     `scanned_documents` 2,000・`DocumentsAfterWindow` 付きの部分回答、max 85 / 71 ms。
+     `AllPages` の短語再現率は 1.0・誤検出 0 のまま、全 14,000 文書を 7 window で走査
+     （[10k-200pdf](ISSUE_30/linux-short-term-lanes/10k-200pdf/queries.json)）。
+     `--small`（200 文献 / 20 PDF × 4 page）は `電` 5 件・`電池` 3 件、complete
+     （[small](ISSUE_30/linux-short-term-lanes/small/queries.json)）。1,000 PDF の通し測定
+     （Linux/macOS）は未再実行。
 5. **索引作成の書き込み量**: 402 MB の DB に 3.13 GB を書いた（約 7.8 倍、WAL/checkpoint と
    FTS segment merge）。案: 一括抽出時の FTS `automerge`/`crisismerge` と WAL checkpoint 間隔の
    調整、または page batch を大きくする。SSD 寿命より時間への影響を実機で確認する。

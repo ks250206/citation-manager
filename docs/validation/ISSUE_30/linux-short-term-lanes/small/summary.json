@@ -1,0 +1,744 @@
+{
+  "quantile": "nearest rank sorted[ceil(p*N)-1]",
+  "measured": {
+    "warm_start_ms": 32.909478,
+    "warm_start_p95_ms": 35.480647999999995,
+    "collection_switch_p95_ms": 2.406958,
+    "tag_and_switch_p95_ms": 1.629339,
+    "metadata_search_p95_ms": 4.336795,
+    "metadata_keyword_p95_ms": 4.336795,
+    "metadata_fts_p95_ms": 2.468466,
+    "fulltext_search_p95_ms": 1.9914699999999999,
+    "fulltext_search_p95_ms_all_terms_default_scope": 1.9914699999999999,
+    "fulltext_in_collection_p95_ms": 1.791407,
+    "short_term_all_pages_call_p95_ms": 3.3387629999999997,
+    "daemon_idle_rss_mib_after_warm_start": 12.78125,
+    "daemon_peak_rss_mib_indexing": 24.98046875,
+    "daemon_peak_rss_mib_queries": 15.359375,
+    "gui_idle_rss_mib": null,
+    "total_idle_rss_mib_gui_plus_daemon": null,
+    "pdf_view_rss_mib": null
+  },
+  "targets": [
+    {
+      "metric": "warm_start_ms",
+      "target": "温かい起動 1秒程度",
+      "limit": 1000.0,
+      "measured": 32.909478,
+      "status": "met"
+    },
+    {
+      "metric": "collection_switch_p95_ms",
+      "target": "コレクション切り替え p95 < 100 ms",
+      "limit": 100.0,
+      "measured": 2.406958,
+      "status": "met"
+    },
+    {
+      "metric": "metadata_search_p95_ms",
+      "target": "メタデータ検索 p95 < 150 ms",
+      "limit": 150.0,
+      "measured": 4.336795,
+      "status": "met"
+    },
+    {
+      "metric": "fulltext_search_p95_ms",
+      "target": "本文全文検索 p95 < 300 ms",
+      "limit": 300.0,
+      "measured": 1.9914699999999999,
+      "status": "met"
+    },
+    {
+      "metric": "gui_idle_rss_mib",
+      "target": "GUI アイドル RSS < 200 MB",
+      "limit": 200.0,
+      "measured": null,
+      "status": "unmeasured"
+    },
+    {
+      "metric": "pdf_view_rss_mib",
+      "target": "PDF 1本閲覧時 RSS < 350 MB",
+      "limit": 350.0,
+      "measured": null,
+      "status": "unmeasured"
+    }
+  ],
+  "cases": {
+    "collection_switch": {
+      "samples": 50,
+      "p50_ms": 1.956257,
+      "p95_ms": 2.406958,
+      "max_ms": 2.785878,
+      "returned": [
+        40
+      ],
+      "detail": {
+        "collection": 9
+      }
+    },
+    "fts_bibliographic:needle": {
+      "samples": 5,
+      "p50_ms": 1.88118,
+      "p95_ms": 2.468466,
+      "max_ms": 2.468466,
+      "returned": [
+        28
+      ],
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 28,
+        "unsearched": "[]"
+      }
+    },
+    "fulltext_default:dendrite": {
+      "samples": 5,
+      "p50_ms": 1.287112,
+      "p95_ms": 1.597708,
+      "max_ms": 1.597708,
+      "returned": [
+        2
+      ],
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 2,
+        "unsearched": "[]"
+      }
+    },
+    "fulltext_default:lithium": {
+      "samples": 5,
+      "p50_ms": 1.929483,
+      "p95_ms": 2.587977,
+      "max_ms": 2.587977,
+      "returned": [
+        16
+      ],
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 16,
+        "unsearched": "[]"
+      }
+    },
+    "fulltext_default:zirconia": {
+      "samples": 5,
+      "p50_ms": 1.011748,
+      "p95_ms": 1.3320210000000001,
+      "max_ms": 1.3320210000000001,
+      "returned": [
+        1
+      ],
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 1,
+        "unsearched": "[]"
+      }
+    },
+    "fulltext_default:固体電解質": {
+      "samples": 5,
+      "p50_ms": 0.8006000000000001,
+      "p95_ms": 0.999614,
+      "max_ms": 0.999614,
+      "returned": [
+        1
+      ],
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 1,
+        "unsearched": "[]"
+      }
+    },
+    "fulltext_default:電": {
+      "samples": 5,
+      "p50_ms": 1.374549,
+      "p95_ms": 1.668711,
+      "max_ms": 1.668711,
+      "returned": [
+        0
+      ],
+      "detail": {
+        "complete": false,
+        "fts_truncated": false,
+        "scanned_documents": 200,
+        "short_terms": [
+          "電"
+        ],
+        "timed_out": false,
+        "total_hits": 0,
+        "unsearched": "[PdfPagesForShortTerms]"
+      }
+    },
+    "fulltext_default:電池": {
+      "samples": 5,
+      "p50_ms": 1.3645319999999999,
+      "p95_ms": 1.678128,
+      "max_ms": 1.678128,
+      "returned": [
+        0
+      ],
+      "detail": {
+        "complete": false,
+        "fts_truncated": false,
+        "scanned_documents": 200,
+        "short_terms": [
+          "電池"
+        ],
+        "timed_out": false,
+        "total_hits": 0,
+        "unsearched": "[PdfPagesForShortTerms]"
+      }
+    },
+    "fulltext_default:電解質": {
+      "samples": 5,
+      "p50_ms": 1.073,
+      "p95_ms": 1.2679399999999998,
+      "max_ms": 1.2679399999999998,
+      "returned": [
+        7
+      ],
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 7,
+        "unsearched": "[]"
+      }
+    },
+    "fulltext_in_collection:dendrite": {
+      "samples": 5,
+      "p50_ms": 1.181716,
+      "p95_ms": 1.521841,
+      "max_ms": 1.521841,
+      "returned": [
+        1
+      ],
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 1,
+        "unsearched": "[]"
+      }
+    },
+    "fulltext_in_collection:lithium": {
+      "samples": 5,
+      "p50_ms": 1.210317,
+      "p95_ms": 1.644667,
+      "max_ms": 1.644667,
+      "returned": [
+        2
+      ],
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 2,
+        "unsearched": "[]"
+      }
+    },
+    "fulltext_in_collection:zirconia": {
+      "samples": 5,
+      "p50_ms": 1.146154,
+      "p95_ms": 1.366622,
+      "max_ms": 1.366622,
+      "returned": [
+        1
+      ],
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 1,
+        "unsearched": "[]"
+      }
+    },
+    "fulltext_in_collection:固体電解質": {
+      "samples": 5,
+      "p50_ms": 0.83887,
+      "p95_ms": 1.1914479999999998,
+      "max_ms": 1.1914479999999998,
+      "returned": [
+        1
+      ],
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 1,
+        "unsearched": "[]"
+      }
+    },
+    "fulltext_in_collection:電": {
+      "samples": 5,
+      "p50_ms": 1.6892120000000002,
+      "p95_ms": 1.9825799999999998,
+      "max_ms": 1.9825799999999998,
+      "returned": [
+        5
+      ],
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 56,
+        "short_terms": [
+          "電"
+        ],
+        "timed_out": false,
+        "total_hits": 5,
+        "unsearched": "[]"
+      }
+    },
+    "fulltext_in_collection:電池": {
+      "samples": 5,
+      "p50_ms": 1.467851,
+      "p95_ms": 1.791407,
+      "max_ms": 1.791407,
+      "returned": [
+        3
+      ],
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 56,
+        "short_terms": [
+          "電池"
+        ],
+        "timed_out": false,
+        "total_hits": 3,
+        "unsearched": "[]"
+      }
+    },
+    "fulltext_in_collection:電解質": {
+      "samples": 5,
+      "p50_ms": 0.967159,
+      "p95_ms": 1.078928,
+      "max_ms": 1.078928,
+      "returned": [
+        3
+      ],
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 3,
+        "unsearched": "[]"
+      }
+    },
+    "metadata_combined": {
+      "samples": 5,
+      "p50_ms": 2.29706,
+      "p95_ms": 2.817513,
+      "max_ms": 2.817513,
+      "returned": [
+        1
+      ],
+      "detail": {}
+    },
+    "metadata_keyword": {
+      "samples": 5,
+      "p50_ms": 3.2301320000000002,
+      "p95_ms": 4.336795,
+      "max_ms": 4.336795,
+      "returned": [
+        28
+      ],
+      "detail": {}
+    },
+    "metadata_no_hit": {
+      "samples": 5,
+      "p50_ms": 2.320186,
+      "p95_ms": 2.881715,
+      "max_ms": 2.881715,
+      "returned": [
+        0
+      ],
+      "detail": {}
+    },
+    "tag_and_switch": {
+      "samples": 40,
+      "p50_ms": 1.386916,
+      "p95_ms": 1.629339,
+      "max_ms": 1.807462,
+      "returned": [
+        25
+      ],
+      "detail": {
+        "tag": 7
+      }
+    }
+  },
+  "recall": [
+    {
+      "term": "dendrite",
+      "scalars": 8,
+      "scope": "Bounded",
+      "expected": 2,
+      "found": 2,
+      "recall": 1.0,
+      "false_positives": 0,
+      "windows": 1,
+      "calls": 1,
+      "call_p95_ms": 1.076413,
+      "total_ms": 1.0810469999999999,
+      "complete": true,
+      "unsearched": "[]"
+    },
+    {
+      "term": "dendrite",
+      "scalars": 8,
+      "scope": "AllPages",
+      "expected": 2,
+      "found": 2,
+      "recall": 1.0,
+      "false_positives": 0,
+      "windows": 1,
+      "calls": 1,
+      "call_p95_ms": 1.032875,
+      "total_ms": 1.037554,
+      "complete": true,
+      "unsearched": "[]"
+    },
+    {
+      "term": "lithium",
+      "scalars": 7,
+      "scope": "Bounded",
+      "expected": 16,
+      "found": 16,
+      "recall": 1.0,
+      "false_positives": 0,
+      "windows": 1,
+      "calls": 1,
+      "call_p95_ms": 1.853877,
+      "total_ms": 1.86122,
+      "complete": true,
+      "unsearched": "[]"
+    },
+    {
+      "term": "lithium",
+      "scalars": 7,
+      "scope": "AllPages",
+      "expected": 16,
+      "found": 16,
+      "recall": 1.0,
+      "false_positives": 0,
+      "windows": 1,
+      "calls": 1,
+      "call_p95_ms": 1.766771,
+      "total_ms": 1.7714619999999999,
+      "complete": true,
+      "unsearched": "[]"
+    },
+    {
+      "term": "zirconia",
+      "scalars": 8,
+      "scope": "Bounded",
+      "expected": 1,
+      "found": 1,
+      "recall": 1.0,
+      "false_positives": 0,
+      "windows": 1,
+      "calls": 1,
+      "call_p95_ms": 1.00866,
+      "total_ms": 1.0117559999999999,
+      "complete": true,
+      "unsearched": "[]"
+    },
+    {
+      "term": "zirconia",
+      "scalars": 8,
+      "scope": "AllPages",
+      "expected": 1,
+      "found": 1,
+      "recall": 1.0,
+      "false_positives": 0,
+      "windows": 1,
+      "calls": 1,
+      "call_p95_ms": 0.935855,
+      "total_ms": 0.9379670000000001,
+      "complete": true,
+      "unsearched": "[]"
+    },
+    {
+      "term": "固体電解質",
+      "scalars": 5,
+      "scope": "Bounded",
+      "expected": 1,
+      "found": 1,
+      "recall": 1.0,
+      "false_positives": 0,
+      "windows": 1,
+      "calls": 1,
+      "call_p95_ms": 0.714959,
+      "total_ms": 0.717631,
+      "complete": true,
+      "unsearched": "[]"
+    },
+    {
+      "term": "固体電解質",
+      "scalars": 5,
+      "scope": "AllPages",
+      "expected": 1,
+      "found": 1,
+      "recall": 1.0,
+      "false_positives": 0,
+      "windows": 1,
+      "calls": 1,
+      "call_p95_ms": 0.702582,
+      "total_ms": 0.704682,
+      "complete": true,
+      "unsearched": "[]"
+    },
+    {
+      "term": "電",
+      "scalars": 1,
+      "scope": "Bounded",
+      "expected": 24,
+      "found": 0,
+      "recall": 0.0,
+      "false_positives": 0,
+      "windows": 1,
+      "calls": 1,
+      "call_p95_ms": 1.222501,
+      "total_ms": 1.2263709999999999,
+      "complete": false,
+      "unsearched": "[PdfPagesForShortTerms]"
+    },
+    {
+      "term": "電",
+      "scalars": 1,
+      "scope": "AllPages",
+      "expected": 24,
+      "found": 24,
+      "recall": 1.0,
+      "false_positives": 0,
+      "windows": 1,
+      "calls": 1,
+      "call_p95_ms": 3.3387629999999997,
+      "total_ms": 3.347339,
+      "complete": true,
+      "unsearched": "[]"
+    },
+    {
+      "term": "電池",
+      "scalars": 2,
+      "scope": "Bounded",
+      "expected": 12,
+      "found": 0,
+      "recall": 0.0,
+      "false_positives": 0,
+      "windows": 1,
+      "calls": 1,
+      "call_p95_ms": 1.3558089999999998,
+      "total_ms": 1.361707,
+      "complete": false,
+      "unsearched": "[PdfPagesForShortTerms]"
+    },
+    {
+      "term": "電池",
+      "scalars": 2,
+      "scope": "AllPages",
+      "expected": 12,
+      "found": 12,
+      "recall": 1.0,
+      "false_positives": 0,
+      "windows": 1,
+      "calls": 1,
+      "call_p95_ms": 2.703636,
+      "total_ms": 2.710968,
+      "complete": true,
+      "unsearched": "[]"
+    },
+    {
+      "term": "電解質",
+      "scalars": 3,
+      "scope": "Bounded",
+      "expected": 7,
+      "found": 7,
+      "recall": 1.0,
+      "false_positives": 0,
+      "windows": 1,
+      "calls": 1,
+      "call_p95_ms": 1.093588,
+      "total_ms": 1.09825,
+      "complete": true,
+      "unsearched": "[]"
+    },
+    {
+      "term": "電解質",
+      "scalars": 3,
+      "scope": "AllPages",
+      "expected": 7,
+      "found": 7,
+      "recall": 1.0,
+      "false_positives": 0,
+      "windows": 1,
+      "calls": 1,
+      "call_p95_ms": 0.954027,
+      "total_ms": 0.958456,
+      "complete": true,
+      "unsearched": "[]"
+    }
+  ],
+  "fulltext_complete_cases": 5,
+  "fulltext_cases": 7,
+  "parameters": {
+    "papers": 200,
+    "pdfs": 20,
+    "pages_per_pdf": 4,
+    "pages": 80,
+    "samples": 5,
+    "warm_repeats": 3,
+    "seed": 30
+  },
+  "timings": {
+    "build_s": 178.56714796300002,
+    "corpus_s": 0.0758447780001461
+  },
+  "seed": {
+    "papers": {
+      "method": "dedicated fixture SQL connection, one transaction, FULL/WAL (search triggers fire); not CRUD throughput",
+      "papers": 200,
+      "seed_ms": 161.527906
+    },
+    "pdfs": 20,
+    "pdf_bytes": 205176,
+    "attach_ms": 33.026145
+  },
+  "index": {
+    "wall_s_including_idle_exit": 2.5099969939999482,
+    "extract_jobs_span_s": 0.47,
+    "rusage": {
+      "user_s": 0.394302,
+      "system_s": 0.036967,
+      "max_rss_kib": 43244,
+      "in_blocks": 8704,
+      "out_blocks": 17264,
+      "voluntary_ctx": 721,
+      "involuntary_ctx": 2
+    },
+    "peak_rss_kib": 25580,
+    "last_io": {
+      "rss_kib": 25580,
+      "cpu_s": 0.0,
+      "read_bytes": 4456448,
+      "write_bytes": 8024064,
+      "rchar": 12439373,
+      "wchar": 7804981
+    }
+  },
+  "stats": {
+    "integrity_check": "ok",
+    "papers": 200,
+    "attachments": 20,
+    "fulltext_pages": 80,
+    "fulltext_text_bytes": 187700,
+    "search_documents": 280,
+    "extraction_states": {
+      "complete": {
+        "attachments": 20,
+        "pages": 80,
+        "pages_with_text": 80
+      }
+    },
+    "index_bytes": {
+      "fulltext_pages": 331776,
+      "search_documents": 536576,
+      "search_documents_attachment": 12288,
+      "search_documents_paper": 20480,
+      "search_fts_trigram_config": 4096,
+      "search_fts_trigram_data": 978944,
+      "search_fts_trigram_docsize": 12288,
+      "search_fts_trigram_idx": 4096,
+      "search_fts_words_config": 4096,
+      "search_fts_words_data": 299008,
+      "search_fts_words_docsize": 12288,
+      "search_fts_words_idx": 4096,
+      "search_index_state": 4096,
+      "sqlite_autoindex_search_documents_1": 16384
+    },
+    "index_bytes_total": 2240512,
+    "file_bytes": {
+      "attachments_dir": 205176,
+      "backups_dir": 311296,
+      "library_sqlite": 3092480,
+      "library_sqlite_wal": 0
+    }
+  },
+  "corpus": {
+    "generated_chars": 117060,
+    "pdf_bytes": 205176,
+    "corpus_sha256": "6edc06d2a881725c4c5177e9e34632b56755b6059a98a1b1510a2b9c0a8be678",
+    "terms": {
+      "電": 24,
+      "電池": 12,
+      "電解質": 7,
+      "固体電解質": 1,
+      "lithium": 16,
+      "dendrite": 2,
+      "zirconia": 1
+    }
+  },
+  "warm_runs": [
+    {
+      "repeat": 0,
+      "first_page_ms": 31.904654999999998,
+      "connected_ms": 25.796517,
+      "rss_kib": 12992
+    },
+    {
+      "repeat": 1,
+      "first_page_ms": 32.909478,
+      "connected_ms": 27.205459,
+      "rss_kib": 12544
+    },
+    {
+      "repeat": 2,
+      "first_page_ms": 35.480647999999995,
+      "connected_ms": 26.960452,
+      "rss_kib": 13088
+    }
+  ],
+  "queries_rusage": {
+    "user_s": 0.28224499999999997,
+    "system_s": 0.03648,
+    "max_rss_kib": 43244,
+    "in_blocks": 0,
+    "out_blocks": 112,
+    "voluntary_ctx": 940,
+    "involuntary_ctx": 1
+  },
+  "queries_rss_kib_before": 11696,
+  "queries_rss_kib_after": 15372,
+  "gui": {},
+  "environment_file": "environment.json"
+}

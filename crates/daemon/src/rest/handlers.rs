@@ -492,21 +492,27 @@ struct SearchQuery {
     timeout_ms: Option<u32>,
 }
 
+/// `scan_after.offset.pages_after`; a two-part cursor (before the page lane) has
+/// `pages_after = 0`.
 fn search_cursor(cursor: &SearchCursor) -> String {
-    encode_cursor(&format!("{}.{}", cursor.scan_after, cursor.offset))
+    encode_cursor(&format!(
+        "{}.{}.{}",
+        cursor.scan_after, cursor.offset, cursor.pages_after
+    ))
 }
 fn parse_search_cursor(text: &str) -> Result<SearchCursor, ApiError> {
     let raw = decode_cursor(text)?;
-    let (scan, offset) = raw
-        .split_once('.')
-        .ok_or_else(|| ApiError::invalid("invalid cursor"))?;
+    let bad = || ApiError::invalid("invalid cursor");
+    let parts: Vec<&str> = raw.split('.').collect();
+    let (scan, offset, pages) = match parts[..] {
+        [scan, offset] => (scan, offset, "0"),
+        [scan, offset, pages] => (scan, offset, pages),
+        _ => return Err(bad()),
+    };
     Ok(SearchCursor {
-        scan_after: scan
-            .parse()
-            .map_err(|_| ApiError::invalid("invalid cursor"))?,
-        offset: offset
-            .parse()
-            .map_err(|_| ApiError::invalid("invalid cursor"))?,
+        scan_after: scan.parse().map_err(|_| bad())?,
+        offset: offset.parse().map_err(|_| bad())?,
+        pages_after: pages.parse().map_err(|_| bad())?,
     })
 }
 
