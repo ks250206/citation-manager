@@ -184,7 +184,7 @@ Infrastructure
 | `fulltext_pages` | id, attachment_id, page_index, text, extraction_status, updated_at |
 | `annotations` | id, attachment_id, page_index, type, quote_text, context_before, context_after, quads_json, color, comment, created_at, updated_at |
 | `jobs` | id, type, payload_json, state, progress, attempts, last_error, created_at, updated_at |
-| `api_tokens` | id, name, token_hash, scopes_json, created_at, revoked_at |
+| `daemon_grants` | id, token_sha256, label, capabilities_json, client_kind, scopes_json, expires_at_ms, revoked_at_ms（#26: 当初案の `api_tokens` は廃止し #25 の grant に統合） |
 | `schema_migrations` | version, applied_at |
 
 ### 6.2 主要な制約
@@ -1020,3 +1020,16 @@ HTTPS・全 DNS 応答/redirect の公開 IP 検査・接続先 pin・cookie/認
 検査付きで取得し、SHA-256 で重複排除して添付する。失敗しても文献は巻き戻さず、一時的失敗は
 上限付き自動再試行、それ以外は理由付き failed と明示 retry。認証が必要な PDF は迂回せず、
 ブラウザでのダウンロード後の明示取り込みを案内する。
+
+## 36. #26 token/grant 管理・scope・API 設定
+
+[api-tokens-grants ADR](docs/ADR/api-tokens-grants.md) が §13.1–13.4/§14.1/§17 の実装上の明確化となる。
+API/MCP/CLI token は #25 の daemon grant で、scope は `cm_core::policy::scopes` の固定 capability 集合と
+REST/MCP/CLI 対応表（#27–#29 が import）。§13.2 の `/search` は本文・注釈 snippet を返すため
+`papers:read files:read annotations:read` を要する。token は常に期限付き（read 90/最大365日、write 30/最大90日）、
+平文は一度だけ表示し OS secret store（Keychain/Secret Service、無ければ弱い 0600 file）、DB は SHA-256 のみ。
+失効・scope 変更は live session の次の要求から即時。MCP は read-only 既定、write は確認付き別操作。
+一括削除/移動は grant 毎 60 秒 10/25 件を超えると最大 15 分の明示 elevation が必要。API は既定 OFF、
+127.0.0.1/::1 と 1024–65535 のみ保存（listener は #27）。export は許可フォルダ限定。監査ログは
+内容・秘密なしの有界 file。GUI「API & integrations」と `papersd token|api` CLI bootstrap を提供する。
+証跡は [ISSUE_26](docs/validation/ISSUE_26.md)。

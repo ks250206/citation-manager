@@ -55,7 +55,8 @@ Serve (started by an AI client; stdout is MCP protocol only, logs go to stderr):
 
 Grants (run by the library owner in a terminal; uses the owner's desktop credential):
   papers-mcp grant  --library ABS [--write] [--export] [--ttl 8h] [--credential-file ABS] ...
-      Issue an MCP grant (read-only unless --write; --export allows export_citations)
+      Issue an MCP grant (read-only unless --write, which allows the paper, organization
+      and add_annotation tools; --export allows export_citations)
       and store its secret in the credential file (0600). Replaces and revokes the grant
       the file held before; a running server switches on its next call. Expiry: write or
       export grants 8h by default (max 90d), read-only 90d (max 365d); --ttl Nm|Nh|Nd.

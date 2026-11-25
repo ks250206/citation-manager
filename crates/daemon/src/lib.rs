@@ -1,5 +1,11 @@
 //! Service composition root and `papersd` (#25): the single library writer behind
 //! authenticated local IPC. HTTP stays off (#27).
+/// #26 CLI bootstrap (`papersd token …`, `papersd api …`).
+pub mod admin;
+/// #26 tokens, MCP profiles, elevation and local API settings.
+pub mod api;
+/// #26 bounded audit log.
+pub mod audit;
 pub mod desktop_worker;
 pub mod fulltext;
 pub mod ipc;

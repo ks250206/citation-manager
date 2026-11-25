@@ -2,11 +2,23 @@
 //! `LocalConnector` (GUI/CLI/MCP/native host); exits when idle. No HTTP listener.
 //!
 //! Exit status: 0 idle exit, 75 another daemon already serves the library, 2 usage, 1 error.
+//!
+//! #26: `papersd token …` and `papersd api …` are the GUI-less bootstrap (see `admin`).
 #[cfg(unix)]
 fn main() {
     use cm_daemon::ipc::{DaemonConfig, StartError, start};
-    use std::{path::PathBuf, time::Duration};
-    let mut args = std::env::args_os().skip(1);
+    use std::{io::IsTerminal, path::PathBuf, time::Duration};
+    let all: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
+    if cm_daemon::admin::is_admin(all.first().map(|a| a.as_os_str())) {
+        let tty = std::io::stdout().is_terminal();
+        std::process::exit(cm_daemon::admin::run(
+            &all,
+            tty,
+            &mut std::io::stdout(),
+            &mut std::io::stderr(),
+        ));
+    }
+    let mut args = all.into_iter();
     let mut library = None;
     let mut runtime_dir = None;
     let mut settings = None;

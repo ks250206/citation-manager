@@ -24,6 +24,10 @@ pub struct Grant {
     /// Unix epoch milliseconds; `None` means until revoked.
     pub expires_at_ms: Option<i64>,
     pub revoked: bool,
+    /// #26 time-limited, user-approved bulk elevation: until this instant the grant also
+    /// holds `BulkElevated` (subject to session narrowing). `None` = not elevated.
+    #[serde(default)]
+    pub elevated_until_ms: Option<i64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -61,6 +65,7 @@ pub fn check_live(grant: Option<&Grant>, now_ms: i64) -> Result<&Grant, Denial> 
 }
 
 /// Effective session capabilities: stored grant ∩ requested narrowing (if any).
+/// Ignores time-limited elevation; use `effective_at` for authorization decisions.
 pub fn effective(grant: &Grant, requested: Option<&CapabilitySet>) -> CapabilitySet {
     match requested {
         Some(requested) => grant
@@ -72,6 +77,23 @@ pub fn effective(grant: &Grant, requested: Option<&CapabilitySet>) -> Capability
     }
 }
 
+/// `effective` plus `BulkElevated` while a user-approved elevation is running. The
+/// elevation is narrowed like any other capability: a session that requested a set without
+/// `BulkElevated` does not receive it.
+pub fn effective_at(
+    grant: &Grant,
+    requested: Option<&CapabilitySet>,
+    now_ms: i64,
+) -> CapabilitySet {
+    let mut held = effective(grant, requested);
+    if grant.elevated_until_ms.is_some_and(|until| now_ms < until)
+        && requested.is_none_or(|r| r.contains(&Capability::BulkElevated))
+    {
+        held.insert(Capability::BulkElevated);
+    }
+    held
+}
+
 /// Default deny: live grant AND the operation's requirement within the narrowed set.
 pub fn authorize(
     grant: Option<&Grant>,
@@ -80,7 +102,7 @@ pub fn authorize(
     now_ms: i64,
 ) -> Result<CapabilitySet, Denial> {
     let grant = check_live(grant, now_ms)?;
-    let held = effective(grant, requested);
+    let held = effective_at(grant, requested, now_ms);
     if operation.requirement().satisfied_by(&held) {
         Ok(held)
     } else {
@@ -121,6 +143,7 @@ mod tests {
             capabilities: caps,
             expires_at_ms: Some(1_000),
             revoked: false,
+            elevated_until_ms: None,
         }
     }
 

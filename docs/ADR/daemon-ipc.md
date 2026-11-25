@@ -1,8 +1,9 @@
 # #25: papersd, authenticated local IPC, single writer, durable jobs
 
 Status: adopted for M4-1 on Linux/Unix. macOS lifecycle/.app placement is not verified here
-(#34). Concrete feature contracts extend this compatibly; HTTP (#27), persistent token UI and
-grant management (#26), CLI (#28) and MCP tools (#29) build on it.
+(#34). Concrete feature contracts extend this compatibly; HTTP (#27), CLI (#28) and MCP tools
+(#29) build on it. Persistent tokens, scopes, elevation, audit and API settings (#26):
+[api-tokens-grants](api-tokens-grants.md).
 
 ## Processes and ownership
 

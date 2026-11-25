@@ -1,4 +1,5 @@
 //! Descriptions and UI availability only. Command IDs are never authorization grants.
+mod api;
 mod deferred;
 mod library;
 mod pdf;
@@ -7,6 +8,7 @@ mod workbench;
 
 use std::collections::BTreeMap;
 
+pub use api::{api_commands, ids as api_ids};
 pub use deferred::deferred_commands;
 pub use library::{ids, library_commands};
 pub use pdf::{ids as pdf_ids, pdf_commands};
@@ -135,6 +137,7 @@ impl CommandRegistry {
             .chain(workbench_commands())
             .chain(pdf_commands())
             .chain(pdf_export_commands())
+            .chain(api_commands())
             .chain(deferred_commands())
         {
             registry

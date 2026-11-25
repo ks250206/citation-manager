@@ -86,17 +86,20 @@ jobs:
       - name: Exact toolchain and PDF-only validation tools
         run: |
           rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
-          python3 -m venv target/pdfium-tools
-          target/pdfium-tools/bin/python -m pip install -r scripts/pdfium/requirements.txt
+          python3 -m venv $RUNNER_TEMP/pdfium-tools
+          $RUNNER_TEMP/pdfium-tools/bin/python -m pip install -r scripts/pdfium/requirements.txt
       - name: Rust build cache (saved from main only; PRs restore it)
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: pdfium-runtime
           save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Drop non-cargo outputs restored with the build cache
+        # rust-cache restores target/; PDF evidence, fetched runtimes and export fixtures must be fresh.
+        run: rm -rf target/pdfium-validation target/pdfium-poc target/pdfium-linux target/pdf-export-test-* target/pdfium-tools
       - name: Lint runtime feature (no GPUI policy change)
         run: cargo clippy -p cm-pdf --all-targets --features runtime --locked -- -D warnings
       - name: Pinned dylib runtime and independent PDFKit gate (missing prerequisites fail)
-        run: target/pdfium-tools/bin/python scripts/pdfium/run.py --out target/pdfium-validation/ci
+        run: $RUNNER_TEMP/pdfium-tools/bin/python scripts/pdfium/run.py --out target/pdfium-validation/ci
       - name: Exercise bounded PDF metadata operation on the verified runtime
         run: CM_PDFIUM_LIBRARY="$GITHUB_WORKSPACE/target/pdfium-poc/lib/libpdfium.dylib" cargo test -p cm-pdf --test metadata_runtime --features runtime --locked
       - name: Preserve runtime reports and independently rendered exports
@@ -124,6 +127,9 @@ jobs:
         with:
           shared-key: linux-native
           save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Drop non-cargo outputs restored with the build cache
+        # rust-cache restores target/; PDF evidence, fetched runtimes and export fixtures must be fresh.
+        run: rm -rf target/pdfium-validation target/pdfium-poc target/pdfium-linux target/pdf-export-test-* target/pdfium-tools
       - run: cargo clippy -p cm-desktop --all-targets --features native-gpui --locked -- -D warnings
       - run: cargo clippy -p cm-daemon --all-targets --features desktop-bootstrap --locked -- -D warnings
       - run: cargo test -p cm-daemon -p cm-desktop --features cm-daemon/desktop-bootstrap --locked
@@ -138,6 +144,6 @@ jobs:
       - name: Independent check of the annotated export (pypdf structure + poppler rendering, no PDFium)
         run: |
           sudo apt-get install -y poppler-utils
-          python3 -m venv target/pdfium-tools
-          target/pdfium-tools/bin/python -m pip install -r scripts/pdfium/requirements.txt
-          target/pdfium-tools/bin/python scripts/pdfium/validate_export.py target/pdf-export-test-*
+          python3 -m venv $RUNNER_TEMP/pdfium-tools
+          $RUNNER_TEMP/pdfium-tools/bin/python -m pip install -r scripts/pdfium/requirements.txt
+          $RUNNER_TEMP/pdfium-tools/bin/python scripts/pdfium/validate_export.py target/pdf-export-test-*

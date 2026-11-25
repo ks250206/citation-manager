@@ -22,7 +22,7 @@ use crate::{
     search::{FulltextReply, FulltextRequest, SearchReply, SearchRequest},
     settings::{Settings, SettingsLoaded},
 };
-pub use cm_core::policy::{Capability, CapabilitySet, Denial, GrantId, Operation};
+pub use cm_core::policy::{Capability, CapabilitySet, Denial, GrantId, Operation, Requirement};
 use serde::{Deserialize, Serialize};
 
 pub const PROTOCOL_VERSION: u32 = 1;
@@ -135,6 +135,8 @@ pub enum Command {
     Annotations(crate::annotations::AnnotationRequest),
     /// #22 browser/MCP capture (preview, preview-bound commit, PDF job status/retry).
     Capture(CaptureCommand),
+    /// #26 tokens, MCP profiles, elevation, API settings and audit (GrantAdmin only).
+    Api(crate::api::ApiCommand),
 }
 impl Command {
     pub fn operation(&self) -> Operation {
@@ -189,6 +191,7 @@ impl Command {
                 GrantCommand::List => O::GrantList,
                 GrantCommand::Revoke(_) => O::GrantRevoke,
             },
+            Self::Api(c) => c.operation(),
             Self::Search(_) => O::FulltextSearch,
             Self::Fulltext(r) => match r {
                 FulltextRequest::Status(_) | FulltextRequest::AttachmentStatus(_) => {
@@ -197,6 +200,16 @@ impl Command {
                 FulltextRequest::Pages(_) => O::FulltextRead,
             },
             Self::Capture(c) => c.operation(),
+        }
+    }
+    /// Most OS secret-store helper runs the daemon may wait on before answering (see
+    /// `ApiCommand::secret_store_steps`); 0 for commands that never touch the store.
+    pub fn secret_store_steps(&self) -> u32 {
+        match self {
+            Self::Api(c) => c.secret_store_steps(),
+            // Revoking deletes the grant's stored token copy, as `ApiCommand::Revoke` does.
+            Self::Grants(GrantCommand::Revoke(_)) => 1,
+            _ => 0,
         }
     }
 }
@@ -221,6 +234,7 @@ pub enum Reply {
     Fulltext(FulltextReply),
     Annotations(crate::annotations::AnnotationReply),
     Capture(CaptureReply),
+    Api(crate::api::ApiReply),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

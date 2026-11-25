@@ -71,6 +71,12 @@ path = "../../tests/integration/daemon/lifecycle.rs"
 name = "daemon_jobs"
 path = "../../tests/integration/daemon/jobs.rs"
 
+# #26 scoped tokens, revocation/scope changes on live sessions, elevation, export folders,
+# settings across restart and the papersd CLI bootstrap (memory secret store).
+[[test]]
+name = "daemon_api"
+path = "../../tests/integration/daemon/api_tokens.rs"
+
 # #18 extraction jobs, search IPC and authorization (deterministic extractor, no PDFium).
 [[test]]
 name = "daemon_fulltext"

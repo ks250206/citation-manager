@@ -1,19 +1,9 @@
-use super::{Command, Requirement};
+use super::Command;
 
 /// Known design examples only. Their feature owners replace these descriptors when connected.
+/// Every former placeholder (#21's PDF/search commands, #26's `api.open_settings`) is
+/// connected now, so the provider is empty; it stays as the slot for future designs that are
+/// registered before their feature lands (`Requirement::Deferred`).
 pub fn deferred_commands() -> Vec<Command> {
-    [(
-        "api.open_settings",
-        "Open API Settings",
-        26,
-        "API settings are not connected",
-    )]
-    .into_iter()
-    .map(|(id, title, issue, reason)| Command {
-        id,
-        title,
-        description: reason,
-        requirement: Requirement::Deferred { issue, reason },
-    })
-    .collect()
+    Vec::new()
 }
