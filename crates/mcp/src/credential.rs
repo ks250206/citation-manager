@@ -103,6 +103,22 @@ impl FileCredential {
                 "the credential file path must be absolute ({ENV_CREDENTIAL_FILE} or --credential-file)"
             ));
         }
+        // The owner's bootstrap credential (GrantAdmin) must never be served to an AI client,
+        // nor overwritten/revoked by `grant`/`revoke`. Compare canonical forms when possible.
+        let canonical = |p: &Path| {
+            p.parent()
+                .and_then(|d| d.canonicalize().ok())
+                .zip(p.file_name())
+                .map(|(d, n)| d.join(n))
+                .unwrap_or_else(|| p.to_owned())
+        };
+        if path == paths.desktop_credential
+            || canonical(&path) == canonical(&paths.desktop_credential)
+        {
+            return Err(
+                "refusing to use the owner's desktop credential as the MCP credential file".into(),
+            );
+        }
         Ok(Self { path, uid })
     }
 }
@@ -191,6 +207,93 @@ impl Profile {
             (true, true) => "mcp write+export",
         }
     }
+    /// Expiry policy. Aligned with #26's `scopes::lifetime` maxima (write 90 d, read-only
+    /// 365 d; read-only also keeps its 90 d default) without depending on that branch, but
+    /// write/export grants for an AI client default to a short working session.
+    pub fn lifetime(self) -> Lifetime {
+        if self.write || self.export {
+            Lifetime {
+                default_ms: 8 * HOUR_MS,
+                max_ms: 90 * DAY_MS,
+            }
+        } else {
+            Lifetime {
+                default_ms: 90 * DAY_MS,
+                max_ms: 365 * DAY_MS,
+            }
+        }
+    }
+    /// Absolute expiry for a grant issued at `now_ms` (`ttl_ms` defaults per profile).
+    pub fn expires_at(self, ttl_ms: Option<i64>, now_ms: i64) -> Result<i64, String> {
+        let life = self.lifetime();
+        let ttl = ttl_ms.unwrap_or(life.default_ms);
+        if ttl <= 0 {
+            return Err("--ttl must be positive".into());
+        }
+        if ttl > life.max_ms {
+            return Err(format!(
+                "--ttl exceeds the maximum of {} days for {} grants",
+                life.max_ms / DAY_MS,
+                self.label()
+            ));
+        }
+        Ok(now_ms.saturating_add(ttl))
+    }
+}
+
+pub const MINUTE_MS: i64 = 60_000;
+pub const HOUR_MS: i64 = 60 * MINUTE_MS;
+pub const DAY_MS: i64 = 24 * HOUR_MS;
+
+/// Default and maximum lifetime of an issued MCP grant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Lifetime {
+    pub default_ms: i64,
+    pub max_ms: i64,
+}
+
+/// `30m`, `8h`, `7d` (a positive integer and a unit).
+pub fn parse_ttl(text: &str) -> Result<i64, String> {
+    let text = text.trim();
+    let cut = text.char_indices().last().map_or(0, |(i, _)| i);
+    let (number, unit) = text.split_at(cut);
+    let factor = match unit {
+        "m" => MINUTE_MS,
+        "h" => HOUR_MS,
+        "d" => DAY_MS,
+        _ => return Err("--ttl needs a number and a unit: m, h or d (e.g. 8h)".into()),
+    };
+    number
+        .parse::<i64>()
+        .ok()
+        .filter(|n| *n > 0)
+        .and_then(|n| n.checked_mul(factor))
+        .ok_or_else(|| "--ttl needs a positive number and a unit: m, h or d (e.g. 8h)".into())
+}
+
+/// The daemon's reserved label of the owner's bootstrap grant (#25).
+pub const DESKTOP_BOOTSTRAP_LABEL: &str = "desktop-bootstrap";
+
+/// Only MCP grants may be replaced or revoked by these commands: never the owner's
+/// bootstrap grant, another client's grant, or anything holding GrantAdmin.
+fn ensure_mcp_grant(label: &str, capabilities: &CapabilitySet) -> Result<(), String> {
+    if label == DESKTOP_BOOTSTRAP_LABEL
+        || capabilities.contains(&Capability::GrantAdmin)
+        || !label.starts_with(LABEL_PREFIX)
+    {
+        return Err(format!(
+            "refusing to touch grant {label:?}: it is not an MCP grant (owner/admin grants are \
+             managed in the app)"
+        ));
+    }
+    Ok(())
+}
+
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
 }
 
 /// Owner (GrantAdmin) session over the desktop bootstrap credential, starting papersd.
@@ -212,13 +315,41 @@ fn grant_of(
     let mut connector = LocalConnector::new(paths.clone(), uid, CLIENT_KIND);
     connector.credential = CredentialSource::Explicit(credential);
     match Session::open(&connector) {
+        // No narrowing was requested, so these are the grant's full capabilities.
+        Ok(session)
+            if session
+                .welcome
+                .capabilities
+                .contains(&Capability::GrantAdmin) =>
+        {
+            Err(
+                "the credential file holds an owner (GrantAdmin) credential; refusing to use, \
+             replace or revoke it"
+                    .into(),
+            )
+        }
         Ok(session) => Ok(Some(session.welcome.grant)),
         Err(ClientError::Rejected(HandshakeRejection::Unauthenticated)) => Ok(None),
         Err(e) => Err(format!("cannot reach the library daemon: {e}")),
     }
 }
 
+fn all_grants(owner: &mut Session) -> Result<Vec<GrantInfo>, String> {
+    match owner.call(Command::Grants(GrantCommand::List)) {
+        Ok(Ok(Reply::Grants(GrantReply::Grants(grants)))) => Ok(grants),
+        Ok(Ok(_)) => Err("unexpected daemon reply".into()),
+        Ok(Err(e)) => Err(format!("grant listing refused: {e:?}")),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+/// Revokes `grant` after checking (on the daemon's current list) that it is an MCP grant.
 fn revoke_with(owner: &mut Session, grant: GrantId) -> Result<(), String> {
+    let info = all_grants(owner)?
+        .into_iter()
+        .find(|g| g.id == grant)
+        .ok_or_else(|| format!("grant {grant} does not exist"))?;
+    ensure_mcp_grant(&info.label, &info.capabilities)?;
     match owner.call(Command::Grants(GrantCommand::Revoke(grant))) {
         Ok(Ok(_)) => Ok(()),
         Ok(Err(e)) => Err(format!("revocation of grant {grant} refused: {e:?}")),
@@ -233,18 +364,27 @@ pub fn issue(
     uid: u32,
     launch: Option<Launch>,
     profile: Profile,
+    ttl_ms: Option<i64>,
     file: &FileCredential,
 ) -> Result<GrantInfo, String> {
+    let expires_at_ms = profile.expires_at(ttl_ms, now_ms())?;
     let mut owner = owner_session(paths, uid, launch)?;
     let previous = match file.load() {
         Ok(credential) => grant_of(paths, uid, credential)?,
         Err(_) => None,
     };
+    // Never replace a file whose grant this command may not revoke afterwards.
+    if let Some(old) = previous {
+        let grants = all_grants(&mut owner)?;
+        if let Some(info) = grants.iter().find(|g| g.id == old) {
+            ensure_mcp_grant(&info.label, &info.capabilities)?;
+        }
+    }
     let reply = owner
         .call(Command::Grants(GrantCommand::Issue {
             label: profile.label().into(),
             capabilities: profile.capabilities(),
-            expires_at_ms: None,
+            expires_at_ms: Some(expires_at_ms),
         }))
         .map_err(|e| e.to_string())?
         .map_err(|e| format!("grant refused: {e:?}"))?;
@@ -310,15 +450,10 @@ pub fn list(
     launch: Option<Launch>,
 ) -> Result<Vec<GrantInfo>, String> {
     let mut owner = owner_session(paths, uid, launch)?;
-    match owner.call(Command::Grants(GrantCommand::List)) {
-        Ok(Ok(Reply::Grants(GrantReply::Grants(grants)))) => Ok(grants
-            .into_iter()
-            .filter(|g| g.label.starts_with(LABEL_PREFIX))
-            .collect()),
-        Ok(Ok(_)) => Err("unexpected daemon reply".into()),
-        Ok(Err(e)) => Err(format!("grant listing refused: {e:?}")),
-        Err(e) => Err(e.to_string()),
-    }
+    Ok(all_grants(&mut owner)?
+        .into_iter()
+        .filter(|g| g.label.starts_with(LABEL_PREFIX))
+        .collect())
 }
 
 #[cfg(test)]
@@ -350,6 +485,55 @@ mod tests {
         assert_eq!(session_ceiling(true), read_only());
         assert!(Profile::default().label().starts_with(LABEL_PREFIX));
         assert!(all.label().starts_with(LABEL_PREFIX));
+    }
+
+    #[test]
+    fn write_grants_expire_soon_by_default_and_ttls_are_capped() {
+        let now = 1_000;
+        let read = Profile::default();
+        let write = Profile {
+            write: true,
+            export: false,
+        };
+        let export = Profile {
+            write: false,
+            export: true,
+        };
+        assert_eq!(read.expires_at(None, now).unwrap(), now + 90 * DAY_MS);
+        assert_eq!(write.expires_at(None, now).unwrap(), now + 8 * HOUR_MS);
+        assert_eq!(export.expires_at(None, now).unwrap(), now + 8 * HOUR_MS);
+        assert_eq!(
+            write.expires_at(Some(90 * DAY_MS), now).unwrap(),
+            now + 90 * DAY_MS
+        );
+        assert!(write.expires_at(Some(91 * DAY_MS), now).is_err());
+        assert!(read.expires_at(Some(366 * DAY_MS), now).is_err());
+        assert_eq!(parse_ttl("30m").unwrap(), 30 * MINUTE_MS);
+        assert_eq!(parse_ttl("8h").unwrap(), 8 * HOUR_MS);
+        assert_eq!(parse_ttl("7d").unwrap(), 7 * DAY_MS);
+        for bad in [
+            "",
+            "8",
+            "h",
+            "0h",
+            "-1d",
+            "1w",
+            "1.5h",
+            "8時",
+            "99999999999999999d",
+        ] {
+            assert!(parse_ttl(bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn only_mcp_grants_may_be_replaced_or_revoked() {
+        let mcp = read_only();
+        assert!(ensure_mcp_grant("mcp write", &mcp).is_ok());
+        assert!(ensure_mcp_grant(DESKTOP_BOOTSTRAP_LABEL, &mcp).is_err());
+        assert!(ensure_mcp_grant("browser native host", &mcp).is_err());
+        let admin = CapabilitySet::from([Capability::GrantAdmin, Capability::LibraryRead]);
+        assert!(ensure_mcp_grant("mcp sneaky", &admin).is_err());
     }
 
     #[test]
@@ -391,5 +575,9 @@ mod tests {
                 .unwrap();
         assert_eq!(flag.path, PathBuf::from("/f/cred"));
         assert!(FileCredential::resolve(Some("rel".into()), None, &paths, 1).is_err());
+        // The owner's desktop credential is never accepted, however it is named.
+        let desktop = paths.desktop_credential.clone();
+        assert!(FileCredential::resolve(Some(desktop.clone()), None, &paths, 1).is_err());
+        assert!(FileCredential::resolve(None, Some(desktop.into()), &paths, 1).is_err());
     }
 }

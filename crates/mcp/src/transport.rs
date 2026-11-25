@@ -25,21 +25,25 @@ use tokio::{
 
 /// Largest accepted JSON-RPC message line (tool arguments are far smaller).
 pub const MAX_LINE_BYTES: usize = 4 * 1024 * 1024;
+/// Outgoing lines queued for stdout; a client that stops reading applies backpressure.
+pub const OUT_CAPACITY: usize = 64;
 
 pub struct LineTransport<R> {
     reader: R,
-    out: mpsc::UnboundedSender<Vec<u8>>,
+    out: mpsc::Sender<Vec<u8>>,
     line: Vec<u8>,
     oversized: bool,
+    /// Error replies produced while reading, sent before the next read.
+    errors: std::collections::VecDeque<Vec<u8>>,
 }
 
 /// Starts the single stdout writer. Dropping every sender (the transport) ends the task
 /// after it has written and flushed everything queued.
-pub fn writer_task<W>(mut writer: W) -> (mpsc::UnboundedSender<Vec<u8>>, JoinHandle<()>)
+pub fn writer_task<W>(mut writer: W) -> (mpsc::Sender<Vec<u8>>, JoinHandle<()>)
 where
     W: AsyncWrite + Unpin + Send + 'static,
 {
-    let (tx, mut rx) = mpsc::unbounded_channel::<Vec<u8>>();
+    let (tx, mut rx) = mpsc::channel::<Vec<u8>>(OUT_CAPACITY);
     let handle = tokio::spawn(async move {
         while let Some(line) = rx.recv().await {
             if writer.write_all(&line).await.is_err() || writer.flush().await.is_err() {
@@ -58,13 +62,28 @@ enum Read {
 }
 
 impl<R: AsyncBufRead + Unpin + Send> LineTransport<R> {
-    pub fn new(reader: R, out: mpsc::UnboundedSender<Vec<u8>>) -> Self {
+    pub fn new(reader: R, out: mpsc::Sender<Vec<u8>>) -> Self {
         Self {
             reader,
             out,
             line: Vec::new(),
             oversized: false,
+            errors: std::collections::VecDeque::new(),
         }
+    }
+
+    /// Sends queued error replies. Cancellation-safe: a reply leaves the queue only once a
+    /// channel slot is reserved for it. `false` when stdout is gone.
+    async fn flush_errors(&mut self) -> bool {
+        while !self.errors.is_empty() {
+            let Ok(permit) = self.out.reserve().await else {
+                return false;
+            };
+            if let Some(line) = self.errors.pop_front() {
+                permit.send(line);
+            }
+        }
+        true
     }
 
     /// Appends to `self.line` until a newline; state survives a dropped (cancelled) poll.
@@ -101,7 +120,7 @@ impl<R: AsyncBufRead + Unpin + Send> LineTransport<R> {
         }
     }
 
-    fn reply_error(&self, id: Value, code: i64, message: &str) {
+    fn reply_error(&mut self, id: Value, code: i64, message: &str) {
         let mut bytes = serde_json::to_vec(&json!({
             "jsonrpc": "2.0",
             "id": id,
@@ -109,11 +128,11 @@ impl<R: AsyncBufRead + Unpin + Send> LineTransport<R> {
         }))
         .unwrap_or_default();
         bytes.push(b'\n');
-        let _ = self.out.send(bytes);
+        self.errors.push_back(bytes);
     }
 
     /// Parses one complete line; `None` when it was handled here (error reply or ignored).
-    fn parse(&self, raw: &[u8]) -> Option<ClientJsonRpcMessage> {
+    fn parse(&mut self, raw: &[u8]) -> Option<ClientJsonRpcMessage> {
         let line = raw.strip_suffix(b"\r").unwrap_or(raw);
         let line = line.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(line);
         if line.iter().all(u8::is_ascii_whitespace) {
@@ -159,18 +178,21 @@ impl<R: AsyncBufRead + Unpin + Send + 'static> Transport<RoleServer> for LineTra
         item: ServerJsonRpcMessage,
     ) -> impl Future<Output = Result<(), Self::Error>> + Send + 'static {
         let out = self.out.clone();
-        let result = serde_json::to_vec(&item)
-            .map_err(io::Error::other)
-            .and_then(|mut bytes| {
-                bytes.push(b'\n');
-                out.send(bytes)
-                    .map_err(|_| io::Error::new(io::ErrorKind::BrokenPipe, "stdout closed"))
-            });
-        std::future::ready(result)
+        let encoded = serde_json::to_vec(&item).map_err(io::Error::other);
+        async move {
+            let mut bytes = encoded?;
+            bytes.push(b'\n');
+            out.send(bytes)
+                .await
+                .map_err(|_| io::Error::new(io::ErrorKind::BrokenPipe, "stdout closed"))
+        }
     }
 
     async fn receive(&mut self) -> Option<ClientJsonRpcMessage> {
         loop {
+            if !self.flush_errors().await {
+                return None;
+            }
             let read = match self.read_line().await {
                 Ok(read) => read,
                 Err(e) => {
@@ -179,7 +201,10 @@ impl<R: AsyncBufRead + Unpin + Send + 'static> Transport<RoleServer> for LineTra
                 }
             };
             match read {
-                Read::Eof => return None,
+                Read::Eof => {
+                    self.flush_errors().await;
+                    return None;
+                }
                 Read::Oversized => {
                     crate::log::warn("discarded an oversized JSON-RPC line");
                     self.reply_error(
@@ -209,7 +234,7 @@ mod tests {
     use tokio::io::{AsyncReadExt, BufReader};
 
     async fn run(input: Vec<u8>) -> (Vec<ClientJsonRpcMessage>, Vec<Value>) {
-        let (tx, mut rx) = mpsc::unbounded_channel();
+        let (tx, mut rx) = mpsc::channel(1024);
         let mut transport = LineTransport::new(BufReader::new(std::io::Cursor::new(input)), tx);
         let mut messages = Vec::new();
         while let Some(m) = Transport::<RoleServer>::receive(&mut transport).await {
@@ -270,7 +295,9 @@ mod tests {
         let (client, mut server) = tokio::io::duplex(64);
         let (tx, handle) = writer_task(client);
         for i in 0..50 {
-            tx.send(format!("{{\"n\":{i}}}\n").into_bytes()).unwrap();
+            tx.send(format!("{{\"n\":{i}}}\n").into_bytes())
+                .await
+                .unwrap();
         }
         drop(tx);
         let mut all = String::new();

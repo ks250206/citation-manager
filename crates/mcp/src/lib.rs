@@ -54,10 +54,11 @@ Serve (started by an AI client; stdout is MCP protocol only, logs go to stderr):
       --read-only narrows the session to reads even with a write grant.
 
 Grants (run by the library owner in a terminal; uses the owner's desktop credential):
-  papers-mcp grant  --library ABS [--write] [--export] [--credential-file ABS] ...
+  papers-mcp grant  --library ABS [--write] [--export] [--ttl 8h] [--credential-file ABS] ...
       Issue an MCP grant (read-only unless --write; --export allows export_citations)
       and store its secret in the credential file (0600). Replaces and revokes the grant
-      the file held before; a running server switches on its next call.
+      the file held before; a running server switches on its next call. Expiry: write or
+      export grants 8h by default (max 90d), read-only 90d (max 365d); --ttl Nm|Nh|Nd.
   papers-mcp revoke --library ABS [--grant UUID | --credential-file ABS] ...
       Revoke a grant (default: the credential file's, which is then removed).
   papers-mcp grants --library ABS ...
@@ -204,6 +205,7 @@ struct Options {
     write: bool,
     export: bool,
     grant: Option<GrantId>,
+    ttl_ms: Option<i64>,
 }
 
 fn absolute(flag: &str, value: Option<OsString>) -> Result<PathBuf, StdioError> {
@@ -241,7 +243,7 @@ fn parse(
     };
     let allowed: &[&str] = match o.command.as_str() {
         "serve" => &["--read-only", "--idle-disconnect-ms"],
-        "grant" => &["--write", "--export"],
+        "grant" => &["--write", "--export", "--ttl"],
         "revoke" => &["--grant"],
         _ => &[],
     };
@@ -277,6 +279,13 @@ fn parse(
             "--read-only" => o.read_only = true,
             "--write" => o.write = true,
             "--export" => o.export = true,
+            "--ttl" => {
+                let raw = args
+                    .next()
+                    .and_then(|v| v.into_string().ok())
+                    .ok_or_else(|| StdioError::Usage("--ttl needs a duration (e.g. 8h)".into()))?;
+                o.ttl_ms = Some(credential::parse_ttl(&raw).map_err(StdioError::Usage)?);
+            }
             "--grant" => {
                 let raw = args
                     .next()
@@ -369,12 +378,13 @@ fn run(o: Options, env: &dyn Fn(&str) -> Option<OsString>) -> Result<(), StdioEr
                 write: o.write,
                 export: o.export,
             };
-            let grant =
-                credential::issue(&r.paths, r.uid, r.launch, profile, &r.file).map_err(failed)?;
+            let grant = credential::issue(&r.paths, r.uid, r.launch, profile, o.ttl_ms, &r.file)
+                .map_err(failed)?;
             print_json(&serde_json::json!({
                 "grant_id": grant.id.0,
                 "label": grant.label,
                 "capabilities": grant.capabilities,
+                "expires_at_ms": grant.expires_at_ms,
                 "credential_file": r.file.path,
             }));
             Ok(())
@@ -548,6 +558,8 @@ mod tests {
             (o.command.as_str(), o.write, o.export),
             ("grant", true, false)
         );
+        let o = parse(os(&["grant", "--library", "/l", "--ttl", "2h"]), &no_env).unwrap();
+        assert_eq!(o.ttl_ms, Some(2 * credential::HOUR_MS));
         for bad in [
             &["--credential", "abc"][..],
             &["--token", "abc"],
@@ -555,6 +567,8 @@ mod tests {
             &["--write"],
             &["grant", "--read-only"],
             &["revoke", "--grant", "nope"],
+            &["grant", "--ttl", "forever"],
+            &["--ttl", "2h"],
         ] {
             assert!(parse(os(bad), &no_env).is_err(), "{bad:?}");
         }

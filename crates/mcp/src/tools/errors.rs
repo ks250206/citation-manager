@@ -48,8 +48,11 @@ impl ToolError {
         result
     }
 
-    /// Maps a daemon/transport failure to a caller-visible explanation.
-    pub fn from_call(error: CallError, library: &Path) -> Self {
+    /// Maps a daemon/transport failure to a caller-visible explanation. `is_write`: the
+    /// command may change the library, so an unanswered one may still have been applied.
+    pub fn from_call(error: CallError, library: &Path, is_write: bool) -> Self {
+        let maybe_applied = "the change may have been applied; check (e.g. with get_paper or \
+                             get_paper_annotations) before retrying";
         match error {
             CallError::Wire(WireError::Denied(denial)) => denied(denial, library),
             CallError::Wire(WireError::Service(e)) => service(e),
@@ -61,6 +64,13 @@ impl ToolError {
                 "too_large",
                 "the request or its result exceeds the library service's frame limit; request less",
             ),
+            CallError::Wire(WireError::Cancelled) | CallError::Cancelled if is_write => Self::new(
+                "cancelled",
+                format!(
+                    "the request was cancelled while a change was in progress; {maybe_applied}"
+                ),
+            )
+            .with("may_have_been_applied", Value::Bool(true)),
             CallError::Wire(WireError::Cancelled) | CallError::Cancelled => {
                 Self::new("cancelled", "the request was cancelled")
             }
@@ -68,6 +78,14 @@ impl ToolError {
                 "unavailable",
                 "the library service is shutting down or a worker is unavailable; retry",
             ),
+            CallError::Lost if is_write => Self::new(
+                "daemon_restarted",
+                format!(
+                    "the library service stopped or restarted before confirming the change; \
+                     {maybe_applied}. The next call reconnects (starting it on demand)."
+                ),
+            )
+            .with("may_have_been_applied", Value::Bool(true)),
             CallError::Lost => Self::new(
                 "daemon_restarted",
                 "the library service stopped or restarted before replying; the next call \
@@ -91,6 +109,15 @@ impl ToolError {
                 format!("the library service refused the connection: {reason:?}"),
             ),
             CallError::Credential(reason) => Self::new("no_credential", reason),
+            CallError::Timeout(limit) if is_write => Self::new(
+                "timeout",
+                format!(
+                    "no reply from the library service within {} s while making a change; \
+                     {maybe_applied}",
+                    limit.as_secs()
+                ),
+            )
+            .with("may_have_been_applied", Value::Bool(true)),
             CallError::Timeout(limit) => Self::new(
                 "timeout",
                 format!(
@@ -275,11 +302,34 @@ mod tests {
     }
 
     #[test]
+    fn unanswered_writes_never_say_retry_later() {
+        let library = Path::new("/l");
+        for error in [
+            CallError::Timeout(std::time::Duration::from_secs(5)),
+            CallError::Cancelled,
+            CallError::Wire(WireError::Cancelled),
+            CallError::Lost,
+        ] {
+            let write = ToolError::from_call(error.clone(), library, true);
+            assert!(
+                write.message.contains("may have been applied"),
+                "{error:?}: {}",
+                write.message
+            );
+            assert!(!write.message.contains("retry later"), "{}", write.message);
+            assert_eq!(write.details["may_have_been_applied"], true);
+            let read = ToolError::from_call(error, library, false);
+            assert!(!read.message.contains("may have been applied"));
+        }
+    }
+
+    #[test]
     fn denials_explain_how_to_grant_write_access() {
         let library = Path::new("/home/u/lib");
         let e = ToolError::from_call(
             CallError::Wire(WireError::Denied(Denial::Forbidden(Operation::PaperUpdate))),
             library,
+            false,
         );
         assert_eq!(e.kind, "permission_denied");
         assert_eq!(e.details["operation"], "paper_update");
@@ -288,6 +338,7 @@ mod tests {
         let export = ToolError::from_call(
             CallError::Wire(WireError::Denied(Denial::Forbidden(Operation::Export))),
             library,
+            false,
         );
         assert!(export.message.contains("--export"), "{}", export.message);
         // Any-of requirements offer only what an MCP grant can carry.
@@ -296,6 +347,7 @@ mod tests {
                 Operation::ImportPreview,
             ))),
             library,
+            false,
         );
         assert!(preview.message.contains("--write"), "{}", preview.message);
         assert!(
@@ -306,10 +358,14 @@ mod tests {
         let delete = ToolError::from_call(
             CallError::Wire(WireError::Denied(Denial::Forbidden(Operation::PaperTrash))),
             library,
+            false,
         );
         assert!(delete.message.contains("not available to MCP"));
-        let revoked =
-            ToolError::from_call(CallError::Wire(WireError::Denied(Denial::Revoked)), library);
+        let revoked = ToolError::from_call(
+            CallError::Wire(WireError::Denied(Denial::Revoked)),
+            library,
+            false,
+        );
         assert_eq!(revoked.kind, "grant_revoked");
         let result = revoked.into_result();
         assert_eq!(result.is_error, Some(true));

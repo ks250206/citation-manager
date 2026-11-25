@@ -28,7 +28,8 @@ use serde_json::{Value, json};
 pub const UPDATE_DESCRIPTION: &str = "Edit a paper's bibliographic metadata. Only the fields \
 given change; null clears an optional field. authors replaces the whole author list \
 (\"Family, Given\" or literal names). expected_updated_at (from get_paper) refuses the edit \
-if the record changed meanwhile. Needs the separately approved MCP write grant (the default \
+if the record changed since you read it; without it, an edit that races another change is \
+refused as a conflict. Needs the separately approved MCP write grant (the default \
 MCP grant is read-only).";
 
 const TEXT_FIELDS: [(&str, usize); 9] = [
@@ -112,6 +113,18 @@ pub async fn update_paper(ctx: &Ctx<'_>, args: &Args) -> Result<Value, ToolError
     }
     if changed.is_empty() {
         return Err(ToolError::invalid("give at least one field to change"));
+    }
+    // expected_updated_at defaults to the version just read: re-check it right before
+    // writing so a concurrent edit is reported as a conflict instead of being overwritten.
+    // (papersd has no compare-and-swap for papers; a race inside this last step remains.)
+    let read_version = paper.updated_at.clone();
+    let current = get_paper(ctx, id).await?;
+    if current.updated_at != read_version {
+        return Err(ToolError::new(
+            "conflict",
+            "the paper changed while this edit was prepared; re-read it with get_paper",
+        )
+        .with("updated_at", json!(current.updated_at)));
     }
     let updated = match ctx
         .call(Command::Library(LibraryRequest::Update(Box::new(paper))))
@@ -490,7 +503,7 @@ pub fn export_schema() -> Value {
             "paper_ids": {"type": "array", "minItems": 1, "maxItems": 200, "uniqueItems": true,
                 "items": {"type": "string", "format": "uuid"}},
             "format": {"type": "string", "enum": ["bibtex", "ris"], "default": "bibtex"},
-            "max_chars": {"type": "integer", "minimum": 1000, "maximum": 1000000, "default": 200000},
+            "max_chars": {"type": "integer", "minimum": 1000, "maximum": 500000, "default": 200000},
         }),
         &["paper_ids"],
     )
@@ -546,6 +559,7 @@ pub async fn export_citations(ctx: &Ctx<'_>, args: &Args) -> Result<Value, ToolE
     let (text, truncated) = super::source::clip(&text, max_chars);
     Ok(json!({
         "format": name,
+        "untrusted": true,
         "records": exported.records,
         "text": text,
         "truncated": truncated,

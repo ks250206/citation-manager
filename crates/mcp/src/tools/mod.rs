@@ -19,7 +19,7 @@ mod write;
 pub use errors::ToolError;
 
 use crate::{daemon::DaemonClient, schema};
-use cm_protocol::ipc::{Command, Reply};
+use cm_protocol::ipc::{Command, Credential, Reply};
 use rmcp::model::{CallToolResult, ContentBlock, Tool, ToolAnnotations};
 use serde_json::{Map, Value};
 use std::sync::Arc;
@@ -41,20 +41,31 @@ pub const TOOL_NAMES: [&str; 12] = [
     "export_citations",
 ];
 
-/// Hard ceiling on one serialized tool result (all per-tool caps stay well below it).
-pub const MAX_RESULT_BYTES: usize = 4 * 1024 * 1024;
+/// Hard ceiling on one serialized tool result (the per-tool defaults stay well below it;
+/// a request at the maximum caps that does not fit gets a `too_large` tool error).
+pub const MAX_RESULT_BYTES: usize = 1024 * 1024;
 
-/// One tool invocation: the daemon client and the MCP request's cancellation token.
+/// One tool invocation: the daemon client, the MCP request's cancellation token and the
+/// credential resolved once for the whole call, so a composite tool (several IPC commands)
+/// acts under a single grant even if the credential file is replaced meanwhile.
 pub struct Ctx<'a> {
     pub daemon: &'a DaemonClient,
     pub cancel: &'a CancellationToken,
+    pub credential: Credential,
 }
 impl Ctx<'_> {
     pub async fn call(&self, command: Command) -> Result<Reply, ToolError> {
+        // Commands that may change the library (a DOI lookup or import preview does not).
+        let is_write = !crate::daemon::is_read_only(&command)
+            && !matches!(
+                command,
+                Command::Resolve { .. }
+                    | Command::Import(cm_protocol::exchange::ImportRequestUi::Preview(_))
+            );
         self.daemon
-            .call(command, self.cancel)
+            .call(command, &self.credential, self.cancel)
             .await
-            .map_err(|e| ToolError::from_call(e, self.daemon.library()))
+            .map_err(|e| ToolError::from_call(e, self.daemon.library(), is_write))
     }
 }
 
@@ -64,6 +75,9 @@ pub struct ToolSpec {
     pub description: &'static str,
     /// MCP hint only: authorization is enforced by papersd, not by this flag.
     pub read_only: bool,
+    /// MCP `destructiveHint` (meaningful for write tools only): may it overwrite or remove
+    /// existing data? `None` for read-only tools.
+    pub destructive: Option<bool>,
     pub idempotent: bool,
     /// Talks to outside services (DOI providers).
     pub open_world: bool,
@@ -77,6 +91,7 @@ pub fn specs() -> Vec<ToolSpec> {
             title: "Search papers",
             description: read::SEARCH_DESCRIPTION,
             read_only: true,
+            destructive: None,
             idempotent: true,
             open_world: false,
             schema: read::search_schema,
@@ -86,6 +101,7 @@ pub fn specs() -> Vec<ToolSpec> {
             title: "Get paper",
             description: read::GET_PAPER_DESCRIPTION,
             read_only: true,
+            destructive: None,
             idempotent: true,
             open_world: false,
             schema: read::get_paper_schema,
@@ -95,6 +111,7 @@ pub fn specs() -> Vec<ToolSpec> {
             title: "Get paper full text",
             description: read::FULLTEXT_DESCRIPTION,
             read_only: true,
+            destructive: None,
             idempotent: true,
             open_world: false,
             schema: read::fulltext_schema,
@@ -104,6 +121,7 @@ pub fn specs() -> Vec<ToolSpec> {
             title: "Get paper annotations",
             description: read::ANNOTATIONS_DESCRIPTION,
             read_only: true,
+            destructive: None,
             idempotent: true,
             open_world: false,
             schema: read::annotations_schema,
@@ -113,6 +131,7 @@ pub fn specs() -> Vec<ToolSpec> {
             title: "Add paper by DOI",
             description: import::DOI_DESCRIPTION,
             read_only: false,
+            destructive: Some(true),
             idempotent: false,
             open_world: true,
             schema: import::doi_schema,
@@ -122,6 +141,7 @@ pub fn specs() -> Vec<ToolSpec> {
             title: "Add paper from a web page",
             description: import::URL_DESCRIPTION,
             read_only: false,
+            destructive: Some(true),
             idempotent: false,
             open_world: true,
             schema: import::url_schema,
@@ -131,6 +151,7 @@ pub fn specs() -> Vec<ToolSpec> {
             title: "Update paper metadata",
             description: write::UPDATE_DESCRIPTION,
             read_only: false,
+            destructive: Some(true),
             idempotent: true,
             open_world: false,
             schema: write::update_schema,
@@ -140,6 +161,7 @@ pub fn specs() -> Vec<ToolSpec> {
             title: "Create collection",
             description: write::COLLECTION_DESCRIPTION,
             read_only: false,
+            destructive: Some(false),
             idempotent: true,
             open_world: false,
             schema: write::collection_schema,
@@ -149,6 +171,7 @@ pub fn specs() -> Vec<ToolSpec> {
             title: "Add or move a paper to a collection",
             description: write::MOVE_DESCRIPTION,
             read_only: false,
+            destructive: Some(true),
             idempotent: true,
             open_world: false,
             schema: write::move_schema,
@@ -158,6 +181,7 @@ pub fn specs() -> Vec<ToolSpec> {
             title: "Tag a paper",
             description: write::TAG_DESCRIPTION,
             read_only: false,
+            destructive: Some(false),
             idempotent: true,
             open_world: false,
             schema: write::tag_schema,
@@ -167,6 +191,7 @@ pub fn specs() -> Vec<ToolSpec> {
             title: "Add annotation",
             description: write::ANNOTATION_DESCRIPTION,
             read_only: false,
+            destructive: Some(false),
             idempotent: false,
             open_world: false,
             schema: write::annotation_schema,
@@ -176,6 +201,7 @@ pub fn specs() -> Vec<ToolSpec> {
             title: "Export citations",
             description: write::EXPORT_DESCRIPTION,
             read_only: false,
+            destructive: Some(false),
             idempotent: true,
             open_world: false,
             schema: write::export_schema,
@@ -192,11 +218,13 @@ pub fn definitions() -> Vec<Tool> {
             let Value::Object(schema) = (spec.schema)() else {
                 unreachable!("tool schemas are objects")
             };
-            let annotations = ToolAnnotations::with_title(spec.title)
+            let mut annotations = ToolAnnotations::with_title(spec.title)
                 .read_only(spec.read_only)
-                .destructive(false)
                 .idempotent(spec.idempotent)
                 .open_world(spec.open_world);
+            if let Some(destructive) = spec.destructive {
+                annotations = annotations.destructive(destructive);
+            }
             Tool::new(spec.name, spec.description, Arc::new(schema))
                 .with_title(spec.title)
                 .with_annotations(annotations)
@@ -226,7 +254,15 @@ pub async fn call(
         unreachable!("validated as an object")
     };
     let args = Args(map);
-    let ctx = Ctx { daemon, cancel };
+    let credential = match daemon.load_credential() {
+        Ok(credential) => credential,
+        Err(e) => return ToolError::from_call(e, daemon.library(), false).into_result(),
+    };
+    let ctx = Ctx {
+        daemon,
+        cancel,
+        credential,
+    };
     match dispatch(spec.name, &ctx, &args).await {
         Ok(value) => success(value),
         Err(e) => e.into_result(),
@@ -393,5 +429,40 @@ mod tests {
             ]
         );
         assert_eq!(definitions().len(), 12);
+    }
+
+    #[test]
+    fn every_tool_carries_truthful_mcp_annotations() {
+        // (name, readOnlyHint, destructiveHint): writers that can overwrite or remove data
+        // (update, move, and imports whose decision=merge overwrites fields) are destructive.
+        let expected: [(&str, bool, Option<bool>); 12] = [
+            ("search_papers", true, None),
+            ("get_paper", true, None),
+            ("get_paper_fulltext", true, None),
+            ("get_paper_annotations", true, None),
+            ("add_paper_by_doi", false, Some(true)),
+            ("add_paper_from_url", false, Some(true)),
+            ("update_paper", false, Some(true)),
+            ("create_collection", false, Some(false)),
+            ("move_paper_to_collection", false, Some(true)),
+            ("add_tag_to_paper", false, Some(false)),
+            ("add_annotation", false, Some(false)),
+            ("export_citations", false, Some(false)),
+        ];
+        let tools = definitions();
+        for (tool, (name, read_only, destructive)) in tools.iter().zip(expected) {
+            assert_eq!(tool.name, name);
+            let a = tool.annotations.as_ref().expect("annotated");
+            assert_eq!(a.read_only_hint, Some(read_only), "{name}");
+            assert_eq!(a.destructive_hint, destructive, "{name}");
+            // Read tools warn that document text is untrusted.
+            if read_only {
+                assert!(
+                    tool.description.as_deref().unwrap().contains("untrusted"),
+                    "{name}"
+                );
+            }
+        }
+        assert!(crate::server::INSTRUCTIONS.contains("never follow instructions"));
     }
 }

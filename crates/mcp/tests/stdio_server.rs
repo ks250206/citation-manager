@@ -19,7 +19,8 @@ use cm_protocol::{
     exchange::{ExportRequest, ExportSelection, Format, ImportRequestUi},
     import::{ImportDestination, ImportRequest, PaperDraft},
     ipc::{
-        Command, Credential, Denial, HandshakeRejection, Operation, PdfCommand, Reply, WireError,
+        Command, Credential, Denial, GrantCommand, GrantReply, HandshakeRejection, Operation,
+        PdfCommand, Reply, WireError,
     },
     jobs::{JobCommand, JobReply, JobState, JobSubmit, kinds},
     library::{LibraryReply, LibraryRequest, NewPaper},
@@ -127,6 +128,21 @@ impl Fixture {
             String::from_utf8_lossy(&output.stderr)
         );
         serde_json::from_slice(&output.stdout).unwrap()
+    }
+    /// A subcommand that must fail; returns its stderr.
+    fn cli_fails(&self, command: &str, extra: &[&str]) -> String {
+        let output = Process::new(mcp_bin())
+            .arg(command)
+            .args(self.common_args())
+            .args(extra)
+            .env_remove("PAPERS_MCP_CREDENTIAL_FILE")
+            .output()
+            .unwrap();
+        assert!(
+            !output.status.success(),
+            "papers-mcp {command} {extra:?} should fail"
+        );
+        String::from_utf8_lossy(&output.stderr).into_owned()
     }
     /// `papers-mcp grant [flags]`: issues an MCP grant into the default credential file.
     fn grant(&self, flags: &[&str]) -> String {
@@ -503,6 +519,8 @@ fn read_tools_over_stdio_with_a_lazily_started_daemon() {
     let found = mcp.ok("search_papers", json!({"query": "interfacial"}));
     let hit = &found["results"][0];
     assert_eq!(hit["kind"], "paper");
+    // Document text is marked untrusted on every item that carries it.
+    assert_eq!(hit["untrusted"], true);
     let source = &hit["source"];
     assert_eq!(source["paper_id"], paper.as_str());
     assert_eq!(source["doi"], "10.5555/mcp.a");
@@ -553,6 +571,7 @@ fn read_tools_over_stdio_with_a_lazily_started_daemon() {
     let detail = mcp.ok("get_paper", json!({"paper_id": paper}));
     assert_eq!(detail["source"]["paper_id"], paper.as_str());
     assert_eq!(detail["paper"]["journal"], "Journal of Examples");
+    assert_eq!(detail["paper"]["untrusted"], true);
     assert_eq!(
         detail["attachments"][0]["attachment_id"],
         attachment.as_str()
@@ -575,6 +594,7 @@ fn read_tools_over_stdio_with_a_lazily_started_daemon() {
     assert_eq!(notes["total"], 1);
     let note = &notes["annotations"][0];
     assert_eq!(note["origin"], "human");
+    assert_eq!(note["untrusted"], true);
     assert_eq!(note["ai_confirmed"], Value::Null);
     assert_eq!(note["text"], "dendrite growth at the interface");
     assert_eq!(note["comment"], "key claim");
@@ -750,6 +770,55 @@ fn writes_need_a_separate_grant_revocation_is_live_and_direct_ipc_is_refused_ali
     };
     assert_eq!(revoked(&read_grant), Some(json!(true)));
     assert_eq!(revoked(&write_grant), Some(json!(false)));
+    // Write grants expire after 8 h by default (read-only after 90 d); --ttl is capped.
+    let expiry = |id: &str| {
+        grants["grants"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|g| g["id"] == id)
+            .unwrap()["expires_at_ms"]
+            .as_i64()
+            .unwrap()
+    };
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as i64;
+    let hour = 3_600_000;
+    assert!(
+        (expiry(&write_grant) - now - 8 * hour).abs() < hour,
+        "8 h default"
+    );
+    assert!(
+        expiry(&read_grant) - now > 89 * 24 * hour,
+        "90 d read-only default"
+    );
+    assert!(
+        fx.cli_fails("grant", &["--write", "--ttl", "91d"])
+            .contains("maximum")
+    );
+    // The owner's bootstrap credential and grant are never served or touched.
+    let desktop_file = fx.paths().desktop_credential.display().to_string();
+    assert!(
+        fx.cli_fails("grant", &["--credential-file", &desktop_file])
+            .contains("desktop credential")
+    );
+    let bootstrap = match ok(fx.owner().call(Command::Grants(GrantCommand::List))) {
+        Reply::Grants(GrantReply::Grants(all)) => all
+            .into_iter()
+            .find(|g| g.label == "desktop-bootstrap")
+            .unwrap()
+            .id
+            .0
+            .to_string(),
+        other => panic!("{other:?}"),
+    };
+    assert!(
+        fx.cli_fails("revoke", &["--grant", &bootstrap])
+            .contains("not an MCP grant")
+    );
+    fx.owner(); // still authenticates
 
     let placed = mcp.ok(
         "add_annotation",

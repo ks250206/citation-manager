@@ -189,11 +189,15 @@ impl DaemonClient {
             .map(|c| c.welcome.capabilities.clone())
     }
 
-    async fn connection(&self) -> Result<Arc<Connection>, CallError> {
-        let credential = self.credential.load().map_err(CallError::Credential)?;
+    /// The credential for one tool call (re-read each call, so a replaced file takes effect).
+    pub fn load_credential(&self) -> Result<Credential, CallError> {
+        self.credential.load().map_err(CallError::Credential)
+    }
+
+    async fn connection(&self, credential: &Credential) -> Result<Arc<Connection>, CallError> {
         let mut state = self.state.lock().await;
         if let Some(existing) = state.as_ref() {
-            if existing.alive() && existing.credential == credential {
+            if existing.alive() && existing.credential == *credential {
                 return Ok(existing.clone());
             }
             if existing.alive() {
@@ -221,7 +225,7 @@ impl DaemonClient {
             welcome.session, welcome.grant
         ));
         let connection =
-            Connection::start(stream, welcome, credential).map_err(CallError::Connect)?;
+            Connection::start(stream, welcome, credential.clone()).map_err(CallError::Connect)?;
         *state = Some(connection.clone());
         Ok(connection)
     }
@@ -230,6 +234,7 @@ impl DaemonClient {
     pub async fn call(
         &self,
         command: Command,
+        credential: &Credential,
         cancel: &CancellationToken,
     ) -> Result<Reply, CallError> {
         let timeout = timeout_for(&command);
@@ -241,7 +246,7 @@ impl DaemonClient {
                 return Err(CallError::Cancelled);
             }
             let connection = tokio::select! {
-                c = self.connection() => c?,
+                c = self.connection(credential) => c?,
                 _ = cancel.cancelled() => return Err(CallError::Cancelled),
             };
             connection.touch();
@@ -260,6 +265,10 @@ impl DaemonClient {
                 connection.pending().remove(&id);
                 connection.kill();
                 crate::log::debug(&format!("request write failed: {e}"));
+                // Safe for writes too: a failed `write_frame` means the length-prefixed frame
+                // did not fully reach the socket, and papersd only dispatches complete frames
+                // (a truncated one ends the connection unread). This is the stale-connection
+                // case (daemon restarted since the last call), so one fresh attempt is made.
                 if attempt == 1 {
                     continue;
                 }
@@ -338,7 +347,7 @@ fn timeout_for(command: &Command) -> Duration {
 }
 
 /// Commands without effects, which may be re-sent once after a lost connection.
-fn is_read_only(command: &Command) -> bool {
+pub fn is_read_only(command: &Command) -> bool {
     match command {
         Command::Status | Command::Search(_) | Command::Fulltext(_) | Command::Query(_) => true,
         Command::Library(r) => matches!(r, LibraryRequest::Get(_) | LibraryRequest::List(_)),

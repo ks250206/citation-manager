@@ -215,6 +215,7 @@ fn not_found(resolution: &MetadataResolution) -> Value {
 fn draft_json(draft: &PaperDraft) -> Value {
     let b = &draft.bibliography;
     json!({
+        "untrusted": true,
         "title": draft.title,
         "doi": b.doi,
         "authors": b.authors.iter().filter_map(author).collect::<Vec<_>>(),
