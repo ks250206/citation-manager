@@ -163,6 +163,21 @@ function commitFailed(state: State, error: ErrorInfo): State {
   });
 }
 
+/**
+ * The PDF choice for a new preview: on a re-preview the earlier choice is kept (an opt-out
+ * as is, a candidate matched by URL); otherwise, or if that PDF is gone, the first PDF.
+ */
+function keptPdf(state: State, next: PreviewResult): number | null {
+  const previous = state.preview?.pdf_candidates ?? [];
+  if (previous.length > 0) {
+    if (state.pdf === null) return null;
+    const url = previous[state.pdf]?.url;
+    const index = next.pdf_candidates.findIndex((c) => c.url === url);
+    if (index >= 0) return index;
+  }
+  return next.pdf_candidates.length > 0 ? 0 : null;
+}
+
 export function reduce(state: State, event: Event): State {
   switch (event.type) {
     case 'begin':
@@ -219,7 +234,7 @@ export function reduce(state: State, event: Event): State {
         // The capture grant can only Create or Skip. An exact duplicate cannot be created
         // (the daemon refuses it), so it defaults to Skip; merging happens in the app.
         decisions: preview.candidates.map((c) => (c.exact_duplicate ? 'Skip' : 'Create')),
-        pdf: preview.pdf_candidates.length > 0 ? 0 : null,
+        pdf: keptPdf(state, preview),
         phase: { kind: 'review' },
       };
     }
