@@ -155,6 +155,11 @@ mod tests {
             Operation::ImportCommit,
             Operation::OrganizationDelete,
             Operation::GrantIssue,
+            // #22: capture commit is preview-bound; no general network/job control.
+            Operation::MetadataResolve,
+            Operation::JobSubmit,
+            Operation::JobRetry,
+            Operation::PaperCreate,
             Operation::FulltextSearch,
             Operation::FulltextStatus,
             Operation::FulltextRead,
@@ -166,7 +171,19 @@ mod tests {
         }
         assert!(authorize(Some(&host), None, Operation::OrganizationList, 0).is_ok());
         assert!(authorize(Some(&host), None, Operation::ImportPreview, 0).is_ok());
+        for op in [
+            Operation::CaptureSubmit,
+            Operation::CaptureSave,
+            Operation::CaptureCancel,
+            Operation::CapturePdfStatus,
+            Operation::CapturePdfRetry,
+        ] {
+            assert!(authorize(Some(&host), None, op, 0).is_ok(), "{op:?}");
+        }
         let mcp = grant(presets::mcp_read_only());
+        // MCP read-only cannot capture.
+        assert!(authorize(Some(&mcp), None, Operation::CaptureSave, 0).is_err());
+        assert!(authorize(Some(&mcp), None, Operation::CaptureSubmit, 0).is_err());
         assert!(authorize(Some(&mcp), None, Operation::LibraryQuery, 0).is_ok());
         for op in [
             Operation::FulltextSearch,

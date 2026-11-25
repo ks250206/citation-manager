@@ -106,6 +106,30 @@ class ArchitectureTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'GPUI must stay in desktop'):
                     architecture.validate(metadata)
 
+    def test_test_only_features_stay_on_dev_dependencies(self):
+        # #22 review: the loopback fetch policy must never reach a normal/release build.
+        ok = self.metadata()
+        daemon = next(p for p in ok['packages'] if p['name'] == 'cm-daemon')
+        metadata = next(p for p in ok['packages'] if p['name'] == 'cm-metadata')
+        metadata['features'] = {'default': [], 'loopback-test-server': []}
+        daemon['dependencies'] = [{'name': 'cm-metadata', 'kind': 'dev', 'features': ['loopback-test-server']}]
+        architecture.validate(ok)
+        cases = [
+            ('normal dependency', lambda d, m: d['dependencies'].append({'name': 'cm-metadata', 'kind': None, 'features': ['loopback-test-server']})),
+            ('build dependency', lambda d, m: d['dependencies'].append({'name': 'cm-metadata', 'kind': 'build', 'features': ['loopback-test-server']})),
+            ('default feature', lambda d, m: m['features'].update({'default': ['loopback-test-server']})),
+            ('feature table', lambda d, m: d.update({'features': {'default': [], 'x': ['cm-metadata/loopback-test-server']}})),
+            ('optional feature table', lambda d, m: d.update({'features': {'default': [], 'x': ['cm-metadata?/loopback-test-server']}})),
+        ]
+        for label, mutate in cases:
+            with self.subTest(label):
+                bad = copy.deepcopy(ok)
+                d = next(p for p in bad['packages'] if p['name'] == 'cm-daemon')
+                m = next(p for p in bad['packages'] if p['name'] == 'cm-metadata')
+                mutate(d, m)
+                with self.assertRaisesRegex(ValueError, 'test-only feature'):
+                    architecture.validate(bad)
+
     def test_native_drivers_outside_their_owner_are_rejected(self):
         for dependency, owner, message in [
             ('rusqlite', 'cm-daemon', 'SQLite driver must stay in storage'),

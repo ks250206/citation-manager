@@ -46,6 +46,8 @@ required-features = ["desktop-bootstrap"]
 tempfile.workspace = true
 sha2.workspace = true
 serde_json.workspace = true
+# #22: loopback HTTP fixture server + loopback-only fetch policy, tests only.
+cm-metadata = { workspace = true, features = ["loopback-test-server"] }
 
 # Composition-only DOI -> common import -> SQLite tests; no daemon implementation.
 [[test]]
@@ -80,6 +82,11 @@ path = "../../tests/integration/daemon/fulltext.rs"
 name = "fulltext_runtime"
 path = "../../tests/integration/daemon/fulltext_runtime.rs"
 required-features = ["pdfium-runtime-tests"]
+
+# #22 browser/URL capture: native-host grant, common preview/commit, PDF fetch job.
+[[test]]
+name = "daemon_capture"
+path = "../../tests/integration/daemon/capture.rs"
 
 # Headless composition only; preserves metadata/storage dependency direction.
 [[example]]
