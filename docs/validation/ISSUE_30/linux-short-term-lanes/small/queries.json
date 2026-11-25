@@ -1,0 +1,2442 @@
+{
+  "kind": "queries",
+  "list_limit": 100,
+  "method": "one authenticated desktop IPC session; each timed call is a full request/response round trip (frame encode, auth check, service, decode)",
+  "pid": 8333,
+  "recall": [
+    {
+      "expected_pages": 2,
+      "false_positive_pages": 0,
+      "final_coverage": {
+        "call_ms": [
+          1.076413
+        ],
+        "complete": true,
+        "fts_truncated": false,
+        "short_terms": [],
+        "timed_out": false,
+        "unsearched": "[]"
+      },
+      "found_pages": 2,
+      "non_page_hits": 0,
+      "recall": 1.0,
+      "scalars": 8,
+      "scope": "Bounded",
+      "term": "dendrite",
+      "total_ms": 1.0810469999999999,
+      "true_positive_pages": 2,
+      "windows": 1
+    },
+    {
+      "expected_pages": 2,
+      "false_positive_pages": 0,
+      "final_coverage": {
+        "call_ms": [
+          1.032875
+        ],
+        "complete": true,
+        "fts_truncated": false,
+        "short_terms": [],
+        "timed_out": false,
+        "unsearched": "[]"
+      },
+      "found_pages": 2,
+      "non_page_hits": 0,
+      "recall": 1.0,
+      "scalars": 8,
+      "scope": "AllPages",
+      "term": "dendrite",
+      "total_ms": 1.037554,
+      "true_positive_pages": 2,
+      "windows": 1
+    },
+    {
+      "expected_pages": 16,
+      "false_positive_pages": 0,
+      "final_coverage": {
+        "call_ms": [
+          1.853877
+        ],
+        "complete": true,
+        "fts_truncated": false,
+        "short_terms": [],
+        "timed_out": false,
+        "unsearched": "[]"
+      },
+      "found_pages": 16,
+      "non_page_hits": 0,
+      "recall": 1.0,
+      "scalars": 7,
+      "scope": "Bounded",
+      "term": "lithium",
+      "total_ms": 1.86122,
+      "true_positive_pages": 16,
+      "windows": 1
+    },
+    {
+      "expected_pages": 16,
+      "false_positive_pages": 0,
+      "final_coverage": {
+        "call_ms": [
+          1.766771
+        ],
+        "complete": true,
+        "fts_truncated": false,
+        "short_terms": [],
+        "timed_out": false,
+        "unsearched": "[]"
+      },
+      "found_pages": 16,
+      "non_page_hits": 0,
+      "recall": 1.0,
+      "scalars": 7,
+      "scope": "AllPages",
+      "term": "lithium",
+      "total_ms": 1.7714619999999999,
+      "true_positive_pages": 16,
+      "windows": 1
+    },
+    {
+      "expected_pages": 1,
+      "false_positive_pages": 0,
+      "final_coverage": {
+        "call_ms": [
+          1.00866
+        ],
+        "complete": true,
+        "fts_truncated": false,
+        "short_terms": [],
+        "timed_out": false,
+        "unsearched": "[]"
+      },
+      "found_pages": 1,
+      "non_page_hits": 0,
+      "recall": 1.0,
+      "scalars": 8,
+      "scope": "Bounded",
+      "term": "zirconia",
+      "total_ms": 1.0117559999999999,
+      "true_positive_pages": 1,
+      "windows": 1
+    },
+    {
+      "expected_pages": 1,
+      "false_positive_pages": 0,
+      "final_coverage": {
+        "call_ms": [
+          0.935855
+        ],
+        "complete": true,
+        "fts_truncated": false,
+        "short_terms": [],
+        "timed_out": false,
+        "unsearched": "[]"
+      },
+      "found_pages": 1,
+      "non_page_hits": 0,
+      "recall": 1.0,
+      "scalars": 8,
+      "scope": "AllPages",
+      "term": "zirconia",
+      "total_ms": 0.9379670000000001,
+      "true_positive_pages": 1,
+      "windows": 1
+    },
+    {
+      "expected_pages": 1,
+      "false_positive_pages": 0,
+      "final_coverage": {
+        "call_ms": [
+          0.714959
+        ],
+        "complete": true,
+        "fts_truncated": false,
+        "short_terms": [],
+        "timed_out": false,
+        "unsearched": "[]"
+      },
+      "found_pages": 1,
+      "non_page_hits": 0,
+      "recall": 1.0,
+      "scalars": 5,
+      "scope": "Bounded",
+      "term": "\u56fa\u4f53\u96fb\u89e3\u8cea",
+      "total_ms": 0.717631,
+      "true_positive_pages": 1,
+      "windows": 1
+    },
+    {
+      "expected_pages": 1,
+      "false_positive_pages": 0,
+      "final_coverage": {
+        "call_ms": [
+          0.702582
+        ],
+        "complete": true,
+        "fts_truncated": false,
+        "short_terms": [],
+        "timed_out": false,
+        "unsearched": "[]"
+      },
+      "found_pages": 1,
+      "non_page_hits": 0,
+      "recall": 1.0,
+      "scalars": 5,
+      "scope": "AllPages",
+      "term": "\u56fa\u4f53\u96fb\u89e3\u8cea",
+      "total_ms": 0.704682,
+      "true_positive_pages": 1,
+      "windows": 1
+    },
+    {
+      "expected_pages": 24,
+      "false_positive_pages": 0,
+      "final_coverage": {
+        "call_ms": [
+          1.222501
+        ],
+        "complete": false,
+        "fts_truncated": false,
+        "short_terms": [
+          "\u96fb"
+        ],
+        "timed_out": false,
+        "unsearched": "[PdfPagesForShortTerms]"
+      },
+      "found_pages": 0,
+      "non_page_hits": 0,
+      "recall": 0.0,
+      "scalars": 1,
+      "scope": "Bounded",
+      "term": "\u96fb",
+      "total_ms": 1.2263709999999999,
+      "true_positive_pages": 0,
+      "windows": 1
+    },
+    {
+      "expected_pages": 24,
+      "false_positive_pages": 0,
+      "final_coverage": {
+        "call_ms": [
+          3.3387629999999997
+        ],
+        "complete": true,
+        "fts_truncated": false,
+        "short_terms": [
+          "\u96fb"
+        ],
+        "timed_out": false,
+        "unsearched": "[]"
+      },
+      "found_pages": 24,
+      "non_page_hits": 0,
+      "recall": 1.0,
+      "scalars": 1,
+      "scope": "AllPages",
+      "term": "\u96fb",
+      "total_ms": 3.347339,
+      "true_positive_pages": 24,
+      "windows": 1
+    },
+    {
+      "expected_pages": 12,
+      "false_positive_pages": 0,
+      "final_coverage": {
+        "call_ms": [
+          1.3558089999999998
+        ],
+        "complete": false,
+        "fts_truncated": false,
+        "short_terms": [
+          "\u96fb\u6c60"
+        ],
+        "timed_out": false,
+        "unsearched": "[PdfPagesForShortTerms]"
+      },
+      "found_pages": 0,
+      "non_page_hits": 0,
+      "recall": 0.0,
+      "scalars": 2,
+      "scope": "Bounded",
+      "term": "\u96fb\u6c60",
+      "total_ms": 1.361707,
+      "true_positive_pages": 0,
+      "windows": 1
+    },
+    {
+      "expected_pages": 12,
+      "false_positive_pages": 0,
+      "final_coverage": {
+        "call_ms": [
+          2.703636
+        ],
+        "complete": true,
+        "fts_truncated": false,
+        "short_terms": [
+          "\u96fb\u6c60"
+        ],
+        "timed_out": false,
+        "unsearched": "[]"
+      },
+      "found_pages": 12,
+      "non_page_hits": 0,
+      "recall": 1.0,
+      "scalars": 2,
+      "scope": "AllPages",
+      "term": "\u96fb\u6c60",
+      "total_ms": 2.710968,
+      "true_positive_pages": 12,
+      "windows": 1
+    },
+    {
+      "expected_pages": 7,
+      "false_positive_pages": 0,
+      "final_coverage": {
+        "call_ms": [
+          1.093588
+        ],
+        "complete": true,
+        "fts_truncated": false,
+        "short_terms": [],
+        "timed_out": false,
+        "unsearched": "[]"
+      },
+      "found_pages": 7,
+      "non_page_hits": 0,
+      "recall": 1.0,
+      "scalars": 3,
+      "scope": "Bounded",
+      "term": "\u96fb\u89e3\u8cea",
+      "total_ms": 1.09825,
+      "true_positive_pages": 7,
+      "windows": 1
+    },
+    {
+      "expected_pages": 7,
+      "false_positive_pages": 0,
+      "final_coverage": {
+        "call_ms": [
+          0.954027
+        ],
+        "complete": true,
+        "fts_truncated": false,
+        "short_terms": [],
+        "timed_out": false,
+        "unsearched": "[]"
+      },
+      "found_pages": 7,
+      "non_page_hits": 0,
+      "recall": 1.0,
+      "scalars": 3,
+      "scope": "AllPages",
+      "term": "\u96fb\u89e3\u8cea",
+      "total_ms": 0.958456,
+      "true_positive_pages": 7,
+      "windows": 1
+    }
+  ],
+  "rows": [
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 0
+      },
+      "elapsed_ms": 2.115208,
+      "returned": 40,
+      "sample": 0
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 1
+      },
+      "elapsed_ms": 1.8792049999999998,
+      "returned": 40,
+      "sample": 0
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 2
+      },
+      "elapsed_ms": 1.852343,
+      "returned": 40,
+      "sample": 0
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 3
+      },
+      "elapsed_ms": 1.7769030000000001,
+      "returned": 40,
+      "sample": 0
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 4
+      },
+      "elapsed_ms": 1.630446,
+      "returned": 40,
+      "sample": 0
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 5
+      },
+      "elapsed_ms": 1.610702,
+      "returned": 40,
+      "sample": 0
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 6
+      },
+      "elapsed_ms": 2.1686180000000004,
+      "returned": 40,
+      "sample": 0
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 7
+      },
+      "elapsed_ms": 2.093356,
+      "returned": 40,
+      "sample": 0
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 8
+      },
+      "elapsed_ms": 2.234775,
+      "returned": 40,
+      "sample": 0
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 9
+      },
+      "elapsed_ms": 1.980624,
+      "returned": 40,
+      "sample": 0
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 0
+      },
+      "elapsed_ms": 1.488617,
+      "returned": 25,
+      "sample": 0
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 1
+      },
+      "elapsed_ms": 1.358604,
+      "returned": 25,
+      "sample": 0
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 2
+      },
+      "elapsed_ms": 1.471006,
+      "returned": 25,
+      "sample": 0
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 3
+      },
+      "elapsed_ms": 1.4354630000000002,
+      "returned": 25,
+      "sample": 0
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 4
+      },
+      "elapsed_ms": 1.4326409999999998,
+      "returned": 25,
+      "sample": 0
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 5
+      },
+      "elapsed_ms": 1.475927,
+      "returned": 25,
+      "sample": 0
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 6
+      },
+      "elapsed_ms": 1.391578,
+      "returned": 25,
+      "sample": 0
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 7
+      },
+      "elapsed_ms": 1.278113,
+      "returned": 25,
+      "sample": 0
+    },
+    {
+      "case": "metadata_keyword",
+      "detail": {},
+      "elapsed_ms": 3.2301320000000002,
+      "returned": 28,
+      "sample": 0
+    },
+    {
+      "case": "metadata_no_hit",
+      "detail": {},
+      "elapsed_ms": 2.320186,
+      "returned": 0,
+      "sample": 0
+    },
+    {
+      "case": "metadata_combined",
+      "detail": {},
+      "elapsed_ms": 2.29706,
+      "returned": 1,
+      "sample": 0
+    },
+    {
+      "case": "fts_bibliographic:needle",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 28,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.566951,
+      "returned": 28,
+      "sample": 0
+    },
+    {
+      "case": "fulltext_default:dendrite",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 2,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.15014,
+      "returned": 2,
+      "sample": 0
+    },
+    {
+      "case": "fulltext_in_collection:dendrite",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 1,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.155365,
+      "returned": 1,
+      "sample": 0
+    },
+    {
+      "case": "fulltext_default:lithium",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 16,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.9914699999999999,
+      "returned": 16,
+      "sample": 0
+    },
+    {
+      "case": "fulltext_in_collection:lithium",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 2,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.0558290000000001,
+      "returned": 2,
+      "sample": 0
+    },
+    {
+      "case": "fulltext_default:zirconia",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 1,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.2448139999999999,
+      "returned": 1,
+      "sample": 0
+    },
+    {
+      "case": "fulltext_in_collection:zirconia",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 1,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.181234,
+      "returned": 1,
+      "sample": 0
+    },
+    {
+      "case": "fulltext_default:\u56fa\u4f53\u96fb\u89e3\u8cea",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 1,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 0.794913,
+      "returned": 1,
+      "sample": 0
+    },
+    {
+      "case": "fulltext_in_collection:\u56fa\u4f53\u96fb\u89e3\u8cea",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 1,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 0.8098139999999999,
+      "returned": 1,
+      "sample": 0
+    },
+    {
+      "case": "fulltext_default:\u96fb",
+      "detail": {
+        "complete": false,
+        "fts_truncated": false,
+        "scanned_documents": 200,
+        "short_terms": [
+          "\u96fb"
+        ],
+        "timed_out": false,
+        "total_hits": 0,
+        "unsearched": "[PdfPagesForShortTerms]"
+      },
+      "elapsed_ms": 1.612368,
+      "returned": 0,
+      "sample": 0
+    },
+    {
+      "case": "fulltext_in_collection:\u96fb",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 56,
+        "short_terms": [
+          "\u96fb"
+        ],
+        "timed_out": false,
+        "total_hits": 5,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.743714,
+      "returned": 5,
+      "sample": 0
+    },
+    {
+      "case": "fulltext_default:\u96fb\u6c60",
+      "detail": {
+        "complete": false,
+        "fts_truncated": false,
+        "scanned_documents": 200,
+        "short_terms": [
+          "\u96fb\u6c60"
+        ],
+        "timed_out": false,
+        "total_hits": 0,
+        "unsearched": "[PdfPagesForShortTerms]"
+      },
+      "elapsed_ms": 1.3645319999999999,
+      "returned": 0,
+      "sample": 0
+    },
+    {
+      "case": "fulltext_in_collection:\u96fb\u6c60",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 56,
+        "short_terms": [
+          "\u96fb\u6c60"
+        ],
+        "timed_out": false,
+        "total_hits": 3,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.467851,
+      "returned": 3,
+      "sample": 0
+    },
+    {
+      "case": "fulltext_default:\u96fb\u89e3\u8cea",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 7,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.04071,
+      "returned": 7,
+      "sample": 0
+    },
+    {
+      "case": "fulltext_in_collection:\u96fb\u89e3\u8cea",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 3,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 0.967159,
+      "returned": 3,
+      "sample": 0
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 0
+      },
+      "elapsed_ms": 1.8364589999999998,
+      "returned": 40,
+      "sample": 1
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 1
+      },
+      "elapsed_ms": 1.810145,
+      "returned": 40,
+      "sample": 1
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 2
+      },
+      "elapsed_ms": 1.6556279999999999,
+      "returned": 40,
+      "sample": 1
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 3
+      },
+      "elapsed_ms": 1.820465,
+      "returned": 40,
+      "sample": 1
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 4
+      },
+      "elapsed_ms": 1.851945,
+      "returned": 40,
+      "sample": 1
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 5
+      },
+      "elapsed_ms": 2.156816,
+      "returned": 40,
+      "sample": 1
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 6
+      },
+      "elapsed_ms": 1.690856,
+      "returned": 40,
+      "sample": 1
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 7
+      },
+      "elapsed_ms": 1.7491500000000002,
+      "returned": 40,
+      "sample": 1
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 8
+      },
+      "elapsed_ms": 1.750282,
+      "returned": 40,
+      "sample": 1
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 9
+      },
+      "elapsed_ms": 1.956257,
+      "returned": 40,
+      "sample": 1
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 0
+      },
+      "elapsed_ms": 1.06588,
+      "returned": 25,
+      "sample": 1
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 1
+      },
+      "elapsed_ms": 1.244593,
+      "returned": 25,
+      "sample": 1
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 2
+      },
+      "elapsed_ms": 1.303617,
+      "returned": 25,
+      "sample": 1
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 3
+      },
+      "elapsed_ms": 1.508283,
+      "returned": 25,
+      "sample": 1
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 4
+      },
+      "elapsed_ms": 1.3673229999999998,
+      "returned": 25,
+      "sample": 1
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 5
+      },
+      "elapsed_ms": 1.346327,
+      "returned": 25,
+      "sample": 1
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 6
+      },
+      "elapsed_ms": 1.4008180000000001,
+      "returned": 25,
+      "sample": 1
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 7
+      },
+      "elapsed_ms": 1.431038,
+      "returned": 25,
+      "sample": 1
+    },
+    {
+      "case": "metadata_keyword",
+      "detail": {},
+      "elapsed_ms": 3.399123,
+      "returned": 28,
+      "sample": 1
+    },
+    {
+      "case": "metadata_no_hit",
+      "detail": {},
+      "elapsed_ms": 2.401844,
+      "returned": 0,
+      "sample": 1
+    },
+    {
+      "case": "metadata_combined",
+      "detail": {},
+      "elapsed_ms": 2.484315,
+      "returned": 1,
+      "sample": 1
+    },
+    {
+      "case": "fts_bibliographic:needle",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 28,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 2.029958,
+      "returned": 28,
+      "sample": 1
+    },
+    {
+      "case": "fulltext_default:dendrite",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 2,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.4526160000000001,
+      "returned": 2,
+      "sample": 1
+    },
+    {
+      "case": "fulltext_in_collection:dendrite",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 1,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.181716,
+      "returned": 1,
+      "sample": 1
+    },
+    {
+      "case": "fulltext_default:lithium",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 16,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.90733,
+      "returned": 16,
+      "sample": 1
+    },
+    {
+      "case": "fulltext_in_collection:lithium",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 2,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.210317,
+      "returned": 2,
+      "sample": 1
+    },
+    {
+      "case": "fulltext_default:zirconia",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 1,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.011748,
+      "returned": 1,
+      "sample": 1
+    },
+    {
+      "case": "fulltext_in_collection:zirconia",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 1,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.048039,
+      "returned": 1,
+      "sample": 1
+    },
+    {
+      "case": "fulltext_default:\u56fa\u4f53\u96fb\u89e3\u8cea",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 1,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 0.740779,
+      "returned": 1,
+      "sample": 1
+    },
+    {
+      "case": "fulltext_in_collection:\u56fa\u4f53\u96fb\u89e3\u8cea",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 1,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 0.831175,
+      "returned": 1,
+      "sample": 1
+    },
+    {
+      "case": "fulltext_default:\u96fb",
+      "detail": {
+        "complete": false,
+        "fts_truncated": false,
+        "scanned_documents": 200,
+        "short_terms": [
+          "\u96fb"
+        ],
+        "timed_out": false,
+        "total_hits": 0,
+        "unsearched": "[PdfPagesForShortTerms]"
+      },
+      "elapsed_ms": 1.374549,
+      "returned": 0,
+      "sample": 1
+    },
+    {
+      "case": "fulltext_in_collection:\u96fb",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 56,
+        "short_terms": [
+          "\u96fb"
+        ],
+        "timed_out": false,
+        "total_hits": 5,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.5698940000000001,
+      "returned": 5,
+      "sample": 1
+    },
+    {
+      "case": "fulltext_default:\u96fb\u6c60",
+      "detail": {
+        "complete": false,
+        "fts_truncated": false,
+        "scanned_documents": 200,
+        "short_terms": [
+          "\u96fb\u6c60"
+        ],
+        "timed_out": false,
+        "total_hits": 0,
+        "unsearched": "[PdfPagesForShortTerms]"
+      },
+      "elapsed_ms": 1.2665389999999999,
+      "returned": 0,
+      "sample": 1
+    },
+    {
+      "case": "fulltext_in_collection:\u96fb\u6c60",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 56,
+        "short_terms": [
+          "\u96fb\u6c60"
+        ],
+        "timed_out": false,
+        "total_hits": 3,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.410184,
+      "returned": 3,
+      "sample": 1
+    },
+    {
+      "case": "fulltext_default:\u96fb\u89e3\u8cea",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 7,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 0.9925680000000001,
+      "returned": 7,
+      "sample": 1
+    },
+    {
+      "case": "fulltext_in_collection:\u96fb\u89e3\u8cea",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 3,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 0.801485,
+      "returned": 3,
+      "sample": 1
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 0
+      },
+      "elapsed_ms": 2.3643370000000004,
+      "returned": 40,
+      "sample": 2
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 1
+      },
+      "elapsed_ms": 2.043255,
+      "returned": 40,
+      "sample": 2
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 2
+      },
+      "elapsed_ms": 1.951363,
+      "returned": 40,
+      "sample": 2
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 3
+      },
+      "elapsed_ms": 2.039747,
+      "returned": 40,
+      "sample": 2
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 4
+      },
+      "elapsed_ms": 1.9806799999999998,
+      "returned": 40,
+      "sample": 2
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 5
+      },
+      "elapsed_ms": 1.92165,
+      "returned": 40,
+      "sample": 2
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 6
+      },
+      "elapsed_ms": 2.039193,
+      "returned": 40,
+      "sample": 2
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 7
+      },
+      "elapsed_ms": 1.8184399999999998,
+      "returned": 40,
+      "sample": 2
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 8
+      },
+      "elapsed_ms": 1.80683,
+      "returned": 40,
+      "sample": 2
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 9
+      },
+      "elapsed_ms": 1.886069,
+      "returned": 40,
+      "sample": 2
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 0
+      },
+      "elapsed_ms": 1.475365,
+      "returned": 25,
+      "sample": 2
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 1
+      },
+      "elapsed_ms": 1.386916,
+      "returned": 25,
+      "sample": 2
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 2
+      },
+      "elapsed_ms": 1.169891,
+      "returned": 25,
+      "sample": 2
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 3
+      },
+      "elapsed_ms": 1.0991410000000001,
+      "returned": 25,
+      "sample": 2
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 4
+      },
+      "elapsed_ms": 1.15375,
+      "returned": 25,
+      "sample": 2
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 5
+      },
+      "elapsed_ms": 1.090673,
+      "returned": 25,
+      "sample": 2
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 6
+      },
+      "elapsed_ms": 1.171214,
+      "returned": 25,
+      "sample": 2
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 7
+      },
+      "elapsed_ms": 1.3553199999999999,
+      "returned": 25,
+      "sample": 2
+    },
+    {
+      "case": "metadata_keyword",
+      "detail": {},
+      "elapsed_ms": 2.461576,
+      "returned": 28,
+      "sample": 2
+    },
+    {
+      "case": "metadata_no_hit",
+      "detail": {},
+      "elapsed_ms": 1.746518,
+      "returned": 0,
+      "sample": 2
+    },
+    {
+      "case": "metadata_combined",
+      "detail": {},
+      "elapsed_ms": 1.633135,
+      "returned": 1,
+      "sample": 2
+    },
+    {
+      "case": "fts_bibliographic:needle",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 28,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 2.468466,
+      "returned": 28,
+      "sample": 2
+    },
+    {
+      "case": "fulltext_default:dendrite",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 2,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.597708,
+      "returned": 2,
+      "sample": 2
+    },
+    {
+      "case": "fulltext_in_collection:dendrite",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 1,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.521841,
+      "returned": 1,
+      "sample": 2
+    },
+    {
+      "case": "fulltext_default:lithium",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 16,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 2.587977,
+      "returned": 16,
+      "sample": 2
+    },
+    {
+      "case": "fulltext_in_collection:lithium",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 2,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.644667,
+      "returned": 2,
+      "sample": 2
+    },
+    {
+      "case": "fulltext_default:zirconia",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 1,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.3320210000000001,
+      "returned": 1,
+      "sample": 2
+    },
+    {
+      "case": "fulltext_in_collection:zirconia",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 1,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.366622,
+      "returned": 1,
+      "sample": 2
+    },
+    {
+      "case": "fulltext_default:\u56fa\u4f53\u96fb\u89e3\u8cea",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 1,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 0.999614,
+      "returned": 1,
+      "sample": 2
+    },
+    {
+      "case": "fulltext_in_collection:\u56fa\u4f53\u96fb\u89e3\u8cea",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 1,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.1914479999999998,
+      "returned": 1,
+      "sample": 2
+    },
+    {
+      "case": "fulltext_default:\u96fb",
+      "detail": {
+        "complete": false,
+        "fts_truncated": false,
+        "scanned_documents": 200,
+        "short_terms": [
+          "\u96fb"
+        ],
+        "timed_out": false,
+        "total_hits": 0,
+        "unsearched": "[PdfPagesForShortTerms]"
+      },
+      "elapsed_ms": 1.668711,
+      "returned": 0,
+      "sample": 2
+    },
+    {
+      "case": "fulltext_in_collection:\u96fb",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 56,
+        "short_terms": [
+          "\u96fb"
+        ],
+        "timed_out": false,
+        "total_hits": 5,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.9825799999999998,
+      "returned": 5,
+      "sample": 2
+    },
+    {
+      "case": "fulltext_default:\u96fb\u6c60",
+      "detail": {
+        "complete": false,
+        "fts_truncated": false,
+        "scanned_documents": 200,
+        "short_terms": [
+          "\u96fb\u6c60"
+        ],
+        "timed_out": false,
+        "total_hits": 0,
+        "unsearched": "[PdfPagesForShortTerms]"
+      },
+      "elapsed_ms": 1.678128,
+      "returned": 0,
+      "sample": 2
+    },
+    {
+      "case": "fulltext_in_collection:\u96fb\u6c60",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 56,
+        "short_terms": [
+          "\u96fb\u6c60"
+        ],
+        "timed_out": false,
+        "total_hits": 3,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.791407,
+      "returned": 3,
+      "sample": 2
+    },
+    {
+      "case": "fulltext_default:\u96fb\u89e3\u8cea",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 7,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.2679399999999998,
+      "returned": 7,
+      "sample": 2
+    },
+    {
+      "case": "fulltext_in_collection:\u96fb\u89e3\u8cea",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 3,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.078928,
+      "returned": 3,
+      "sample": 2
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 0
+      },
+      "elapsed_ms": 1.9576950000000002,
+      "returned": 40,
+      "sample": 3
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 1
+      },
+      "elapsed_ms": 1.688707,
+      "returned": 40,
+      "sample": 3
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 2
+      },
+      "elapsed_ms": 1.539282,
+      "returned": 40,
+      "sample": 3
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 3
+      },
+      "elapsed_ms": 1.526222,
+      "returned": 40,
+      "sample": 3
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 4
+      },
+      "elapsed_ms": 1.5242229999999999,
+      "returned": 40,
+      "sample": 3
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 5
+      },
+      "elapsed_ms": 1.499268,
+      "returned": 40,
+      "sample": 3
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 6
+      },
+      "elapsed_ms": 2.5956960000000002,
+      "returned": 40,
+      "sample": 3
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 7
+      },
+      "elapsed_ms": 2.150256,
+      "returned": 40,
+      "sample": 3
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 8
+      },
+      "elapsed_ms": 1.572911,
+      "returned": 40,
+      "sample": 3
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 9
+      },
+      "elapsed_ms": 2.004971,
+      "returned": 40,
+      "sample": 3
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 0
+      },
+      "elapsed_ms": 1.3835220000000001,
+      "returned": 25,
+      "sample": 3
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 1
+      },
+      "elapsed_ms": 1.629339,
+      "returned": 25,
+      "sample": 3
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 2
+      },
+      "elapsed_ms": 1.501446,
+      "returned": 25,
+      "sample": 3
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 3
+      },
+      "elapsed_ms": 1.299445,
+      "returned": 25,
+      "sample": 3
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 4
+      },
+      "elapsed_ms": 1.47856,
+      "returned": 25,
+      "sample": 3
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 5
+      },
+      "elapsed_ms": 1.223778,
+      "returned": 25,
+      "sample": 3
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 6
+      },
+      "elapsed_ms": 1.807462,
+      "returned": 25,
+      "sample": 3
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 7
+      },
+      "elapsed_ms": 1.7071910000000001,
+      "returned": 25,
+      "sample": 3
+    },
+    {
+      "case": "metadata_keyword",
+      "detail": {},
+      "elapsed_ms": 4.336795,
+      "returned": 28,
+      "sample": 3
+    },
+    {
+      "case": "metadata_no_hit",
+      "detail": {},
+      "elapsed_ms": 2.881715,
+      "returned": 0,
+      "sample": 3
+    },
+    {
+      "case": "metadata_combined",
+      "detail": {},
+      "elapsed_ms": 2.817513,
+      "returned": 1,
+      "sample": 3
+    },
+    {
+      "case": "fts_bibliographic:needle",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 28,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.88118,
+      "returned": 28,
+      "sample": 3
+    },
+    {
+      "case": "fulltext_default:dendrite",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 2,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.287112,
+      "returned": 2,
+      "sample": 3
+    },
+    {
+      "case": "fulltext_in_collection:dendrite",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 1,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.1662249999999998,
+      "returned": 1,
+      "sample": 3
+    },
+    {
+      "case": "fulltext_default:lithium",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 16,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.929483,
+      "returned": 16,
+      "sample": 3
+    },
+    {
+      "case": "fulltext_in_collection:lithium",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 2,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.249584,
+      "returned": 2,
+      "sample": 3
+    },
+    {
+      "case": "fulltext_default:zirconia",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 1,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 0.9623360000000001,
+      "returned": 1,
+      "sample": 3
+    },
+    {
+      "case": "fulltext_in_collection:zirconia",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 1,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.146154,
+      "returned": 1,
+      "sample": 3
+    },
+    {
+      "case": "fulltext_default:\u56fa\u4f53\u96fb\u89e3\u8cea",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 1,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 0.805988,
+      "returned": 1,
+      "sample": 3
+    },
+    {
+      "case": "fulltext_in_collection:\u56fa\u4f53\u96fb\u89e3\u8cea",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 1,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 0.943038,
+      "returned": 1,
+      "sample": 3
+    },
+    {
+      "case": "fulltext_default:\u96fb",
+      "detail": {
+        "complete": false,
+        "fts_truncated": false,
+        "scanned_documents": 200,
+        "short_terms": [
+          "\u96fb"
+        ],
+        "timed_out": false,
+        "total_hits": 0,
+        "unsearched": "[PdfPagesForShortTerms]"
+      },
+      "elapsed_ms": 1.3341889999999998,
+      "returned": 0,
+      "sample": 3
+    },
+    {
+      "case": "fulltext_in_collection:\u96fb",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 56,
+        "short_terms": [
+          "\u96fb"
+        ],
+        "timed_out": false,
+        "total_hits": 5,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.6892120000000002,
+      "returned": 5,
+      "sample": 3
+    },
+    {
+      "case": "fulltext_default:\u96fb\u6c60",
+      "detail": {
+        "complete": false,
+        "fts_truncated": false,
+        "scanned_documents": 200,
+        "short_terms": [
+          "\u96fb\u6c60"
+        ],
+        "timed_out": false,
+        "total_hits": 0,
+        "unsearched": "[PdfPagesForShortTerms]"
+      },
+      "elapsed_ms": 1.432274,
+      "returned": 0,
+      "sample": 3
+    },
+    {
+      "case": "fulltext_in_collection:\u96fb\u6c60",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 56,
+        "short_terms": [
+          "\u96fb\u6c60"
+        ],
+        "timed_out": false,
+        "total_hits": 3,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.5798990000000002,
+      "returned": 3,
+      "sample": 3
+    },
+    {
+      "case": "fulltext_default:\u96fb\u89e3\u8cea",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 7,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.155915,
+      "returned": 7,
+      "sample": 3
+    },
+    {
+      "case": "fulltext_in_collection:\u96fb\u89e3\u8cea",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 3,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.024041,
+      "returned": 3,
+      "sample": 3
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 0
+      },
+      "elapsed_ms": 2.785878,
+      "returned": 40,
+      "sample": 4
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 1
+      },
+      "elapsed_ms": 2.406958,
+      "returned": 40,
+      "sample": 4
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 2
+      },
+      "elapsed_ms": 2.227742,
+      "returned": 40,
+      "sample": 4
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 3
+      },
+      "elapsed_ms": 1.995358,
+      "returned": 40,
+      "sample": 4
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 4
+      },
+      "elapsed_ms": 2.255508,
+      "returned": 40,
+      "sample": 4
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 5
+      },
+      "elapsed_ms": 2.21266,
+      "returned": 40,
+      "sample": 4
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 6
+      },
+      "elapsed_ms": 1.961099,
+      "returned": 40,
+      "sample": 4
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 7
+      },
+      "elapsed_ms": 2.157604,
+      "returned": 40,
+      "sample": 4
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 8
+      },
+      "elapsed_ms": 1.9969350000000001,
+      "returned": 40,
+      "sample": 4
+    },
+    {
+      "case": "collection_switch",
+      "detail": {
+        "collection": 9
+      },
+      "elapsed_ms": 2.362342,
+      "returned": 40,
+      "sample": 4
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 0
+      },
+      "elapsed_ms": 1.484626,
+      "returned": 25,
+      "sample": 4
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 1
+      },
+      "elapsed_ms": 1.6104450000000001,
+      "returned": 25,
+      "sample": 4
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 2
+      },
+      "elapsed_ms": 1.611631,
+      "returned": 25,
+      "sample": 4
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 3
+      },
+      "elapsed_ms": 1.458398,
+      "returned": 25,
+      "sample": 4
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 4
+      },
+      "elapsed_ms": 1.482977,
+      "returned": 25,
+      "sample": 4
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 5
+      },
+      "elapsed_ms": 1.1912660000000002,
+      "returned": 25,
+      "sample": 4
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 6
+      },
+      "elapsed_ms": 1.243751,
+      "returned": 25,
+      "sample": 4
+    },
+    {
+      "case": "tag_and_switch",
+      "detail": {
+        "tag": 7
+      },
+      "elapsed_ms": 1.2690430000000001,
+      "returned": 25,
+      "sample": 4
+    },
+    {
+      "case": "metadata_keyword",
+      "detail": {},
+      "elapsed_ms": 2.883436,
+      "returned": 28,
+      "sample": 4
+    },
+    {
+      "case": "metadata_no_hit",
+      "detail": {},
+      "elapsed_ms": 2.068089,
+      "returned": 0,
+      "sample": 4
+    },
+    {
+      "case": "metadata_combined",
+      "detail": {},
+      "elapsed_ms": 2.0489290000000002,
+      "returned": 1,
+      "sample": 4
+    },
+    {
+      "case": "fts_bibliographic:needle",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 28,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.60494,
+      "returned": 28,
+      "sample": 4
+    },
+    {
+      "case": "fulltext_default:dendrite",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 2,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.174741,
+      "returned": 2,
+      "sample": 4
+    },
+    {
+      "case": "fulltext_in_collection:dendrite",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 1,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.209081,
+      "returned": 1,
+      "sample": 4
+    },
+    {
+      "case": "fulltext_default:lithium",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 16,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.6190600000000002,
+      "returned": 16,
+      "sample": 4
+    },
+    {
+      "case": "fulltext_in_collection:lithium",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 2,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.013425,
+      "returned": 2,
+      "sample": 4
+    },
+    {
+      "case": "fulltext_default:zirconia",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 1,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 0.924674,
+      "returned": 1,
+      "sample": 4
+    },
+    {
+      "case": "fulltext_in_collection:zirconia",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 1,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.134693,
+      "returned": 1,
+      "sample": 4
+    },
+    {
+      "case": "fulltext_default:\u56fa\u4f53\u96fb\u89e3\u8cea",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 1,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 0.8006000000000001,
+      "returned": 1,
+      "sample": 4
+    },
+    {
+      "case": "fulltext_in_collection:\u56fa\u4f53\u96fb\u89e3\u8cea",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 1,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 0.83887,
+      "returned": 1,
+      "sample": 4
+    },
+    {
+      "case": "fulltext_default:\u96fb",
+      "detail": {
+        "complete": false,
+        "fts_truncated": false,
+        "scanned_documents": 200,
+        "short_terms": [
+          "\u96fb"
+        ],
+        "timed_out": false,
+        "total_hits": 0,
+        "unsearched": "[PdfPagesForShortTerms]"
+      },
+      "elapsed_ms": 1.264837,
+      "returned": 0,
+      "sample": 4
+    },
+    {
+      "case": "fulltext_in_collection:\u96fb",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 56,
+        "short_terms": [
+          "\u96fb"
+        ],
+        "timed_out": false,
+        "total_hits": 5,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.555191,
+      "returned": 5,
+      "sample": 4
+    },
+    {
+      "case": "fulltext_default:\u96fb\u6c60",
+      "detail": {
+        "complete": false,
+        "fts_truncated": false,
+        "scanned_documents": 200,
+        "short_terms": [
+          "\u96fb\u6c60"
+        ],
+        "timed_out": false,
+        "total_hits": 0,
+        "unsearched": "[PdfPagesForShortTerms]"
+      },
+      "elapsed_ms": 1.293507,
+      "returned": 0,
+      "sample": 4
+    },
+    {
+      "case": "fulltext_in_collection:\u96fb\u6c60",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 56,
+        "short_terms": [
+          "\u96fb\u6c60"
+        ],
+        "timed_out": false,
+        "total_hits": 3,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.41876,
+      "returned": 3,
+      "sample": 4
+    },
+    {
+      "case": "fulltext_default:\u96fb\u89e3\u8cea",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 7,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 1.073,
+      "returned": 7,
+      "sample": 4
+    },
+    {
+      "case": "fulltext_in_collection:\u96fb\u89e3\u8cea",
+      "detail": {
+        "complete": true,
+        "fts_truncated": false,
+        "scanned_documents": 0,
+        "short_terms": [],
+        "timed_out": false,
+        "total_hits": 3,
+        "unsearched": "[]"
+      },
+      "elapsed_ms": 0.852379,
+      "returned": 3,
+      "sample": 4
+    }
+  ],
+  "rss_kib_after": 15372,
+  "rss_kib_before": 11696,
+  "samples": 5,
+  "search_limit": 50,
+  "rusage": {
+    "user_s": 0.28224499999999997,
+    "system_s": 0.03648,
+    "max_rss_kib": 43244,
+    "in_blocks": 0,
+    "out_blocks": 112,
+    "voluntary_ctx": 940,
+    "involuntary_ctx": 1
+  },
+  "peak_rss_kib_sampled": 15728,
+  "last_io": {
+    "rss_kib": 15728,
+    "cpu_s": 0.0,
+    "read_bytes": 0,
+    "write_bytes": 57344,
+    "rchar": 2102963,
+    "wchar": 13
+  }
+}

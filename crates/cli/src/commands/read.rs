@@ -30,15 +30,23 @@ fn quoted(value: &str) -> String {
     format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
+/// `scan_after.offset.pages_after`; a two-part cursor (before the page lane) has
+/// `pages_after = 0`.
 fn encode_cursor(c: SearchCursor) -> String {
-    format!("{}.{}", c.scan_after, c.offset)
+    format!("{}.{}.{}", c.scan_after, c.offset, c.pages_after)
 }
 fn decode_cursor(raw: &str) -> Result<SearchCursor, CliError> {
     let bad = || CliError::usage(format!("invalid --cursor {raw:?}"));
-    let (scan, offset) = raw.split_once('.').ok_or_else(bad)?;
+    let parts: Vec<&str> = raw.split('.').collect();
+    let (scan, offset, pages) = match parts[..] {
+        [scan, offset] => (scan, offset, "0"),
+        [scan, offset, pages] => (scan, offset, pages),
+        _ => return Err(bad()),
+    };
     Ok(SearchCursor {
         scan_after: scan.parse().map_err(|_| bad())?,
         offset: offset.parse().map_err(|_| bad())?,
+        pages_after: pages.parse().map_err(|_| bad())?,
     })
 }
 
@@ -536,9 +544,20 @@ mod tests {
         let c = SearchCursor {
             scan_after: 42,
             offset: 7,
+            pages_after: 9,
         };
+        assert_eq!(encode_cursor(c), "42.7.9");
         assert_eq!(decode_cursor(&encode_cursor(c)).unwrap(), c);
+        // A cursor printed before the page lane existed still resumes (page lane at start).
+        assert_eq!(
+            decode_cursor("42.7").unwrap(),
+            SearchCursor {
+                pages_after: 0,
+                ..c
+            }
+        );
         assert!(decode_cursor("x").is_err());
+        assert!(decode_cursor("1.2.3.4").is_err());
     }
 
     #[test]

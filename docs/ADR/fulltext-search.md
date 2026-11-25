@@ -58,7 +58,7 @@ second index generation); on a 20k-page library it is a single long write, which
 acceptable for a damage-recovery path (#30 measures it).
 
 **Cursor stability.** A rebuild renumbers `search_documents.id`. `SearchCursor` positions
-(`scan_after` window bound and `offset` within a window) refer to those ids, so a cursor
+(`scan_after`/`pages_after` lane positions and `offset` within a window) refer to those ids, so a cursor
 taken before a rebuild can skip or repeat hits afterwards; clients restart from no cursor
 after a rebuild (the `search.rebuild` job result reports the new `generation`). Ordinary
 writes between pages can likewise shift ranked results (no cross-call snapshot).
@@ -135,7 +135,7 @@ diagnostic, so a request never silently selects the whole library.
   `OR`/`*`/`NEAR` inside quotes are data.
 - Terms with 1–2 scalars: unicode61 token match plus a **bounded literal scan**
   (`instr(lower(…))`, ASCII case-insensitive, other text exact) over at most
-  `candidate_limit` (1..20000, default 2000) documents in id order, checked against
+  `candidate_limit` (1..20000, default 2000) documents per call, checked against
   `timeout_ms` between 256-row chunks and inside SQLite (an interrupted chunk ends the
   window early). Scope `bounded` (default) scans bibliographic and
   annotation documents always and PDF pages only after an explicit narrowing filter
@@ -148,6 +148,26 @@ diagnostic, so a request never silently selects the whole library.
   other short clauses match only outside it is checked against all of its documents (same
   sources, request deadline; running out of time sets `timed_out`), so clauses matched in
   different windows still return the paper's documents, each in its own window.
+- **Scan lanes.** A window reads two lanes, each in document id order from its own cursor
+  position: bibliographic + annotation documents (`scan_after`) and, when pages are
+  scanned, PDF page documents (`pages_after`). The lanes share `candidate_limit`: the first
+  lane gets half (rounded up), the page lane what is left, and budget a lane leaves unused
+  (it ran out of documents) goes to the other one, so a window never examines more than
+  `candidate_limit` documents in total. A lane that ran out covers everything after its
+  position; otherwise the window ends at its last examined document and the continuation
+  resumes each lane there. When pages are not scanned, page hits (unicode61 tokens) follow
+  the bibliographic lane's id window as before. Rationale (#30): papers are usually added
+  before their PDFs are extracted, so every page document has a higher id than every
+  bibliographic document; with one id-ordered lane, a narrowed short term over a
+  collection with ≥ `candidate_limit` papers examined no page at all in its first window
+  and returned 0 hits plus `documents_after_window` although thousands of pages matched.
+  Two lanes rather than one per source: bibliographic and annotation documents are a few
+  per paper, pages are the unbounded volume. Scanning pages first was rejected because
+  it moves the same problem to the bibliographic records (title hits, the most heavily
+  weighted, would vanish behind a large PDF set). Cursors written before the page lane
+  (`scan_after.offset` in REST/CLI, no `pages_after` in JSON) resume with the page lane at
+  its start. A lane not reached in a window (deadline, or `candidate_limit = 1`) keeps
+  its position; the first open lane always gets budget, so continuations end.
 - Ranking: score = Σ over clauses of the best weighted score; field weights default to
   title 10, authors 8, tags 5, identifiers 5, journal 3, abstract 3, notes 2, body 1 and are
   overridable per request (0..100). Order: score desc, document id asc.

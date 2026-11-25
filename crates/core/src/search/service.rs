@@ -10,7 +10,9 @@
 //!   (substring, case-insensitive) and unicode61 (token, diacritics folded). Candidates are
 //!   merged per document; the clause score is the better weighted bm25 of the two.
 //! - A shorter clause is looked up as a unicode61 token plus a bounded literal substring
-//!   scan (ASCII case-insensitive, other text exact) over one window of documents.
+//!   scan (ASCII case-insensitive, other text exact) over one window of documents. The
+//!   window has two lanes in id order sharing its budget, bibliographic/annotation
+//!   documents and (when scanned) PDF pages, so neither kind can use up the window alone.
 //!   Within a scan window only documents in that window are returned, so successive
 //!   continuation windows never repeat a hit. The paper-level AND still spans windows: a
 //!   paper with a document in the window is also checked for the short clauses in all of
@@ -292,6 +294,80 @@ fn plan(
 #[derive(Clone, Copy)]
 struct Meta {
     paper_id: PaperId,
+    source: DocumentSource,
+}
+
+/// Hits of a short-term window are limited to `(after, end]` of their lane (`end: None`:
+/// the lane was exhausted). Page documents follow the page lane when the scan examines
+/// pages, otherwise the bibliographic/annotation lane like every other document.
+#[derive(Debug, Clone, Copy)]
+struct Window {
+    records: (i64, Option<i64>),
+    pages: Option<(i64, Option<i64>)>,
+}
+impl Window {
+    fn contains(&self, id: i64, source: DocumentSource) -> bool {
+        let (after, end) = match (source, self.pages) {
+            (DocumentSource::Page, Some(pages)) => pages,
+            _ => self.records,
+        };
+        id > after && end.is_none_or(|end| id <= end)
+    }
+}
+
+/// One window of the short-term scan over independent lanes (`(sources, after)`; a lane
+/// without sources is exhausted). The budget is shared: each lane first gets an equal part
+/// of what is left (a lane that ends early leaves the rest to the lanes after it), then any
+/// remainder goes to lanes that are still open, in order. The total number of examined rows
+/// never exceeds `budget`. A timed-out scan ends the window; later lanes keep their position.
+fn scan_lanes(
+    index: &dyn SearchIndex,
+    needles: &[String],
+    filter: &ResolvedFilter,
+    lanes: &[(&[DocumentSource], i64)],
+    budget: u32,
+    deadline: Instant,
+) -> Result<Vec<ScanWindow>, ServiceError> {
+    let mut windows: Vec<ScanWindow> = lanes
+        .iter()
+        .map(|(sources, _)| ScanWindow {
+            exhausted: sources.is_empty(),
+            ..Default::default()
+        })
+        .collect();
+    let mut remaining = budget;
+    for equal_share in [true, false] {
+        for (i, (sources, after)) in lanes.iter().enumerate() {
+            if windows[i].exhausted || remaining == 0 {
+                continue;
+            }
+            let share = if equal_share {
+                let open = windows[i..].iter().filter(|w| !w.exhausted).count() as u32;
+                remaining.div_ceil(open)
+            } else {
+                remaining
+            };
+            let window = &mut windows[i];
+            let found = index.scan(
+                needles,
+                filter,
+                sources,
+                window.last_id.unwrap_or(*after),
+                share,
+                deadline,
+            )?;
+            remaining = remaining.saturating_sub(found.examined);
+            window.rows.extend(found.rows);
+            window.examined += found.examined;
+            window.last_id = found.last_id.or(window.last_id);
+            window.exhausted = found.exhausted;
+            window.timed_out = found.timed_out;
+            if found.timed_out {
+                return Ok(windows);
+            }
+        }
+    }
+    Ok(windows)
 }
 
 /// Executes one search request within `request.timeout_ms` (plus `RESULT_GRACE` for the
@@ -359,9 +435,10 @@ fn execute(
         clause: &mut HashMap<i64, f64>,
         id: i64,
         paper_id: PaperId,
+        source: DocumentSource,
         score: f64,
     ) {
-        meta.entry(id).or_insert(Meta { paper_id });
+        meta.entry(id).or_insert(Meta { paper_id, source });
         let entry = clause.entry(id).or_insert(score);
         *entry = entry.max(score);
     }
@@ -387,14 +464,15 @@ fn execute(
                     &mut clauses[i],
                     c.id,
                     c.paper_id,
+                    c.source,
                     c.score.max(0.0),
                 );
             }
         }
     }
 
-    // Window bounds for short-term queries: hits are limited to (scan_after, window_end].
-    let mut window: Option<(i64, Option<i64>)> = None;
+    // Window bounds for short-term queries: hits are limited to their lane's (after, end].
+    let mut window: Option<Window> = None;
     if !short.is_empty() {
         let pages_allowed =
             request.short_term_scope == ShortTermScope::AllPages || filter.narrows();
@@ -409,23 +487,34 @@ fn execute(
                 .push(UnsearchedScope::PdfPagesForShortTerms);
         }
         let needles: Vec<String> = short.iter().map(|s| s.to_string()).collect();
-        let scan = if scan_sources.is_empty() {
-            ScanWindow {
-                exhausted: true,
-                ..Default::default()
-            }
+        // Two lanes, so that one kind of document cannot use up the window: bibliographic
+        // and annotation documents (a few per paper), and PDF pages (up to thousands per
+        // paper, usually extracted after the papers were added and so with higher ids).
+        let record_sources: Vec<DocumentSource> = scan_sources
+            .iter()
+            .copied()
+            .filter(|s| *s != DocumentSource::Page)
+            .collect();
+        let scan_pages = scan_sources.contains(&DocumentSource::Page);
+        let page_sources: &[DocumentSource] = if scan_pages {
+            &[DocumentSource::Page]
         } else {
-            index.scan(
-                &needles,
-                filter,
-                &scan_sources,
-                cursor.scan_after,
-                request.candidate_limit,
-                deadline,
-            )?
+            &[]
         };
-        coverage.scanned_documents = scan.examined;
-        coverage.timed_out = scan.timed_out;
+        let lanes = [
+            (record_sources.as_slice(), cursor.scan_after),
+            (page_sources, cursor.pages_after),
+        ];
+        let scans = scan_lanes(
+            index,
+            &needles,
+            filter,
+            &lanes,
+            request.candidate_limit,
+            deadline,
+        )?;
+        coverage.scanned_documents = scans.iter().map(|w| w.examined).sum();
+        coverage.timed_out = scans.iter().any(|w| w.timed_out);
         let record =
             |meta: &mut HashMap<i64, Meta>, clauses: &mut [HashMap<i64, f64>], rows: &[ScanRow]| {
                 for row in rows {
@@ -438,27 +527,53 @@ fn execute(
                                 &mut clauses[i],
                                 row.id,
                                 row.paper_id,
+                                row.source,
                                 weights.best(*mask),
                             );
                         }
                     }
                 }
             };
-        record(&mut meta, &mut clauses, &scan.rows);
-        let full = cursor.scan_after == 0 && scan.exhausted && !scan.timed_out;
-        if scan.exhausted && !scan.timed_out {
+        for scan in &scans {
+            record(&mut meta, &mut clauses, &scan.rows);
+        }
+        let done = !coverage.timed_out && scans.iter().all(|w| w.exhausted);
+        let full = done && lanes.iter().all(|(_, after)| *after == 0);
+        // Per lane: an exhausted lane covers everything after its start; otherwise the
+        // window ends at the last examined document (or is empty when the lane was not
+        // reached before the deadline) and the continuation resumes there.
+        let bounds: Vec<(i64, Option<i64>)> = lanes
+            .iter()
+            .zip(&scans)
+            .map(|((_, after), scan)| {
+                if scan.exhausted && !scan.timed_out {
+                    (*after, None)
+                } else {
+                    (*after, Some(scan.last_id.unwrap_or(*after)))
+                }
+            })
+            .collect();
+        let next = |i: usize| scans[i].last_id.unwrap_or(lanes[i].1);
+        let current = Window {
+            records: bounds[0],
+            pages: scan_pages.then_some(bounds[1]),
+        };
+        window = Some(current);
+        if done {
             coverage.scan = ScanStatus::Complete;
-            window = Some((cursor.scan_after, None));
         } else {
             coverage.scan = ScanStatus::Partial;
-            let end = scan.last_id.unwrap_or(cursor.scan_after);
-            window = Some((cursor.scan_after, Some(end)));
             coverage
                 .unsearched
                 .push(UnsearchedScope::DocumentsAfterWindow);
             coverage.continuation = Some(SearchCursor {
-                scan_after: end,
+                scan_after: next(0),
                 offset: 0,
+                pages_after: if scan_pages {
+                    next(1)
+                } else {
+                    cursor.pages_after
+                },
             });
         }
         // Paper-level AND across windows: when this window did not cover every document, a
@@ -466,8 +581,6 @@ fn execute(
         // window. Those clauses are looked up in all documents of such papers, so the paper's
         // in-window documents are still returned here (and only here).
         if !full && !scan_sources.is_empty() {
-            let (after, end) = window.expect("set above");
-            let in_window = |id: i64| id > after && end.is_none_or(|end| id <= end);
             let is_short: Vec<bool> = plan.texts.iter().map(|t| short.contains(&t)).collect();
             let clause_papers: Vec<HashSet<PaperId>> = clauses
                 .iter()
@@ -476,7 +589,7 @@ fn execute(
             let mut candidates: Vec<PaperId> = clauses
                 .iter()
                 .flat_map(|c| c.keys())
-                .filter(|id| in_window(**id))
+                .filter(|id| current.contains(**id, meta[*id].source))
                 .map(|id| meta[id].paper_id)
                 .collect::<HashSet<_>>()
                 .into_iter()
@@ -542,8 +655,8 @@ fn execute(
         }
         docs.into_iter().collect()
     };
-    if let Some((after, end)) = window {
-        ranked.retain(|(id, _)| *id > after && end.is_none_or(|end| *id <= end));
+    if let Some(window) = window {
+        ranked.retain(|(id, _)| window.contains(*id, meta[id].source));
     }
     ranked.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
     let total = ranked.len();
@@ -555,8 +668,8 @@ fn execute(
         .copied()
         .collect();
     let next_page = (offset + page.len() < total).then_some(SearchCursor {
-        scan_after: cursor.scan_after,
         offset: (offset + page.len()) as u32,
+        ..cursor
     });
 
     let ids: Vec<i64> = page.iter().map(|(id, _)| *id).collect();
