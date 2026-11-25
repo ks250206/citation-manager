@@ -6,8 +6,8 @@ use cm_core::{
     papers::PaperVisibility,
     search::{
         service::{
-            Candidate, ExtractionGaps, IndexedDocument, ResolvedFilter, ScanRow, ScanWindow,
-            SearchIndex, Tokenizer,
+            Candidate, ExtractionGaps, IndexedDocument, ResolvedFilter, ScanBudget, ScanRow,
+            ScanWindow, SearchIndex, Tokenizer,
         },
         types::{DocumentSource, SearchField, Weights},
     },
@@ -259,7 +259,7 @@ impl SearchIndex for SqliteSearch<'_> {
         f: &ResolvedFilter,
         source_set: &[DocumentSource],
         after: i64,
-        max_rows: u32,
+        budget: ScanBudget,
         deadline: Instant,
     ) -> Result<ScanWindow, ServiceError> {
         let mut window = ScanWindow::default();
@@ -267,9 +267,16 @@ impl SearchIndex for SqliteSearch<'_> {
             window.exhausted = true;
             return Ok(window);
         }
+        let empty_rows = budget.empty_rows.max(budget.rows);
         let mut last = after;
         loop {
-            let chunk = SCAN_CHUNK.min(max_rows - window.examined);
+            // Base window first; past it only while nothing matched (empty-window extension).
+            let cap = if window.examined < budget.rows {
+                budget.rows
+            } else {
+                empty_rows
+            };
+            let chunk = SCAN_CHUNK.min(cap - window.examined);
             let mut b = Sql::default();
             let masks = needles
                 .iter()
@@ -311,9 +318,10 @@ impl SearchIndex for SqliteSearch<'_> {
             let rows = match rows {
                 Ok(rows) => rows,
                 // The request deadline interrupted this chunk: the window ends after the
-                // last fully examined chunk and is reported as timed out (continuation).
+                // last fully examined chunk (continuation). It timed out unless the base
+                // window was already complete and only the empty-window extension was cut.
                 Err(e) if sql_fault(&e) == SqlFault::Interrupted => {
-                    window.timed_out = true;
+                    window.timed_out = window.examined < budget.rows;
                     return Ok(window);
                 }
                 Err(e) => return Err(self.err(e)),
@@ -331,10 +339,17 @@ impl SearchIndex for SqliteSearch<'_> {
                 window.exhausted = true;
                 return Ok(window);
             }
-            if window.examined >= max_rows {
+            let now = Instant::now();
+            // A full base window ends normally; so does an empty-window extension at its
+            // row cap or soft time limit (`empty_until` is never after `deadline`).
+            if window.examined >= budget.rows
+                && (!window.rows.is_empty()
+                    || window.examined >= empty_rows
+                    || now >= budget.empty_until.min(deadline))
+            {
                 break;
             }
-            if Instant::now() >= deadline {
+            if now >= deadline {
                 window.timed_out = true;
                 break;
             }

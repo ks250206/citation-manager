@@ -9,8 +9,8 @@ use cm_core::{
         extraction::{ExtractScope, ExtractedPage, ExtractionState, FulltextStore, StoreBatch},
         search,
         service::{
-            Candidate, ExtractionGaps, IndexedDocument, ResolvedFilter, ScanWindow, SearchIndex,
-            Tokenizer,
+            Candidate, ExtractionGaps, IndexedDocument, ResolvedFilter, ScanBudget, ScanWindow,
+            SearchIndex, Tokenizer,
         },
         types::*,
     },
@@ -433,7 +433,7 @@ fn short_term_scan_stops_at_the_deadline_between_chunks() {
             &Default::default(),
             &all,
             0,
-            1000,
+            ScanBudget::fixed(1000),
             expired,
         )
         .unwrap();
@@ -448,7 +448,7 @@ fn short_term_scan_stops_at_the_deadline_between_chunks() {
             &Default::default(),
             &all,
             window.last_id.unwrap(),
-            1000,
+            ScanBudget::fixed(1000),
             std::time::Instant::now() + std::time::Duration::from_secs(60),
         )
         .unwrap();
@@ -565,6 +565,135 @@ fn short_term_scan_is_bounded_with_continuation_and_explicit_scope() {
     let mut all = SearchRequest::new("電池");
     all.short_term_scope = ShortTermScope::AllPages;
     assert_eq!(results(&db, &all).hits.len(), 6);
+}
+
+/// #30 regression: a collection's bibliographic records are indexed before any of its PDF
+/// pages, so with more records than `candidate_limit` the first window used to hold only
+/// records and a short term that occurs only in pages returned 0 hits plus a continuation.
+/// An empty window now keeps going until it matches; continuation windows still return
+/// every matching page exactly once, without timing out.
+#[test]
+fn scoped_short_term_reaches_pages_behind_a_window_of_records() {
+    let mut db = LibraryDb::in_memory().unwrap();
+    let shelf = CollectionService::new(db.collections())
+        .create(CollectionInput::named("Shelf"))
+        .unwrap();
+    let mut members = Vec::new();
+    for i in 0..30 {
+        let id = paper(&mut db, &format!("record {i}"), 2020, "no term here");
+        CollectionService::new(db.collections())
+            .add_paper(id, shelf.id)
+            .unwrap();
+        members.push(id);
+    }
+    let outside = paper(&mut db, "outside", 2020, "no term here");
+    // Pages are extracted after all records were imported: higher document ids. The
+    // first member's matching page is followed by more non-matching pages than one scan
+    // chunk, then the second member's matching page.
+    let first = attachment(&db, members[0], 1);
+    page(&db, first, 0, "1", "本文に電池が出る");
+    for i in 1..300 {
+        page(&db, first, i, &format!("{}", i + 1), "背景の文章だけ");
+    }
+    let second = attachment(&db, members[7], 2);
+    page(&db, second, 0, "1", "全固体電池の評価");
+    let elsewhere = attachment(&db, outside, 3);
+    page(&db, elsewhere, 0, "1", "電池は範囲外");
+
+    let mut request = SearchRequest::new("電池");
+    request.collection = Some(shelf.id);
+    request.candidate_limit = 10;
+    let page_hits = |page: &SearchPage| {
+        page.hits
+            .iter()
+            .map(|h| {
+                assert_eq!(h.source, DocumentSource::Page);
+                (h.paper_id, h.page_index.unwrap())
+            })
+            .collect::<Vec<_>>()
+    };
+    let one = results(&db, &request);
+    assert_eq!(
+        page_hits(&one),
+        vec![(members[0], 0)],
+        "hit on the first call"
+    );
+    assert!(!one.coverage.timed_out);
+    assert_eq!(one.coverage.scan, ScanStatus::Partial);
+    assert!(
+        one.coverage.scanned_documents > 30,
+        "past the records: {}",
+        one.coverage.scanned_documents
+    );
+    // The extension stops at the matching chunk; the rest is a normal continuation.
+    let mut seen = page_hits(&one);
+    let mut windows = 1;
+    request.cursor = one.coverage.continuation;
+    while request.cursor.is_some() {
+        let next = results(&db, &request);
+        windows += 1;
+        assert!(windows < 10, "continuations must end");
+        assert!(!next.coverage.timed_out);
+        seen.extend(page_hits(&next));
+        request.cursor = next.coverage.continuation;
+    }
+    assert_eq!(windows, 2);
+    assert_eq!(seen, vec![(members[0], 0), (members[7], 0)]);
+    // A term with no match at all: one call covers the whole scope (up to the empty-window
+    // limit) and is complete instead of an empty partial window.
+    let mut none = SearchRequest::new("鉄");
+    none.collection = Some(shelf.id);
+    none.candidate_limit = 10;
+    let none = results(&db, &none);
+    assert!(none.hits.is_empty());
+    assert_eq!(none.coverage.scan, ScanStatus::Complete);
+    assert_eq!(none.coverage.scanned_documents, 30 + 301);
+}
+
+/// The empty-window extension is bounded by its row cap and its soft time limit; reaching
+/// either ends the window normally (continuation, not `timed_out`).
+#[test]
+fn empty_window_extension_stops_at_its_limits_without_timing_out() {
+    use std::time::{Duration, Instant};
+    let mut db = LibraryDb::in_memory().unwrap();
+    for i in 0..600 {
+        paper(&mut db, &format!("record {i}"), 2020, "x");
+    }
+    paper(&mut db, "電池 at the end", 2020, "x");
+    let index = db.search_index();
+    let needles = ["電池".to_string()];
+    let sources = [DocumentSource::Paper];
+    let later = Instant::now() + Duration::from_secs(60);
+    let scan = |budget| {
+        index
+            .scan(&needles, &Default::default(), &sources, 0, budget, later)
+            .unwrap()
+    };
+    // Soft time limit already passed: the base window only.
+    let soft = scan(ScanBudget {
+        rows: 10,
+        empty_rows: 20_000,
+        empty_until: Instant::now(),
+    });
+    assert_eq!(soft.examined, 10);
+    assert!(soft.rows.is_empty() && !soft.timed_out && !soft.exhausted);
+    // Row cap: base window plus extension chunks up to `empty_rows`.
+    let capped = scan(ScanBudget {
+        rows: 10,
+        empty_rows: 300,
+        empty_until: later,
+    });
+    assert_eq!(capped.examined, 300);
+    assert!(capped.rows.is_empty() && !capped.timed_out && !capped.exhausted);
+    // Unbounded enough: reaches the match and the end of the scope.
+    let found = scan(ScanBudget::extending(10, later));
+    assert_eq!(found.examined, 601);
+    assert_eq!(found.rows.len(), 1);
+    assert!(found.exhausted && !found.timed_out);
+    // A fixed budget never extends.
+    let fixed = scan(ScanBudget::fixed(10));
+    assert_eq!(fixed.examined, 10);
+    assert!(fixed.rows.is_empty() && !fixed.exhausted);
 }
 
 #[test]
@@ -875,11 +1004,11 @@ impl SearchIndex for Expired<'_> {
         filter: &ResolvedFilter,
         sources: &[DocumentSource],
         after: i64,
-        max_rows: u32,
+        budget: ScanBudget,
         deadline: std::time::Instant,
     ) -> Result<ScanWindow, cm_core::ServiceError> {
         self.0
-            .scan(needles, filter, sources, after, max_rows, deadline)
+            .scan(needles, filter, sources, after, budget, deadline)
     }
     fn documents(&self, ids: &[i64]) -> Result<Vec<IndexedDocument>, cm_core::ServiceError> {
         self.0.documents(ids)
@@ -975,7 +1104,7 @@ fn deadline_interrupts_inside_sqlite_and_readers_do_not_serialize() {
             &Default::default(),
             &[DocumentSource::Paper],
             0,
-            1000,
+            ScanBudget::fixed(1000),
             Instant::now() + Duration::from_secs(60),
         )
         .unwrap();

@@ -207,7 +207,10 @@ pub struct SearchRequest {
     pub cursor: Option<SearchCursor>,
     #[serde(default)]
     pub short_term_scope: ShortTermScope,
-    /// Documents examined per short-term scan window: 1..=20000.
+    /// Documents examined per short-term scan window: 1..=20000. A window that has found no
+    /// match after this many documents keeps going until a chunk matches (at most 20000
+    /// documents and half the remaining `timeout_ms`), so it does not end empty just
+    /// because non-matching documents (e.g. a collection's records) come first.
     #[serde(default = "default_candidates")]
     pub candidate_limit: u32,
     /// Snippet length in Unicode scalars: 32..=1000.

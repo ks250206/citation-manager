@@ -10,7 +10,9 @@
 //!   (substring, case-insensitive) and unicode61 (token, diacritics folded). Candidates are
 //!   merged per document; the clause score is the better weighted bm25 of the two.
 //! - A shorter clause is looked up as a unicode61 token plus a bounded literal substring
-//!   scan (ASCII case-insensitive, other text exact) over one window of documents.
+//!   scan (ASCII case-insensitive, other text exact) over one window of documents. A
+//!   window with no match after `candidate_limit` documents extends until one matches
+//!   (bounded, see `ScanBudget`), so a run of non-matching records does not end it empty.
 //!   Within a scan window only documents in that window are returned, so successive
 //!   continuation windows never repeat a hit. The paper-level AND still spans windows: a
 //!   paper with a document in the window is also checked for the short clauses in all of
@@ -82,6 +84,42 @@ pub struct ScanRow {
     pub masks: Vec<u8>,
 }
 
+/// How far one short-term scan window may go.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ScanBudget {
+    /// Documents examined per window (`SearchRequest::candidate_limit`).
+    pub rows: u32,
+    /// A window that has found no match after `rows` documents keeps going, chunk by
+    /// chunk, until a chunk matches, `empty_rows` documents (>= `rows`) are examined or
+    /// `empty_until` passes. Without it a run of non-matching documents — typically a
+    /// collection's bibliographic records, whose ids precede its extracted PDF pages —
+    /// ends the window empty although the next documents match (#30). Stopping at
+    /// `empty_rows` or `empty_until` ends a normal window (continuation, not `timed_out`).
+    pub empty_rows: u32,
+    pub empty_until: Instant,
+}
+impl ScanBudget {
+    /// Exactly `rows` documents (no extension of an empty window).
+    pub fn fixed(rows: u32) -> Self {
+        Self {
+            rows,
+            empty_rows: rows,
+            empty_until: Instant::now(),
+        }
+    }
+    /// Base window of `rows`; an empty window extends up to `MAX_CANDIDATE_LIMIT`
+    /// documents and at most half of the time left until `deadline`, so the rest of the
+    /// request (paper-level AND checks, the result fetch) keeps its share of the budget.
+    pub fn extending(rows: u32, deadline: Instant) -> Self {
+        let now = Instant::now();
+        Self {
+            rows,
+            empty_rows: rows.max(MAX_CANDIDATE_LIMIT),
+            empty_until: now + deadline.saturating_duration_since(now) / 2,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ScanWindow {
     /// Rows with at least one needle match.
@@ -135,15 +173,16 @@ pub trait SearchIndex {
     ) -> Result<Vec<Candidate>, ServiceError>;
     /// Bibliographic documents of papers matching `filter` (filter-only queries).
     fn filtered(&self, filter: &ResolvedFilter, max: u32) -> Result<Vec<Candidate>, ServiceError>;
-    /// Examines documents in id order after `after`, at most `max_rows`, stopping early at
-    /// `deadline`. Literal substring per needle and field, ASCII case-insensitive.
+    /// Examines documents in id order after `after` within `budget` (`budget.rows`, or
+    /// more while nothing has matched yet), stopping early at `deadline` (`timed_out`).
+    /// Literal substring per needle and field, ASCII case-insensitive.
     fn scan(
         &self,
         needles: &[String],
         filter: &ResolvedFilter,
         sources: &[DocumentSource],
         after: i64,
-        max_rows: u32,
+        budget: ScanBudget,
         deadline: Instant,
     ) -> Result<ScanWindow, ServiceError>;
     fn documents(&self, ids: &[i64]) -> Result<Vec<IndexedDocument>, ServiceError>;
@@ -420,7 +459,7 @@ fn execute(
                 filter,
                 &scan_sources,
                 cursor.scan_after,
-                request.candidate_limit,
+                ScanBudget::extending(request.candidate_limit, deadline),
                 deadline,
             )?
         };
@@ -499,7 +538,7 @@ fn execute(
                         &scoped,
                         &scan_sources,
                         from,
-                        MAX_CANDIDATE_LIMIT,
+                        ScanBudget::fixed(MAX_CANDIDATE_LIMIT),
                         deadline,
                     )?;
                     record(&mut meta, &mut clauses, &found.rows);

@@ -137,7 +137,26 @@ diagnostic, so a request never silently selects the whole library.
   (`instr(lower(…))`, ASCII case-insensitive, other text exact) over at most
   `candidate_limit` (1..20000, default 2000) documents in id order, checked against
   `timeout_ms` between 256-row chunks and inside SQLite (an interrupted chunk ends the
-  window early). Scope `bounded` (default) scans bibliographic and
+  window early). **Empty-window extension** (#30): a window with no literal match after
+  `candidate_limit` documents keeps scanning in 256-row chunks and ends after the first
+  chunk that matches, at 20000 examined documents, at half of the time left when the scan
+  started, or at the end of the scope. Documents are numbered in indexing order, so a
+  collection's bibliographic records (imported first) precede its extracted PDF pages; in
+  the #30 benchmark (collection of 2,000 papers + 2,000 pages, default window 2,000) the
+  first window held only records and `電`/`電池` returned 0 hits plus a continuation
+  although the collection's pages match. The extension changes only where a window ends:
+  the cursor is still the last examined id, windows never repeat a hit, `scanned_documents`
+  counts every examined document, and ending at the row cap or the soft time limit is a
+  normal partial window (`continuation`, not `timed_out`); `timed_out` still means the
+  request deadline cut the base window short (an interrupt inside an extension chunk only
+  ends the window at the last complete chunk). It never costs more than the continuation
+  calls it replaces, but a short term with no match in a large scope now uses up to that
+  bound in one call instead of returning an empty window quickly. Alternatives rejected:
+  scanning PDF pages first (needs a two-part cursor on every surface and moves title hits,
+  the highest-weighted, behind all pages — the same empty-window failure mirrored for
+  terms found only in records); sizing the window by the scoped document count (no help
+  for a collection larger than one window). The paper-level AND re-check below uses fixed
+  windows. Scope `bounded` (default) scans bibliographic and
   annotation documents always and PDF pages only after an explicit narrowing filter
   (doi/tag/collection/year/`collection`/`papers`); otherwise `unsearched` contains
   `pdf_pages_for_short_terms` — missing page hits are unknown, not zero. Scope `all_pages`
