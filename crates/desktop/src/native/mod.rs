@@ -17,6 +17,7 @@ mod import_ui;
 mod library_ui;
 mod palette_ui;
 mod pdf_ui;
+mod pdf_viewer_ui;
 mod settings_ui;
 mod text_input;
 use self::text_input::TextInput;
@@ -57,6 +58,7 @@ actions!(
         PaletteNext,
         PalettePrevious,
         PaletteClose,
+        CopySelection,
     ]
 );
 enum Event {
@@ -73,6 +75,12 @@ enum Event {
     SaveSettings(Result<(), ServiceError>),
     Export(Result<Exported, ServiceError>),
     Progress(PdfReport),
+    /// Page render replies bypass the single-ticket lanes; the viewer tracks them by key.
+    Render(
+        crate::pdf_viewer::RenderKey,
+        u64,
+        Result<PdfReply, ServiceError>,
+    ),
 }
 struct Message {
     lane: Lane,
@@ -154,6 +162,9 @@ struct LibraryView {
     palette_index: usize,
     palette_query: Entity<TextInput>,
     palette_scroll: ScrollHandle,
+    viewer: Option<pdf_viewer_ui::Viewer>,
+    viewer_focus: FocusHandle,
+    page_input: Entity<TextInput>,
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Screen {
@@ -239,7 +250,11 @@ impl LibraryView {
             palette_index: 0,
             palette_query: cx.new(|cx| TextInput::new("Type a command…", cx)),
             palette_scroll: ScrollHandle::new(),
+            viewer: None,
+            viewer_focus: cx.focus_handle(),
+            page_input: cx.new(|cx| TextInput::new("Page", cx)),
         };
+        view.subscribe_viewer_inputs(window, cx);
         cx.subscribe(
             &view.palette_query,
             |this, _, _: &text_input::Edited, cx| {
@@ -379,6 +394,10 @@ impl LibraryView {
         cx.notify();
     }
     fn receive(&mut self, message: Message, cx: &mut Context<Self>) {
+        if let Event::Render(key, serial, result) = message.event {
+            self.render_reply(key, serial, result, cx);
+            return;
+        }
         if let Event::Progress(report) = message.event {
             if self.pending.get(&message.lane) == Some(&message.ticket) {
                 self.pdf_report = report;
@@ -516,7 +535,7 @@ impl LibraryView {
                 }
                 Err(e) => self.status(format!("Export failed: {e}"), true, cx),
             },
-            Event::Progress(_) => (),
+            Event::Progress(_) | Event::Render(..) => (),
         }
         self.lock_fields(cx);
         cx.notify();
@@ -1066,7 +1085,7 @@ impl Render for LibraryView {
             )
             .child(self.toolbar(cx))
             .child(match self.screen {
-                Screen::Library => self.library_screen(cx).into_any_element(),
+                Screen::Library => self.library_screen(window, cx).into_any_element(),
                 Screen::Import => self.import_screen(cx).into_any_element(),
                 Screen::Pdf => self.pdf_screen(cx).into_any_element(),
                 Screen::Settings => self.settings_screen(cx).into_any_element(),
@@ -1120,6 +1139,7 @@ fn key_bindings() -> Vec<KeyBinding> {
         KeyBinding::new("down", PaletteNext, Some("Palette")),
         KeyBinding::new("up", PalettePrevious, Some("Palette")),
         KeyBinding::new("escape", PaletteClose, Some("Palette")),
+        KeyBinding::new(primary!("c"), CopySelection, Some("PdfViewer")),
         KeyBinding::new("tab", NextField, Some("Library")),
         KeyBinding::new("shift-tab", PreviousField, Some("Library")),
         KeyBinding::new(primary!("q"), Quit, None),

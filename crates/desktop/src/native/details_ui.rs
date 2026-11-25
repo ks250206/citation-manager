@@ -1,7 +1,13 @@
 use super::*;
 impl LibraryView {
-    pub(super) fn details_screen(&self, cx: &mut Context<Self>) -> Stateful<Div> {
+    pub(super) fn details_screen(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Stateful<Div> {
         let enabled = !self.locked();
+        // The viewer owns its own scrolling, so the PDF tab is not inside the details scroll.
+        let viewer = (self.settings.details_tab == "PDF").then(|| self.viewer_panel(window, cx));
         let tab = self.settings.details_tab.as_str();
         div()
             .id("details-host")
@@ -49,14 +55,27 @@ impl LibraryView {
                         })),
                     ),
             )
-            .child(
+            .when_some(viewer, |el, viewer| {
+                el.child(
+                    div()
+                        .id("pdf-attachments")
+                        .max_h(px(220.))
+                        .flex_shrink_0()
+                        .overflow_y_scroll()
+                        .p_3()
+                        .border_b_1()
+                        .border_color(rgb(BORDER))
+                        .child(self.pdf_host(cx)),
+                )
+                .child(viewer)
+            })
+            .when(tab != "PDF", |el| el.child(
                 div()
                     .id("details-content")
                     .flex_1()
                     .overflow_y_scroll()
                     .p_3()
                     .child(match tab {
-                        "PDF" => self.pdf_host(cx).into_any_element(),
                         "Notes" => div()
                             .child(hint(
                                 "Notes editing is not available in this version. No note text is saved.",
@@ -64,7 +83,7 @@ impl LibraryView {
                             .into_any_element(),
                         _ => self.info_tab(enabled, cx).into_any_element(),
                     }),
-            )
+            ))
     }
     fn info_tab(&self, enabled: bool, cx: &mut Context<Self>) -> Div {
         div()
@@ -273,12 +292,13 @@ impl LibraryView {
                 .child(
                     div()
                         .id("attach-drop")
-                        .p_4()
-                        .my_2()
+                        .px_3()
+                        .py_1()
+                        .my_1()
+                        .rounded_md()
+                        .text_size(px(12.))
                         .bg(rgb(0xe0eaff))
-                        .child(
-                            "Drop PDFs here to attach to this paper. Bibliography stays unchanged.",
-                        )
+                        .child("Drop PDFs here to ATTACH to this paper (bibliography unchanged)")
                         .on_drop(cx.listener(move |this, paths: &ExternalPaths, _, cx| {
                             if !this.locked() {
                                 this.inspect(
@@ -293,10 +313,13 @@ impl LibraryView {
             .child(
                 div()
                     .id("register-drop")
-                    .p_4()
-                    .my_2()
+                    .px_3()
+                    .py_1()
+                    .my_1()
+                    .rounded_md()
+                    .text_size(px(12.))
                     .bg(rgb(0xe5efe8))
-                    .child("Drop PDFs here to review registration as NEW papers.")
+                    .child("Drop PDFs here to register them as NEW papers (after review)")
                     .on_drop(cx.listener(|this, paths: &ExternalPaths, _, cx| {
                         if !this.locked() {
                             this.inspect(
@@ -321,20 +344,18 @@ impl LibraryView {
                     .enumerate()
                     .map(|(index, (a, status))| {
                         let id = a.id;
-                        button(
+                        nav_item(
                             ("attachment", index),
                             format!(
-                                "{} {} · {} bytes · {:?}",
-                                if self.host.selected == Some(id) {
-                                    "▸"
-                                } else {
-                                    ""
-                                },
+                                "📄 {} · {} KB{}",
                                 a.original_name,
-                                a.byte_size,
-                                status
+                                a.byte_size.div_ceil(1024),
+                                match status {
+                                    AttachmentStatus::Present => String::new(),
+                                    other => format!(" · {other:?}"),
+                                }
                             ),
-                            true,
+                            self.host.selected == Some(id),
                         )
                         .w_full()
                         .on_click(cx.listener(move |this, _, _, cx| {
@@ -343,20 +364,5 @@ impl LibraryView {
                         }))
                     }),
             )
-            .when_some(self.host.selected, |el, id| {
-                el.child(
-                    div()
-                        .id("pdf-viewer-host-slot")
-                        .mt_4()
-                        .p_4()
-                        .h(px(220.))
-                        .bg(rgb(0xe7e9ed))
-                        .child(line("Attachment selected"))
-                        .child(line(format!("{}", id.0)))
-                        .child(line(
-                            "PDF rendering and annotation tools are not available in this version.",
-                        )),
-                )
-            })
     }
 }
