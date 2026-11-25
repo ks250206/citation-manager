@@ -159,16 +159,30 @@ open while a child is open or a gate below remains.
 
 ## Blockers to declaring the MVP complete
 
-1. **Real-Mac verification** (owner or a native-CUA agent, per the [#7 table](TEST_MATRIX.md)):
-   install from the `.dmg` by Finder, first launch with quarantine/Gatekeeper, relaunch, the GUI on
-   Metal (viewer, selection, annotations, ⌘ shortcuts, Japanese IME, NSSavePanel export), browser
-   capture with the real extension, Keychain token storage, sleep/logout, concurrent first start.
+1. **Real-Mac verification.** A [real-Mac session](real-mac/README.md) on an M4 Max (36 GB,
+   macOS 27.2) verified the following with an ad-hoc `.dmg`:
+   - Finder install, the quarantined first launch blocked by Gatekeeper and opened after Open
+     Anyway, and relaunch.
+   - The Metal GUI: PDF viewer, drag selection and exact ⌘C text.
+   - ⌘K/⌘F/⌘Q and the Japanese IME commit/cancel rules.
+   - Keychain token storage and revoke, and the Quit Apple Event.
+
+   Still missing:
+   - Browser capture with the real extension, and NSSavePanel export.
+   - Annotation creation in the macOS GUI.
+   - Sleep/logout, concurrent first start, Kotoeri and Vim keys.
+   - IME candidate placement: fixed on `claude/ime-candidate-position`, not yet re-verified on
+     the Mac.
 2. **Developer ID signing and notarization** (#31; on hold by the owner): no certificate or notary credentials exist;
    `release_sign.py` reports `UNVERIFIED: no Developer ID`; the signed path has never run.
 3. **Store-published extension IDs** (#24): Chrome Web Store / AMO listings; until then only the
    development IDs exist and `npm run build:release` refuses to build.
-4. **16 GB Apple Silicon measurement** (#30, DESIGN §16.1), GUI frame time, and the PDF-view RSS
-   that is above target on Linux (409.7 MiB vs. 350 MB).
+4. **16 GB Apple Silicon measurement** (#30, DESIGN §16.1) and GUI frame time (#86).
+   - The headless targets are met on a real Mac (M4 Max 36 GB: metadata p95 41.9 ms, full text
+     16.7 ms, collection switch 2.0 ms).
+   - GUI idle with 10,000 rows is 126 MiB in total.
+   - PDF-view RSS is above target on Linux (409.7 MiB) and on the Mac: 495.9 MiB with one PDF at
+     100 % on a Retina display, 830 MiB peak in reading mode. #85 addresses this.
 5. **#15 native gates** listed in its README: offline DOI fallback, failed-page retry, native
    queued-late-arrival.
 6. **Live DOI providers**: no lane has ever resolved a DOI against Crossref/DataCite.
