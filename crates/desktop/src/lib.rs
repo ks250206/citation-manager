@@ -1,7 +1,13 @@
 //! Desktop views depend only on the replaceable protocol client.
+/// #84 actions on several selected papers, sent one request at a time.
+pub mod bulk;
+/// #84 library table columns, header sorting and cell text.
+pub mod columns;
 pub mod commands;
 pub mod deep_links;
 pub mod keymap;
+/// #84 popup menus (row context menu, ＋ Add, settings) and their keyboard navigation.
+pub mod menu;
 pub mod palette;
 pub mod pdf_viewer;
 #[cfg(any(

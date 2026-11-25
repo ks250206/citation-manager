@@ -143,3 +143,54 @@ fn filters_and_cursor_validate_at_the_common_boundary() {
         assert!(LibraryCursor::from_encoded(text).is_err());
     }
 }
+
+#[test]
+fn author_and_journal_cursors_carry_an_optional_text_key() {
+    let id = PaperId(uuid::Uuid::now_v7());
+    for field in [SortField::Author, SortField::Journal] {
+        let q = LibraryQuery {
+            sort: LibrarySort {
+                field,
+                direction: SortDirection::Desc,
+            },
+            ..Default::default()
+        };
+        for value in [None, Some("Müller".to_string())] {
+            let cursor =
+                LibraryCursor::from_position(&q, id, SortValue::OptionalText(value.clone()))
+                    .unwrap();
+            assert_eq!(
+                cursor.position_for(&q).unwrap(),
+                (id, SortValue::OptionalText(value))
+            );
+        }
+        // A key of another shape, or a cursor reused under another sort, is rejected.
+        assert!(LibraryCursor::from_position(&q, id, SortValue::Text("x".into())).is_err());
+        let cursor = LibraryCursor::from_position(&q, id, SortValue::OptionalText(None)).unwrap();
+        assert!(
+            LibraryQuery {
+                sort: LibrarySort {
+                    field: SortField::Title,
+                    direction: SortDirection::Desc,
+                },
+                after: Some(cursor),
+                ..q.clone()
+            }
+            .validate()
+            .is_err()
+        );
+    }
+    let title = LibraryQuery {
+        sort: LibrarySort {
+            field: SortField::Title,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    assert!(LibraryCursor::from_position(&title, id, SortValue::OptionalText(None)).is_err());
+    // Persisted sort settings name the new fields like the old ones.
+    assert_eq!(
+        serde_json::to_string(&SortField::Author).unwrap(),
+        "\"Author\""
+    );
+}

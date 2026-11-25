@@ -140,6 +140,35 @@ pub fn page_offsets(count: u32, sizes: &HashMap<u32, (f32, f32)>, scale: f32) ->
         .collect()
 }
 
+/// Scroll position (top edge, ≥ 0) that keeps the same spot of the same page at the top of
+/// the pane when the layout changes scale, e.g. when the pane is widened by Expand or the
+/// viewer comes back at another width. Without it the old pixel offset would land on a
+/// different page, or past the end in an empty gap. Positions in the gap above a page
+/// keep to that page's top.
+pub fn rescale_offset(old: &[(f32, f32)], new: &[(f32, f32)], top: f32) -> f32 {
+    let Some(page) = old
+        .iter()
+        .rposition(|(t, _)| *t - PAGE_GAP <= top)
+        .or((!old.is_empty()).then_some(0))
+    else {
+        return 0.0;
+    };
+    let (old_top, old_h) = old[page];
+    let fraction = if old_h > 0.0 {
+        ((top - old_top) / old_h).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let Some((new_top, new_h)) = new.get(page.min(new.len().saturating_sub(1))).copied() else {
+        return 0.0;
+    };
+    if top < old_top {
+        // In the gap above the page: keep the same gap.
+        return (new_top - (old_top - top)).max(0.0);
+    }
+    (new_top + fraction * new_h).max(0.0)
+}
+
 /// Pages intersecting `[top, top + height)` in a layout from `page_offsets`.
 pub fn visible_pages(layout: &[(f32, f32)], top: f32, height: f32) -> std::ops::Range<u32> {
     let bottom = top + height.max(1.0);

@@ -14,6 +14,7 @@ fn page(id: &str, next: Option<LibraryCursor>) -> LibraryPage {
             deleted_at: None,
         }],
         next,
+        with_pdf: vec![],
     }
 }
 
@@ -100,14 +101,16 @@ fn stale_query_pages_cannot_replace_current_filters_and_sort() {
         old,
         LibraryPage {
             papers: vec![],
-            next: None
+            next: None,
+            with_pdf: vec![],
         }
     ));
     assert!(library.complete(
         library.generation,
         LibraryPage {
             papers: vec![],
-            next: None
+            next: None,
+            with_pdf: vec![],
         }
     ));
 }

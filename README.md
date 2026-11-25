@@ -89,7 +89,12 @@ Linux では ⌘ の代わりに Ctrl を使います（Ctrl+N / Ctrl+S / Ctrl+F
 ⌘N で新規、Info の metadata を入力し ⌘S で共通 preview を開き、明示的な decisions を確認して保存します。
 保存済み文献はテーブルから選んで編集し、⌘S で更新。⌘F で metadata 検索欄へ移動し、↩ で検索します。
 テーブルでは ↑/↓ で選択移動、↩ で Title 欄へ移動、Esc で入力欄からテーブルへ戻ります。
-⌘1 Library、⌘2 Import review、⌘, Organize & export。未保存の編集は下部ステータスバーに表示されます。
+Shift+クリック / Shift+↑↓ で範囲選択、⌘クリックで追加選択、⌘A で全選択。行の右クリック（または Shift+F10）で
+開く・引用コピー（⌘⇧C）・コレクション・タグ・ゴミ箱（Delete）のメニューを開きます。列見出しのクリックで
+Author / Title / Year / Journal / Added の順に並べ替え、列の表示は ⚙ Settings › Table columns で切り替えます。
+新規作成と BibTeX / RIS の取り込みはトップバーの「＋ Add」から。
+⌘1 Library、⌘2 Import review、⌘, Organize & export（API & integrations とともに ⚙ Settings からも開けます）。
+未保存の編集は下部ステータスバーに表示されます。
 ⌘Q で完全終了し、同じ library/settings で再起動します。
 既定の実ライブラリは自動接続しません。HTTP は既定で無効です（API & integrations で有効化すると
 `papersd` が 127.0.0.1/::1 の REST API を提供: [rest-api ADR](docs/ADR/rest-api.md)、[OpenAPI](docs/openapi.json)）。GUI は library ごとの `papersd` を

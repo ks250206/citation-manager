@@ -497,6 +497,25 @@ fn pdf_offline_registration_partial_attachment_retry_without_second_paper_and_sc
     let paper = report.files[index].paper.unwrap();
     let page = call(|done| client.query(Default::default(), done)).unwrap();
     assert_eq!(page.papers.len(), 1);
+    // #84 the list's PDF column comes with the page, under every sort.
+    assert_eq!(page.with_pdf, vec![paper]);
+    for field in [SortField::Author, SortField::Journal] {
+        let sorted = call(|done| {
+            client.query(
+                LibraryQuery {
+                    sort: LibrarySort {
+                        field,
+                        direction: SortDirection::Desc,
+                    },
+                    ..Default::default()
+                },
+                done,
+            )
+        })
+        .unwrap();
+        assert_eq!(sorted.papers, page.papers);
+        assert_eq!(sorted.with_pdf, vec![paper]);
+    }
     let PdfReply::Attachments(attachments) =
         call(|done| client.pdf(PdfRequest::List(paper), Box::new(|_| {}), done)).unwrap()
     else {

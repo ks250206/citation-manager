@@ -1,5 +1,44 @@
 use super::*;
 impl LibraryView {
+    /// #84 the two settings screens link to each other (they also open from ⚙ Settings in
+    /// the top bar and from the Command Palette).
+    pub(super) fn settings_switcher(&self, cx: &mut Context<Self>) -> Div {
+        div()
+            .flex()
+            .items_center()
+            .gap_2()
+            .child(hint("Settings:"))
+            .child(
+                div()
+                    .flex()
+                    .gap_1()
+                    .p(px(2.))
+                    .rounded_md()
+                    .bg(rgb(SIDEBAR))
+                    .child(
+                        nav_item(
+                            "switch-organize",
+                            "Organize & export",
+                            self.screen == Screen::Settings,
+                        )
+                        .px_3()
+                        .on_click(cx.listener(|this, _, w, cx| this.show(Screen::Settings, w, cx))),
+                    )
+                    .child(
+                        nav_item(
+                            "switch-api",
+                            "API & integrations",
+                            self.screen == Screen::Api,
+                        )
+                        .px_3()
+                        .on_click(cx.listener(|this, _, w, cx| {
+                            this.open_api(api_ui::ApiFocus::Settings, w, cx)
+                        })),
+                    ),
+            )
+            .child(div().flex_1())
+            .child(hint("esc returns to the library"))
+    }
     pub(super) fn settings_screen(&self, cx: &mut Context<Self>) -> Stateful<Div> {
         let enabled = !self.locked() && !self.busy(Lane::Organization);
         let card = || {
@@ -30,6 +69,7 @@ impl LibraryView {
             .flex_col()
             .gap_4()
             .max_w(px(900.))
+            .child(self.settings_switcher(cx))
             // Collections & tags first: it is the most frequent task on this screen.
             .child(
                 card()
@@ -282,7 +322,12 @@ impl LibraryView {
                 card()
                     .child(title("Table & panes"))
                     .child(hint("Saved automatically in this private library."))
+                    .child(hint(
+                        "Columns: also from ⚙ Settings › Table columns or by right-clicking a column header. Click a header to sort.",
+                    ))
                     .children(self.settings.columns.iter().enumerate().map(|(i, c)| {
+                        let kind = crate::columns::ColumnKind::from_name(&c.name);
+                        let fixed = !kind.is_some_and(|k| k.can_hide());
                         row()
                             .child(
                                 div().w(px(150.)).child(
@@ -292,11 +337,11 @@ impl LibraryView {
                                         false,
                                     )
                                     // Title stays visible so rows remain identifiable.
-                                    .when(i == 0, |el| el.cursor_default().text_color(rgb(MUTED)))
+                                    .when(fixed, |el| el.cursor_default().text_color(rgb(MUTED)))
                                     .on_click(cx.listener(move |this, _, _, cx| {
-                                        if i != 0 {
-                                            this.settings.columns[i].visible =
-                                                !this.settings.columns[i].visible;
+                                        if let Some(kind) = kind
+                                            && crate::columns::toggle(&mut this.settings.columns, kind)
+                                        {
                                             this.persist(cx);
                                         }
                                     })),

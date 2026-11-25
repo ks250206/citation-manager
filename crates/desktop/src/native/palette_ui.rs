@@ -42,6 +42,16 @@ pub(super) const CONNECTED: &[&str] = &[
     ids::SAVE,
     ids::DOI,
     ids::IMPORT,
+    ids::IMPORT_RIS,
+    ids::ADD_MENU,
+    ids::ACTIONS,
+    ids::SELECT_ALL,
+    ids::COLUMNS,
+    ids::SORT_AUTHOR,
+    ids::SORT_TITLE,
+    ids::SORT_YEAR,
+    ids::SORT_JOURNAL,
+    ids::SORT_ADDED,
     wb::VIEW_LIBRARY,
     wb::VIEW_IMPORT_REVIEW,
     wb::VIEW_PDFS,
@@ -64,7 +74,7 @@ pub(super) const CONNECTED: &[&str] = &[
 ];
 
 /// Platform shortcuts bound directly in GPUI (see `key_bindings`), shown next to commands.
-fn fixed_shortcut(id: &str) -> Option<&'static str> {
+pub(super) fn fixed_shortcut(id: &str) -> Option<&'static str> {
     Some(match id {
         ids::NEW => "Cmd+n",
         ids::SAVE => "Cmd+s",
@@ -85,6 +95,10 @@ fn fixed_shortcut(id: &str) -> Option<&'static str> {
         wb::VIEW_IMPORT_REVIEW => "Cmd+2",
         wb::VIEW_ORGANIZE => "Cmd+,",
         wb::RELOAD => "Cmd+r",
+        ids::SELECT_ALL => "Cmd+a",
+        ids::ACTIONS => "Shift+F10",
+        ids::COPY => "Cmd+Shift+c",
+        wb::TRASH => "Delete",
         _ => return None,
     })
 }
@@ -103,6 +117,7 @@ pub(super) fn display_keys(keys: &str) -> String {
                 "Down" => "↓".to_owned(),
                 "Up" => "↑".to_owned(),
                 "Enter" => "↩".to_owned(),
+                "Delete" if mods.is_empty() && cfg!(target_os = "macos") => "⌦".to_owned(),
                 "Esc" => "esc".to_owned(),
                 k if !mods.is_empty() => k.to_uppercase(),
                 k => k.to_owned(),
@@ -252,10 +267,7 @@ impl LibraryView {
             ids::PREVIOUS => self.move_selection(-1, cx),
             ids::FIRST | ids::LAST => {
                 if let Some(paper) = self.library.edge(id == ids::LAST) {
-                    self.select(paper, false, cx);
-                    if let Some(index) = self.library.index_of(paper) {
-                        self.rows.scroll_to_item(index, ScrollStrategy::Nearest);
-                    }
+                    self.select(paper, Default::default(), cx);
                 }
             }
             ids::OPEN => {
@@ -287,10 +299,57 @@ impl LibraryView {
                 self.doi.focus_handle(cx).focus(window, cx);
                 self.status("Enter a DOI and press ↩ to preview it", false, cx);
             }
-            ids::IMPORT => {
+            ids::IMPORT | ids::IMPORT_RIS => {
                 if !self.locked() {
-                    self.pick_bibliography(Format::Bibtex, cx);
+                    self.pick_bibliography(
+                        if id == ids::IMPORT {
+                            Format::Bibtex
+                        } else {
+                            Format::Ris
+                        },
+                        cx,
+                    );
                 }
+            }
+            ids::ADD_MENU => {
+                let position = self.add_menu_position(window);
+                self.open_menu(menu_ui::MenuKind::Add, position, window, cx);
+            }
+            ids::ACTIONS => {
+                self.show(Screen::Library, window, cx);
+                let position = self.keyboard_menu_position();
+                self.open_menu(menu_ui::MenuKind::Row, position, window, cx);
+            }
+            ids::COLUMNS => {
+                self.show(Screen::Library, window, cx);
+                let position = self.keyboard_menu_position();
+                self.open_menu(menu_ui::MenuKind::Columns, position, window, cx);
+            }
+            ids::SELECT_ALL => {
+                self.show(Screen::Library, window, cx);
+                self.change_selection(cx, |library| library.select_all());
+                self.status(
+                    format!("{} papers selected", self.library.selected.len()),
+                    false,
+                    cx,
+                );
+            }
+            ids::SORT_AUTHOR
+            | ids::SORT_TITLE
+            | ids::SORT_YEAR
+            | ids::SORT_JOURNAL
+            | ids::SORT_ADDED => {
+                self.show(Screen::Library, window, cx);
+                self.sort_by(
+                    match id {
+                        ids::SORT_AUTHOR => SortField::Author,
+                        ids::SORT_TITLE => SortField::Title,
+                        ids::SORT_YEAR => SortField::Year,
+                        ids::SORT_JOURNAL => SortField::Journal,
+                        _ => SortField::CreatedAt,
+                    },
+                    cx,
+                );
             }
             wb::VIEW_LIBRARY => self.show(Screen::Library, window, cx),
             wb::VIEW_IMPORT_REVIEW => self.show(Screen::Import, window, cx),
@@ -308,7 +367,7 @@ impl LibraryView {
                 self.show(Screen::Library, window, cx);
                 self.reload(cx);
             }
-            wb::TRASH => self.toggle_trash(cx),
+            wb::TRASH => self.trash_selected(cx),
             wb::DISCARD => self.discard_edits(cx),
             wb::READING => {
                 self.settings.reading = !self.settings.reading;
@@ -420,14 +479,32 @@ impl LibraryView {
         }
         cx.notify();
     }
-    fn copy_citation(&mut self, cx: &mut Context<Self>) {
-        let Some(paper) = &self.editor else {
+    /// One citation per selected paper, in table order; the open paper when nothing on
+    /// this page is selected.
+    pub(super) fn copy_citation(&mut self, cx: &mut Context<Self>) {
+        let selected = self.library.selected_in_order();
+        let papers: Vec<&Paper> = if selected.len() > 1 {
+            selected
+                .iter()
+                .filter_map(|id| self.library.papers.iter().find(|p| p.id == *id))
+                .collect()
+        } else {
+            self.editor.iter().collect()
+        };
+        if papers.is_empty() {
             self.status("Select a paper to copy its citation", true, cx);
             return;
-        };
-        let text = crate::details::citation_text(&paper.title, &paper.bibliography);
-        cx.write_to_clipboard(ClipboardItem::new_string(text.clone()));
-        self.status(format!("Copied: {text}"), false, cx);
+        }
+        let lines: Vec<String> = papers
+            .iter()
+            .map(|p| crate::details::citation_text(&p.title, &p.bibliography))
+            .collect();
+        cx.write_to_clipboard(ClipboardItem::new_string(lines.join("\n")));
+        if let [line] = lines.as_slice() {
+            self.status(format!("Copied: {line}"), false, cx);
+        } else {
+            self.status(format!("Copied {} citations", lines.len()), false, cx);
+        }
     }
     /// Keys the table's GPUI bindings did not consume go through the user keymap
     /// (Vim Normal mode, or VimOff bindings). Text fields never reach this handler.

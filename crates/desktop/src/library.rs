@@ -6,9 +6,22 @@ pub struct Library {
     pub papers: Vec<Paper>,
     pub next: Option<LibraryCursor>,
     pub previous: Vec<Option<LibraryCursor>>,
+    /// Most recently selected last: keyboard movement and the details pane follow it.
     pub selected: Vec<PaperId>,
+    /// Papers of the loaded page with a PDF attachment (the PDF column).
+    pub with_pdf: std::collections::HashSet<PaperId>,
     pub generation: u64,
     pending_page: Option<PendingPage>,
+    /// Fixed end of a Shift range: the last plain or Cmd/Ctrl-clicked row.
+    anchor: Option<PaperId>,
+}
+/// How a row click combines with the current selection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ClickKind {
+    /// Cmd (macOS) / Ctrl: add or remove one row.
+    pub toggle: bool,
+    /// Shift: select the rows between the anchor and this one.
+    pub range: bool,
 }
 struct PendingPage {
     after: Option<LibraryCursor>,
@@ -68,7 +81,11 @@ impl Library {
         }
         self.papers = page.papers;
         self.next = page.next;
+        self.with_pdf = page.with_pdf.into_iter().collect();
         true
+    }
+    pub fn has_pdf(&self, id: PaperId) -> bool {
+        self.with_pdf.contains(&id)
     }
     /// Row reached by moving `delta` rows from the most recently selected visible
     /// paper. With no visible selection, Down starts at the first row and Up at
@@ -106,6 +123,7 @@ impl Library {
     pub fn select_only(&mut self, id: PaperId) {
         self.selected.clear();
         self.selected.push(id);
+        self.anchor = Some(id);
     }
     pub fn select(&mut self, id: PaperId, multiple: bool) {
         if !multiple {
@@ -115,6 +133,97 @@ impl Library {
             self.selected.remove(index);
         } else {
             self.selected.push(id);
+        }
+        self.anchor = Some(id);
+    }
+    /// The row keyboard movement starts from and the details pane shows: the most
+    /// recently selected paper that is on the loaded page.
+    pub fn focused(&self) -> Option<PaperId> {
+        self.selected
+            .iter()
+            .rev()
+            .find(|id| self.index_of(**id).is_some())
+            .copied()
+    }
+    /// Mouse selection. Plain: only this row. Cmd/Ctrl: toggle this row, keeping the rest.
+    /// Shift: the rows from the anchor to this one (replacing the selection, or added to
+    /// it with Cmd/Ctrl as well). The anchor stays put across Shift clicks, so a range
+    /// can be grown and shrunk from the same end. Returns the paper to show, if any.
+    pub fn click(&mut self, id: PaperId, kind: ClickKind) -> Option<PaperId> {
+        let anchor = self.anchor.filter(|a| self.index_of(*a).is_some());
+        match (kind.range, anchor) {
+            (true, Some(anchor)) => {
+                let range = self.range(anchor, id);
+                if kind.toggle {
+                    self.selected.retain(|p| !range.contains(p));
+                    self.selected.extend(range);
+                } else {
+                    self.selected = range;
+                }
+            }
+            _ if kind.toggle => {
+                self.select(id, true);
+                return self.focused();
+            }
+            _ => self.select_only(id),
+        }
+        Some(id)
+    }
+    /// Shift+Up/Down: move the moving end of the range by `delta` rows (clamped to the
+    /// page) and select everything between it and the anchor. Returns the new end.
+    pub fn extend(&mut self, delta: isize) -> Option<PaperId> {
+        let head = self.adjacent(delta)?;
+        let anchor = self
+            .anchor
+            .filter(|a| self.index_of(*a).is_some())
+            .or(self.focused())
+            .unwrap_or(head);
+        self.anchor = Some(anchor);
+        self.selected = self.range(anchor, head);
+        Some(head)
+    }
+    /// Right-click on a selected row: keep the selection, make that row the focused one
+    /// (the one "Open" shows). A row outside the selection becomes the whole selection.
+    pub fn focus_within(&mut self, id: PaperId) -> Option<PaperId> {
+        if let Some(index) = self.selected.iter().position(|p| *p == id) {
+            self.selected.remove(index);
+            self.selected.push(id);
+        } else {
+            self.select_only(id);
+        }
+        Some(id)
+    }
+    /// Every loaded row (Cmd/Ctrl+A); the focused row stays focused.
+    pub fn select_all(&mut self) -> Option<PaperId> {
+        let focused = self.focused();
+        self.selected = self.papers.iter().map(|p| p.id).collect();
+        if let Some(id) = focused {
+            self.selected.retain(|p| *p != id);
+            self.selected.push(id);
+        }
+        self.anchor = self.anchor.or(self.selected.first().copied());
+        self.focused()
+    }
+    /// Selected papers in table order (for bulk actions and copied citations).
+    pub fn selected_in_order(&self) -> Vec<PaperId> {
+        self.papers
+            .iter()
+            .map(|p| p.id)
+            .filter(|id| self.selected.contains(id))
+            .collect()
+    }
+    /// Rows from `from` to `to` inclusive, ordered so that `to` comes last.
+    fn range(&self, from: PaperId, to: PaperId) -> Vec<PaperId> {
+        let (Some(a), Some(b)) = (self.index_of(from), self.index_of(to)) else {
+            return vec![to];
+        };
+        let rows = self.papers.iter().map(|p| p.id);
+        if a <= b {
+            rows.skip(a).take(b - a + 1).collect()
+        } else {
+            let mut ids: Vec<_> = rows.skip(b).take(a - b + 1).collect();
+            ids.reverse();
+            ids
         }
     }
 }

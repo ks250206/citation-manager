@@ -15,6 +15,19 @@ pub mod ids {
     pub const SAVE: &str = "paper.save";
     pub const DOI: &str = "paper.add_by_doi";
     pub const IMPORT: &str = "import.bibliography";
+    /// #84: RIS has its own entry next to BibTeX (the ＋ Add menu and the palette).
+    pub const IMPORT_RIS: &str = "import.ris";
+    /// #84 the ＋ Add menu (new paper, DOI, PDFs, BibTeX, RIS).
+    pub const ADD_MENU: &str = "add.menu";
+    /// #84 row context menu for the selection (Shift+F10 / Menu key).
+    pub const ACTIONS: &str = "paper.actions";
+    pub const SELECT_ALL: &str = "library.select_all";
+    pub const COLUMNS: &str = "library.columns";
+    pub const SORT_AUTHOR: &str = "library.sort_author";
+    pub const SORT_TITLE: &str = "library.sort_title";
+    pub const SORT_YEAR: &str = "library.sort_year";
+    pub const SORT_JOURNAL: &str = "library.sort_journal";
+    pub const SORT_ADDED: &str = "library.sort_added";
 }
 
 pub fn library_commands() -> Vec<Command> {
@@ -94,8 +107,68 @@ pub fn library_commands() -> Vec<Command> {
         ),
         (
             ids::IMPORT,
-            "Import BibTeX/RIS",
-            "Request bibliography preview and explicit import review",
+            "Import BibTeX…",
+            "Choose a .bib file, then review the preview before anything is saved",
+            Library,
+        ),
+        (
+            ids::IMPORT_RIS,
+            "Import RIS…",
+            "Choose a .ris file, then review the preview before anything is saved",
+            Library,
+        ),
+        (
+            ids::ADD_MENU,
+            "Add…",
+            "New paper, DOI, PDFs or a BibTeX/RIS file (the ＋ Add menu)",
+            Ui,
+        ),
+        (
+            ids::ACTIONS,
+            "Paper Actions…",
+            "Open, copy citation, collections, tags and Trash for the selected papers",
+            Selection,
+        ),
+        (
+            ids::SELECT_ALL,
+            "Select All Papers",
+            "Select every paper on the loaded page",
+            Library,
+        ),
+        (
+            ids::COLUMNS,
+            "Table Columns…",
+            "Show or hide Author, Journal, PDF, Type, DOI and Added columns",
+            Ui,
+        ),
+        (
+            ids::SORT_AUTHOR,
+            "Sort by First Author",
+            "Sort the library by first author (again: reverse)",
+            Library,
+        ),
+        (
+            ids::SORT_TITLE,
+            "Sort by Title",
+            "Sort the library by title (again: reverse)",
+            Library,
+        ),
+        (
+            ids::SORT_YEAR,
+            "Sort by Year",
+            "Sort the library by year (again: reverse)",
+            Library,
+        ),
+        (
+            ids::SORT_JOURNAL,
+            "Sort by Journal",
+            "Sort the library by journal (again: reverse)",
+            Library,
+        ),
+        (
+            ids::SORT_ADDED,
+            "Sort by Date Added",
+            "Newest papers first (again: oldest first)",
             Library,
         ),
     ]

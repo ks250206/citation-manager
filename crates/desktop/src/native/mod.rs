@@ -17,6 +17,7 @@ mod api_ui;
 mod details_ui;
 mod import_ui;
 mod library_ui;
+mod menu_ui;
 mod palette_ui;
 mod pdf_export_ui;
 mod pdf_ui;
@@ -65,6 +66,18 @@ actions!(
         CopySelection,
         AnnotationUndo,
         AnnotationRedo,
+        ExtendNext,
+        ExtendPrevious,
+        SelectAll,
+        ShowActions,
+        TrashSelected,
+        CopyCitation,
+        MenuNext,
+        MenuPrevious,
+        MenuConfirm,
+        MenuClose,
+        MenuOpenSubmenu,
+        MenuCloseSubmenu,
     ]
 );
 enum Event {
@@ -80,6 +93,8 @@ enum Event {
     LoadSettings(Result<SettingsLoaded, ServiceError>),
     SaveSettings(Result<(), ServiceError>),
     Export(Result<Exported, ServiceError>),
+    /// #84 several single-paper requests sent one after another (context menu).
+    Bulk(Result<crate::bulk::BulkReport, ServiceError>),
     Progress(PdfReport),
     /// Page render replies bypass the single-ticket lanes; the viewer tracks them by key.
     Render(
@@ -202,6 +217,14 @@ struct LibraryView {
     /// #26 API & Integrations screen.
     api: crate::api_settings::ApiSettingsState,
     api_inputs: api_ui::ApiInputs,
+    /// #84 open popup menu (row context menu, ＋ Add, ⚙, columns) and its key focus.
+    menu: Option<menu_ui::OpenMenu>,
+    menu_focus: FocusHandle,
+    /// Status verb of the running bulk action ("Moved to Trash:").
+    bulk_verb: String,
+    /// Whether the bulk action changed the papers themselves (Trash), so the open one is
+    /// re-read when it ends.
+    bulk_refetch: bool,
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Screen {
@@ -298,6 +321,10 @@ impl LibraryView {
             page_input: cx.new(|cx| TextInput::new("Page", cx)),
             api: Default::default(),
             api_inputs: api_ui::ApiInputs::new(cx),
+            menu: None,
+            menu_focus: cx.focus_handle(),
+            bulk_verb: String::new(),
+            bulk_refetch: false,
         };
         view.subscribe_viewer_inputs(window, cx);
         // The resolver belongs to the table focus owner: a prefix never survives focus loss.
@@ -583,7 +610,7 @@ impl LibraryView {
                     } else if !self.keymap_diagnostics.is_empty() {
                         self.status(
                             format!(
-                                "keymap.json ignored ({} problem(s)); using built-in keys. Details: Organize & export › Keyboard",
+                                "keymap.json ignored ({} problem(s)); using built-in keys. Details: ⚙ Settings › Organize & export › Keyboard",
                                 self.keymap_diagnostics.len()
                             ),
                             true,
@@ -615,6 +642,7 @@ impl LibraryView {
                 Ok(_) => (),
                 Err(e) => self.status(format!("Attachment read failed: {e}"), true, cx),
             },
+            Event::Bulk(result) => self.bulk_reply(result, cx),
             Event::Export(result) => match result {
                 Ok(report) => {
                     self.diagnostics = vec![
@@ -878,7 +906,16 @@ impl LibraryView {
         };
         fields[next].focus_handle(cx).focus(window, cx);
     }
-    fn select(&mut self, id: PaperId, multiple: bool, cx: &mut Context<Self>) {
+    fn select(&mut self, id: PaperId, kind: crate::library::ClickKind, cx: &mut Context<Self>) {
+        self.change_selection(cx, |library| library.click(id, kind));
+    }
+    /// Apply a selection change and show its focused paper in the details pane. With
+    /// several rows selected the pane follows the row that was clicked or moved to last.
+    fn change_selection(
+        &mut self,
+        cx: &mut Context<Self>,
+        change: impl FnOnce(&mut Library) -> Option<PaperId>,
+    ) {
         // Any selection change (mouse, palette, keymap) ends a pending key sequence, so the
         // first `g` of `gg` cannot complete against a paper chosen afterwards.
         self.resolver.reset();
@@ -889,12 +926,19 @@ impl LibraryView {
             cx.notify();
             return;
         }
-        self.library.select(id, multiple);
-        self.set_editor(
-            self.library.papers.iter().find(|p| p.id == id).cloned(),
-            None,
-            cx,
-        );
+        let shown = change(&mut self.library);
+        if let Some(id) = shown
+            && self.editor.as_ref().map(|p| p.id) != Some(id)
+        {
+            self.set_editor(
+                self.library.papers.iter().find(|p| p.id == id).cloned(),
+                None,
+                cx,
+            );
+        }
+        if let Some(index) = shown.and_then(|id| self.library.index_of(id)) {
+            self.rows.scroll_to_item(index, ScrollStrategy::Nearest);
+        }
         self.screen = Screen::Library;
         cx.notify();
     }
@@ -1027,11 +1071,15 @@ impl LibraryView {
             return;
         }
         if let Some(id) = self.library.adjacent(delta) {
-            self.select(id, false, cx);
-            if let Some(index) = self.library.index_of(id) {
-                self.rows.scroll_to_item(index, ScrollStrategy::Nearest);
-            }
+            self.select(id, Default::default(), cx);
         }
+    }
+    /// Shift+Up/Down: grow or shrink the range from its anchor.
+    fn extend_selection(&mut self, delta: isize, cx: &mut Context<Self>) {
+        if self.screen != Screen::Library {
+            return;
+        }
+        self.change_selection(cx, |library| library.extend(delta));
     }
     /// Enter on the table jumps into the first metadata field for editing.
     fn edit_selected(&mut self, _: &EditSelected, window: &mut Window, cx: &mut Context<Self>) {
@@ -1142,7 +1190,7 @@ impl LibraryView {
                         .text_color(rgb(MUTED))
                         .whitespace_nowrap()
                         .child(format!(
-                            "{} commands · {} new · {} search · ↑↓ select · ↩ edit · {} save",
+                            "{} commands · {} new · {} search · ↑↓ select (⇧ extends) · ⇧F10 actions · ↩ edit · {} save",
                             shortcut("K"),
                             shortcut("N"),
                             shortcut("F"),
@@ -1220,6 +1268,11 @@ impl Render for LibraryView {
                     .into_any_element(),
             })
             .child(self.status_bar(cx));
+        let menu = if self.menu.is_some() {
+            Some(self.menu_overlay(cx))
+        } else {
+            None
+        };
         div()
             .size_full()
             .relative()
@@ -1229,6 +1282,7 @@ impl Render for LibraryView {
             .text_size(px(13.))
             .child(workbench)
             .when(self.palette_open, |el| el.child(self.palette_overlay(cx)))
+            .children(menu)
     }
 }
 pub fn run(client: Arc<dyn LibraryClient>) {
@@ -1269,6 +1323,23 @@ fn key_bindings() -> Vec<KeyBinding> {
         KeyBinding::new("down", SelectNext, Some("PaperTable")),
         KeyBinding::new("up", SelectPrevious, Some("PaperTable")),
         KeyBinding::new("enter", EditSelected, Some("PaperTable")),
+        KeyBinding::new("shift-down", ExtendNext, Some("PaperTable")),
+        KeyBinding::new("shift-up", ExtendPrevious, Some("PaperTable")),
+        KeyBinding::new(primary!("a"), SelectAll, Some("PaperTable")),
+        KeyBinding::new("shift-f10", ShowActions, Some("PaperTable")),
+        KeyBinding::new("menu", ShowActions, Some("PaperTable")),
+        KeyBinding::new("delete", TrashSelected, Some("PaperTable")),
+        KeyBinding::new(primary!("backspace"), TrashSelected, Some("PaperTable")),
+        KeyBinding::new(primary!("shift-c"), CopyCitation, Some("PaperTable")),
+        KeyBinding::new("down", MenuNext, Some("Menu")),
+        KeyBinding::new("up", MenuPrevious, Some("Menu")),
+        KeyBinding::new("tab", MenuNext, Some("Menu")),
+        KeyBinding::new("shift-tab", MenuPrevious, Some("Menu")),
+        KeyBinding::new("right", MenuOpenSubmenu, Some("Menu")),
+        KeyBinding::new("left", MenuCloseSubmenu, Some("Menu")),
+        KeyBinding::new("enter", MenuConfirm, Some("Menu")),
+        KeyBinding::new("space", MenuConfirm, Some("Menu")),
+        KeyBinding::new("escape", MenuClose, Some("Menu")),
     ]
 }
 fn open_main_window(client: Arc<dyn LibraryClient>, bounds: Bounds<Pixels>, cx: &mut App) {

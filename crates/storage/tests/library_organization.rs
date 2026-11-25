@@ -716,6 +716,8 @@ fn expected_order(papers: &[Paper], field: SortField, direction: SortDirection) 
             SortField::Year => a.bibliography.year.cmp(&b.bibliography.year),
             SortField::CreatedAt => a.created_at.cmp(&b.created_at),
             SortField::UpdatedAt => a.updated_at.cmp(&b.updated_at),
+            // Covered with their null placement by the #84 test below.
+            SortField::Author | SortField::Journal => unreachable!(),
         };
         let comparison = primary.then(a.id.0.cmp(&b.id.0));
         if direction == SortDirection::Desc {
@@ -1000,4 +1002,182 @@ fn oversized_title_cursor_has_a_bounded_error_and_id_sort_remains_available() {
         .unwrap();
     assert_eq!(page.papers[0].id, paper.id);
     assert!(page.next.is_some());
+}
+
+fn person(
+    given: Option<&str>,
+    family: Option<&str>,
+    literal: Option<&str>,
+    role: &str,
+) -> Contributor {
+    Contributor {
+        given_name: given.map(Into::into),
+        family_name: family.map(Into::into),
+        literal_name: literal.map(Into::into),
+        orcid: None,
+        role: role.into(),
+    }
+}
+/// #84 the same key the adapter documents: first `author` by position, family name, else
+/// literal, else given name; no author (or a blank journal) is None and sorts last.
+fn optional_key(p: &Paper, field: SortField) -> Option<String> {
+    let nonempty = |s: &Option<String>| s.clone().filter(|s| !s.is_empty());
+    match field {
+        SortField::Journal => nonempty(&p.bibliography.journal),
+        SortField::Author => p
+            .bibliography
+            .authors
+            .iter()
+            .find(|a| a.role == "author")
+            .and_then(|a| {
+                nonempty(&a.family_name)
+                    .or(nonempty(&a.literal_name))
+                    .or(nonempty(&a.given_name))
+            }),
+        _ => unreachable!(),
+    }
+}
+
+#[test]
+fn author_and_journal_sorts_page_with_keyset_cursors_and_mark_pdfs() {
+    let (_temp, dir, mut db) = library();
+    let raw = Connection::open(dir.database_path()).unwrap();
+    let authors: [Vec<Contributor>; 7] = [
+        vec![person(Some("Ann"), Some("Smith"), None, "author")],
+        vec![
+            person(None, None, Some("Editors Inc"), "editor"),
+            person(Some("Bo"), Some("Adams"), None, "author"),
+        ],
+        vec![person(None, None, Some("CERN Collaboration"), "author")],
+        vec![],
+        vec![person(Some("Only"), None, None, "author")],
+        vec![person(None, None, Some("Editor Only"), "editor")],
+        vec![person(Some("Ann"), Some("Smith"), None, "author")],
+    ];
+    let journals = [
+        Some("Nature"),
+        None,
+        Some("ACS Nano"),
+        Some("Nature"),
+        None,
+        Some("Ångström Letters"),
+        Some("nature"),
+    ];
+    let mut pdf = vec![];
+    for (i, (people, journal)) in authors.into_iter().zip(journals).enumerate() {
+        let mut input = NewPaper::titled(format!("paper {i}"));
+        input.bibliography.authors = people;
+        input.bibliography.journal = journal.map(Into::into);
+        let p = db.papers().create(input).unwrap();
+        if i % 3 == 0 {
+            attachment(&raw, p.id, "pdf", "application/pdf");
+            pdf.push(p.id);
+        } else if i == 1 {
+            // Not a PDF by the filter's rule, so not marked either.
+            attachment(&raw, p.id, "pdf", "image/png");
+        }
+    }
+    let papers = db
+        .library_query()
+        .query(&LibraryQuery::default())
+        .unwrap()
+        .papers;
+    for field in [SortField::Author, SortField::Journal] {
+        for direction in [SortDirection::Asc, SortDirection::Desc] {
+            let mut expected = papers.clone();
+            expected.sort_by(|a, b| {
+                let (ka, kb) = (optional_key(a, field), optional_key(b, field));
+                // Missing keys last in both directions, then BINARY text, then id.
+                ka.is_none().cmp(&kb.is_none()).then_with(|| {
+                    let order = ka.cmp(&kb).then(a.id.0.cmp(&b.id.0));
+                    if direction == SortDirection::Desc {
+                        order.reverse()
+                    } else {
+                        order
+                    }
+                })
+            });
+            let expected: Vec<PaperId> = expected.iter().map(|p| p.id).collect();
+            for limit in [1, 2, 3, 7, 8] {
+                let mut query = LibraryQuery {
+                    sort: LibrarySort { field, direction },
+                    limit,
+                    ..Default::default()
+                };
+                let mut seen = vec![];
+                let mut marked = vec![];
+                loop {
+                    let page = db.library_query().query(&query).unwrap();
+                    seen.extend(page.papers.iter().map(|p| p.id));
+                    // Marks belong to this page only.
+                    assert!(
+                        page.with_pdf
+                            .iter()
+                            .all(|id| page.papers.iter().any(|p| p.id == *id))
+                    );
+                    marked.extend(page.with_pdf);
+                    assert!(seen.len() <= papers.len(), "cursor failed to advance");
+                    let Some(next) = page.next else { break };
+                    // Round-trips like any opaque cursor (REST/IPC hand it back as text).
+                    query.after = Some(
+                        cm_core::library_query::LibraryCursor::from_encoded(next.as_str().into())
+                            .unwrap(),
+                    );
+                }
+                assert_eq!(seen, expected, "{field:?} {direction:?} limit={limit}");
+                marked.sort_by_key(|id| id.0);
+                let mut want = pdf.clone();
+                want.sort_by_key(|id| id.0);
+                assert_eq!(marked, want);
+            }
+        }
+    }
+    // Spot-check the documented key: editors are skipped; literal and given names count.
+    let ascending = db
+        .library_query()
+        .query(&LibraryQuery {
+            sort: LibrarySort {
+                field: SortField::Author,
+                direction: SortDirection::Asc,
+            },
+            ..Default::default()
+        })
+        .unwrap();
+    let keys: Vec<_> = ascending
+        .papers
+        .iter()
+        .map(|p| optional_key(p, SortField::Author))
+        .collect();
+    assert_eq!(
+        keys,
+        [
+            Some("Adams".to_string()),
+            Some("CERN Collaboration".into()),
+            Some("Only".into()),
+            Some("Smith".into()),
+            Some("Smith".into()),
+            None,
+            None,
+        ]
+    );
+    // A cursor from one sort cannot continue another.
+    let first = db
+        .library_query()
+        .query(&LibraryQuery {
+            sort: LibrarySort {
+                field: SortField::Journal,
+                direction: SortDirection::Asc,
+            },
+            limit: 2,
+            ..Default::default()
+        })
+        .unwrap();
+    invalid(db.library_query().query(&LibraryQuery {
+        sort: LibrarySort {
+            field: SortField::Author,
+            direction: SortDirection::Asc,
+        },
+        after: first.next,
+        ..Default::default()
+    }));
 }
