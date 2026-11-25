@@ -157,3 +157,35 @@ papers plus `ManagedAttachments::import` of every PDF, automatic extraction by `
 the GUI/CLI `Launch` path, IPC query workload and exact recall, optional GUI phases.
 Output: `target/representative-benchmark/<NAME>/{environment,seed,stats,index,warm,queries,summary}.json`.
 Quantiles are nearest rank. Only self-created libraries under that directory are touched.
+
+# #86 GUI frame timing (perceived performance)
+
+`frame_timing.py` runs the real release GUI on the same #30 library (10,000 papers / 1,000
+PDFs / 20,000 pages, indexed first so no extraction job competes) with the opt-in recorder
+enabled, drives it with scripted input and reports p50/p95/max against 16.7 ms (60 Hz) and
+8.3 ms (120 Hz). Results and limits: [ISSUE_86](../../docs/validation/ISSUE_86.md).
+
+```sh
+python3 scripts/benchmarks/frame_timing.py --xvfb --out NAME                 # Linux, full scale
+python3 scripts/benchmarks/frame_timing.py --xvfb --small --out NAME         # 200/20/80 smoke
+python3 scripts/benchmarks/frame_timing.py --xvfb --reuse NAME --out NAME2   # same library, rebuilt GUI
+python3 scripts/benchmarks/frame_timing.py --out NAME                        # macOS (Quartz events)
+```
+
+- **Recorder** (`crates/desktop/src/frame_timing.rs`): enabled only when `CM_FRAME_TIMING`
+  names an absolute file at GUI start; otherwise every hook is a no-op and nothing is written.
+  It records per-frame app work (root render → paint of an end marker; present excluded) and
+  spans `list_scroll`/`pdf_scroll` (scroll offset moving), `pdf_first_page` (viewer created →
+  first visible page painted) and `page_turn` (page jump → target page painted).
+- **GPUI draw+present**: the harness also sets GPUI's own `ZED_MEASUREMENTS=1` and parses its
+  `frame duration:` lines from stderr (whole `Window::draw` + `present`); they are paired with
+  the recorder's frames by order when the counts agree.
+- **Input**: Linux uses xdotool/xclip on a private Xvfb (`--xvfb`, 1400x900x24, lavapipe
+  software Vulkan); macOS posts Quartz events via ctypes and needs the Accessibility
+  permission. A phase whose expected span never completed is reported `observed: false`.
+- **Phases**: startup idle; list wheel scrolling; list j/k (selection + details); list paging
+  (Next ›); open the first corpus PDF through the palette's "Open paper:// Link from
+  Clipboard" (input → first page painted); vim `J`×19 / `K`×19 page turns; PDF wheel and j/k
+  scrolling; idle. Frames are attributed to phases by Unix time.
+- Output: `target/frame-timing-benchmark/<NAME>/{environment,phases,frames,gpui-frames,summary}.json`,
+  `gui.log` and screenshots. Manual workflow: `benchmark.yml` (`suite: frame-timing`).
