@@ -284,7 +284,9 @@ def main():
     parser.add_argument('--report', type=Path, help='also write the checks as JSON here')
     args = parser.parse_args()
     bin_dir = args.bin_dir.resolve()
-    tmp = Path(tempfile.mkdtemp(prefix=f'cm-nh-smoke-{args.browser}-'))
+    # macOS: $TMPDIR (/var/folders/...) is too long for the daemon socket (104-byte sun_path).
+    tmp = Path(tempfile.mkdtemp(prefix=f'cmnh-{args.browser[:2]}-',
+                                dir='/tmp' if sys.platform == 'darwin' else None)).resolve()
     checks = {}
     try:
         prefix_bin = (args.app.resolve() / 'Contents/MacOS') if args.app else install(tmp, bin_dir)
