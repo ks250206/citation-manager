@@ -253,7 +253,7 @@ fn annotations_persist_undo_redo_review_and_carry_over() {
     assert_eq!(list(&c, replacement).len(), 3);
     let copy = list(&c, replacement)
         .into_iter()
-        .find(|a| a.source == Source::Human)
+        .find(|a| a.source == Source::Human && a.kind == AnnotationKind::Highlight)
         .unwrap();
     // Proposal needs the PDF runtime; tests run without the bundle.
     assert!(
@@ -286,6 +286,26 @@ fn annotations_persist_undo_redo_review_and_carry_over() {
             .iter()
             .any(|a| matches!(a.anchor, Anchor::Resolved { page_index: 0, .. }))
     );
+    // A copied page note has no quote to search for; the person places it on a page by hand
+    // (the desktop's manual placement sends exactly this request: no quads).
+    let note_copy = list(&c, replacement)
+        .into_iter()
+        .find(|a| a.kind == AnnotationKind::Note)
+        .unwrap();
+    assert!(note_copy.quote.is_empty());
+    assert!(matches!(note_copy.anchor, Anchor::Unresolved { .. }));
+    ann(
+        &c,
+        AnnotationRequest::Resolve {
+            id: note_copy.id,
+            page_index: 1,
+            page_label: None,
+            quads: vec![],
+        },
+    )
+    .unwrap();
+    assert!(list(&c, replacement).iter().any(|a| a.id == note_copy.id
+        && matches!(&a.anchor, Anchor::Resolved { page_index: 1, quads, .. } if quads.is_empty())));
     // Paper-wide listing spans both PDFs.
     let AnnotationReply::List(all) = ann(&c, AnnotationRequest::ForPaper(paper_id)).unwrap() else {
         panic!()

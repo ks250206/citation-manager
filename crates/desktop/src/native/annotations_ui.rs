@@ -1,6 +1,8 @@
 //! #19 highlights, comments and notes: requests, undo/redo history and the Notes tab.
 use super::*;
-use crate::annotations::{PaperHistory, PendingSelection, Step, StepOutcome, pending_selection};
+use crate::annotations::{
+    PaperHistory, PendingSelection, Step, StepOutcome, pending_selection, place_on_page, placement,
+};
 use cm_protocol::annotations::{
     Anchor, Annotation, AnnotationId, AnnotationKind, AnnotationPatch, AnnotationReply,
     AnnotationRequest, COLORS, Edit, NewAnnotation, Proposal, Source, pending_carry_over,
@@ -395,6 +397,70 @@ impl LibraryView {
         self.ann.note_open = false;
         cx.notify();
     }
+    /// Manual placement: put an unresolved note (e.g. a page note copied from a replaced PDF,
+    /// which has no quote to search for) on a page of its PDF, as a page note. Undoable.
+    pub(super) fn ann_place_on_page(
+        &mut self,
+        id: AnnotationId,
+        page: u32,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(a) = self.ann.list.iter().find(|a| a.id == id) else {
+            return;
+        };
+        let label = self
+            .viewer
+            .as_ref()
+            .filter(|v| v.attachment_id() == a.attachment_id)
+            .and_then(|v| v.page_label(page));
+        let Some(request) = place_on_page(a, page, label) else {
+            return self.status("Only unresolved notes can be placed on a page", true, cx);
+        };
+        if self
+            .ann
+            .proposal
+            .as_ref()
+            .is_some_and(|(pid, _)| *pid == id)
+        {
+            self.ann.proposal = None;
+        }
+        self.ann_record(request);
+        self.status(format!("Placed the note on p. {}", page + 1), false, cx);
+    }
+    /// Palette entry: place the selected unresolved note on the page the viewer shows.
+    pub(super) fn ann_place_selected(&mut self, cx: &mut Context<Self>) {
+        let target = self
+            .ann
+            .selected()
+            .filter(|a| placement(a).is_some_and(|p| p.manual))
+            .map(|a| (a.id, a.attachment_id));
+        let Some((id, attachment)) = target else {
+            return self.status(
+                "Select an unresolved note first (Notes tab › Place in PDF…)",
+                true,
+                cx,
+            );
+        };
+        let page = self
+            .viewer
+            .as_ref()
+            .filter(|v| v.attachment_id() == attachment && self.settings.details_tab == "PDF")
+            .map(|v| v.current_page());
+        match page {
+            Some(page) => self.ann_place_on_page(id, page, cx),
+            // Not looking at its PDF yet: open it first, the person then picks the page.
+            None => {
+                if let Some(a) = self.ann.selected().cloned() {
+                    self.ann_open(&a, cx);
+                }
+                self.status(
+                    "Go to the note's page, then run Place Note on Current Page again",
+                    false,
+                    cx,
+                );
+            }
+        }
+    }
     /// Jump from the list to the annotation's page in the PDF tab.
     pub(super) fn ann_open(&mut self, a: &Annotation, cx: &mut Context<Self>) {
         self.host.selected = Some(a.attachment_id);
@@ -498,7 +564,8 @@ impl LibraryView {
         for (i, a) in self.ann.list.iter().enumerate() {
             let id = a.id;
             let selected = self.ann.selected == Some(id);
-            let unresolved = matches!(a.anchor, Anchor::Unresolved { .. });
+            let place = placement(a);
+            let unresolved = place.is_some();
             let ai_pending = a.source == Source::Ai && a.confirmed_at.is_none();
             let location = match page_of(a) {
                 Some(p) => format!("p. {}", p + 1),
@@ -589,23 +656,50 @@ impl LibraryView {
                         ),
                 );
             }
-            if unresolved {
+            if let Some(place) = place {
                 let proposal = self
                     .ann
                     .proposal
                     .as_ref()
                     .filter(|(pid, _)| *pid == id)
                     .map(|(_, p)| p.clone());
-                row = row.child(match proposal {
-                    None => div().child(
-                        button(("ann-find", i), "Find position in this PDF", true).on_click(
-                            cx.listener(move |this, _, _, cx| this.ann_propose(id, cx)),
-                        ),
-                    ),
-                    Some(None) => div().child(hint(
-                        "The quoted text was not found in this PDF. Keep it unresolved or delete it.",
-                    )),
-                    Some(Some(p)) => {
+                // Notes can also be placed by hand on a page chosen in the viewer.
+                let manual = place.manual.then(|| {
+                    let item = a.clone();
+                    button(("ann-manual", i), "Place in PDF…", true)
+                        .on_click(cx.listener(move |this, _, _, cx| this.ann_open(&item, cx)))
+                });
+                row = row.child(match (place.search, proposal) {
+                    (false, _) => div()
+                        .flex()
+                        .flex_wrap()
+                        .items_center()
+                        .gap_2()
+                        .child(hint(
+                            "No quoted text to search for: open it in the PDF, go to its page and choose Place on p. N (palette: Place Note on Current Page).",
+                        ))
+                        .children(manual),
+                    (true, None) => div()
+                        .flex()
+                        .gap_2()
+                        .child(
+                            button(("ann-find", i), "Find position in this PDF", true).on_click(
+                                cx.listener(move |this, _, _, cx| this.ann_propose(id, cx)),
+                            ),
+                        )
+                        .children(manual),
+                    (true, Some(None)) => div()
+                        .flex()
+                        .flex_wrap()
+                        .items_center()
+                        .gap_2()
+                        .child(hint(if place.manual {
+                            "The quoted text was not found in this PDF. Place it by hand, keep it unresolved or delete it."
+                        } else {
+                            "The quoted text was not found in this PDF. Keep it unresolved or delete it."
+                        }))
+                        .children(manual),
+                    (true, Some(Some(p))) => {
                         let place = p.clone();
                         div()
                             .flex()

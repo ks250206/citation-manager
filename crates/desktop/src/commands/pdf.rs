@@ -16,6 +16,7 @@ pub mod ids {
     pub const ROTATE: &str = "pdf.rotate";
     pub const HIGHLIGHT: &str = "pdf.highlight_selection";
     pub const ADD_NOTE: &str = "pdf.add_note";
+    pub const PLACE_NOTE: &str = "pdf.place_note";
     pub const SHOW_ANNOTATIONS: &str = "pdf.show_annotations";
     pub const FULL_TEXT: &str = "search.full_text";
     pub const COPY_LINK: &str = "link.copy";
@@ -91,6 +92,12 @@ pub fn pdf_commands() -> Vec<Command> {
             ids::ADD_NOTE,
             "Add Page Note",
             "Add a note to the current PDF page",
+            Selection,
+        ),
+        (
+            ids::PLACE_NOTE,
+            "Place Note on Current Page",
+            "Place the selected unresolved note on the PDF page being viewed",
             Selection,
         ),
         (

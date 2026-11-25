@@ -2,7 +2,7 @@
 //! bounded render cache with cancellation, and character-based text selection.
 use super::annotations_ui::page_of;
 use super::*;
-use crate::annotations::{MARKER_H, MARKER_W, is_marker, marker_origin, quads_of};
+use crate::annotations::{MARKER_H, MARKER_W, is_marker, marker_origin, placement, quads_of};
 use crate::pdf_viewer::{
     self, BusyBackoff, RenderCache, RenderKey, TextPos, ZoomMode, capped_zoom, hit_char,
     layout_scale, page_offsets, page_range, render_zoom, rotate, rotate_rgba, rotated_points,
@@ -202,6 +202,10 @@ impl Viewer {
             self.scroll
                 .set_offset(point(x, px(-(top - pdf_viewer::PAGE_GAP).max(0.0))));
         }
+    }
+    /// Page label PDFium reported for a rendered page, if any.
+    pub(super) fn page_label(&self, page: u32) -> Option<String> {
+        self.labels.get(&page).cloned().flatten()
     }
     pub(super) fn current_page(&self) -> u32 {
         let (_, h) = self.pane();
@@ -1016,6 +1020,18 @@ impl LibraryView {
                         Some(p) => format!("Selected · p. {}", p + 1),
                         None => "Selected · unresolved".into(),
                     }))
+                    .when(placement(a).is_some_and(|p| p.manual), |el| {
+                        el.child(
+                            primary_button(
+                                "pdf-ann-place",
+                                format!("Place on p. {}", current + 1),
+                                true,
+                            )
+                            .on_click(cx.listener(
+                                move |this, _, _, cx| this.ann_place_on_page(id, current, cx),
+                            )),
+                        )
+                    })
                     .when(a.kind == AnnotationKind::Highlight, |el| {
                         el.child(self.color_swatches(
                             "pdf-ann-color",

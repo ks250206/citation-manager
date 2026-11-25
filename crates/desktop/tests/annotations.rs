@@ -1,7 +1,10 @@
 //! Selection → annotation helpers (#19); persistence is tested in crates/daemon/tests.
 use cm_desktop::annotations::*;
 use cm_protocol::{
-    annotations::{Anchor, Annotation, AnnotationId, AnnotationKind, Edit, MAX_CONTEXT_CHARS},
+    annotations::{
+        Anchor, Annotation, AnnotationId, AnnotationKind, AnnotationRequest, Edit,
+        MAX_CONTEXT_CHARS,
+    },
     attachments::{PageChar, Rect},
     domain::{AttachmentId, PaperId},
     geometry::{Origin, Point, Rotation, Viewport},
@@ -243,4 +246,61 @@ fn a_hit_or_link_selects_its_annotation_only_once_the_list_has_arrived() {
         pending_selection(Some(other), Some(&list)),
         PendingSelection::Missing(other)
     );
+}
+
+#[test]
+fn copied_page_notes_without_a_quote_can_be_placed_manually() {
+    let unresolved = |mut a: Annotation| {
+        a.anchor = Anchor::Unresolved {
+            reason: "Copied from a replaced PDF; confirm its position".into(),
+        };
+        a
+    };
+    // A page note made in the viewer has no quote; its copy cannot be found by searching.
+    let mut page_note = unresolved(row(1, AnnotationKind::Note, vec![]));
+    page_note.quote = String::new();
+    assert_eq!(
+        placement(&page_note),
+        Some(Placement {
+            search: false,
+            manual: true
+        })
+    );
+    match place_on_page(&page_note, 4, Some("v".into())) {
+        Some(AnnotationRequest::Resolve {
+            id,
+            page_index,
+            page_label,
+            quads,
+        }) => {
+            assert_eq!(id, page_note.id);
+            assert_eq!(page_index, 4);
+            assert_eq!(page_label.as_deref(), Some("v"));
+            assert!(quads.is_empty(), "a page note is placed without quads");
+        }
+        other => panic!("expected Resolve, got {other:?}"),
+    }
+    // A note with quoted text may be searched for or placed by hand.
+    let quoted_note = unresolved(row(2, AnnotationKind::Note, vec![]));
+    assert_eq!(
+        placement(&quoted_note),
+        Some(Placement {
+            search: true,
+            manual: true
+        })
+    );
+    // Highlights need text quads: only the search can place them.
+    let highlight = unresolved(row(3, AnnotationKind::Highlight, vec![]));
+    assert_eq!(
+        placement(&highlight),
+        Some(Placement {
+            search: true,
+            manual: false
+        })
+    );
+    assert!(place_on_page(&highlight, 0, None).is_none());
+    // Placed annotations are not moved this way.
+    let placed = row(4, AnnotationKind::Note, vec![]);
+    assert_eq!(placement(&placed), None);
+    assert!(place_on_page(&placed, 0, None).is_none());
 }
