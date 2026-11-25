@@ -13,7 +13,10 @@ Layout (docs/ADR/app-layout.md; what `cm_pdf::worker::bundled_library` and the s
     MacOS/papers-native-host      browser Native Messaging host
     Frameworks/libpdfium.dylib    chromium/8125 universal, upstream bytes (sha256 pinned)
     Resources/AppIcon.icns        when built on macOS (rendered from assets/icon.svg)
+    Resources/licenses/LICENSE    the project's MIT license
     Resources/licenses/pdfium/    PDFium LICENSE + every upstream third-party notice
+    Resources/licenses/THIRD_PARTY_NOTICES.md, third-party-licenses.json
+                                  Rust crates (scripts/package/third_party_notices.py, #31)
     Resources/native-messaging/extension-ids.json
     Resources/pdfium-runtime.json build, archive and library digests of the bundled PDFium
 
@@ -136,8 +139,22 @@ def copy_pdfium(pdfium_dir, contents, signed=None, signed_sha256=None):
     return target
 
 
+NOTICES = ('THIRD_PARTY_NOTICES.md', 'third-party-licenses.json')
+PROJECT_LICENSE = ROOT / 'LICENSE'
+
+
+def copy_notices(notices_dir, contents):
+    """Bundle the generated crate notices next to the PDFium ones."""
+    missing = [name for name in NOTICES if not (Path(notices_dir) / name).is_file()]
+    if missing:
+        raise ValueError(f'missing generated notices in {notices_dir}: {", ".join(missing)} '
+                         '(run scripts/package/third_party_notices.py)')
+    for name in NOTICES:
+        shutil.copy2(Path(notices_dir) / name, contents / 'Resources/licenses' / name)
+
+
 def build(bin_dir, pdfium_dir, out, version=None, build_number='1', icon=True,
-          signed_pdfium=None, signed_pdfium_sha256=None):
+          signed_pdfium=None, signed_pdfium_sha256=None, notices_dir=None):
     """Create `<out>/Citation Manager.app` (replacing an earlier build) and return its path."""
     bin_dir, pdfium_dir, out = Path(bin_dir), Path(pdfium_dir), Path(out)
     missing = [name for name in EXECUTABLES if not (bin_dir / name).is_file()]
@@ -154,6 +171,10 @@ def build(bin_dir, pdfium_dir, out, version=None, build_number='1', icon=True,
         shutil.copy2(bin_dir / name, contents / 'MacOS' / name)
         (contents / 'MacOS' / name).chmod(0o755)
     copy_pdfium(pdfium_dir, contents, signed_pdfium and Path(signed_pdfium), signed_pdfium_sha256)
+    # The project's own MIT license ships next to the third-party notices.
+    shutil.copy2(PROJECT_LICENSE, contents / 'Resources/licenses/LICENSE')
+    if notices_dir is not None:
+        copy_notices(notices_dir, contents)
     messaging = contents / 'Resources/native-messaging'
     messaging.mkdir()
     shutil.copy2(EXTENSION_IDS, messaging / 'extension-ids.json')
@@ -180,9 +201,10 @@ def main():
     parser.add_argument('--no-icon', action='store_true')
     parser.add_argument('--signed-pdfium', type=Path, help='dylib signed by `codesign.py pdfium`')
     parser.add_argument('--signed-pdfium-sha256', help='its digest (= CM_PDFIUM_SIGNED_SHA256 of the build)')
+    parser.add_argument('--notices-dir', type=Path, help='output of scripts/package/third_party_notices.py')
     args = parser.parse_args()
     app = build(args.bin_dir, args.pdfium_dir, args.out, args.version, args.build_number, not args.no_icon,
-                args.signed_pdfium, args.signed_pdfium_sha256)
+                args.signed_pdfium, args.signed_pdfium_sha256, args.notices_dir)
     print(app)
 
 
