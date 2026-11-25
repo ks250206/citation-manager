@@ -243,18 +243,19 @@ function reviewView(doc: Document, state: State, ctl: Controller): HTMLElement[]
   for (const hint of snapshotHints(state)) out.push(el(doc, 'p', { class: 'hint', 'data-hint': hint.id }, hint.text));
   for (const note of correctionNotes(state)) out.push(el(doc, 'p', { class: 'hint warn', 'data-note': note.id }, note.text));
   preview.candidates.forEach((candidate, i) => out.push(candidateView(doc, candidate, i, state, ctl)));
-  if (preview.hidden_matches > 0) {
+  if (preview.hidden_duplicates > 0) {
     out.push(
       el(
         doc,
         'p',
-        { class: 'hint warn', id: 'hidden-matches', 'data-count': String(preview.hidden_matches) },
-        `Possible duplicates: ${preview.hidden_matches} matching paper(s) already in your library (details are shown only in the app). An exact duplicate cannot be saved from the browser; merge it in the app.`,
+        { class: 'hint warn', id: 'hidden-matches', 'data-count': String(preview.hidden_duplicates) },
+        `Already in your library: ${preview.hidden_duplicates} paper(s) here exactly match an existing paper (same DOI or identifier; details are shown only in the app). Browser capture skips them instead of saving a duplicate; merge in the app if needed.`,
       ),
     );
   }
-  // Other daemon warnings, minus the generic import-API note and the hidden-match line above.
-  for (const warning of preview.warnings.filter((w) => !/^Commit requires|existing-library match/.test(w)).slice(0, 4)) {
+  // Other daemon warnings, minus the generic import-API note and the constant redaction note
+  // (its substance is the structured line above).
+  for (const warning of preview.warnings.filter((w) => !/^Commit requires|existing-library match/i.test(w)).slice(0, 4)) {
     out.push(el(doc, 'p', { class: 'hint warn' }, warning));
   }
 

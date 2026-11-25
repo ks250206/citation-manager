@@ -14,7 +14,7 @@ import {
   parseJob,
   parsePreview,
 } from '../../src/shared/validate';
-import { COLLECTION, DESTINATIONS, HELLO, commitResult, job, previewResult } from './samples';
+import { COLLECTION, DESTINATIONS, HELLO, REDACTED_WARNING, commitResult, job, previewResult } from './samples';
 
 const base = () => ({
   page_url: 'https://journal.example.org/a',
@@ -111,12 +111,15 @@ test('host errors keep code and retryable flag; malformed errors are bad replies
 });
 
 test('preview results are read from the cm-protocol shapes', () => {
-  const p = parsePreview(previewResult({ warnings: ['1 possible existing-library matches hidden for this client'] }));
+  const p = parsePreview(previewResult({ warnings: [REDACTED_WARNING], hiddenDuplicates: 1 }));
   assert.equal(p.preview_id, 'preview-1');
   assert.equal(p.candidates[0]?.draft.title, 'Capturing Papers');
   assert.equal(p.candidates[0]?.draft.year, 2026);
   assert.equal(p.candidates[0]?.draft.authors[0]?.family_name, 'Lovelace');
-  assert.equal(p.hidden_matches, 1);
+  assert.equal(p.hidden_duplicates, 1);
+  // The only row is the hidden duplicate: it is treated like a visible exact duplicate.
+  assert.equal(p.candidates[0]?.exact_duplicate, true);
+  assert.deepEqual(p.candidates[0]?.matches, []);
   assert.deepEqual(p.pdf_candidates, [{ url: 'https://cdn.example.org/a.pdf', origin: 'highwire' }]);
   const existing = { id: 'x', title: 'Old', external_ids: [], doi: '10.9999/x', year: 2020 };
   const dup = parsePreview(previewResult({ matches: [{ existing, kind: 'Doi', differences: [] }] }));
@@ -124,6 +127,27 @@ test('preview results are read from the cm-protocol shapes', () => {
   assert.equal(dup.candidates[0]?.matches[0]?.title, 'Old');
   const fuzzy = parsePreview(previewResult({ matches: [{ existing, kind: 'SimilarTitle', differences: [] }] }));
   assert.equal(fuzzy.candidates[0]?.exact_duplicate, false);
+});
+
+test('hidden duplicates come from the structured field, never from warning text', () => {
+  // Absent (older daemon): none. The warning text, old or new, is not parsed.
+  for (const warnings of [[], [REDACTED_WARNING], ['1 possible existing-library matches hidden for this client']]) {
+    const p = parsePreview(previewResult({ warnings }));
+    assert.equal(p.hidden_duplicates, 0);
+    assert.equal(p.candidates[0]?.exact_duplicate, false);
+  }
+  assert.equal(parsePreview(previewResult({ hiddenDuplicates: 0 })).hidden_duplicates, 0);
+  // Some rows of several: counted, but no row can be singled out.
+  const some = parsePreview(previewResult({ rows: 3, hiddenDuplicates: 2 }));
+  assert.equal(some.hidden_duplicates, 2);
+  assert.deepEqual(some.candidates.map((c) => c.exact_duplicate), [false, false, false]);
+  const all = parsePreview(previewResult({ rows: 2, hiddenDuplicates: 2 }));
+  assert.deepEqual(all.candidates.map((c) => c.exact_duplicate), [true, true]);
+  // More than the rows, negative, fractional or not a number: a bad reply.
+  for (const bad of [2, -1, 0.5, '1']) {
+    const raw = { ...previewResult(), hidden_duplicates: bad };
+    assert.equal(code(() => parsePreview(raw)), 'bad_reply', String(bad));
+  }
 });
 
 test('malformed previews are rejected', () => {

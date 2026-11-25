@@ -11,8 +11,8 @@
 //  3. Press the extension's keyboard shortcut with xdotool: a real user gesture, so the
 //     browser grants activeTab for that tab and opens the popup.
 //  4. Drive the popup: Save (offline DOI lookup off) -> review -> commit -> PDF job status ->
-//     Retry PDF; then a duplicate save of the same page; then a page without metadata saved
-//     provisionally with manual corrections.
+//     Retry PDF; then a duplicate save of the same page (skipped by the daemon, nothing
+//     created); then a page without metadata saved provisionally with manual corrections.
 //  5. Quit the browser, check no host process is left, and open the library as its owner
 //     (as the app does on launch) to confirm both papers were persisted.
 //
@@ -226,31 +226,27 @@ async function duplicateScenario(popup, checks, results) {
   await saveToReview(popup, checks, 'duplicate');
   const fields = await popup.evaluate(reviewFields);
   results.duplicate_review = fields;
-  // The capture grant has no LibraryRead: matches are hidden, and the popup says so.
-  checks.duplicate_preview_flags_existing_match =
-    fields.matches.length > 0 || (await popup.evaluate(`Boolean(document.getElementById('hidden-matches'))`));
-  // Create anyway. The daemon refuses an exact duplicate with `conflict`; the popup offers
-  // "Preview again" once, and reports the existing paper on the second refusal.
-  const attempts = [];
-  for (let i = 0; i < 3; i++) {
-    await popup.evaluate(click('#commit'));
-    await until(popup, `${phaseIs('saved')} || ${phaseIs('error')}`, 60000, 'duplicate commit result');
-    const outcome = await popup.evaluate(`({ phase: document.getElementById('app').dataset.phase, code: document.getElementById('error')?.dataset.code ?? null, message: document.getElementById('error')?.textContent ?? null, paper: document.getElementById('saved')?.dataset.paper ?? null, recover: document.getElementById('recover')?.textContent ?? null })`);
-    attempts.push(outcome);
-    if (outcome.code !== 'conflict') break;
-    await popup.evaluate(click('#recover'));
-    await until(popup, `${phaseIs('review')} || ${phaseIs('error')}`, 60000, 're-preview');
-  }
-  results.duplicate_commit_attempts = attempts;
-  const last = attempts.at(-1);
-  checks.duplicate_conflict_offers_repreview = attempts[0]?.code === 'conflict' && attempts[0]?.recover === 'Preview again';
-  checks.duplicate_reported_not_created = last?.phase === 'error' && last?.code === 'duplicate' && last?.paper === null;
-  if (last?.phase === 'error') {
+  // The capture grant has no LibraryRead: the match is hidden, but the daemon reports the
+  // row as a hidden exact duplicate (`hidden_duplicates`) and the popup says so.
+  const hidden = await popup.evaluate(`document.getElementById('hidden-matches')?.dataset.count ?? null`);
+  results.duplicate_hidden_count = hidden;
+  checks.duplicate_preview_flags_existing_match = fields.matches.length > 0 || hidden === '1';
+  // It defaults to Skip, so there is nothing to save as is.
+  checks.duplicate_defaults_to_skip = fields.decision === 'Skip' && fields.commitEnabled === false;
+  // Save as new anyway: the daemon skips the hidden exact duplicate (no conflict, nothing
+  // created, no PDF job) and the popup reports the existing paper.
+  await popup.evaluate(click('#decision-0-Create'));
+  await until(popup, `document.querySelector('input[name="decision-0"]:checked')?.value === 'Create' && !document.getElementById('commit')?.disabled`, 10000, 'save as new chosen');
+  await popup.evaluate(click('#commit'));
+  await until(popup, `${phaseIs('saved')} || ${phaseIs('error')}`, 60000, 'duplicate commit result');
+  const outcome = await popup.evaluate(`({ phase: document.getElementById('app').dataset.phase, code: document.getElementById('error')?.dataset.code ?? null, message: document.getElementById('error')?.textContent ?? null, paper: document.getElementById('saved')?.dataset.paper ?? null, recover: document.getElementById('recover')?.textContent ?? null })`);
+  results.duplicate_commit = outcome;
+  checks.duplicate_skipped_not_conflict = outcome.phase === 'error' && outcome.code === 'duplicate' && /nothing was saved/.test(outcome.message ?? '');
+  checks.duplicate_reported_not_created = outcome.phase === 'error' && outcome.code === 'duplicate' && outcome.paper === null && outcome.recover === null;
+  if (outcome.phase === 'error') {
     await popup.evaluate(click('#back'));
-    await until(popup, phaseIs('review'), 10000, 'back to review');
-    await popup.evaluate(click('#cancel'));
-    await until(popup, phaseIs('ready'), 15000, 'cancelled');
-    checks.duplicate_cancelled_back_to_ready = true;
+    await until(popup, phaseIs('ready'), 15000, 'back to ready');
+    checks.duplicate_back_to_ready = true;
   }
 }
 

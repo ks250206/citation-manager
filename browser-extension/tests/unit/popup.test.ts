@@ -2,13 +2,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Controller, type Client } from '../../src/popup/controller';
-import { DUPLICATE_MESSAGE, MAX_POLLS, initialState, pdfView, recoveryFor, reduce } from '../../src/popup/state';
+import { DUPLICATE_MESSAGE, DUPLICATE_SKIPPED_MESSAGE, MAX_POLLS, canCommit, initialState, pdfView, recoveryFor, reduce } from '../../src/popup/state';
 import { collectionTree, render } from '../../src/popup/view';
 import { buildCaptureRequest, normalizeCorrections } from '../../src/shared/request';
 import type { Outcome, PageSnapshot } from '../../src/shared/types';
 import { parseCommit, parseDestinations, parseHello, parseJob, parsePreview } from '../../src/shared/validate';
 import { dom } from './helpers';
-import { CHILD, COLLECTION, DESTINATIONS, HELLO, JOB, TAG, commitResult, job, previewResult } from './samples';
+import { CHILD, COLLECTION, DESTINATIONS, HELLO, JOB, REDACTED_WARNING, TAG, commitResult, job, previewResult, skippedResult } from './samples';
 
 const SNAPSHOT: PageSnapshot = {
   page_url: 'https://journal.example.org/a',
@@ -153,11 +153,12 @@ test('daemon unavailable is retryable and Retry commits the same preview again',
   assert.equal(commits[1]?.preview_id, 'preview-1');
 });
 
-test('conflict asks to preview again; a repeated conflict with hidden matches is a duplicate', async () => {
+test('conflict asks to preview again; a repeated conflict with hidden duplicates is a duplicate', async () => {
   let previews = 0;
   const h = harness({
     ...happy(),
-    preview: () => okOf(parsePreview(previewResult({ id: `p${++previews}`, warnings: ['1 possible existing-library matches hidden for this client'] }))),
+    // Two rows, one a hidden duplicate the daemon cannot attribute to a row for us.
+    preview: () => okOf(parsePreview(previewResult({ id: `p${++previews}`, rows: 2, hiddenDuplicates: 1, warnings: [REDACTED_WARNING] }))),
     commit: () => errOf('conflict', true),
   });
   await h.ctl.start();
@@ -177,6 +178,50 @@ test('conflict asks to preview again; a repeated conflict with hidden matches is
   await h.ctl.cancel();
   assert.equal(kindOf(h.ctl), 'ready');
   assert.deepEqual(h.calls.at(-1), { op: 'cancel', preview_id: 'p2' });
+});
+
+test('a hidden duplicate defaults to Skip; saving it anyway is skipped by the daemon and reported', async () => {
+  const h = harness({
+    ...happy(),
+    preview: () => okOf(parsePreview(previewResult({ hiddenDuplicates: 1, warnings: [REDACTED_WARNING] }))),
+    commit: () => okOf(parseCommit(skippedResult())),
+  });
+  await h.ctl.start();
+  await h.ctl.save();
+  assert.equal(kindOf(h.ctl), 'review');
+  assert.deepEqual(h.ctl.state.decisions, ['Skip']);
+  assert.equal(canCommit(h.ctl.state), false, 'nothing to save as long as the duplicate is skipped');
+  h.ctl.dispatch({ type: 'decision', index: 0, action: 'Create' });
+  await h.ctl.commit();
+  const phase = h.ctl.state.phase;
+  assert.equal(phase.kind === 'error' && phase.error.code, 'duplicate');
+  assert.equal(phase.kind === 'error' && phase.error.message, DUPLICATE_SKIPPED_MESSAGE);
+  assert.equal(phase.kind === 'error' && phase.recovery, 'none');
+  assert.equal(h.ctl.state.saved, null, 'nothing was saved');
+  assert.equal(h.ctl.state.preview, null, 'the daemon used up the preview');
+  assert.deepEqual(h.ops().filter((o) => o === 'commit' || o === 'pdf_job'), ['commit'], 'committed once, no PDF job polled');
+  h.ctl.dispatch({ type: 'back' });
+  assert.equal(kindOf(h.ctl), 'ready');
+});
+
+test('a skipped duplicate after an earlier save of another page does not show that save', () => {
+  let s = reduce(initialState(), { type: 'extracted', outcome: okOf(SNAPSHOT) });
+  s = reduce(s, { type: 'previewed', outcome: okOf(parsePreview(previewResult())), destination: { collection: null, tags: [] }, corrections: {} });
+  s = reduce(s, { type: 'committed', outcome: okOf(parseCommit(commitResult())) });
+  assert.equal(s.phase.kind, 'saved');
+  s = reduce(s, { type: 'extracted', outcome: okOf(SNAPSHOT) });
+  s = reduce(s, { type: 'previewed', outcome: okOf(parsePreview(previewResult({ hiddenDuplicates: 1 }))), destination: { collection: null, tags: [] }, corrections: {} });
+  s = reduce(s, { type: 'decision', index: 0, action: 'Create' });
+  s = reduce(s, { type: 'committed', outcome: okOf(parseCommit(skippedResult())) });
+  assert.equal(s.phase.kind === 'error' && s.phase.error.code, 'duplicate');
+  s = reduce(s, { type: 'back' });
+  assert.equal(s.phase.kind, 'ready');
+  // Skipping on purpose is not an error.
+  s = reduce(s, { type: 'extracted', outcome: okOf(SNAPSHOT) });
+  s = reduce(s, { type: 'previewed', outcome: okOf(parsePreview(previewResult({ rows: 2 }))), destination: { collection: null, tags: [] }, corrections: {} });
+  s = reduce(s, { type: 'decision', index: 1, action: 'Skip' });
+  s = reduce(s, { type: 'committed', outcome: okOf(parseCommit(commitResult())) });
+  assert.equal(s.phase.kind, 'saved');
 });
 
 test('a visible exact duplicate defaults to Skip and cannot be committed as is', () => {
@@ -275,7 +320,7 @@ test('review UI shows fields, PDF choices, destination, decisions; page strings 
       await ctl.start();
       await ctl.save();
     },
-    { ...happy(), preview: () => okOf(parsePreview(previewResult({ title: evil, warnings: ['2 possible existing-library matches hidden for this client'] }))) },
+    { ...happy(), preview: () => okOf(parsePreview(previewResult({ title: evil, rows: 3, hiddenDuplicates: 2, warnings: [REDACTED_WARNING, 'Other note'] }))) },
   );
   await ready;
   assert.equal(root.dataset.phase, 'review');
@@ -287,6 +332,11 @@ test('review UI shows fields, PDF choices, destination, decisions; page strings 
   assert.equal((root.querySelector('#pdf-0') as HTMLInputElement).checked, true);
   assert.equal((root.querySelector('#decision-0-Create') as HTMLInputElement).checked, true);
   assert.equal(root.querySelector('#hidden-matches')?.getAttribute('data-count'), '2');
+  assert.match(root.querySelector('#hidden-matches')?.textContent ?? '', /Already in your library: 2 /);
+  // The constant redaction note is summarized by the line above; other notes are shown.
+  const notes = [...root.querySelectorAll('p.hint.warn')].map((p) => p.textContent);
+  assert.ok(!notes.some((n) => n === REDACTED_WARNING), JSON.stringify(notes));
+  assert.ok(notes.includes('Other note'), JSON.stringify(notes));
   assert.ok(root.querySelector('#collection'));
   assert.ok(root.querySelector('#fix-title'));
   assert.equal((root.querySelector('#commit') as HTMLButtonElement).hasAttribute('disabled'), false);

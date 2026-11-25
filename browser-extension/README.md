@@ -33,9 +33,13 @@ instructions; `daemon_unavailable` / `busy` / timeout → **Retry** (same reques
 **Preview again**; `too_large` → one automatic retry with the HTML snapshot cut by a quarter.
 A commit whose outcome is unknown (the host stopped or the 30 s deadline passed while saving,
 or the background restarted) is never retried: the popup says "check the app before saving
-again" and drops the preview. The daemon answers an exact duplicate (same DOI/identifier) with
-`conflict` as well and hides the match from the capture grant; a second conflict after
-re-previewing is therefore reported as "already in your library" (merge in the app).
+again" and drops the preview. The daemon hides existing-library matches from the capture grant
+but counts rows that exactly duplicate an existing paper (same DOI/identifier) in the preview's
+structured `hidden_duplicates` (the warning text is never parsed). Such a page is shown as
+"already in your library" and defaults to **Skip**; **Save as new** anyway is skipped by the
+daemon (nothing created, no PDF job) and reported as "already in your library, nothing was
+saved" (merge in the app). Should a commit still end in `conflict` for a reported duplicate,
+a second conflict after re-previewing is reported the same way.
 
 ### Deadlines and the MV3 service worker
 

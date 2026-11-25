@@ -5,7 +5,13 @@ export const COLLECTION = '01a20f9f-0000-7000-8000-000000000001';
 export const CHILD = '01a20f9f-0000-7000-8000-000000000002';
 export const TAG = '01a20f9f-0000-7000-8000-0000000000aa';
 
-export function previewResult(over: { matches?: unknown[]; warnings?: string[]; provisional?: boolean; pdfs?: unknown[]; id?: string; title?: string } = {}) {
+/** The daemon's constant redaction note (#27 `REDACTED_PREVIEW_WARNING`). */
+export const REDACTED_WARNING =
+  'Existing-library matches are hidden for this client; rows that exactly duplicate an existing paper are skipped on commit.';
+
+export function previewResult(
+  over: { matches?: unknown[]; warnings?: string[]; provisional?: boolean; pdfs?: unknown[]; id?: string; title?: string; hiddenDuplicates?: number; rows?: number } = {},
+) {
   const draft = {
     title: over.title ?? 'Capturing Papers',
     external_ids: [{ namespace: 'doi', value: '10.9999/x' }],
@@ -18,10 +24,11 @@ export function previewResult(over: { matches?: unknown[]; warnings?: string[]; 
     source: { adapter: 'browser-capture', locator: null, row: null, sha256: null },
     diagnostics: [],
   };
+  const candidate = { draft, existing_match: null, matches: over.matches ?? [], batch_matches: [], diagnostics: [] };
   return {
     preview: {
       id: over.id ?? 'preview-1',
-      candidates: [{ draft, existing_match: null, matches: over.matches ?? [], batch_matches: [], diagnostics: [] }],
+      candidates: Array.from({ length: over.rows ?? 1 }, () => candidate),
       warnings: over.warnings ?? [],
     },
     resolution: {
@@ -34,6 +41,7 @@ export function previewResult(over: { matches?: unknown[]; warnings?: string[]; 
       provisional: over.provisional ?? false,
       pdf_candidates: over.pdfs ?? [{ url: 'https://cdn.example.org/a.pdf', origin: 'highwire' }],
     },
+    ...(over.hiddenDuplicates === undefined ? {} : { hidden_duplicates: over.hiddenDuplicates }),
   };
 }
 
@@ -63,6 +71,16 @@ export function commitResult(pdfJob: unknown = job('queued', 0)) {
     outcome: { created: [PAPER], merged: [], skipped: 0, rows: [] },
     paper: PAPER,
     pdf_job: pdfJob,
+    pdf_error: null,
+  };
+}
+
+/** The daemon skipped the (hidden duplicate) row: nothing created, no paper, no PDF job. */
+export function skippedResult() {
+  return {
+    outcome: { created: [], merged: [], skipped: 1, rows: [] },
+    paper: null,
+    pdf_job: null,
     pdf_error: null,
   };
 }

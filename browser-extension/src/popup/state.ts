@@ -45,7 +45,7 @@ export interface State {
   job: JobStatus | null;
   /** `capture.pdf_job` polls made for the current job state. */
   polls: number;
-  /** Commit conflicts for the current page (a hidden exact duplicate also commits as conflict). */
+  /** Commit conflicts for the current page (an older daemon commits a hidden duplicate as conflict). */
   conflicts: number;
 }
 
@@ -132,11 +132,15 @@ function fail(state: State, op: Op, error: ErrorInfo): State {
 export const DUPLICATE_MESSAGE =
   'This paper is already in your library (same DOI or identifier). Browser capture cannot create a duplicate or merge; open the app to merge it, or cancel.';
 
+/** The daemon skipped a row the preview reported as an exact duplicate: nothing was saved. */
+export const DUPLICATE_SKIPPED_MESSAGE =
+  'This paper is already in your library (same DOI or identifier), so nothing was saved. Browser capture cannot create a duplicate or merge; open the app to merge it.';
+
 /**
- * The daemon answers Create on an exact persisted duplicate with `conflict`, the same code
- * as "library changed, preview again". The capture grant cannot see the match (it is
- * redacted to a warning), so: the first conflict suggests previewing again; a second one
- * for the same page with a duplicate warning is reported as an existing paper.
+ * A Create on a hidden exact duplicate is skipped by the daemon (#27, see `committed`). An
+ * older daemon, or a duplicate only the desktop can see, answers it with `conflict`, the
+ * same code as "library changed, preview again": the first conflict suggests previewing
+ * again; a second one for the same page with a reported duplicate is an existing paper.
  */
 function commitFailed(state: State, error: ErrorInfo): State {
   if (error.code === 'commit_unknown') {
@@ -144,7 +148,7 @@ function commitFailed(state: State, error: ErrorInfo): State {
     return fail({ ...state, preview: null, previewDestination: null }, 'commit', error);
   }
   const preview = state.preview;
-  const suspect = preview !== null && (preview.hidden_matches > 0 || preview.candidates.some((c) => c.exact_duplicate));
+  const suspect = preview !== null && (preview.hidden_duplicates > 0 || preview.candidates.some((c) => c.exact_duplicate));
   if (error.code !== 'conflict' || !suspect) return fail(state, 'commit', error);
   const conflicts = state.conflicts + 1;
   if (conflicts >= 2 || preview.candidates.some((c) => c.exact_duplicate)) {
@@ -218,6 +222,12 @@ export function reduce(state: State, event: Event): State {
     case 'committed': {
       if (!event.outcome.ok) return commitFailed(state, event.outcome.error);
       const saved = event.outcome.result;
+      if (saved.paper === null && saved.created === 0 && saved.skipped > 0 && state.decisions.includes('Create')) {
+        // Save as new was chosen, but the daemon skipped the row as an exact duplicate of an
+        // existing paper (hidden from this grant). The preview is used up; nothing was saved.
+        const cleared = { ...state, saved: null, job: null, polls: 0, preview: null, previewDestination: null };
+        return fail(cleared, 'commit', { code: 'duplicate', message: DUPLICATE_SKIPPED_MESSAGE, retryable: false });
+      }
       return { ...state, saved, job: saved.pdf_job, polls: 0, preview: null, phase: { kind: 'saved' } };
     }
     case 'job': {

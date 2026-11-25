@@ -288,13 +288,19 @@ export function parsePreview(v: unknown): PreviewResult {
     return { url, origin: str(x.origin, `pdf_candidates[${i}].origin`, 32) };
   });
   const warnings = arr(preview.warnings, 'preview.warnings', 64).map((w) => str(w, 'warnings[]', 4096));
-  // The daemon reports redacted duplicate matches only as a warning (#25 redact_matches).
-  const hidden = warnings.map((w) => /^(\d+) possible existing-library match(?:es)? hidden/.exec(w)).find(Boolean);
+  // Matches are redacted for the capture grant; the daemon counts the hidden exact duplicates
+  // in a structured field (absent from older daemons: 0). The warning text is never parsed.
+  const hiddenDuplicates = int(o.hidden_duplicates ?? 0, 'hidden_duplicates');
+  if (hiddenDuplicates < 0 || hiddenDuplicates > candidates.length) bad('hidden_duplicates');
+  // When every row is a hidden duplicate (a page capture has one row), each row is one.
+  if (hiddenDuplicates > 0 && hiddenDuplicates === candidates.length) {
+    for (const candidate of candidates) candidate.exact_duplicate = true;
+  }
   return {
     preview_id: str(preview.id, 'preview.id', 256),
     candidates,
     warnings,
-    hidden_matches: hidden ? Number(hidden[1]) : 0,
+    hidden_duplicates: hiddenDuplicates,
     provisional: bool(resolution.provisional ?? false, 'resolution.provisional'),
     pdf_candidates: pdfs,
     tiers_used: arr(resolution.tiers_used, 'tiers_used', 16).map((t) => str(t, 'tiers_used[]', 32)),

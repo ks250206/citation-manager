@@ -124,7 +124,10 @@ export interface DuplicateMatch {
 export interface PreviewCandidate {
   draft: Draft;
   matches: DuplicateMatch[];
-  /** An exact (DOI / external id) persisted match: the host grant cannot create it. */
+  /**
+   * An exact (DOI / external id) persisted match, shown or reported by the daemon as a hidden
+   * duplicate: the host grant cannot create it (the daemon skips it on commit).
+   */
   exact_duplicate: boolean;
   diagnostics: Diagnostic[];
 }
@@ -138,8 +141,11 @@ export interface PreviewResult {
   preview_id: string;
   candidates: PreviewCandidate[];
   warnings: string[];
-  /** Existing-library matches the daemon hid from this grant (no LibraryRead). */
-  hidden_matches: number;
+  /**
+   * Rows the daemon found to exactly duplicate an existing paper while hiding the match from
+   * this grant (no LibraryRead); it skips them on commit (`CapturePreview::hidden_duplicates`).
+   */
+  hidden_duplicates: number;
   provisional: boolean;
   pdf_candidates: PdfCandidate[];
   tiers_used: string[];
