@@ -997,7 +997,17 @@ exactly-once ではなく at-least-once + 冪等効果と明記する。macOS .a
 unicode61 token と、範囲・件数・時間上限付きの literal scan で検索し、未検索領域と continuation を
 返す（0件表示と区別）。幅/NFC 正規化は #53 実測どおり行わない。GUI #21、負荷 #30 は未実施。
 
-## 34. #22 Browser/URL 取り込みと安全な PDF 取得
+## 34. #28 `papers` CLI
+
+[cli ADR](docs/ADR/cli.md) が §15 の実装上の明確化となる。`papers` は clap の adapter で、DB を開かず
+#25 の認可付き IPC だけを使い、未起動なら同じディレクトリの `papersd` を遅延起動する。stdout は
+`papers.v1` JSON envelope（または `--text`）、診断は stderr、終了コードは 0/1/2/3/4/5/6/7 に意味を固定する。
+書込は preview → 明示 decision → `--yes`（非対話時は必須）で commit し、merge は `--merge <id>` のみ。
+credential/要求 capability は `credentials` module に集約し（既定は owner の desktop bootstrap credential、
+`client_kind=cli`、subcommand ごとの最小 `requested`）、#26 の CLI token をそこへ追加する。
+`papers mcp` は #7 の `cm_mcp::run_stdio` を呼び、#29 未実装の間は exit 7。REST は #27。
+
+## 35. #22 Browser/URL 取り込みと安全な PDF 取得
 
 [browser capture ADR](docs/ADR/browser-capture.md) が §8.2/§12.3/§17–18 の実装上の明確化となる。
 Browser/MCP 共通の `CaptureRequest`（URL、title、上限付き HTML snapshot、meta、JSON-LD、明示 PDF、
