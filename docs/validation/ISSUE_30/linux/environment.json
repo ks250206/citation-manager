@@ -13,7 +13,7 @@
     "RUSTFLAGS": null,
     "CARGO_ENCODED_RUSTFLAGS": null,
     "CARGO_BUILD_TARGET": null,
-    "CARGO_TARGET_DIR": "/tmp/claude-0/-home-user-citation-manager/c6a2b039-9a98-5d5e-96a4-8206830fccd5/scratchpad/tgt_i30"
+    "CARGO_TARGET_DIR": "<scratch>/tgt_i30"
   },
   "ci": false,
   "runner": {
@@ -124,7 +124,7 @@
     }
   },
   "pdfium": {
-    "path": "/tmp/claude-0/-home-user-citation-manager/c6a2b039-9a98-5d5e-96a4-8206830fccd5/scratchpad/i30_pdfium/lib/libpdfium.so",
+    "path": "<scratch>/i30_pdfium/lib/libpdfium.so",
     "sha256": "1c251efce460d67437a4c76d4be9033ae2f17bf5603f5bff1af10209b94ca723"
   }
 }
