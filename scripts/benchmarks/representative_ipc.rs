@@ -473,11 +473,29 @@ fn renders(
     let rss_after = rss_kib(pid);
     std::thread::sleep(Duration::from_secs(2));
     let rss_settled = rss_kib(pid);
+    // macOS: `ps` RSS also counts freed allocations libmalloc keeps as reusable pages, so
+    // record the physical footprint and the region summary too (diagnostic text).
+    let macos_memory = cfg!(target_os = "macos").then(|| {
+        let tool = |program: &str, args: &[&str]| {
+            std::process::Command::new(program)
+                .args(args)
+                .output()
+                .map(|o| {
+                    let text = String::from_utf8_lossy(&o.stdout).into_owned()
+                        + &String::from_utf8_lossy(&o.stderr);
+                    text.chars().take(8000).collect::<String>()
+                })
+                .unwrap_or_else(|e| format!("{program}: {e}"))
+        };
+        let pid = pid.to_string();
+        json!({"footprint": tool("footprint", &[&pid]),
+               "vmmap_summary": tool("vmmap", &["-summary", &pid])})
+    });
     Ok(
         json!({"kind": "renders", "pid": pid, "pages": pages, "zoom": zoom,
         "connections": connections, "wall_ms": wall_ms, "rows": rows,
         "rss_kib_before": rss_before, "rss_kib_after": rss_after,
-        "rss_kib_settled": rss_settled,
+        "rss_kib_settled": rss_settled, "macos_memory": macos_memory,
         "method": "PdfCommand::Render over authenticated desktop IPC sessions (one per connection), as the GUI viewer requests pages; RSS by ps"}),
     )
 }
