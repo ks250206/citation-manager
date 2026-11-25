@@ -182,6 +182,37 @@ class ReleaseSign(unittest.TestCase):
         self.assertNotIn('rust-cache', release)
         self.assertIn('persist-credentials: false', release)
 
+    def test_rejected_notarization_fails_the_release_and_keeps_the_report(self):
+        identity = 'Developer ID Application: A B (TEAM123456)'
+        env = {'CM_NOTARY_KEYCHAIN_PROFILE': 'cm'}
+        for rejected_step in ('app', 'dmg'):
+            calls = []
+
+            def run(command, rejected_step=rejected_step, calls=calls):
+                calls.append(command)
+                if command[:2] == ['xcrun', 'notarytool']:
+                    target = 'dmg' if command[3].endswith('.dmg') else 'app'
+                    status = 'Invalid' if target == rejected_step else 'Accepted'
+                    return mock.Mock(stdout=json.dumps({'status': status, 'id': 'sub-1'}), stderr='')
+                return mock.Mock(stdout='', stderr='TeamIdentifier=TEAM123456')
+
+            with mock.patch.object(release_sign, 'Runner', return_value=run), \
+                    mock.patch.object(release_sign.codesign, 'plan', return_value=[]), \
+                    mock.patch.object(release_sign.codesign, 'verify_command', return_value=['true']), \
+                    mock.patch.object(release_sign.create_dmg, 'build'), \
+                    mock.patch.object(release_sign.subprocess, 'run',
+                                      return_value=mock.Mock(stdout='accepted', stderr='')):
+                with self.assertRaises(release_sign.NotarizationRejected) as raised:
+                    release_sign.sign_app(Path('/o/A.app'), Path('/o/x.dmg'), env, identity)
+            status = raised.exception.status
+            self.assertEqual(status['release'], f'FAILED: {rejected_step} notarization Invalid')
+            # Nothing is stapled after a rejection, and the DMG step is never reached after an app rejection.
+            self.assertFalse(any(c[:3] == ['xcrun', 'stapler', 'staple'] and c[-1].endswith(rejected_step)
+                                 for c in calls))
+            if rejected_step == 'app':
+                self.assertEqual(status['dmg'], 'not run')
+        self.assertEqual(release_sign.EXIT_NOT_NOTARIZED, 4)
+
     def test_workflow_never_prints_or_traces_secrets(self):
         workflow = (ROOT / '.github/workflows/package-macos.yml').read_text()
         self.assertNotRegex(workflow, r'-----BEGIN|MII[A-Za-z0-9+/]{40}')
