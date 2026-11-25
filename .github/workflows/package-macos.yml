@@ -5,6 +5,13 @@ name: macOS app package
 # and Chrome/Firefox Native Messaging probes. Hosted-runner evidence only: it is not a
 # real-hardware check and an ad-hoc signature is not a distribution signature (#31).
 on:
+  # push as well: workflow_dispatch only works once this file is on the default branch.
+  push:
+    paths:
+      - 'packaging/**'
+      - 'scripts/package/**'
+      - 'scripts/native-host/**'
+      - '.github/workflows/package-macos.yml'
   pull_request:
     paths:
       - 'packaging/**'
