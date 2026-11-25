@@ -43,7 +43,7 @@ pub enum Capability {
     GrantAdmin,
 }
 impl Capability {
-    pub const ALL: [Capability; 13] = [
+    pub const ALL: [Capability; 14] = [
         Self::LibraryRead,
         Self::LibraryWrite,
         Self::LibraryDelete,
