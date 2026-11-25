@@ -89,6 +89,14 @@ impl LibraryView {
             cx.notify();
         }
     }
+    /// Enter/Search: full-text search when "Full text" is on, else the metadata filter.
+    pub(super) fn search_or_filter(&mut self, cx: &mut Context<Self>) {
+        if self.find_search.fulltext {
+            self.run_fulltext(cx);
+        } else {
+            self.filter(cx);
+        }
+    }
     pub(super) fn clear_filters(&mut self, cx: &mut Context<Self>) {
         self.library.query.filter = LibraryFilter {
             visibility: self.library.query.filter.visibility,
@@ -188,7 +196,18 @@ impl LibraryView {
                             .child(div().w(px(100.)).child(self.paper_type.clone()))
                             .child(
                                 primary_button("apply", "Search", true)
-                                    .on_click(cx.listener(|this, _, _, cx| this.filter(cx))),
+                                    .on_click(cx.listener(|this, _, _, cx| this.search_or_filter(cx))),
+                            )
+                            .child(
+                                nav_item("fulltext-mode", "Full text", self.find_search.fulltext)
+                                    .flex_none()
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.find_search.fulltext = !this.find_search.fulltext;
+                                        if this.find_search.fulltext {
+                                            this.run_fulltext(cx);
+                                        }
+                                        cx.notify();
+                                    })),
                             ),
                     )
                     .child(
@@ -226,11 +245,18 @@ impl LibraryView {
                                     cx.listener(|this, _, _, cx| this.clear_filters(cx)),
                                 ),
                             )
-                            .child(hint(
-                                "↩ to search · metadata only · literal keywords · direct collection membership",
-                            )),
+                            .child(
+                                div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(hint(
+                                    if self.find_search.fulltext {
+                                        "↩ full text: titles, abstracts, notes, PDF text · \"phrase\" tag: year: doi: collection:"
+                                    } else {
+                                        "↩ to search · metadata only · literal keywords · direct collection membership"
+                                    },
+                                )),
+                            ),
                     )
-                    .child(self.table(cx)),
+                    .when(!self.find_search.fulltext, |el| el.child(self.table(cx)))
+                    .when(self.find_search.fulltext, |el| el.child(self.search_results(cx))),
             ))
             .child(details)
     }
