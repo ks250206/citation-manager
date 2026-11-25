@@ -19,6 +19,8 @@ fn main() {
             &mut std::io::stderr(),
         ));
     }
+    // #85: fixed glibc mmap threshold so freed page bitmaps return to the OS.
+    cm_daemon::malloc_tuning::apply();
     let mut args = all.into_iter();
     let mut library = None;
     let mut runtime_dir = None;

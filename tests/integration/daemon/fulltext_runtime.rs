@@ -1,17 +1,21 @@
 //! #18 PDF -> pinned PDFium text extraction job -> FTS search -> page jump data, over real
-//! papersd IPC. Requires `CM_PDFIUM_LIBRARY` (absolute path of the pinned library).
+//! papersd IPC; #85 a real page render through the binary IPC frame. Requires
+//! `CM_PDFIUM_LIBRARY` (absolute path of the pinned library).
 mod support;
 use cm_daemon::{fulltext::PdfiumExtractor, ipc::start};
 use cm_protocol::{
-    client::Session,
+    attachments::{PdfReply, RenderedPage},
+    client::{Session, handshake},
     domain::PaperId,
-    ipc::{Command, Reply},
+    ipc::{ClientFrame, Command, PdfCommand, Reply, ServerFrame, frame, read_frame, write_frame},
     jobs::{JobCommand, JobReply, JobState, JobStatus, JobSubmit, kinds},
     library::{LibraryReply, LibraryRequest, NewPaper},
     search::*,
 };
 use serde_json::json;
 use std::{
+    io::Read,
+    os::unix::net::UnixStream,
     path::PathBuf,
     sync::Arc,
     time::{Duration, Instant},
@@ -118,6 +122,7 @@ fn real_pdf_is_extracted_by_the_job_and_found_by_page() {
         ]
     );
     let corpus = papers[0];
+    render_travels_as_a_binary_frame(&env, &mut desktop, corpus);
 
     // 3+ scalars: trigram + unicode61, page hits with 0-based index and PDF labels.
     let english = search(&mut desktop, SearchRequest::new("\"coordinate proof\""));
@@ -184,4 +189,71 @@ fn real_pdf_is_extracted_by_the_job_and_found_by_page() {
             "runs": 31,
         })
     );
+}
+
+/// #85: a real PDFium page render reaches the client intact, with its RGBA pixels as the raw
+/// binary payload of a protocol-2 frame (no base64 text in the JSON part).
+fn render_travels_as_a_binary_frame(env: &Env, desktop: &mut Session, paper: PaperId) {
+    let attachment = match ok(desktop.call(Command::Pdf(PdfCommand::List(paper)))) {
+        Reply::Pdf(PdfReply::Attachments(list)) => list[0].0.id,
+        other => panic!("{other:?}"),
+    };
+    let render = PdfCommand::Render {
+        attachment,
+        page: 0,
+        zoom: 1.0,
+    };
+    let page: Box<RenderedPage> = match ok(desktop.call(Command::Pdf(render.clone()))) {
+        Reply::Pdf(PdfReply::Page(Ok(page))) => page,
+        other => panic!("{other:?}"),
+    };
+    assert_eq!(page.page, 0);
+    assert!(page.width > 100 && page.height > 100);
+    assert_eq!(
+        page.rgba.len(),
+        page.width as usize * page.height as usize * 4
+    );
+    // Straight RGBA, opaque, with drawn (non-white) text pixels.
+    let pixels = page.rgba.as_chunks::<4>().0;
+    assert!(pixels.iter().all(|p| p[3] == 255));
+    assert!(
+        pixels
+            .iter()
+            .any(|p| p[0] < 128 && p[1] < 128 && p[2] < 128)
+    );
+
+    // The same request on a raw connection: one binary frame whose payload is the bitmap.
+    let mut stream = UnixStream::connect(env.paths().socket).unwrap();
+    let welcome = handshake(&mut stream, env.connector("desktop").hello().unwrap()).unwrap();
+    assert_eq!(welcome.protocol_version, 2);
+    let request = ClientFrame::Request {
+        id: 7,
+        command: Command::Pdf(render),
+    };
+    write_frame(&mut stream, &request, welcome.max_request_frame).unwrap();
+    let mut head = [0u8; 13];
+    stream.read_exact(&mut head).unwrap();
+    let length = u32::from_be_bytes(head[..4].try_into().unwrap()) as usize;
+    assert_eq!(head[4], frame::BINARY_TAG);
+    let json_len = u32::from_be_bytes(head[5..9].try_into().unwrap()) as usize;
+    assert_eq!(u32::from_be_bytes(head[9..13].try_into().unwrap()), 1);
+    let mut rest = vec![0u8; length - 9];
+    stream.read_exact(&mut rest).unwrap();
+    let blob_len = u32::from_be_bytes(rest[..4].try_into().unwrap()) as usize;
+    assert_eq!(blob_len, page.rgba.len());
+    assert_eq!(9 + 4 + json_len + blob_len, length);
+    let json = std::str::from_utf8(&rest[4..4 + json_len]).unwrap();
+    assert!(json.contains(r#""rgba":{"blob":0}"#), "{json}");
+    assert!(json.len() < 64 * 1024, "the JSON part carries no pixels");
+    assert_eq!(&rest[4 + json_len..], page.rgba.as_slice());
+    // And the standard reader turns it back into the same page.
+    let mut framed = head.to_vec();
+    framed.extend_from_slice(&rest);
+    match read_frame::<_, ServerFrame>(&mut framed.as_slice(), u32::MAX).unwrap() {
+        Some(ServerFrame::Response {
+            id: 7,
+            result: Ok(Reply::Pdf(PdfReply::Page(Ok(again)))),
+        }) => assert_eq!(again.rgba, page.rgba),
+        other => panic!("{other:?}"),
+    }
 }

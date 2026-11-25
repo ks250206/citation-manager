@@ -47,6 +47,10 @@ cancel する。完了と cancel の競合では既に返された結果が勝�
 悪意ある PDF の sandbox は未実装**。save-to-bytes の native 内部 buffer は保存後にサイズ検査する。
 shutdown の join も native call が戻るまで待つ。hard timeout/強制隔離には別 process が必要。
 
+#85: page render は `FPDF_REVERSE_BYTE_ORDER`（`set_reverse_byte_order(true)`）で PDFium に RGBA を
+直接書かせ、`as_rgba_bytes` の BGRA→RGBA 変換コピーをなくした（PDFium buffer + 1 copy）。画素値は
+cm-pdf runtime test（赤画素の位置・色）で従来と同じであることを確認する。
+
 malformed、password missing/wrong、unsupported security、invalid index、image-only を typed status/error で返す。
 password は Debug/log に出さない。PDF 層は Paper/storage を更新せず、書誌を消す機能を持たない。
 画像のみは NoExtractableText として扱う。これは OCR やページに画像があることの一般判定ではない。

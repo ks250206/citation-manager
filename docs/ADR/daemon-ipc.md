@@ -76,9 +76,25 @@ start.
 
 ## Wire protocol
 
-Frames are a 4-byte big-endian length plus UTF-8 JSON (`cm_protocol::ipc::frame`), with
-limits per direction: first (pre-auth) frame 64 KiB, requests 8 MiB, responses 64 MiB. A
-declared oversized length is rejected before allocation. At most 64 in-flight requests per
+Frames are a 4-byte big-endian length plus a body (`cm_protocol::ipc::frame`), with
+limits per direction on the whole body: first (pre-auth) frame 64 KiB, requests 8 MiB,
+responses 64 MiB. A declared oversized length is rejected before allocation. The body is
+UTF-8 JSON, or (protocol 2, #85) a binary frame for values with raw byte payloads (page
+bitmaps):
+
+```text
+0x00 | json_len u32 | count u32 | count x blob_len u32 | JSON | blob 0 | blob 1 ...
+```
+
+The JSON part refers to payload `i` as `{"blob": i}` (`cm_protocol::ipc::blob`). The parts
+must add up exactly to the frame length (checked before any payload is allocated), `count`
+is 1..=8, and every payload must be referenced exactly once; anything else is malformed and
+closes the connection, as any frame error does. The writer sends payloads from their own
+buffers and the reader reads each straight into the buffer the decoded value keeps, so a
+page bitmap is never base64-encoded, copied into the frame or held twice. JSON never starts
+with 0x00, and handshake frames carry no payloads, so a version-1 peer still reads the
+plain-JSON `Rejected(VersionMismatch{supported: 2})`. Outside IPC frames (REST, MCP, logs)
+the same fields serialize as base64 strings, so their JSON contracts are unchanged. At most 64 in-flight requests per
 connection (`Busy`), 64 connections, 5 s to complete the handshake. A request stays in flight
 until its reply has been written to the socket, and each connection's outbound queue is
 bounded (128 frames, never waited on by the library worker): a client that keeps sending but
@@ -93,7 +109,8 @@ client: Request{id, command: Command} | Cancel{id}
 daemon: Response{id, result: Result<Reply, WireError>} | PdfProgress{id, report}
 ```
 
-`PROTOCOL_VERSION = 1`. `Command`/`Reply`/`JobCommand`/`GrantCommand` are grouped by feature
+`PROTOCOL_VERSION = 2` (1 until #85 moved page bitmaps out of base64 JSON; a version-1
+client is rejected at the handshake). `Command`/`Reply`/`JobCommand`/`GrantCommand` are grouped by feature
 module and `#[non_exhaustive]`; additive variants keep the version, incompatible changes bump
 it. Unknown commands get `InvalidInput`, never execution. `PdfRequest` travels as
 `PdfCommand`: the client keeps its `Cancellation` and sends `Cancel{id}`; the daemon binds a

@@ -472,6 +472,9 @@ pub(crate) fn execute(pdfium: &Pdfium, op: Operation, ctx: &Context) -> Result<O
                         &PdfRenderConfig::new()
                             .set_fixed_size(w.ceil() as i32, h.ceil() as i32)
                             .set_format(PdfBitmapFormat::BGRA)
+                            // PDFium writes RGBA directly, so `as_rgba_bytes` is one copy of
+                            // its buffer instead of a copy plus a converted copy (#85).
+                            .set_reverse_byte_order(true)
                             .render_annotations(true),
                     )
                     .map_err(native)?;
