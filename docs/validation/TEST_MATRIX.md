@@ -65,7 +65,7 @@ GitHub runner の OS/Xcode 差による失敗は PR 上で実結果を確認す�
 | 全文抽出/検索 #18 | implementing agent が Linux 自動回帰と pin 済み Linux PDFium 実抽出 | Linux 自動回帰と実 PDFium 抽出→検索 passed（[ISSUE_18](ISSUE_18.md)）。macOS PDFium/.app 同梱 (#34)、GUI 検索 (#21) は**未実施**。1万件/1000 PDF/2万頁負荷は #30 で Linux コンテナと GitHub macOS VM runner で実測（[ISSUE_30](ISSUE_30.md)）、Apple Silicon 16 GB 実機は**未実施** |
 | Chrome/Firefox保存 #23/#24 | implementing agent がfixture、自動化可能な実ブラウザ agent。fallback Ryoji Kanno | #23 host: Linux の Chromium（Playwright 同梱）と Firefox ESR 153 で開発用 test 拡張 → host → 実 papersd の preview/commit、host 終了・ブラウザ終了・GUI 非起動のまま保存と PDF job 終端を確認（[ISSUE_23](ISSUE_23.md)）。macOS/Windows/正式版 Chrome・署名済み拡張は**未実施**。#24 の実拡張 UI と重複/再試行の手動記録は**未実施**。#22 の daemon 側 capture/PDF job は Linux 自動試験済み（[ISSUE_22](ISSUE_22.md)） |
 | MCP stdio tools #29 | implementing agent が公式SDK/clientから自動試験 | **未実施**。入口は Unavailable。read-only/write許可・出典ページ・stdout純度・transport停止を検証 |
-| Developer ID / notarization / DMG #31 | Ryoji Kanno が Developer ID と Apple 公証権限を用意し、権限を与えた配布担当 agent が実行 | **blocker**: `security find-identity -v -p codesigning` → `0 valid identities found`。Developer ID署名・notarizationは未検証。秘密は保存/Issue公開しない |
+| Developer ID / notarization / DMG #31 | Ryoji Kanno が Developer ID と Apple 公証権限を用意し、権限を与えた配布担当 agent が実行 | **blocker**: `security find-identity -v -p codesigning` → `0 valid identities found`。Developer ID署名・notarizationは未検証。秘密は保存/Issue公開しない。DMG作成・notices同梱・ad-hoc hardened runtime は hosted runner で検証、署名手順は script 化し secrets 無しでは `UNVERIFIED: no Developer ID`（[ISSUE_31](ISSUE_31.md)） |
 | 独立異モデル review | root が非対話/read-only の別モデルを手配 | **実施**。Opus 5.5/mediumが `e927a5f` を確認しP0〜P2なし、P3のtest/doc指摘3件。本変更で対応し、修正後headのreview結果と証跡はPRコメントに記録する。自己reviewで代替しない |
 
 UI/browser の未実施は自動 contract test で充足した扱いにしない。fallback ユーザーがまだ実行していない項目を
@@ -139,3 +139,13 @@ Apple Silicon 16 GB release 実機の値ではない。
 | フレーム落ち（一覧スクロール） | なし | — | **未測定**（フレーム時間の計測手段なし） |
 | PDFium 以外での注釈表示 | Linux CI（pypdf + poppler） | 既存 `scripts/pdfium/validate_export.py`（ci.yml linux-native）、[pdf-export ADR](../ADR/pdf-export.md) | ISSUE_30 に再実行結果 |
 | host/daemon 寿命、lease/retry_wait 復帰 | Linux 自動 | 既存 `daemon_lifecycle`、`crates/native-host/tests/host_process.rs` | passed（既存、本 PR の全体実行で再確認） |
+
+## #32 MVP 受け入れ（2026-11-25）
+
+§24 の 17 条件の対応表・blocker・release E2E の結果は [MVP_ACCEPTANCE](MVP_ACCEPTANCE.md)。
+
+| 対象 | 実行主体 / 環境 | 証跡 | 状態 |
+|---|---|---|---|
+| 新規 install → ブラウザ保存（GUI/daemon 停止）→ GUI 再起動・検索 → CLI/REST/MCP → 注釈付き PDF → 可搬性・privacy・offline | implementing agent、Linux コンテナ（release build、Xvfb、Playwright Chromium、loopback のみの network namespace） | `tests/e2e/release/run.py`、[release-e2e/linux](release-e2e/linux/) | passed |
+| 同（ブラウザと GUI を除く）、`.dmg` から取り出した `.app` | GitHub hosted macOS VM（`package-macos.yml`） | run 45613061723、[release-e2e/macos](release-e2e/macos/) | passed（66 checks） |
+| 実機 Mac・Developer ID 署名・store 拡張・16 GB 実機計測 | 上表の fallback 担当（owner）/ 権限を持つ担当 | — | **未実施**（MVP 完了の blocker） |

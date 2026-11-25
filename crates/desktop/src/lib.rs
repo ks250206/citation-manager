@@ -5,6 +5,8 @@ pub mod bulk;
 pub mod columns;
 pub mod commands;
 pub mod deep_links;
+/// #86 Opt-in frame-time/span recorder (disabled unless `CM_FRAME_TIMING` is set).
+pub mod frame_timing;
 pub mod keymap;
 /// #84 popup menus (row context menu, ＋ Add, settings) and their keyboard navigation.
 pub mod menu;

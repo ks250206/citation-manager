@@ -638,14 +638,10 @@ impl LibraryView {
                     .border_color(rgb(BORDER))
                     .bg(rgb(0xf8f9fb))
                     .child(
+                        // #98's page summary (paper/papers, selection) plus #84's sort label.
                         hint(format!(
-                            "Page {} · {} papers{} · {}{}",
-                            self.library.previous.len() + 1,
-                            self.library.papers.len(),
-                            match self.library.selected.len() {
-                                0 | 1 => String::new(),
-                                n => format!(" · {n} selected"),
-                            },
+                            "{} · {}{}",
+                            self.library.page_summary(false),
                             columns::sort_label(sort),
                             if self.busy(Lane::Query) {
                                 " · loading…"

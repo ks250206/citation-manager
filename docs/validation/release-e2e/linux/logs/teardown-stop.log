@@ -1,0 +1,6 @@
+$ <work>/prefix/bin/papers server stop --force
+exit 0 (0.1s)
+--- stdout
+{"command":"server stop","data":{"library":"<work>/home/.local/share/citation-manager/library","pid":917,"rest":"follows the persisted API settings: enable it in API & integrations or with `papersd api set --library DIR --enable` (papersd api show reports it)","running":false,"socket":"<runtime>/citation-manager/f99ef58dd052c5e2.sock","stopped":true},"ok":true,"schema":"papers.v1","warnings":[]}
+
+--- stderr

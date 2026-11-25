@@ -1,0 +1,7 @@
+$ <work>/prefix/bin/papers-native-host unregister
+exit 0 (0.0s)
+--- stdout
+removed <work>/chromium-profile/NativeMessagingHosts/dev.citation_manager.native_host.json
+revoked grant 01a212b2-72c6-77a4-931a-0fd8d762ba3c
+
+--- stderr

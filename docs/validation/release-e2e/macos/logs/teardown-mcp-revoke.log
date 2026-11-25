@@ -1,0 +1,6 @@
+$ <work>/Applications/Citation Manager.app/Contents/MacOS/papers-mcp revoke --library <work>/home/.local/share/citation-manager/library
+exit 0 (0.3s)
+--- stdout
+{"revoked":"01a212bd-d714-72d7-8833-c59d15fa2417"}
+
+--- stderr

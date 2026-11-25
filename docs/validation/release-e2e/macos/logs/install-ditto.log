@@ -1,0 +1,5 @@
+$ ditto <runner-temp>/e2e mount/Citation Manager.app <work>/Applications/Citation Manager.app
+exit 0 (0.4s)
+--- stdout
+
+--- stderr

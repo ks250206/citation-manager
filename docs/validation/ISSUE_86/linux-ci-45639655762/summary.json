@@ -1,0 +1,471 @@
+{
+  "quantile": "nearest rank sorted[ceil(p*N)-1]",
+  "budgets_ms": {
+    "60hz": 16.666666666666668,
+    "120hz": 8.333333333333334
+  },
+  "frame_count": 897,
+  "recorded_frames": 897,
+  "dropped_frames": 0,
+  "gpui_logged_frames": 818,
+  "all_frames": {
+    "app_frame": {
+      "n": 897,
+      "p50_ms": 2.313,
+      "p95_ms": 3.688,
+      "max_ms": 64.869,
+      "over_60hz": 1,
+      "over_60hz_share": 0.0011148272017837235,
+      "over_120hz": 3,
+      "over_120hz_share": 0.0033444816053511705
+    },
+    "gpui_draw_present": {
+      "n": 818,
+      "p50_ms": 34.831952,
+      "p95_ms": 44.01953,
+      "max_ms": 250.968765,
+      "over_60hz": 818,
+      "over_60hz_share": 1.0,
+      "over_120hz": 818,
+      "over_120hz_share": 1.0
+    }
+  },
+  "spans": {
+    "list_scroll": {
+      "completed": 4,
+      "incomplete": 0,
+      "duration": {
+        "n": 4,
+        "p50_ms": 1986.84,
+        "p95_ms": 9506.45,
+        "max_ms": 9506.45
+      }
+    },
+    "page_turn": {
+      "completed": 46,
+      "incomplete": 0,
+      "duration": {
+        "n": 46,
+        "p50_ms": 9.948,
+        "p95_ms": 195.276,
+        "max_ms": 205.218
+      }
+    },
+    "pdf_first_page": {
+      "completed": 1,
+      "incomplete": 0,
+      "duration": {
+        "n": 1,
+        "p50_ms": 147.146,
+        "p95_ms": 147.146,
+        "max_ms": 147.146
+      }
+    },
+    "pdf_scroll": {
+      "completed": 48,
+      "incomplete": 0,
+      "duration": {
+        "n": 48,
+        "p50_ms": 1.313,
+        "p95_ms": 1.544,
+        "max_ms": 9697.215
+      }
+    }
+  },
+  "open_spans": 0,
+  "phases": {
+    "startup": {
+      "window_s": 20.51960825920105,
+      "app_frame": {
+        "n": 4,
+        "p50_ms": 2.684,
+        "p95_ms": 64.869,
+        "max_ms": 64.869,
+        "over_60hz": 1,
+        "over_60hz_share": 0.25,
+        "over_120hz": 2,
+        "over_120hz_share": 0.5
+      },
+      "gpui_draw_present": {
+        "n": 3,
+        "p50_ms": 133.713797,
+        "p95_ms": 250.968765,
+        "max_ms": 250.968765,
+        "over_60hz": 3,
+        "over_60hz_share": 1.0,
+        "over_120hz": 3,
+        "over_120hz_share": 1.0
+      },
+      "spans": {},
+      "expected": null,
+      "observed": true
+    },
+    "list_wheel": {
+      "window_s": 11.252763748168945,
+      "app_frame": {
+        "n": 204,
+        "p50_ms": 2.455,
+        "p95_ms": 3.327,
+        "max_ms": 3.51,
+        "over_60hz": 0,
+        "over_60hz_share": 0.0,
+        "over_120hz": 0,
+        "over_120hz_share": 0.0
+      },
+      "gpui_draw_present": {
+        "n": 204,
+        "p50_ms": 21.685678,
+        "p95_ms": 22.662649,
+        "max_ms": 24.151778,
+        "over_60hz": 204,
+        "over_60hz_share": 1.0,
+        "over_120hz": 204,
+        "over_120hz_share": 1.0
+      },
+      "spans": {
+        "list_scroll": {
+          "completed": 1,
+          "incomplete": 0,
+          "duration": {
+            "n": 1,
+            "p50_ms": 9506.45,
+            "p95_ms": 9506.45,
+            "max_ms": 9506.45
+          }
+        }
+      },
+      "expected": "list_scroll",
+      "observed": true
+    },
+    "list_keys": {
+      "window_s": 12.746473550796509,
+      "app_frame": {
+        "n": 189,
+        "p50_ms": 2.799,
+        "p95_ms": 3.746,
+        "max_ms": 4.373,
+        "over_60hz": 0,
+        "over_60hz_share": 0.0,
+        "over_120hz": 0,
+        "over_120hz_share": 0.0
+      },
+      "gpui_draw_present": {
+        "n": 145,
+        "p50_ms": 22.593255,
+        "p95_ms": 23.21583,
+        "max_ms": 25.872471,
+        "over_60hz": 145,
+        "over_60hz_share": 1.0,
+        "over_120hz": 145,
+        "over_120hz_share": 1.0
+      },
+      "spans": {
+        "list_scroll": {
+          "completed": 3,
+          "incomplete": 0,
+          "duration": {
+            "n": 3,
+            "p50_ms": 1986.84,
+            "p95_ms": 2008.835,
+            "max_ms": 2008.835
+          }
+        }
+      },
+      "expected": "list_scroll",
+      "observed": true
+    },
+    "list_pages": {
+      "window_s": 10.018066883087158,
+      "app_frame": {
+        "n": 7,
+        "p50_ms": 6.752,
+        "p95_ms": 8.649,
+        "max_ms": 8.649,
+        "over_60hz": 0,
+        "over_60hz_share": 0.0,
+        "over_120hz": 1,
+        "over_120hz_share": 0.14285714285714285
+      },
+      "gpui_draw_present": {
+        "n": 7,
+        "p50_ms": 26.272593,
+        "p95_ms": 66.816325,
+        "max_ms": 66.816325,
+        "over_60hz": 7,
+        "over_60hz_share": 1.0,
+        "over_120hz": 7,
+        "over_120hz_share": 1.0
+      },
+      "spans": {},
+      "expected": null,
+      "observed": true
+    },
+    "pdf_open": {
+      "window_s": 5.660853624343872,
+      "app_frame": {
+        "n": 27,
+        "p50_ms": 2.831,
+        "p95_ms": 4.223,
+        "max_ms": 6.044,
+        "over_60hz": 0,
+        "over_60hz_share": 0.0,
+        "over_120hz": 0,
+        "over_120hz_share": 0.0
+      },
+      "gpui_draw_present": {
+        "n": 13,
+        "p50_ms": 27.753245,
+        "p95_ms": 77.764266,
+        "max_ms": 77.764266,
+        "over_60hz": 13,
+        "over_60hz_share": 1.0,
+        "over_120hz": 13,
+        "over_120hz_share": 1.0
+      },
+      "spans": {
+        "pdf_first_page": {
+          "completed": 1,
+          "incomplete": 0,
+          "duration": {
+            "n": 1,
+            "p50_ms": 147.146,
+            "p95_ms": 147.146,
+            "max_ms": 147.146
+          }
+        }
+      },
+      "expected": "pdf_first_page",
+      "observed": true,
+      "input_to_first_page_ms": 210.4175090789795
+    },
+    "page_turn_forward": {
+      "window_s": 14.828930377960205,
+      "app_frame": {
+        "n": 38,
+        "p50_ms": 1.455,
+        "p95_ms": 4.914,
+        "max_ms": 4.945,
+        "over_60hz": 0,
+        "over_60hz_share": 0.0,
+        "over_120hz": 0,
+        "over_120hz_share": 0.0
+      },
+      "gpui_draw_present": {
+        "n": 37,
+        "p50_ms": 41.649677,
+        "p95_ms": 44.867588,
+        "max_ms": 45.540127,
+        "over_60hz": 37,
+        "over_60hz_share": 1.0,
+        "over_120hz": 37,
+        "over_120hz_share": 1.0
+      },
+      "spans": {
+        "page_turn": {
+          "completed": 19,
+          "incomplete": 0,
+          "duration": {
+            "n": 19,
+            "p50_ms": 9.358,
+            "p95_ms": 16.795,
+            "max_ms": 16.795
+          }
+        },
+        "pdf_scroll": {
+          "completed": 19,
+          "incomplete": 0,
+          "duration": {
+            "n": 19,
+            "p50_ms": 1.362,
+            "p95_ms": 1.544,
+            "max_ms": 1.544
+          }
+        }
+      },
+      "expected": "page_turn",
+      "observed": true
+    },
+    "page_turn_back": {
+      "window_s": 14.82387900352478,
+      "app_frame": {
+        "n": 33,
+        "p50_ms": 1.505,
+        "p95_ms": 2.341,
+        "max_ms": 2.384,
+        "over_60hz": 0,
+        "over_60hz_share": 0.0,
+        "over_120hz": 0,
+        "over_120hz_share": 0.0
+      },
+      "gpui_draw_present": {
+        "n": 33,
+        "p50_ms": 40.525024,
+        "p95_ms": 44.4176,
+        "max_ms": 46.014133,
+        "over_60hz": 33,
+        "over_60hz_share": 1.0,
+        "over_120hz": 33,
+        "over_120hz_share": 1.0
+      },
+      "spans": {
+        "page_turn": {
+          "completed": 19,
+          "incomplete": 0,
+          "duration": {
+            "n": 19,
+            "p50_ms": 8.947,
+            "p95_ms": 15.792,
+            "max_ms": 15.792
+          }
+        },
+        "pdf_scroll": {
+          "completed": 19,
+          "incomplete": 0,
+          "duration": {
+            "n": 19,
+            "p50_ms": 1.283,
+            "p95_ms": 1.535,
+            "max_ms": 1.535
+          }
+        }
+      },
+      "expected": "page_turn",
+      "observed": true
+    },
+    "page_jump": {
+      "window_s": 17.51579737663269,
+      "app_frame": {
+        "n": 65,
+        "p50_ms": 1.288,
+        "p95_ms": 2.922,
+        "max_ms": 7.051,
+        "over_60hz": 0,
+        "over_60hz_share": 0.0,
+        "over_120hz": 0,
+        "over_120hz_share": 0.0
+      },
+      "gpui_draw_present": {
+        "n": 47,
+        "p50_ms": 41.193204,
+        "p95_ms": 54.738013,
+        "max_ms": 61.79629,
+        "over_60hz": 47,
+        "over_60hz_share": 1.0,
+        "over_120hz": 47,
+        "over_120hz_share": 1.0
+      },
+      "spans": {
+        "page_turn": {
+          "completed": 8,
+          "incomplete": 0,
+          "duration": {
+            "n": 8,
+            "p50_ms": 191.228,
+            "p95_ms": 205.218,
+            "max_ms": 205.218
+          }
+        },
+        "pdf_scroll": {
+          "completed": 8,
+          "incomplete": 0,
+          "duration": {
+            "n": 8,
+            "p50_ms": 1.234,
+            "p95_ms": 1.288,
+            "max_ms": 1.288
+          }
+        }
+      },
+      "expected": "page_turn",
+      "observed": true
+    },
+    "pdf_wheel": {
+      "window_s": 11.207265615463257,
+      "app_frame": {
+        "n": 202,
+        "p50_ms": 1.066,
+        "p95_ms": 1.142,
+        "max_ms": 2.23,
+        "over_60hz": 0,
+        "over_60hz_share": 0.0,
+        "over_120hz": 0,
+        "over_120hz_share": 0.0
+      },
+      "gpui_draw_present": {
+        "n": 202,
+        "p50_ms": 37.028466,
+        "p95_ms": 39.557093,
+        "max_ms": 50.006862,
+        "over_60hz": 202,
+        "over_60hz_share": 1.0,
+        "over_120hz": 202,
+        "over_120hz_share": 1.0
+      },
+      "spans": {
+        "pdf_scroll": {
+          "completed": 1,
+          "incomplete": 0,
+          "duration": {
+            "n": 1,
+            "p50_ms": 9697.215,
+            "p95_ms": 9697.215,
+            "max_ms": 9697.215
+          }
+        }
+      },
+      "expected": "pdf_scroll",
+      "observed": true
+    },
+    "pdf_keys": {
+      "window_s": 8.139198780059814,
+      "app_frame": {
+        "n": 121,
+        "p50_ms": 1.077,
+        "p95_ms": 1.153,
+        "max_ms": 1.212,
+        "over_60hz": 0,
+        "over_60hz_share": 0.0,
+        "over_120hz": 0,
+        "over_120hz_share": 0.0
+      },
+      "gpui_draw_present": {
+        "n": 120,
+        "p50_ms": 37.080701,
+        "p95_ms": 38.958525,
+        "max_ms": 41.364776,
+        "over_60hz": 120,
+        "over_60hz_share": 1.0,
+        "over_120hz": 120,
+        "over_120hz_share": 1.0
+      },
+      "spans": {
+        "pdf_scroll": {
+          "completed": 1,
+          "incomplete": 0,
+          "duration": {
+            "n": 1,
+            "p50_ms": 6577.084,
+            "p95_ms": 6577.084,
+            "max_ms": 6577.084
+          }
+        }
+      },
+      "expected": "pdf_scroll",
+      "observed": true
+    },
+    "idle": {
+      "window_s": 5.000185012817383,
+      "app_frame": null,
+      "gpui_draw_present": null,
+      "spans": {},
+      "expected": null,
+      "observed": true
+    }
+  },
+  "notes": [
+    "window content origin (42, 20), size (1320, 860)"
+  ],
+  "driver": "xdotool",
+  "gui_exit_code": 0,
+  "environment_file": "environment.json"
+}

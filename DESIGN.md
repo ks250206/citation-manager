@@ -1079,3 +1079,26 @@ PDF 取得 job は host・ブラウザ・GUI の終了後も daemon が完了さ
 `~/Library/Application Support/Citation Manager/library` を使い、毎回の起動で native host manifest を
 `refresh` する（App Translocation/読取専用 volume は登録しない）。hosted macOS 15 runner の証跡は
 [APP_LAYOUT_POC](docs/validation/APP_LAYOUT_POC.md)。実機検証と Developer ID 署名/notarization（#31）は未完。
+
+## 40. #31 macOS DMG・notices・署名手順
+
+#34 の配置を変えずに配布物を作る。`scripts/package/third_party_notices.py` が出荷 binary の通常依存閉包から
+crate の license 本文を集めた `THIRD_PARTY_NOTICES.md` を生成し PDFium の notices と共に `Resources/licenses/` に
+同梱、`create_dmg.py` が UDZO の `.dmg` を作る。Developer ID 署名→notarization→staple は
+`release_sign.py`（preflight/pdfium/app の段階、秘密は環境変数/Keychain のみ）で、識別子が無ければ
+`UNVERIFIED: no Developer ID` と記録し成功扱いにしない。導入・更新・削除と復旧は
+[INSTALL](docs/INSTALL.md)/[RECOVERY](docs/RECOVERY.md)/[LICENSES](docs/LICENSES.md)、証跡は
+[ISSUE_31](docs/validation/ISSUE_31.md)。Developer ID 署名・notarization・実機導入は未検証。
+
+## 41. #32 MVP 受け入れ判定
+
+§24 の各条件は [MVP_ACCEPTANCE](docs/validation/MVP_ACCEPTANCE.md) で担当 Issue/PR・検証手順・環境・
+結果（passed / partial / not verified / failed）・証跡に結び付ける。passed は repo 内の試験・記録や CI 実行の
+証跡がある場合だけで、Linux コンテナや GitHub hosted macOS VM の結果を実機・署名済み配布の代わりにしない。
+§20 M5 の Exit は [release E2E](tests/e2e/release/README.md)（新規 install → GUI/daemon 停止中のブラウザ保存 →
+GUI 再起動・検索 → CLI/REST/MCP → 注釈と注釈付き PDF 書き出し → BibTeX/RIS・バックアップ復元、privacy 既定値、
+loopback のみの network namespace での外部通信 0 件）で再現する。注釈付き PDF 書き出しと AI 注釈の確認は
+GUI と同じ owner IPC 要求で行い、保存ダイアログとボタン操作そのものは実機確認に残す。
+全子 Issue と各親の Exit、および同文書の blocker（実機、Developer ID 署名/notarization、拡張の store ID、
+16 GB 実機計測、プロジェクトライセンス、#15 の native gate、実 DOI provider）が解消するまで MVP 完了としない。
+P1/P2 機能は完了条件に含めない。

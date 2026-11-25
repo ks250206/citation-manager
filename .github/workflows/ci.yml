@@ -1,4 +1,8 @@
 name: macOS workspace
+# Linux first, macOS once: the Linux jobs (cheap, plentiful runners) run every platform-independent
+# check and the Linux runtime tests; the single macOS job starts only when they pass, so a red
+# change never waits for or occupies a macOS runner, and each run needs one macOS runner instead
+# of three (the macOS queue, not the work, was the slow part).
 on:
   push:
     branches: [main]
@@ -11,108 +15,12 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  contracts:
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        with:
-          python-version: '3.14'
-      - name: Install exact Rust toolchain
-        run: |
-          rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
-          rustup show active-toolchain
-      - name: Rust build cache (saved from main only; PRs restore it)
-        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          shared-key: contracts
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - run: cargo fmt --all -- --check
-      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
-      - run: cargo test --workspace --locked
-      - run: cargo build --workspace --locked
-      - run: python3 scripts/check_architecture.py
-      - run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
-      - name: Check migration identities and preserve base registry
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: |
-          if [ -n "$BASE_SHA" ] && [ "$BASE_SHA" != "0000000000000000000000000000000000000000" ]; then
-            python3 scripts/check_migrations.py --base "$BASE_SHA"
-          else
-            python3 scripts/check_migrations.py
-          fi
-  native-dependencies:
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-      - name: Environment and exact toolchain
-        run: |
-          rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
-          rustup show active-toolchain
-          xcodebuild -version
-      - name: Rust build cache (saved from main only; PRs restore it)
-        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          shared-key: native-dependencies
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: Ensure Xcode Metal compiler
-        run: |
-          # Xcode 16 bundles Metal and does not support -downloadComponent.
-          # Newer Xcode releases may need the separately installed toolchain.
-          if ! xcrun --sdk macosx metal -v; then
-            xcodebuild -downloadComponent MetalToolchain
-          fi
-          xcrun --sdk macosx metal -v
-      - run: cargo check -p cm-desktop --features native-gpui --locked
-      - run: cargo clippy -p cm-desktop --all-targets --features native-gpui --locked -- -D warnings
-      - run: cargo build -p cm-desktop --features native-gpui --locked
-      - name: Check actual desktop bootstrap executable (no GUI launch on runner)
-        run: cargo check -p cm-daemon --bin citation-manager --features desktop-bootstrap --locked
-      - run: cargo clippy -p cm-daemon --all-targets --features desktop-bootstrap --locked -- -D warnings
-      - run: cargo test -p cm-daemon -p cm-desktop --features cm-daemon/desktop-bootstrap --locked
-      - run: cargo build -p cm-daemon --bin citation-manager --features desktop-bootstrap --locked
-      - name: Compile PDF bindings only (no PDFium runtime)
-        run: cargo check -p cm-pdf --features bindings-check --locked
-  pdfium-runtime:
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        with:
-          python-version: '3.14'
-      - name: Exact toolchain and PDF-only validation tools
-        run: |
-          rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
-          python3 -m venv $RUNNER_TEMP/pdfium-tools
-          $RUNNER_TEMP/pdfium-tools/bin/python -m pip install -r scripts/pdfium/requirements.txt
-      - name: Rust build cache (saved from main only; PRs restore it)
-        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          shared-key: pdfium-runtime
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: Drop non-cargo outputs restored with the build cache
-        # rust-cache restores target/; PDF evidence, fetched runtimes and export fixtures must be fresh.
-        run: rm -rf target/pdfium-validation target/pdfium-poc target/pdfium-linux target/pdf-export-test-* target/pdfium-tools
-      - name: Lint runtime feature (no GPUI policy change)
-        run: cargo clippy -p cm-pdf --all-targets --features runtime --locked -- -D warnings
-      - name: Pinned dylib runtime and independent PDFKit gate (missing prerequisites fail)
-        run: $RUNNER_TEMP/pdfium-tools/bin/python scripts/pdfium/run.py --out target/pdfium-validation/ci
-      - name: Exercise bounded PDF metadata operation on the verified runtime
-        run: CM_PDFIUM_LIBRARY="$GITHUB_WORKSPACE/target/pdfium-poc/lib/libpdfium.dylib" cargo test -p cm-pdf --test metadata_runtime --features runtime --locked
-      - name: Preserve runtime reports and independently rendered exports
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: pdfium-runtime-evidence
-          path: target/pdfium-validation/ci/
-          if-no-files-found: error
   linux-native:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.14'
@@ -132,8 +40,23 @@ jobs:
       - name: Drop non-cargo outputs restored with the build cache
         # rust-cache restores target/; PDF evidence, fetched runtimes and export fixtures must be fresh.
         run: rm -rf target/pdfium-validation target/pdfium-poc target/pdfium-linux target/pdf-export-test-* target/pdfium-tools
+      # Platform-independent gates run here only (formerly on the macOS `contracts` job).
+      - run: cargo fmt --all -- --check
+      - run: python3 scripts/check_architecture.py
+      - name: Check migration identities and preserve base registry
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -n "$BASE_SHA" ] && [ "$BASE_SHA" != "0000000000000000000000000000000000000000" ]; then
+            python3 scripts/check_migrations.py --base "$BASE_SHA"
+          else
+            python3 scripts/check_migrations.py
+          fi
+      - run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo clippy -p cm-desktop --all-targets --features native-gpui --locked -- -D warnings
       - run: cargo clippy -p cm-daemon --all-targets --features desktop-bootstrap --locked -- -D warnings
+      - run: cargo test --workspace --locked
       - run: cargo test -p cm-daemon -p cm-desktop --features cm-daemon/desktop-bootstrap --locked
       - name: Check actual desktop bootstrap executable (no GUI launch on runner)
         run: cargo build -p cm-daemon --bin citation-manager --features desktop-bootstrap --locked
@@ -164,3 +87,64 @@ jobs:
       - run: npm run build
       - run: npm run lint
       - run: npm test
+  macos:
+    # Everything that needs macOS, on one runner and one build cache: the workspace under
+    # cfg(target_os = "macos"), GPUI with Metal, the desktop bootstrap, and the pinned PDFium
+    # dylib with the independent PDFKit gate. Starts only after the Linux jobs pass.
+    needs: [linux-native, browser-extension]
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.14'
+      - name: Environment, exact toolchain and PDF-only validation tools
+        run: |
+          rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
+          rustup show active-toolchain
+          xcodebuild -version
+          python3 -m venv $RUNNER_TEMP/pdfium-tools
+          $RUNNER_TEMP/pdfium-tools/bin/python -m pip install -r scripts/pdfium/requirements.txt
+      - name: Rust build cache (saved from main only; PRs restore it)
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          shared-key: macos
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Drop non-cargo outputs restored with the build cache
+        # rust-cache restores target/; PDF evidence, fetched runtimes and export fixtures must be fresh.
+        run: rm -rf target/pdfium-validation target/pdfium-poc target/pdfium-linux target/pdf-export-test-* target/pdfium-tools
+      - name: Ensure Xcode Metal compiler
+        run: |
+          # Xcode 16 bundles Metal and does not support -downloadComponent.
+          # Newer Xcode releases may need the separately installed toolchain.
+          if ! xcrun --sdk macosx metal -v; then
+            xcodebuild -downloadComponent MetalToolchain
+          fi
+          xcrun --sdk macosx metal -v
+      # Workspace (formerly `contracts`): macOS-only cfg paths (Keychain, peer credentials, ...).
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked
+      - run: cargo build --workspace --locked
+      # GPUI and the desktop bootstrap (formerly `native-dependencies`).
+      - run: cargo clippy -p cm-desktop --all-targets --features native-gpui --locked -- -D warnings
+      - run: cargo build -p cm-desktop --features native-gpui --locked
+      - run: cargo clippy -p cm-daemon --all-targets --features desktop-bootstrap --locked -- -D warnings
+      - run: cargo test -p cm-daemon -p cm-desktop --features cm-daemon/desktop-bootstrap --locked
+      - name: Check actual desktop bootstrap executable (no GUI launch on runner)
+        run: cargo build -p cm-daemon --bin citation-manager --features desktop-bootstrap --locked
+      - name: Compile PDF bindings only (no PDFium runtime)
+        run: cargo check -p cm-pdf --features bindings-check --locked
+      # Pinned PDFium dylib (formerly `pdfium-runtime`).
+      - name: Lint runtime feature (no GPUI policy change)
+        run: cargo clippy -p cm-pdf --all-targets --features runtime --locked -- -D warnings
+      - name: Pinned dylib runtime and independent PDFKit gate (missing prerequisites fail)
+        run: $RUNNER_TEMP/pdfium-tools/bin/python scripts/pdfium/run.py --out target/pdfium-validation/ci
+      - name: Exercise bounded PDF metadata operation on the verified runtime
+        run: CM_PDFIUM_LIBRARY="$GITHUB_WORKSPACE/target/pdfium-poc/lib/libpdfium.dylib" cargo test -p cm-pdf --test metadata_runtime --features runtime --locked
+      - name: Preserve runtime reports and independently rendered exports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pdfium-runtime-evidence
+          path: target/pdfium-validation/ci/
+          if-no-files-found: error

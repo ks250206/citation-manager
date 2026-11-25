@@ -1,0 +1,7 @@
+$ <work>/Applications/Citation Manager.app/Contents/MacOS/papers --library <work>/Restored/library server stop
+exit 7 (0.1s)
+--- stdout
+{"command":"server stop","error":{"code":"feature_unavailable","exit_code":7,"message":"server stop needs socket peer credentials, available on Linux only for now (#34)"},"ok":false,"schema":"papers.v1","warnings":[]}
+
+--- stderr
+papers: error: server stop needs socket peer credentials, available on Linux only for now (#34)

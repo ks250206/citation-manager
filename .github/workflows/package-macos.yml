@@ -2,8 +2,11 @@ name: macOS app package
 # #34: assemble Citation Manager.app from release binaries and the pinned PDFium, place it
 # outside the checkout under a path with spaces, and verify layout, linkage, PDFium
 # load/render/text, lazy daemon start/idle exit, a GUI launch after moving the bundle, an
-# ad-hoc signed variant, and Chrome/Firefox Native Messaging probes. Hosted-runner evidence
-# only: not a real-hardware check, and an ad-hoc signature is not a distribution signature.
+# ad-hoc signed variant, and Chrome/Firefox Native Messaging probes. #31: third-party notices,
+# the .dmg (run from the mounted read-only image), a hardened-runtime variant, and Developer ID
+# signing/notarization in the separate release-sign job, which runs only for a hand-dispatched
+# v* tag behind the `release` environment; every other run reports "UNVERIFIED: no Developer ID".
+# Hosted-runner evidence only: not a real-hardware check; ad-hoc is not a distribution signature.
 on:
   # push as well: workflow_dispatch only works once this file is on the default branch.
   push:
@@ -11,12 +14,14 @@ on:
       - 'packaging/**'
       - 'scripts/package/**'
       - 'scripts/native-host/**'
+      - 'tests/e2e/release/**'
       - '.github/workflows/package-macos.yml'
   pull_request:
     paths:
       - 'packaging/**'
       - 'scripts/package/**'
       - 'scripts/native-host/**'
+      - 'tests/e2e/release/**'
       - '.github/workflows/package-macos.yml'
   workflow_dispatch:
 permissions:
@@ -69,22 +74,30 @@ jobs:
         run: |
           cargo build --release --locked -p cm-daemon --bins --features desktop-bootstrap
           cargo build --release --locked -p cm-cli -p cm-mcp -p cm-native-host
-          cargo build --release --locked -p cm-native-host --example inspect_capture
+          cargo build --release --locked -p cm-native-host --example inspect_capture --example release_e2e_owner
+      - name: Third-party notices (normal-dependency closure of the shipped binaries)
+        run: |
+          python3 scripts/package/third_party_notices.py --out "$RUNNER_TEMP/notices"
+          mkdir -p "$RUNNER_TEMP/evidence"
+          cp "$RUNNER_TEMP/notices/third-party-licenses.json" "$RUNNER_TEMP/evidence/"
       - name: Assemble the unsigned and the to-be-signed bundles outside the checkout
         run: |
           python3 scripts/package/macos/build_app.py --bin-dir target/release \
-            --pdfium-dir "$RUNNER_TEMP/pdfium" --out "$RUNNER_TEMP/package"
-          python3 scripts/package/macos/build_app.py --bin-dir target/release \
-            --pdfium-dir "$RUNNER_TEMP/pdfium" --out "$RUNNER_TEMP/Signed Copy" \
-            --signed-pdfium "$RUNNER_TEMP/pdfium-signed/libpdfium.dylib" \
-            --signed-pdfium-sha256 "$CM_PDFIUM_SIGNED_SHA256"
+            --pdfium-dir "$RUNNER_TEMP/pdfium" --out "$RUNNER_TEMP/package" \
+            --notices-dir "$RUNNER_TEMP/notices"
+          for copy in "Signed Copy" "Hardened Copy"; do
+            python3 scripts/package/macos/build_app.py --bin-dir target/release \
+              --pdfium-dir "$RUNNER_TEMP/pdfium" --out "$RUNNER_TEMP/$copy" \
+              --signed-pdfium "$RUNNER_TEMP/pdfium-signed/libpdfium.dylib" \
+              --signed-pdfium-sha256 "$CM_PDFIUM_SIGNED_SHA256" --notices-dir "$RUNNER_TEMP/notices"
+          done
           mkdir -p "$RUNNER_TEMP/Install Root 検証"
           ditto "$RUNNER_TEMP/package/$APP_NAME" "$RUNNER_TEMP/Install Root 検証/$APP_NAME"
           find "$RUNNER_TEMP/Install Root 検証/$APP_NAME" -print | sed "s|$RUNNER_TEMP/||"
           du -sh "$RUNNER_TEMP/package/$APP_NAME"
       - name: Unsigned bundle - static, CLI/PDFium/lazy start, GUI after move
         run: |
-          python3 scripts/package/layout-smoke/smoke.py \
+          python3 scripts/package/layout-smoke/smoke.py --require-notices \
             --app "$RUNNER_TEMP/Install Root 検証/$APP_NAME" \
             --out "$RUNNER_TEMP/evidence/unsigned" --work "$RUNNER_TEMP/work unsigned" \
             --moved-parent "$RUNNER_TEMP/Moved Apps 移動先"
@@ -92,9 +105,46 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           python3 scripts/package/macos/codesign.py app "$RUNNER_TEMP/Signed Copy/$APP_NAME"
-          python3 scripts/package/layout-smoke/smoke.py --expect-signed --phase static --phase cli \
-            --app "$RUNNER_TEMP/Signed Copy/$APP_NAME" \
+          python3 scripts/package/layout-smoke/smoke.py --expect-signed --require-notices \
+            --phase static --phase cli --app "$RUNNER_TEMP/Signed Copy/$APP_NAME" \
             --out "$RUNNER_TEMP/evidence/adhoc" --work "$RUNNER_TEMP/work adhoc"
+      - name: Disk image of the ad-hoc signed bundle; run from the mounted read-only image
+        if: ${{ !cancelled() }}
+        run: |
+          version="$(python3 -c "import tomllib; print(tomllib.load(open('Cargo.toml','rb'))['workspace']['package']['version'])")"
+          dmg="$RUNNER_TEMP/evidence/Citation-Manager-$version-arm64-adhoc.dmg"
+          python3 scripts/package/macos/create_dmg.py --app "$RUNNER_TEMP/Signed Copy/$APP_NAME" --out "$dmg"
+          ls -la "$dmg"
+          hdiutil imageinfo "$dmg" | grep -E '^Format:|Checksum Type' || true
+          mnt="$RUNNER_TEMP/dmg mount"
+          mkdir -p "$mnt"
+          hdiutil attach -readonly -nobrowse -mountpoint "$mnt" "$dmg"
+          trap 'hdiutil detach "$mnt" || hdiutil detach -force "$mnt"' EXIT
+          ls -la "$mnt"
+          codesign --verify --deep --strict --verbose=2 "$mnt/$APP_NAME"
+          python3 scripts/package/layout-smoke/smoke.py --expect-signed --require-notices \
+            --phase static --phase dmg --app "$mnt/$APP_NAME" \
+            --out "$RUNNER_TEMP/evidence/dmg" --work "$RUNNER_TEMP/work dmg"
+      - name: Hardened runtime (ad-hoc) - PDFium, daemon, GUI after move, Firefox probe
+        if: ${{ !cancelled() }}
+        run: |
+          hr="$RUNNER_TEMP/Hardened Copy/$APP_NAME"
+          python3 scripts/package/macos/codesign.py app --hardened-runtime "$hr"
+          codesign -dv --verbose=4 "$hr/Contents/MacOS/papersd" 2>&1 | grep -E '^(CodeDirectory|Runtime Version|Signature)'
+          python3 scripts/package/layout-smoke/smoke.py --expect-signed --require-notices --app "$hr" \
+            --out "$RUNNER_TEMP/evidence/hardened" --work "$RUNNER_TEMP/work hardened" \
+            --moved-parent "$RUNNER_TEMP/Hardened Moved"
+          moved="$(cat "$RUNNER_TEMP/evidence/hardened/moved-app-path.txt")"
+          real="$HOME/Library/Application Support/Mozilla/NativeMessagingHosts"
+          set +e
+          python3 scripts/native-host/browser_smoke.py --bin-dir target/release --app "$moved" \
+            --browser firefox --executable /Applications/Firefox.app/Contents/MacOS/firefox \
+            --firefox-driver "$(command -v geckodriver || echo "$GECKOWEBDRIVER/geckodriver")" \
+            --firefox-manifest-dir "$real" --report "$RUNNER_TEMP/evidence/hardened/browser-firefox.json" \
+            2>&1 | tee "$RUNNER_TEMP/evidence/hardened/browser-firefox.log"
+          status=$?
+          rm -f "$real/dev.citation_manager.native_host.json"
+          exit $status
       - name: Chrome Native Messaging probe (host and papersd from the moved bundle)
         if: ${{ !cancelled() }}
         run: |
@@ -144,6 +194,26 @@ jobs:
           rm -f "$real/dev.citation_manager.native_host.json"
           ls -la "$real" 2>/dev/null || true
           exit $status
+      - name: Release E2E (#32) - drag-install from the disk image, host capture, CLI/MCP/REST, annotated export, portability
+        if: ${{ !cancelled() }}
+        run: |
+          # Non-browser parts of tests/e2e/release (the browser probes are the steps above; the
+          # GUI launch after a move is in the smoke). The app is copied out of the mounted image.
+          dmg="$(ls "$RUNNER_TEMP"/evidence/Citation-Manager-*-arm64-adhoc.dmg)"
+          mnt="$RUNNER_TEMP/e2e mount"
+          mkdir -p "$mnt"
+          hdiutil attach -readonly -nobrowse -mountpoint "$mnt" "$dmg"
+          trap 'hdiutil detach "$mnt" || hdiutil detach -force "$mnt"' EXIT
+          python3 tests/e2e/release/run.py --app "$mnt/$APP_NAME" \
+            --owner-client target/release/examples/release_e2e_owner \
+            --out "$RUNNER_TEMP/evidence/release-e2e" --work "$RUNNER_TEMP/release e2e"
+      - name: Developer ID preflight (signing itself runs only in the gated release-sign job)
+        if: ${{ !cancelled() }}
+        run: |
+          # No signing secret is referenced in this job: it runs for any pushed branch and PR.
+          python3 scripts/package/macos/release_sign.py preflight --allow-unverified \
+            --status "$RUNNER_TEMP/evidence/release-signing.json"
+          echo "### Release signing: UNVERIFIED here by design (see the release-sign job)" >> "$GITHUB_STEP_SUMMARY"
       - name: Archive bundles
         if: always()
         run: |
@@ -156,6 +226,96 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: package-macos-evidence
+          path: ${{ runner.temp }}/evidence/
+          if-no-files-found: error
+          retention-days: 14
+
+  release-sign:
+    # Developer ID signing and notarization (#31). Runs only when dispatched by hand on a v* tag
+    # and only after approval in the `release` environment, which holds the CM_SIGN_* /
+    # CM_NOTARY_* secrets (environment secrets, not repository secrets; restrict the
+    # environment's deployment refs to protected v* tags). No build cache is restored here, so
+    # nothing produced by branch or PR runs reaches the credential-bearing job.
+    if: github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: macos-15
+    timeout-minutes: 90
+    environment: release
+    defaults:
+      run:
+        shell: bash
+    env:
+      APP_NAME: Citation Manager.app
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.14'
+      - name: Exact toolchain and Xcode Metal compiler
+        run: |
+          rustup toolchain install 1.99.1 --profile minimal
+          if ! xcrun --sdk macosx metal -v; then
+            xcodebuild -downloadComponent MetalToolchain
+          fi
+      - name: Fetch the pinned PDFium and generate third-party notices
+        run: |
+          python3 scripts/pdfium/fetch.py "$RUNNER_TEMP/pdfium"
+          python3 scripts/package/third_party_notices.py --out "$RUNNER_TEMP/notices"
+          mkdir -p "$RUNNER_TEMP/evidence"
+      - name: Developer ID signing and notarization
+        env:
+          # Secrets only reach this step's environment; nothing below prints them.
+          CM_SIGN_IDENTITY: ${{ secrets.CM_SIGN_IDENTITY }}
+          CM_SIGN_P12_BASE64: ${{ secrets.CM_SIGN_P12_BASE64 }}
+          CM_SIGN_P12_PASSWORD: ${{ secrets.CM_SIGN_P12_PASSWORD }}
+          CM_NOTARY_KEY_ID: ${{ secrets.CM_NOTARY_KEY_ID }}
+          CM_NOTARY_ISSUER: ${{ secrets.CM_NOTARY_ISSUER }}
+          CM_NOTARY_KEY_P8: ${{ secrets.CM_NOTARY_KEY_P8 }}
+        run: |
+          status="$RUNNER_TEMP/evidence/release-signing.json"
+          if [ -z "$CM_SIGN_IDENTITY" ] || [ -z "$CM_SIGN_P12_BASE64" ] || [ -z "$CM_SIGN_P12_PASSWORD" ]; then
+            echo "### Release signing: UNVERIFIED: no Developer ID (the release environment has no signing secrets)" >> "$GITHUB_STEP_SUMMARY"
+            # A release run without a Developer ID fails instead of publishing an unsigned build.
+            python3 scripts/package/macos/release_sign.py preflight --status "$status"
+          fi
+          # Temporary keychain holding only the Developer ID identity; deleted in the next step.
+          keychain="$RUNNER_TEMP/release-signing.keychain-db"
+          password="$(uuidgen)"
+          echo "CM_SIGN_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          umask 077
+          printf '%s' "$CM_SIGN_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/identity.p12"
+          security import "$RUNNER_TEMP/identity.p12" -k "$keychain" -P "$CM_SIGN_P12_PASSWORD" -T /usr/bin/codesign >/dev/null
+          rm -f "$RUNNER_TEMP/identity.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain" >/dev/null
+          export CM_SIGN_KEYCHAIN="$keychain"
+          if [ -n "$CM_NOTARY_KEY_P8" ] && [ -n "$CM_NOTARY_KEY_ID" ] && [ -n "$CM_NOTARY_ISSUER" ]; then
+            printf '%s' "$CM_NOTARY_KEY_P8" > "$RUNNER_TEMP/notary.p8"
+            export CM_NOTARY_KEY_PATH="$RUNNER_TEMP/notary.p8"
+          fi
+          # The binaries pin the Developer ID signed PDFium copy, so they are rebuilt for it.
+          digest="$(python3 scripts/package/macos/release_sign.py pdfium \
+            "$RUNNER_TEMP/pdfium/lib/libpdfium.dylib" "$RUNNER_TEMP/pdfium-release/libpdfium.dylib")"
+          CM_PDFIUM_SIGNED_SHA256="$digest" cargo build --release --locked -p cm-daemon --bins --features desktop-bootstrap
+          CM_PDFIUM_SIGNED_SHA256="$digest" cargo build --release --locked -p cm-cli -p cm-mcp -p cm-native-host
+          python3 scripts/package/macos/build_app.py --bin-dir target/release --pdfium-dir "$RUNNER_TEMP/pdfium" \
+            --out "$RUNNER_TEMP/Release" --signed-pdfium "$RUNNER_TEMP/pdfium-release/libpdfium.dylib" \
+            --signed-pdfium-sha256 "$digest" --notices-dir "$RUNNER_TEMP/notices"
+          python3 scripts/package/macos/release_sign.py app --app "$RUNNER_TEMP/Release/$APP_NAME" \
+            --dmg "$RUNNER_TEMP/evidence/Citation-Manager-release.dmg" --status "$status"
+      - name: Remove the signing keychain and notary key
+        if: always()
+        run: |
+          if [ -n "${CM_SIGN_KEYCHAIN:-}" ]; then security delete-keychain "$CM_SIGN_KEYCHAIN" || true; fi
+          rm -f "$RUNNER_TEMP/notary.p8" "$RUNNER_TEMP/identity.p12"
+      - name: Upload the signed release and its status
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-signed
           path: ${{ runner.temp }}/evidence/
           if-no-files-found: error
           retention-days: 14

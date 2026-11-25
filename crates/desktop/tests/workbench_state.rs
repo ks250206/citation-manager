@@ -1,4 +1,7 @@
-use cm_desktop::{import_dialogs::Review, library::Library};
+use cm_desktop::{
+    import_dialogs::Review,
+    library::{Library, papers_count},
+};
 use cm_protocol::domain::{Paper, PaperId};
 use cm_protocol::{import::*, library_query::*};
 
@@ -16,6 +19,25 @@ fn page(id: &str, next: Option<LibraryCursor>) -> LibraryPage {
         next,
         with_pdf: vec![],
     }
+}
+
+#[test]
+fn page_summary_counts_papers_in_the_singular_and_plural() {
+    assert_eq!(papers_count(0), "0 papers");
+    assert_eq!(papers_count(1), "1 paper");
+    assert_eq!(papers_count(2), "2 papers");
+    let mut library = Library::default();
+    library.reload();
+    library.complete(
+        library.generation,
+        page("00000000-0000-0000-0000-000000000001", None),
+    );
+    assert_eq!(library.page_summary(false), "Page 1 · 1 paper");
+    library.select_only(library.papers[0].id);
+    assert_eq!(
+        library.page_summary(true),
+        "Page 1 · 1 paper · 1 selected · loading…"
+    );
 }
 
 #[test]

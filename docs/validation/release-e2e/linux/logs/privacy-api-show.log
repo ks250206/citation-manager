@@ -1,0 +1,6 @@
+$ <work>/prefix/bin/papersd api show --library <work>/home/.local/share/citation-manager/library
+exit 0 (0.0s)
+--- stdout
+enabled=false bind=127.0.0.1 port=39271 export_dirs=0 secret_store=File listener=Stopped
+
+--- stderr
