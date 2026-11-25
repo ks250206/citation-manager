@@ -130,21 +130,23 @@ pub async fn search_papers(ctx: &Ctx<'_>, args: &Args) -> Result<Value, ToolErro
                 .first()
                 .map(|d| d.message.clone())
                 .unwrap_or_else(|| "invalid query".into());
-            return Err(ToolError::invalid(format!("invalid search query: {first}")).with(
-                "diagnostics",
-                Value::Array(
-                    errors
-                        .diagnostics
-                        .iter()
-                        .map(|d| {
-                            json!({"code": d.code, "message": d.message,
+            return Err(
+                ToolError::invalid(format!("invalid search query: {first}")).with(
+                    "diagnostics",
+                    Value::Array(
+                        errors
+                            .diagnostics
+                            .iter()
+                            .map(|d| {
+                                json!({"code": d.code, "message": d.message,
                                    "start": d.start, "end": d.end,
                                    "corrections": d.corrections.iter()
                                        .map(|c| c.replacement.clone()).collect::<Vec<_>>()})
-                        })
-                        .collect(),
+                            })
+                            .collect(),
+                    ),
                 ),
-            ));
+            );
         }
         _ => return Err(unexpected()),
     };

@@ -282,27 +282,20 @@ impl Args {
     }
     /// `Some(None)` when the key is present with `null` (clear the field).
     pub fn nullable_str(&self, key: &str) -> Option<Option<String>> {
-        self.0
-            .get(key)
-            .map(|v| v.as_str().map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()))
+        self.0.get(key).map(|v| {
+            v.as_str()
+                .map(|s| s.trim().to_owned())
+                .filter(|s| !s.is_empty())
+        })
     }
     pub fn u32(&self, key: &str) -> Option<u32> {
-        self.0
-            .get(key)
-            .and_then(Value::as_f64)
-            .map(|f| f as u32)
+        self.0.get(key).and_then(Value::as_f64).map(|f| f as u32)
     }
     pub fn i32(&self, key: &str) -> Option<i32> {
-        self.0
-            .get(key)
-            .and_then(Value::as_f64)
-            .map(|f| f as i32)
+        self.0.get(key).and_then(Value::as_f64).map(|f| f as i32)
     }
     pub fn i64(&self, key: &str) -> Option<i64> {
-        self.0
-            .get(key)
-            .and_then(Value::as_f64)
-            .map(|f| f as i64)
+        self.0.get(key).and_then(Value::as_f64).map(|f| f as i64)
     }
     pub fn bool(&self, key: &str) -> Option<bool> {
         self.0.get(key).and_then(Value::as_bool)
@@ -369,7 +362,9 @@ mod tests {
             assert_eq!(schema["additionalProperties"], false, "{}", spec.name);
             for required in schema["required"].as_array().unwrap() {
                 assert!(
-                    schema["properties"].get(required.as_str().unwrap()).is_some(),
+                    schema["properties"]
+                        .get(required.as_str().unwrap())
+                        .is_some(),
                     "{}: {required}",
                     spec.name
                 );

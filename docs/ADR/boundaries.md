@@ -63,3 +63,9 @@ No new crate edge. `core::search` gains transport-neutral search/extraction DTOs
 re-exports the DTOs; `daemon::fulltext` composes job handlers and the PDFium extractor
 (`pdf-metadata` feature). `cm-search` stays an empty placeholder: SQL must stay in storage
 and the orchestration is pure core. See [fulltext-search](fulltext-search.md).
+
+## #29 additions
+
+No new crate edge: `mcp` still depends only on `protocol` (normal and dev). The MCP SDK
+(rmcp, exact pin) and its tokio stack stay inside `mcp`; `mcp` gains the working
+`papers-mcp` executable. See [mcp-server](mcp-server.md).

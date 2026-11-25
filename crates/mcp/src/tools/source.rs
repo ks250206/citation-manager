@@ -45,8 +45,16 @@ pub fn uri(
 
 /// "Family, Given", or the literal name.
 pub fn author(c: &Contributor) -> Option<String> {
-    let family = c.family_name.as_deref().map(str::trim).filter(|s| !s.is_empty());
-    let given = c.given_name.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let family = c
+        .family_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let given = c
+        .given_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
     match (family, given) {
         (Some(f), Some(g)) => Some(format!("{f}, {g}")),
         (Some(f), None) => Some(f.to_owned()),
@@ -146,13 +154,12 @@ pub struct Papers(HashMap<PaperId, Option<Paper>>);
 impl Papers {
     /// `None` when the paper is gone or unreadable; other errors (permission, daemon) abort.
     pub async fn get(&mut self, ctx: &Ctx<'_>, id: PaperId) -> Result<Option<&Paper>, ToolError> {
-        if !self.0.contains_key(&id) {
-            let paper = match get_paper(ctx, id).await {
+        if let std::collections::hash_map::Entry::Vacant(slot) = self.0.entry(id) {
+            slot.insert(match get_paper(ctx, id).await {
                 Ok(paper) => Some(paper),
                 Err(e) if e.kind == "not_found" => None,
                 Err(e) => return Err(e),
-            };
-            self.0.insert(id, paper);
+            });
         }
         Ok(self.0.get(&id).and_then(Option::as_ref))
     }
@@ -191,13 +198,19 @@ mod tests {
             "paper://00000000-0000-0000-0000-000000000001/attachment/00000000-0000-0000-0000-000000000002?page=5"
         );
         assert!(uri(p, Some(a), Some(0), Some("x")).ends_with("?page=1&annotation=x"));
-        assert!(uri(p, Some(a), None, Some("x")).ends_with("/attachment/00000000-0000-0000-0000-000000000002?annotation=x"));
+        assert!(
+            uri(p, Some(a), None, Some("x"))
+                .ends_with("/attachment/00000000-0000-0000-0000-000000000002?annotation=x")
+        );
     }
 
     #[test]
     fn authors_round_trip_and_clip_counts_characters() {
         let c = contributor("  Doe,   Jane ");
-        assert_eq!((c.family_name.as_deref(), c.given_name.as_deref()), (Some("Doe"), Some("Jane")));
+        assert_eq!(
+            (c.family_name.as_deref(), c.given_name.as_deref()),
+            (Some("Doe"), Some("Jane"))
+        );
         assert_eq!(author(&c).unwrap(), "Doe, Jane");
         let literal = contributor("Research Consortium");
         assert_eq!(author(&literal).unwrap(), "Research Consortium");

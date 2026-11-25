@@ -111,9 +111,10 @@ fn service(error: ServiceError) -> ToolError {
             "conflict",
             "the record changed or conflicts with existing data; re-read it and retry",
         ),
-        ServiceError::Unavailable => {
-            ToolError::new("unavailable", "the library service is temporarily unavailable")
-        }
+        ServiceError::Unavailable => ToolError::new(
+            "unavailable",
+            "the library service is temporarily unavailable",
+        ),
     }
 }
 
@@ -180,7 +181,11 @@ fn denied(denial: Denial, library: &Path) -> ToolError {
                 .any(|c| matches!(c, Capability::LibraryWrite | Capability::NetworkLookup));
             let export = caps.contains(&Capability::LocalFileWrite);
             let shown: Vec<Capability> = if caps.is_empty() {
-                if all.is_empty() { any.clone() } else { all.clone() }
+                if all.is_empty() {
+                    any.clone()
+                } else {
+                    all.clone()
+                }
             } else {
                 caps.clone()
             };
@@ -263,7 +268,10 @@ mod tests {
         );
         let (all, any) = required_capabilities(Operation::ImportPreview);
         assert!(all.is_empty());
-        assert_eq!(any, vec![Capability::LibraryWrite, Capability::CapturePreview]);
+        assert_eq!(
+            any,
+            vec![Capability::LibraryWrite, Capability::CapturePreview]
+        );
     }
 
     #[test]
@@ -284,17 +292,24 @@ mod tests {
         assert!(export.message.contains("--export"), "{}", export.message);
         // Any-of requirements offer only what an MCP grant can carry.
         let preview = ToolError::from_call(
-            CallError::Wire(WireError::Denied(Denial::Forbidden(Operation::ImportPreview))),
+            CallError::Wire(WireError::Denied(Denial::Forbidden(
+                Operation::ImportPreview,
+            ))),
             library,
         );
         assert!(preview.message.contains("--write"), "{}", preview.message);
-        assert!(!preview.message.contains("capture_preview"), "{}", preview.message);
+        assert!(
+            !preview.message.contains("capture_preview"),
+            "{}",
+            preview.message
+        );
         let delete = ToolError::from_call(
             CallError::Wire(WireError::Denied(Denial::Forbidden(Operation::PaperTrash))),
             library,
         );
         assert!(delete.message.contains("not available to MCP"));
-        let revoked = ToolError::from_call(CallError::Wire(WireError::Denied(Denial::Revoked)), library);
+        let revoked =
+            ToolError::from_call(CallError::Wire(WireError::Denied(Denial::Revoked)), library);
         assert_eq!(revoked.kind, "grant_revoked");
         let result = revoked.into_result();
         assert_eq!(result.is_error, Some(true));

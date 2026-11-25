@@ -220,7 +220,8 @@ impl DaemonClient {
             "connected to papersd (session {}, grant {})",
             welcome.session, welcome.grant
         ));
-        let connection = Connection::start(stream, welcome, credential).map_err(CallError::Connect)?;
+        let connection =
+            Connection::start(stream, welcome, credential).map_err(CallError::Connect)?;
         *state = Some(connection.clone());
         Ok(connection)
     }
@@ -315,13 +316,12 @@ async fn reap_idle(client: Weak<DaemonClient>, idle: Duration) {
         let idle_connection = state
             .as_ref()
             .is_some_and(|c| !c.alive() || (c.pending().is_empty() && c.idle_for() >= idle));
-        if idle_connection {
-            if let Some(connection) = state.take()
-                && connection.alive()
-            {
-                crate::log::debug("closing idle daemon connection");
-                connection.kill();
-            }
+        if idle_connection
+            && let Some(connection) = state.take()
+            && connection.alive()
+        {
+            crate::log::debug("closing idle daemon connection");
+            connection.kill();
         }
     }
 }
@@ -343,10 +343,16 @@ fn is_read_only(command: &Command) -> bool {
         Command::Status | Command::Search(_) | Command::Fulltext(_) | Command::Query(_) => true,
         Command::Library(r) => matches!(r, LibraryRequest::Get(_) | LibraryRequest::List(_)),
         Command::Organization(r) => {
-            matches!(r, OrganizationRequest::List | OrganizationRequest::ForPaper(_))
+            matches!(
+                r,
+                OrganizationRequest::List | OrganizationRequest::ForPaper(_)
+            )
         }
         Command::Annotations(r) => {
-            matches!(r, AnnotationRequest::List(_) | AnnotationRequest::ForPaper(_))
+            matches!(
+                r,
+                AnnotationRequest::List(_) | AnnotationRequest::ForPaper(_)
+            )
         }
         Command::Pdf(PdfCommand::List(_)) => true,
         _ => false,
@@ -366,7 +372,9 @@ mod tests {
     #[test]
     fn only_effect_free_commands_are_retried_after_a_lost_connection() {
         let paper = PaperId(uuid::Uuid::new_v4());
-        assert!(is_read_only(&Command::Search(Box::new(SearchRequest::new("x")))));
+        assert!(is_read_only(&Command::Search(Box::new(
+            SearchRequest::new("x")
+        ))));
         assert!(is_read_only(&Command::Library(LibraryRequest::Get(paper))));
         assert!(is_read_only(&Command::Organization(
             OrganizationRequest::ForPaper(paper)
@@ -374,7 +382,9 @@ mod tests {
         assert!(!is_read_only(&Command::Library(LibraryRequest::Create(
             Box::new(NewPaper::titled("x"))
         ))));
-        assert!(!is_read_only(&Command::Resolve { doi: "10.1/x".into() }));
+        assert!(!is_read_only(&Command::Resolve {
+            doi: "10.1/x".into()
+        }));
         assert!(!is_read_only(&Command::Export(ExportRequest {
             selection: cm_protocol::exchange::ExportSelection::All,
             format: Format::Bibtex,

@@ -85,7 +85,11 @@ pub async fn update_paper(ctx: &Ctx<'_>, args: &Args) -> Result<Value, ToolError
         changed.push("abstract");
     }
     if args.present("authors") {
-        paper.bibliography.authors = args.strings("authors").iter().map(|a| contributor(a)).collect();
+        paper.bibliography.authors = args
+            .strings("authors")
+            .iter()
+            .map(|a| contributor(a))
+            .collect();
         changed.push("authors");
     }
     let b = &mut paper.bibliography;
@@ -156,9 +160,7 @@ pub async fn create_collection(ctx: &Ctx<'_>, args: &Args) -> Result<Value, Tool
     let name = display_name(args.str("name").expect("validated"));
     let parent = args.uuid("parent_id").map(CollectionId);
     let before = org(ctx, OrganizationRequest::List).await?;
-    let describe = |c: &cm_protocol::domain::Collection| {
-        json!({"collection_id": c.id.0, "name": c.name, "parent_id": c.parent.map(|p| p.0)})
-    };
+    let describe = |c: &cm_protocol::domain::Collection| json!({"collection_id": c.id.0, "name": c.name, "parent_id": c.parent.map(|p| p.0)});
     if let Some(existing) = before
         .collections
         .iter()
@@ -250,8 +252,8 @@ pub async fn add_tag_to_paper(ctx: &Ctx<'_>, args: &Args) -> Result<Value, ToolE
     let names = args.strings("tags");
     let mut keys = Vec::with_capacity(names.len());
     for name in &names {
-        let key = TagKey::new(name)
-            .map_err(|e| ToolError::invalid(format!("tag {name:?}: {e}")))?;
+        let key =
+            TagKey::new(name).map_err(|e| ToolError::invalid(format!("tag {name:?}: {e}")))?;
         keys.push((name.clone(), key));
     }
     let paper = get_paper(ctx, paper_id).await?;
@@ -261,7 +263,11 @@ pub async fn add_tag_to_paper(ctx: &Ctx<'_>, args: &Args) -> Result<Value, ToolE
         let tag = match all.tags.iter().find(|t| t.key == key) {
             Some(tag) => tag.id,
             None => {
-                all = org(ctx, OrganizationRequest::CreateTag(TagInput::named(name.clone()))).await?;
+                all = org(
+                    ctx,
+                    OrganizationRequest::CreateTag(TagInput::named(name.clone())),
+                )
+                .await?;
                 created.push(name.clone());
                 all.tags
                     .iter()
@@ -330,7 +336,9 @@ pub async fn add_annotation(ctx: &Ctx<'_>, args: &Args) -> Result<Value, ToolErr
         .map(|c| c.trim().to_owned())
         .filter(|c| !c.is_empty());
     if kind == AnnotationKind::Highlight && quote.is_empty() {
-        return Err(ToolError::invalid("a highlight needs quote (the highlighted text)"));
+        return Err(ToolError::invalid(
+            "a highlight needs quote (the highlighted text)",
+        ));
     }
     if kind == AnnotationKind::Note && comment.is_none() {
         return Err(ToolError::invalid("a note needs comment"));
@@ -351,7 +359,9 @@ pub async fn add_annotation(ctx: &Ctx<'_>, args: &Args) -> Result<Value, ToolErr
             top: n("top"),
         };
         if !rect.valid() {
-            return Err(ToolError::invalid("each rect needs right > left and top > bottom"));
+            return Err(ToolError::invalid(
+                "each rect needs right > left and top > bottom",
+            ));
         }
         quads.push(rect.quad());
     }
@@ -374,15 +384,18 @@ pub async fn add_annotation(ctx: &Ctx<'_>, args: &Args) -> Result<Value, ToolErr
         }
         None => match pdfs.as_slice() {
             [only] => *only,
-            [] => return Err(ToolError::invalid("this paper has no PDF attachment to annotate")),
-            several => {
+            [] => {
                 return Err(ToolError::invalid(
-                    "this paper has several PDFs; give attachment_id",
-                )
-                .with(
-                    "attachment_ids",
-                    Value::Array(several.iter().map(|a| json!(a.0)).collect()),
+                    "this paper has no PDF attachment to annotate",
                 ));
+            }
+            several => {
+                return Err(
+                    ToolError::invalid("this paper has several PDFs; give attachment_id").with(
+                        "attachment_ids",
+                        Value::Array(several.iter().map(|a| json!(a.0)).collect()),
+                    ),
+                );
             }
         },
     };
@@ -423,7 +436,9 @@ pub async fn add_annotation(ctx: &Ctx<'_>, args: &Args) -> Result<Value, ToolErr
         comment,
     };
     let created = match ctx
-        .call(Command::Annotations(AnnotationRequest::Create(Box::new(new))))
+        .call(Command::Annotations(AnnotationRequest::Create(Box::new(
+            new,
+        ))))
         .await?
     {
         Reply::Annotations(AnnotationReply::Edit(edit)) => match *edit {
@@ -493,7 +508,12 @@ pub async fn export_citations(ctx: &Ctx<'_>, args: &Args) -> Result<Value, ToolE
     let dir = tempfile::Builder::new()
         .prefix("papers-mcp-export-")
         .tempdir()
-        .map_err(|e| ToolError::new("unavailable", format!("cannot create a temporary directory: {e}")))?;
+        .map_err(|e| {
+            ToolError::new(
+                "unavailable",
+                format!("cannot create a temporary directory: {e}"),
+            )
+        })?;
     let path = dir
         .path()
         .canonicalize()

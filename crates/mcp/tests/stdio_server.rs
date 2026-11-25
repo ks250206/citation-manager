@@ -228,23 +228,25 @@ fn human_highlight(owner: &mut Session, attachment: AttachmentId, quote: &str, c
         right: 300.0,
         top: 712.0,
     };
-    ok(owner.call(Command::Annotations(AnnotationRequest::Create(Box::new(
-        NewAnnotation {
-            attachment_id: attachment,
-            kind: AnnotationKind::Highlight,
-            source: Source::Human,
-            anchor: Anchor::Resolved {
-                page_index: 0,
-                page_label: Some("1".into()),
-                quads: vec![rect.quad()],
+    ok(
+        owner.call(Command::Annotations(AnnotationRequest::Create(Box::new(
+            NewAnnotation {
+                attachment_id: attachment,
+                kind: AnnotationKind::Highlight,
+                source: Source::Human,
+                anchor: Anchor::Resolved {
+                    page_index: 0,
+                    page_label: Some("1".into()),
+                    quads: vec![rect.quad()],
+                },
+                quote: quote.into(),
+                context_before: None,
+                context_after: None,
+                color: Some("yellow".into()),
+                comment: Some(comment.into()),
             },
-            quote: quote.into(),
-            context_before: None,
-            context_after: None,
-            color: Some("yellow".into()),
-            comment: Some(comment.into()),
-        },
-    )))));
+        )))),
+    );
 }
 
 /// One paper with DOI/authors/year, a stored PDF, a human highlight, collection and tag.
@@ -286,8 +288,16 @@ fn seed(fx: &Fixture) -> Seeded {
         &mut owner,
         OrganizationRequest::CollectionMember(paper.id, reading, true),
     );
-    let anode = org(&mut owner, OrganizationRequest::CreateTag(TagInput::named("anode"))).tags[0].id;
-    org(&mut owner, OrganizationRequest::TagMember(paper.id, anode, true));
+    let anode = org(
+        &mut owner,
+        OrganizationRequest::CreateTag(TagInput::named("anode")),
+    )
+    .tags[0]
+        .id;
+    org(
+        &mut owner,
+        OrganizationRequest::TagMember(paper.id, anode, true),
+    );
     Seeded { paper, attachment }
 }
 
@@ -391,7 +401,10 @@ impl Mcp {
         assert!(result.is_object(), "{name}: {response}");
         // Structured content is mirrored as one text block.
         let text = result["content"][0]["text"].as_str().unwrap_or_default();
-        assert!(text.contains(&result["structuredContent"].to_string()[..2]), "{name}");
+        assert!(
+            text.contains(&result["structuredContent"].to_string()[..2]),
+            "{name}"
+        );
         result
     }
     fn ok(&mut self, name: &str, arguments: Value) -> Value {
@@ -401,7 +414,10 @@ impl Mcp {
     }
     fn err(&mut self, name: &str, arguments: Value) -> Value {
         let result = self.tool(name, arguments.clone());
-        assert_eq!(result["isError"], true, "{name} {arguments} should fail: {result}");
+        assert_eq!(
+            result["isError"], true,
+            "{name} {arguments} should fail: {result}"
+        );
         result["structuredContent"]["error"].clone()
     }
     /// Closes stdin (EOF) and waits for a clean exit; returns stderr.
@@ -461,7 +477,12 @@ fn read_tools_over_stdio_with_a_lazily_started_daemon() {
     let init = mcp.initialize();
     assert_eq!(init["serverInfo"]["name"], "citation-manager");
     assert!(init["capabilities"]["tools"].is_object());
-    assert!(init["instructions"].as_str().unwrap().contains("Read-only by default"));
+    assert!(
+        init["instructions"]
+            .as_str()
+            .unwrap()
+            .contains("Read-only by default")
+    );
 
     let tools = mcp.request("tools/list", json!({}))["result"]["tools"].clone();
     let names: Vec<&str> = tools
@@ -485,14 +506,23 @@ fn read_tools_over_stdio_with_a_lazily_started_daemon() {
     let source = &hit["source"];
     assert_eq!(source["paper_id"], paper.as_str());
     assert_eq!(source["doi"], "10.5555/mcp.a");
-    assert_eq!(source["title"], "Interfacial stability of solid electrolytes");
+    assert_eq!(
+        source["title"],
+        "Interfacial stability of solid electrolytes"
+    );
     assert_eq!(source["authors"], json!(["Doe, Jane"]));
     assert_eq!(source["year"], 2024);
     assert_eq!(source["uri"], format!("paper://{paper}"));
-    assert!(fx.daemon_pid() != killed, "a new papersd was started on demand");
+    assert!(
+        fx.daemon_pid() != killed,
+        "a new papersd was started on demand"
+    );
 
     // Annotation hits carry the stored attachment/page location.
-    let found = mcp.ok("search_papers", json!({"query": "dendrite", "sources": ["annotations"]}));
+    let found = mcp.ok(
+        "search_papers",
+        json!({"query": "dendrite", "sources": ["annotations"]}),
+    );
     let hit = &found["results"][0];
     assert_eq!(hit["kind"], "annotation");
     assert_eq!(hit["source"]["attachment_id"], attachment.as_str());
@@ -514,13 +544,19 @@ fn read_tools_over_stdio_with_a_lazily_started_daemon() {
             .iter()
             .map(|r| &r["source"]["paper_id"])
             .collect();
-        assert!(!ids.is_empty() && ids.iter().all(|id| *id == paper.as_str()), "{filters}: {found}");
+        assert!(
+            !ids.is_empty() && ids.iter().all(|id| *id == paper.as_str()),
+            "{filters}: {found}"
+        );
     }
 
     let detail = mcp.ok("get_paper", json!({"paper_id": paper}));
     assert_eq!(detail["source"]["paper_id"], paper.as_str());
     assert_eq!(detail["paper"]["journal"], "Journal of Examples");
-    assert_eq!(detail["attachments"][0]["attachment_id"], attachment.as_str());
+    assert_eq!(
+        detail["attachments"][0]["attachment_id"],
+        attachment.as_str()
+    );
     assert_eq!(detail["attachments"][0]["status"], "present");
     assert_eq!(detail["collections"][0]["name"], "Reading");
     assert_eq!(detail["tags"][0]["name"], "anode");
@@ -565,33 +601,64 @@ fn writes_need_a_separate_grant_revocation_is_live_and_direct_ipc_is_refused_ali
     // Read-only by default: every write tool is refused by papersd, naming the operation.
     let unknown_collection = uuid::Uuid::new_v4().to_string();
     let refused = [
-        ("add_paper_by_doi", json!({"doi": "10.5555/new"}), Operation::MetadataResolve),
+        (
+            "add_paper_by_doi",
+            json!({"doi": "10.5555/new"}),
+            Operation::MetadataResolve,
+        ),
         (
             "add_paper_from_url",
             json!({"url": "https://example.org/a", "title": "AI write", "confirm": true}),
             Operation::ImportPreview,
         ),
-        ("update_paper", json!({"paper_id": paper, "year": 2030}), Operation::PaperUpdate),
-        ("create_collection", json!({"name": "AI picks"}), Operation::OrganizationWrite),
+        (
+            "update_paper",
+            json!({"paper_id": paper, "year": 2030}),
+            Operation::PaperUpdate,
+        ),
+        (
+            "create_collection",
+            json!({"name": "AI picks"}),
+            Operation::OrganizationWrite,
+        ),
         (
             "move_paper_to_collection",
             json!({"paper_id": paper, "collection_id": unknown_collection}),
             Operation::OrganizationWrite,
         ),
-        ("add_tag_to_paper", json!({"paper_id": paper, "tags": ["ai"]}), Operation::OrganizationWrite),
+        (
+            "add_tag_to_paper",
+            json!({"paper_id": paper, "tags": ["ai"]}),
+            Operation::OrganizationWrite,
+        ),
         (
             "add_annotation",
             json!({"paper_id": paper, "kind": "note", "page_index": 0, "comment": "AI note"}),
             Operation::AnnotationWrite,
         ),
-        ("export_citations", json!({"paper_ids": [paper]}), Operation::Export),
+        (
+            "export_citations",
+            json!({"paper_ids": [paper]}),
+            Operation::Export,
+        ),
     ];
     for (tool, args, operation) in &refused {
         let error = mcp.err(tool, args.clone());
         assert_eq!(error["kind"], "permission_denied", "{tool}: {error}");
-        assert_eq!(error["operation"], operation_name(*operation), "{tool}: {error}");
-        let flag = if *operation == Operation::Export { "--export" } else { "--write" };
-        assert!(error["message"].as_str().unwrap().contains(flag), "{tool}: {error}");
+        assert_eq!(
+            error["operation"],
+            operation_name(*operation),
+            "{tool}: {error}"
+        );
+        let flag = if *operation == Operation::Export {
+            "--export"
+        } else {
+            "--write"
+        };
+        assert!(
+            error["message"].as_str().unwrap().contains(flag),
+            "{tool}: {error}"
+        );
     }
 
     // The same commands sent directly over IPC with the MCP credential are refused by the
@@ -603,9 +670,7 @@ fn writes_need_a_separate_grant_revocation_is_live_and_direct_ipc_is_refused_ali
         attachment_id: seeded.attachment,
         kind: AnnotationKind::Note,
         source: Source::Ai,
-        anchor: Anchor::Unresolved {
-            reason: "x".into(),
-        },
+        anchor: Anchor::Unresolved { reason: "x".into() },
         quote: String::new(),
         context_before: None,
         context_after: None,
@@ -621,9 +686,9 @@ fn writes_need_a_separate_grant_revocation_is_live_and_direct_ipc_is_refused_ali
             destination: ImportDestination::default(),
         })),
         Command::Library(LibraryRequest::Update(Box::new(changed))),
-        Command::Organization(OrganizationRequest::CreateCollection(CollectionInput::named(
-            "AI picks",
-        ))),
+        Command::Organization(OrganizationRequest::CreateCollection(
+            CollectionInput::named("AI picks"),
+        )),
         Command::Organization(OrganizationRequest::CollectionMember(
             seeded.paper.id,
             cm_protocol::domain::CollectionId(uuid::Uuid::new_v4()),
@@ -664,7 +729,10 @@ fn writes_need_a_separate_grant_revocation_is_live_and_direct_ipc_is_refused_ali
                "authors": ["Roe, Richard"], "year": 2025, "confirm": true}),
     );
     assert_eq!(again["status"], "needs_confirmation", "{again}");
-    assert_eq!(again["duplicates"][0]["source"]["paper_id"], created["paper_id"]);
+    assert_eq!(
+        again["duplicates"][0]["source"]["paper_id"],
+        created["paper_id"]
+    );
     let skipped = mcp.ok(
         "add_paper_from_url",
         json!({"preview_id": again["preview_id"], "decision": "skip"}),
@@ -700,10 +768,16 @@ fn writes_need_a_separate_grant_revocation_is_live_and_direct_ipc_is_refused_ali
                "quote": "a text anchor", "context_before": "before "}),
     );
     assert_eq!(anchored["annotation"]["anchor"]["resolved"], false);
-    let ai = mcp.ok("get_paper_annotations", json!({"paper_id": paper, "origin": "ai"}));
+    let ai = mcp.ok(
+        "get_paper_annotations",
+        json!({"paper_id": paper, "origin": "ai"}),
+    );
     assert_eq!(ai["total"], 2);
 
-    let updated = mcp.ok("update_paper", json!({"paper_id": paper, "year": 2025, "volume": "7"}));
+    let updated = mcp.ok(
+        "update_paper",
+        json!({"paper_id": paper, "year": 2025, "volume": "7"}),
+    );
     assert_eq!(updated["source"]["year"], 2025);
     let collection = mcp.ok("create_collection", json!({"name": "AI picks"}));
     assert_eq!(collection["status"], "created");
@@ -718,7 +792,10 @@ fn writes_need_a_separate_grant_revocation_is_live_and_direct_ipc_is_refused_ali
     );
     assert_eq!(moved["status"], "moved");
     assert_eq!(moved["collections"].as_array().unwrap().len(), 1);
-    let tagged = mcp.ok("add_tag_to_paper", json!({"paper_id": paper, "tags": ["AI reviewed", "Anode"]}));
+    let tagged = mcp.ok(
+        "add_tag_to_paper",
+        json!({"paper_id": paper, "tags": ["AI reviewed", "Anode"]}),
+    );
     assert_eq!(tagged["created_tags"], json!(["AI reviewed"]));
     assert_eq!(tagged["tags"].as_array().unwrap().len(), 2);
     // Export needs its own approval even with the write grant.
@@ -746,10 +823,19 @@ fn writes_need_a_separate_grant_revocation_is_live_and_direct_ipc_is_refused_ali
 
     // Export with an export grant returns the text (written only to a private temp dir).
     fx.grant(&["--write", "--export"]);
-    let exported = mcp.ok("export_citations", json!({"paper_ids": [paper], "format": "bibtex"}));
+    let exported = mcp.ok(
+        "export_citations",
+        json!({"paper_ids": [paper], "format": "bibtex"}),
+    );
     assert_eq!(exported["records"], 1);
-    assert!(exported["text"].as_str().unwrap().contains("10.5555/mcp.a"), "{exported}");
-    let ris = mcp.ok("export_citations", json!({"paper_ids": [paper], "format": "ris", "max_chars": 1000}));
+    assert!(
+        exported["text"].as_str().unwrap().contains("10.5555/mcp.a"),
+        "{exported}"
+    );
+    let ris = mcp.ok(
+        "export_citations",
+        json!({"paper_ids": [paper], "format": "ris", "max_chars": 1000}),
+    );
     assert!(ris["text"].as_str().unwrap().contains("TY  -"), "{ris}");
 
     // Revocation applies to the live session at once, for reads too.
@@ -766,7 +852,10 @@ fn writes_need_a_separate_grant_revocation_is_live_and_direct_ipc_is_refused_ali
     fx.cli("revoke", &["--grant", &live_grant]);
     let error = mcp.err("search_papers", json!({"query": "interfacial"}));
     assert_eq!(error["kind"], "grant_revoked", "{error}");
-    let error = mcp.err("add_annotation", json!({"paper_id": paper, "kind": "note", "comment": "x"}));
+    let error = mcp.err(
+        "add_annotation",
+        json!({"paper_id": paper, "kind": "note", "comment": "x"}),
+    );
     assert_eq!(error["kind"], "grant_revoked", "{error}");
     // ... and to direct IPC: the open session is denied, a new handshake rejected.
     assert_eq!(
@@ -803,82 +892,182 @@ fn malformed_input_and_size_limits_are_tool_errors_and_the_server_continues() {
 
     // Malformed JSON: Parse error with id null, then the server keeps serving.
     mcp.send_raw("this is not json {");
-    let parse = mcp.wait_for(&Value::Null, TIMEOUT).expect("parse error reply");
+    let parse = mcp
+        .wait_for(&Value::Null, TIMEOUT)
+        .expect("parse error reply");
     assert_eq!(parse["error"]["code"], -32700);
     mcp.send_raw(r#"{"jsonrpc":"2.0","id":"bad-params","method":"tools/call","params":7}"#);
     let invalid = mcp.wait_for(&json!("bad-params"), TIMEOUT).unwrap();
     assert_eq!(invalid["error"]["code"], -32600);
     // An unknown tool is a protocol error (unroutable); bad arguments are tool errors.
-    let unknown = mcp.request("tools/call", json!({"name": "drop_library", "arguments": {}}));
+    let unknown = mcp.request(
+        "tools/call",
+        json!({"name": "drop_library", "arguments": {}}),
+    );
     assert_eq!(unknown["error"]["code"], -32602, "{unknown}");
     assert!(mcp.request("ping", json!({}))["result"].is_object());
 
     // Bounds of every tool are enforced before any daemon call: a read-only grant gets
     // invalid_input (not permission_denied) for oversized write requests too.
     let long = |n: usize| "a".repeat(n);
-    let ids = |n: usize| (0..n).map(|_| uuid::Uuid::new_v4().to_string()).collect::<Vec<_>>();
+    let ids = |n: usize| {
+        (0..n)
+            .map(|_| uuid::Uuid::new_v4().to_string())
+            .collect::<Vec<_>>()
+    };
     let cases = [
         ("search_papers", json!({})),
         ("search_papers", json!({"query": long(1001)})),
         ("search_papers", json!({"query": "x", "limit": 51})),
         ("search_papers", json!({"query": "x", "limit": 0})),
-        ("search_papers", json!({"query": "x", "snippet_chars": 1001})),
-        ("search_papers", json!({"query": "x", "tags": (0..11).map(|i| i.to_string()).collect::<Vec<_>>()})),
+        (
+            "search_papers",
+            json!({"query": "x", "snippet_chars": 1001}),
+        ),
+        (
+            "search_papers",
+            json!({"query": "x", "tags": (0..11).map(|i| i.to_string()).collect::<Vec<_>>()}),
+        ),
         ("search_papers", json!({"query": "x", "bogus": true})),
         ("search_papers", json!({"year_from": 2025, "year_to": 2020})),
-        ("search_papers", json!({"query": "x", "cursor": {"scan_after": -1, "offset": 0}})),
+        (
+            "search_papers",
+            json!({"query": "x", "cursor": {"scan_after": -1, "offset": 0}}),
+        ),
         ("get_paper", json!({"paper_id": "not-a-uuid"})),
-        ("get_paper", json!({"paper_id": paper, "abstract_chars": 20001})),
-        ("get_paper_fulltext", json!({"paper_id": paper, "page_count": 21})),
-        ("get_paper_fulltext", json!({"paper_id": paper, "page_count": 0})),
-        ("get_paper_fulltext", json!({"paper_id": paper, "max_chars": 100001})),
-        ("get_paper_fulltext", json!({"paper_id": paper, "from_page_index": -1})),
-        ("get_paper_annotations", json!({"paper_id": paper, "limit": 501})),
-        ("get_paper_annotations", json!({"paper_id": paper, "max_chars": 200001})),
+        (
+            "get_paper",
+            json!({"paper_id": paper, "abstract_chars": 20001}),
+        ),
+        (
+            "get_paper_fulltext",
+            json!({"paper_id": paper, "page_count": 21}),
+        ),
+        (
+            "get_paper_fulltext",
+            json!({"paper_id": paper, "page_count": 0}),
+        ),
+        (
+            "get_paper_fulltext",
+            json!({"paper_id": paper, "max_chars": 100001}),
+        ),
+        (
+            "get_paper_fulltext",
+            json!({"paper_id": paper, "from_page_index": -1}),
+        ),
+        (
+            "get_paper_annotations",
+            json!({"paper_id": paper, "limit": 501}),
+        ),
+        (
+            "get_paper_annotations",
+            json!({"paper_id": paper, "max_chars": 200001}),
+        ),
         ("add_paper_by_doi", json!({})),
         ("add_paper_by_doi", json!({"doi": long(513)})),
         ("add_paper_by_doi", json!({"preview_id": "p"})),
-        ("add_paper_from_url", json!({"url": "file:///etc/passwd", "title": "x"})),
-        ("add_paper_from_url", json!({"url": format!("https://e.org/{}", long(2040)), "title": "x"})),
-        ("add_paper_from_url", json!({"url": "https://e.org", "title": "x", "authors": vec!["a"; 101]})),
-        ("update_paper", json!({"paper_id": paper, "title": long(2001)})),
-        ("update_paper", json!({"paper_id": paper, "authors": vec!["a"; 201]})),
+        (
+            "add_paper_from_url",
+            json!({"url": "file:///etc/passwd", "title": "x"}),
+        ),
+        (
+            "add_paper_from_url",
+            json!({"url": format!("https://e.org/{}", long(2040)), "title": "x"}),
+        ),
+        (
+            "add_paper_from_url",
+            json!({"url": "https://e.org", "title": "x", "authors": vec!["a"; 101]}),
+        ),
+        (
+            "update_paper",
+            json!({"paper_id": paper, "title": long(2001)}),
+        ),
+        (
+            "update_paper",
+            json!({"paper_id": paper, "authors": vec!["a"; 201]}),
+        ),
         ("create_collection", json!({"name": ""})),
         ("create_collection", json!({"name": long(257)})),
-        ("move_paper_to_collection", json!({"paper_id": paper, "collection_id": paper, "mode": "copy"})),
+        (
+            "move_paper_to_collection",
+            json!({"paper_id": paper, "collection_id": paper, "mode": "copy"}),
+        ),
         ("add_tag_to_paper", json!({"paper_id": paper, "tags": []})),
-        ("add_tag_to_paper", json!({"paper_id": paper, "tags": (0..21).map(|i| i.to_string()).collect::<Vec<_>>()})),
-        ("add_annotation", json!({"paper_id": paper, "kind": "highlight"})),
-        ("add_annotation", json!({"paper_id": paper, "kind": "note", "comment": "c", "context_before": long(49)})),
-        ("add_annotation", json!({"paper_id": paper, "kind": "note", "comment": "c", "page_index": 0,
-            "rects": vec![json!({"left": 0, "bottom": 0, "right": 1, "top": 1}); 65]})),
-        ("add_annotation", json!({"paper_id": paper, "kind": "note", "comment": long(8001)})),
+        (
+            "add_tag_to_paper",
+            json!({"paper_id": paper, "tags": (0..21).map(|i| i.to_string()).collect::<Vec<_>>()}),
+        ),
+        (
+            "add_annotation",
+            json!({"paper_id": paper, "kind": "highlight"}),
+        ),
+        (
+            "add_annotation",
+            json!({"paper_id": paper, "kind": "note", "comment": "c", "context_before": long(49)}),
+        ),
+        (
+            "add_annotation",
+            json!({"paper_id": paper, "kind": "note", "comment": "c", "page_index": 0,
+            "rects": vec![json!({"left": 0, "bottom": 0, "right": 1, "top": 1}); 65]}),
+        ),
+        (
+            "add_annotation",
+            json!({"paper_id": paper, "kind": "note", "comment": long(8001)}),
+        ),
         ("export_citations", json!({"paper_ids": []})),
         ("export_citations", json!({"paper_ids": ids(201)})),
-        ("export_citations", json!({"paper_ids": [paper], "format": "csl"})),
+        (
+            "export_citations",
+            json!({"paper_ids": [paper], "format": "csl"}),
+        ),
     ];
     for (tool, args) in cases {
         let error = mcp.err(tool, args.clone());
         assert_eq!(error["kind"], "invalid_input", "{tool} {args}: {error}");
     }
     // An unknown paper is a clean not_found tool error.
-    let error = mcp.err("get_paper", json!({"paper_id": uuid::Uuid::new_v4().to_string()}));
+    let error = mcp.err(
+        "get_paper",
+        json!({"paper_id": uuid::Uuid::new_v4().to_string()}),
+    );
     assert_eq!(error["kind"], "not_found");
 
     // Count and character caps on successful reads.
-    let page = mcp.ok("get_paper_annotations", json!({"paper_id": paper, "limit": 2}));
-    assert_eq!((page["returned"].clone(), page["total"].clone()), (json!(2), json!(3)));
+    let page = mcp.ok(
+        "get_paper_annotations",
+        json!({"paper_id": paper, "limit": 2}),
+    );
+    assert_eq!(
+        (page["returned"].clone(), page["total"].clone()),
+        (json!(2), json!(3))
+    );
     assert_eq!(page["truncated"], true);
-    let page = mcp.ok("get_paper_annotations", json!({"paper_id": paper, "max_chars": 10}));
-    assert_eq!(page["annotations"][0]["text"].as_str().unwrap().chars().count(), 10);
+    let page = mcp.ok(
+        "get_paper_annotations",
+        json!({"paper_id": paper, "max_chars": 10}),
+    );
+    assert_eq!(
+        page["annotations"][0]["text"]
+            .as_str()
+            .unwrap()
+            .chars()
+            .count(),
+        10
+    );
     assert_eq!(page["annotations"][0]["truncated"], true);
     assert_eq!(page["truncated"], true);
-    let found = mcp.ok("search_papers", json!({"query": "quote", "limit": 1, "snippet_chars": 32}));
+    let found = mcp.ok(
+        "search_papers",
+        json!({"query": "quote", "limit": 1, "snippet_chars": 32}),
+    );
     assert_eq!(found["returned"], 1);
     assert!(found["total_hits"].as_u64().unwrap() >= 2);
     let next = found["next_cursor"].clone();
     assert!(next.is_object(), "{found}");
-    let second = mcp.ok("search_papers", json!({"query": "quote", "limit": 1, "cursor": next}));
+    let second = mcp.ok(
+        "search_papers",
+        json!({"query": "quote", "limit": 1, "cursor": next}),
+    );
     assert_eq!(second["returned"], 1);
     assert_ne!(second["results"][0]["uri"], found["results"][0]["uri"]);
     let detail = mcp.ok("get_paper", json!({"paper_id": paper, "abstract_chars": 0}));
@@ -950,7 +1139,12 @@ fn a_missing_credential_is_explained_without_touching_the_library() {
     mcp.initialize();
     let error = mcp.err("search_papers", json!({"query": "x"}));
     assert_eq!(error["kind"], "no_credential");
-    assert!(error["message"].as_str().unwrap().contains("papers mcp grant"));
+    assert!(
+        error["message"]
+            .as_str()
+            .unwrap()
+            .contains("papers mcp grant")
+    );
     // No daemon was started and no library was created for a client without a credential.
     assert!(!fx.library.exists());
     assert!(!Path::new(&fx.paths().socket).exists());

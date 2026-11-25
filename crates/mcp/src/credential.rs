@@ -304,7 +304,11 @@ pub fn revoke(
 }
 
 /// MCP grants (label prefix `mcp`) known to the daemon.
-pub fn list(paths: &DaemonPaths, uid: u32, launch: Option<Launch>) -> Result<Vec<GrantInfo>, String> {
+pub fn list(
+    paths: &DaemonPaths,
+    uid: u32,
+    launch: Option<Launch>,
+) -> Result<Vec<GrantInfo>, String> {
     let mut owner = owner_session(paths, uid, launch)?;
     match owner.call(Command::Grants(GrantCommand::List)) {
         Ok(Ok(Reply::Grants(GrantReply::Grants(grants)))) => Ok(grants
@@ -376,8 +380,8 @@ mod tests {
 
     #[test]
     fn resolution_order_is_flag_env_default_and_must_be_absolute() {
-        let paths = DaemonPaths::new(Path::new("/tmp/cm-mcp-lib"), Some(Path::new("/run/x")), 1)
-            .unwrap();
+        let paths =
+            DaemonPaths::new(Path::new("/tmp/cm-mcp-lib"), Some(Path::new("/run/x")), 1).unwrap();
         let default = FileCredential::resolve(None, None, &paths, 1).unwrap();
         assert_eq!(default.path, paths.state_dir.join(DEFAULT_FILE_NAME));
         let env = FileCredential::resolve(None, Some("/e/cred".into()), &paths, 1).unwrap();

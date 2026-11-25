@@ -155,7 +155,11 @@ pub async fn add_paper_from_url(ctx: &Ctx<'_>, args: &Args) -> Result<Value, Too
         b.url = Some(url.to_owned());
     }
     if b.authors.is_empty() {
-        b.authors = args.strings("authors").iter().map(|a| contributor(a)).collect();
+        b.authors = args
+            .strings("authors")
+            .iter()
+            .map(|a| contributor(a))
+            .collect();
     }
     if b.year.is_none() {
         b.year = args.i32("year");
@@ -299,7 +303,8 @@ async fn preview(
         "preview"
     });
     if let Some(resolution) = resolution {
-        result["provider_outcomes"] = serde_json::to_value(&resolution.outcomes).unwrap_or_default();
+        result["provider_outcomes"] =
+            serde_json::to_value(&resolution.outcomes).unwrap_or_default();
     }
     result["next_step"] = Value::from(if blocked {
         "The record has errors (see diagnostics) and can only be skipped; nothing was added."

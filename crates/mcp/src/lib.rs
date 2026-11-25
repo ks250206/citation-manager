@@ -7,8 +7,10 @@
 //! Entry points (the contract `papers mcp` from #28 uses):
 //! - [`main`]: `papers-mcp [ARGS]` ≡ `papers mcp [ARGS]` — parses ARGS, serves stdio or runs a
 //!   grant subcommand, returns the process exit code.
-//! - [`run_stdio`]: serve stdio configured from the environment only (`PAPERS_LIBRARY`, ...).
-//! - [`serve`]: serve stdio with an explicit [`ServeConfig`].
+//! - [`run_stdio_with`]: serve stdio with a [`StdioConfig`] the embedding CLI already resolved
+//!   (library/runtime paths or a `LocalConnector`, credential source); read-only session by
+//!   default.
+//! - [`run_stdio`]: thin wrapper, configured from the environment only (`PAPERS_LIBRARY`, ...).
 //!
 //! stdout carries MCP protocol frames only; every diagnostic goes to stderr ([`log`]).
 pub mod credential;
@@ -19,16 +21,17 @@ pub mod server;
 pub mod tools;
 pub mod transport;
 
+use cm_protocol::client::local::{CredentialSource, LocalConnector};
 use cm_protocol::{
     client::local::{DaemonPaths, Launch},
-    ipc::GrantId,
+    ipc::{Credential, GrantId},
 };
 use credential::{CredentialStore, FileCredential, Profile};
 use rmcp::ServiceExt;
 use std::{
     ffi::OsString,
     fmt,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
 };
@@ -89,16 +92,99 @@ impl fmt::Display for StdioError {
 }
 impl std::error::Error for StdioError {}
 
-/// Everything `serve` needs. Built by [`main`]/[`run_stdio`] or by an embedding CLI.
-pub struct ServeConfig {
+/// Where an embedded server gets its MCP secret. Never the owner's desktop credential.
+#[derive(Clone)]
+pub enum McpCredential {
+    /// `$PAPERS_MCP_CREDENTIAL_FILE`, else `<library>/daemon/mcp.credential` (0600 file).
+    DefaultFile,
+    /// An explicit private credential file (absolute path).
+    File(PathBuf),
+    /// A secret the embedding process already resolved (kept in memory only).
+    Fixed(Credential),
+    /// Any other source (#26 profiles/keychain).
+    Store(Arc<dyn CredentialStore>),
+}
+
+/// Configuration of [`run_stdio_with`]: an embedding CLI (`papers mcp`, #28) passes the
+/// library/connection it already resolved. Defaults: papersd next to the current executable,
+/// [`McpCredential::DefaultFile`], and a **read-only session** (only the MCP read-only preset
+/// is requested; set `read_only = false` to let an owner-approved write/export grant act).
+#[derive(Clone)]
+pub struct StdioConfig {
     pub paths: DaemonPaths,
     pub uid: u32,
     /// `None`: never start papersd (connect to a running one only).
     pub launch: Option<Launch>,
-    pub credential: Arc<dyn CredentialStore>,
+    pub credential: McpCredential,
     /// Request only the read-only capabilities even if the grant allows more.
     pub read_only: bool,
+    /// Close an unused daemon connection after this long (`None`: keep it).
     pub idle_disconnect: Option<Duration>,
+}
+impl StdioConfig {
+    /// `library` (and `runtime_dir`, if given) must be absolute.
+    pub fn new(library: &Path, runtime_dir: Option<&Path>) -> Result<Self, StdioError> {
+        let uid = euid();
+        let paths = DaemonPaths::new(library, runtime_dir, uid)
+            .map_err(|e| StdioError::Usage(format!("library/runtime directory: {e}")))?;
+        Ok(Self {
+            paths,
+            uid,
+            launch: sibling_launch(None, None),
+            credential: McpCredential::DefaultFile,
+            read_only: true,
+            idle_disconnect: Some(IDLE_DISCONNECT),
+        })
+    }
+    /// Reuses a connector's library paths, UID and launch settings. Its credential is used
+    /// only when it is an explicit (issued) one; a `DesktopBootstrap` (owner) source is never
+    /// presented by the MCP server — the default MCP credential file is used instead.
+    pub fn from_connector(connector: &LocalConnector) -> Self {
+        Self {
+            paths: connector.paths.clone(),
+            uid: connector.uid,
+            launch: connector.launch.clone(),
+            credential: match &connector.credential {
+                CredentialSource::Explicit(c) => McpCredential::Fixed(c.clone()),
+                CredentialSource::DesktopBootstrap => McpCredential::DefaultFile,
+            },
+            read_only: true,
+            idle_disconnect: Some(IDLE_DISCONNECT),
+        }
+    }
+}
+
+/// A secret held in memory (from [`McpCredential::Fixed`]).
+struct FixedCredential(Credential);
+impl CredentialStore for FixedCredential {
+    fn load(&self) -> Result<Credential, String> {
+        Ok(self.0.clone())
+    }
+    fn describe(&self) -> String {
+        "credential supplied by the embedding process".into()
+    }
+}
+
+fn sibling_launch(papersd: Option<PathBuf>, daemon_idle_ms: Option<u64>) -> Option<Launch> {
+    let papersd = papersd.or_else(|| {
+        std::env::current_exe()
+            .ok()
+            .map(|exe| exe.with_file_name("papersd"))
+    });
+    let launch = papersd.filter(|p| p.is_file()).map(|papersd| Launch {
+        papersd,
+        extra_args: daemon_idle_ms
+            .map(|ms| vec!["--idle-timeout-ms".into(), ms.to_string().into()])
+            .unwrap_or_default(),
+        timeout: START_TIMEOUT,
+    });
+    if launch.is_none() {
+        log::warn(
+            "papersd was not found next to this executable; only an already running library \
+             service can be used",
+        );
+    }
+    launch
 }
 
 pub fn euid() -> u32 {
@@ -121,11 +207,14 @@ struct Options {
 }
 
 fn absolute(flag: &str, value: Option<OsString>) -> Result<PathBuf, StdioError> {
-    let path = PathBuf::from(value.ok_or_else(|| StdioError::Usage(format!("{flag} needs a value")))?);
+    let path =
+        PathBuf::from(value.ok_or_else(|| StdioError::Usage(format!("{flag} needs a value")))?);
     if path.is_absolute() {
         Ok(path)
     } else {
-        Err(StdioError::Usage(format!("{flag} must be an absolute path")))
+        Err(StdioError::Usage(format!(
+            "{flag} must be an absolute path"
+        )))
     }
 }
 
@@ -136,7 +225,10 @@ fn number(flag: &str, value: Option<OsString>) -> Result<u64, StdioError> {
         .ok_or_else(|| StdioError::Usage(format!("{flag} needs a non-negative integer")))
 }
 
-fn parse(args: Vec<OsString>, env: &dyn Fn(&str) -> Option<OsString>) -> Result<Options, StdioError> {
+fn parse(
+    args: Vec<OsString>,
+    env: &dyn Fn(&str) -> Option<OsString>,
+) -> Result<Options, StdioError> {
     let mut o = Options::default();
     let mut args = args.into_iter().peekable();
     o.command = match args.peek().and_then(|a| a.to_str()) {
@@ -190,9 +282,10 @@ fn parse(args: Vec<OsString>, env: &dyn Fn(&str) -> Option<OsString>) -> Result<
                     .next()
                     .and_then(|v| v.into_string().ok())
                     .ok_or_else(|| StdioError::Usage("--grant needs a UUID".into()))?;
-                o.grant = Some(GrantId(uuid::Uuid::parse_str(&raw).map_err(|_| {
-                    StdioError::Usage("--grant needs a UUID".into())
-                })?));
+                o.grant =
+                    Some(GrantId(uuid::Uuid::parse_str(&raw).map_err(|_| {
+                        StdioError::Usage("--grant needs a UUID".into())
+                    })?));
             }
             _ => unreachable!("checked above"),
         }
@@ -218,29 +311,14 @@ struct Resolved {
 }
 
 fn resolve(o: &Options, env: &dyn Fn(&str) -> Option<OsString>) -> Result<Resolved, StdioError> {
-    let library = o.library.clone().ok_or_else(|| {
-        StdioError::Usage(format!("--library (or ${ENV_LIBRARY}) is required"))
-    })?;
+    let library = o
+        .library
+        .clone()
+        .ok_or_else(|| StdioError::Usage(format!("--library (or ${ENV_LIBRARY}) is required")))?;
     let uid = euid();
     let paths = DaemonPaths::new(&library, o.runtime_dir.as_deref(), uid)
         .map_err(|e| StdioError::Usage(format!("library/runtime directory: {e}")))?;
-    let papersd = match &o.papersd {
-        Some(path) => Some(path.clone()),
-        None => std::env::current_exe()
-            .ok()
-            .map(|exe| exe.with_file_name("papersd")),
-    };
-    let launch = papersd.filter(|p| p.is_file()).map(|papersd| Launch {
-        papersd,
-        extra_args: o
-            .daemon_idle_ms
-            .map(|ms| vec!["--idle-timeout-ms".into(), ms.to_string().into()])
-            .unwrap_or_default(),
-        timeout: START_TIMEOUT,
-    });
-    if launch.is_none() {
-        log::warn("papersd was not found next to this executable; only an already running library service can be used");
-    }
+    let launch = sibling_launch(o.papersd.clone(), o.daemon_idle_ms);
     let file = FileCredential::resolve(
         o.credential_file.clone(),
         env(credential::ENV_CREDENTIAL_FILE),
@@ -291,7 +369,8 @@ fn run(o: Options, env: &dyn Fn(&str) -> Option<OsString>) -> Result<(), StdioEr
                 write: o.write,
                 export: o.export,
             };
-            let grant = credential::issue(&r.paths, r.uid, r.launch, profile, &r.file).map_err(failed)?;
+            let grant =
+                credential::issue(&r.paths, r.uid, r.launch, profile, &r.file).map_err(failed)?;
             print_json(&serde_json::json!({
                 "grant_id": grant.id.0,
                 "label": grant.label,
@@ -301,7 +380,8 @@ fn run(o: Options, env: &dyn Fn(&str) -> Option<OsString>) -> Result<(), StdioEr
             Ok(())
         }
         "revoke" => {
-            let revoked = credential::revoke(&r.paths, r.uid, r.launch, o.grant, &r.file).map_err(failed)?;
+            let revoked =
+                credential::revoke(&r.paths, r.uid, r.launch, o.grant, &r.file).map_err(failed)?;
             print_json(&serde_json::json!({"revoked": revoked.0}));
             Ok(())
         }
@@ -310,11 +390,13 @@ fn run(o: Options, env: &dyn Fn(&str) -> Option<OsString>) -> Result<(), StdioEr
             print_json(&serde_json::json!({"grants": grants}));
             Ok(())
         }
-        _ => serve(ServeConfig {
+        // `papers-mcp` serve: the grant decides (read-only unless the owner approved more);
+        // `--read-only` additionally narrows the session.
+        _ => run_stdio_with(StdioConfig {
             paths: r.paths,
             uid: r.uid,
             launch: r.launch,
-            credential: Arc::new(r.file),
+            credential: McpCredential::Store(Arc::new(r.file)),
             read_only: o.read_only,
             idle_disconnect: match o.idle_disconnect_ms {
                 Some(0) => None,
@@ -330,18 +412,62 @@ fn print_json(value: &serde_json::Value) {
     println!("{value}");
 }
 
-/// Serves MCP over stdio configured from the environment only: `$PAPERS_LIBRARY` (required),
-/// `$PAPERS_RUNTIME_DIR`, `$PAPERS_MCP_CREDENTIAL_FILE`; papersd next to this executable.
+/// Thin wrapper over [`run_stdio_with`] configured from the environment only:
+/// `$PAPERS_LIBRARY` (required), `$PAPERS_RUNTIME_DIR`, `$PAPERS_MCP_CREDENTIAL_FILE`;
+/// papersd next to this executable; read-only session ([`StdioConfig::new`] defaults).
 /// Returns when stdin closes.
 pub fn run_stdio() -> Result<(), StdioError> {
     log::init_from_env();
     let env = |key: &str| std::env::var_os(key);
     let options = parse(Vec::new(), &env)?;
-    run(options, &env)
+    let library = options
+        .library
+        .ok_or_else(|| StdioError::Usage(format!("${ENV_LIBRARY} is required")))?;
+    run_stdio_with(StdioConfig::new(&library, options.runtime_dir.as_deref())?)
 }
 
-/// Serves MCP over this process's stdin/stdout until stdin closes.
-pub fn serve(config: ServeConfig) -> Result<(), StdioError> {
+/// Serves MCP over this process's stdin/stdout until stdin closes. stdout carries protocol
+/// frames only; diagnostics go to stderr. Blocks the calling thread (owns its runtime).
+pub fn run_stdio_with(config: StdioConfig) -> Result<(), StdioError> {
+    let credential: Arc<dyn CredentialStore> = match config.credential {
+        McpCredential::DefaultFile | McpCredential::File(_) => {
+            let explicit = match &config.credential {
+                McpCredential::File(path) => Some(path.clone()),
+                _ => None,
+            };
+            Arc::new(
+                FileCredential::resolve(
+                    explicit,
+                    std::env::var_os(credential::ENV_CREDENTIAL_FILE),
+                    &config.paths,
+                    config.uid,
+                )
+                .map_err(StdioError::Usage)?,
+            )
+        }
+        McpCredential::Fixed(secret) => Arc::new(FixedCredential(secret)),
+        McpCredential::Store(store) => store,
+    };
+    serve(ServeConfig {
+        paths: config.paths,
+        uid: config.uid,
+        launch: config.launch,
+        credential,
+        read_only: config.read_only,
+        idle_disconnect: config.idle_disconnect,
+    })
+}
+
+struct ServeConfig {
+    paths: DaemonPaths,
+    uid: u32,
+    launch: Option<Launch>,
+    credential: Arc<dyn CredentialStore>,
+    read_only: bool,
+    idle_disconnect: Option<Duration>,
+}
+
+fn serve(config: ServeConfig) -> Result<(), StdioError> {
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
         .thread_name("papers-mcp")
@@ -365,7 +491,7 @@ pub fn serve(config: ServeConfig) -> Result<(), StdioError> {
 }
 
 /// The server over arbitrary byte streams (used by `serve` with stdin/stdout).
-pub async fn serve_async<R, W>(config: ServeConfig, input: R, output: W) -> Result<(), StdioError>
+async fn serve_async<R, W>(config: ServeConfig, input: R, output: W) -> Result<(), StdioError>
 where
     R: tokio::io::AsyncRead + Unpin + Send + 'static,
     W: tokio::io::AsyncWrite + Unpin + Send + 'static,
@@ -418,7 +544,10 @@ mod tests {
         assert_eq!(o.command, "serve");
         assert!(o.read_only);
         let o = parse(os(&["grant", "--library", "/l", "--write"]), &no_env).unwrap();
-        assert_eq!((o.command.as_str(), o.write, o.export), ("grant", true, false));
+        assert_eq!(
+            (o.command.as_str(), o.write, o.export),
+            ("grant", true, false)
+        );
         for bad in [
             &["--credential", "abc"][..],
             &["--token", "abc"],
@@ -445,5 +574,26 @@ mod tests {
                 .to_string()
                 .contains("unavailable")
         );
+    }
+
+    #[test]
+    fn embedding_config_is_read_only_and_never_presents_the_owner_credential() {
+        let library = Path::new("/tmp/cm-mcp-embed/lib");
+        let runtime = Path::new("/tmp/cm-mcp-embed/run");
+        let config = StdioConfig::new(library, Some(runtime)).unwrap();
+        assert!(config.read_only);
+        assert!(matches!(config.credential, McpCredential::DefaultFile));
+        assert!(StdioConfig::new(Path::new("relative"), None).is_err());
+        let owner = LocalConnector::new(config.paths.clone(), euid(), "cli");
+        let from_owner = StdioConfig::from_connector(&owner);
+        assert!(from_owner.read_only);
+        assert!(matches!(from_owner.credential, McpCredential::DefaultFile));
+        assert_eq!(from_owner.paths, config.paths);
+        let mut issued = owner.clone();
+        issued.credential = CredentialSource::Explicit(Credential("s".into()));
+        assert!(matches!(
+            StdioConfig::from_connector(&issued).credential,
+            McpCredential::Fixed(Credential(ref s)) if s == "s"
+        ));
     }
 }

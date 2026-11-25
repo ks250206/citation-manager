@@ -13,10 +13,10 @@ Rust + GPUI のローカル文献管理アプリを実装中です。#7 の 12-c
 **#15 の native CUA acceptance は未完了**です（[検証・blocker](docs/validation/ISSUE_15.md)、
 [保存と worker 境界](docs/ADR/library-workbench.md)）。#25 で library ごとの `papersd`（唯一の writer、
 認可付きローカル IPC、永続 job）を追加し、GUI は IPC 経由で使います（[daemon-ipc ADR](docs/ADR/daemon-ipc.md)、
-[Linux 検証](docs/validation/ISSUE_25.md)）。CLI、MCP tools、REST はまだ利用できません。
+[Linux 検証](docs/validation/ISSUE_25.md)）。CLI、REST はまだ利用できません。
 #11 の PDFium runtime は [再現可能な検証PoC](docs/validation/PDFIUM_POC.md) を追加し、
 専用worker・継承CropBox/回転/Unicode・注釈搬出をPDFKitと独立照合しました。製品viewer/exportは後続です。
-`cm_mcp::run_stdio()` は #29 未実装を明示するエラーを返し、MCP stdout を出力しません。
+#29 で既定 read-only の MCP stdio サーバー `papers-mcp`（papersd IPC 経由、12 tools、出典付き結果）を追加しました（[mcp-server ADR](docs/ADR/mcp-server.md)）。書き込みは所有者が別途承認した grant が必要です。
 
 設計は [DESIGN.md](DESIGN.md)、依存方向と信頼境界は [ADR](docs/ADR/boundaries.md) /
 [security](docs/ADR/security.md)、変更ルールは [CONTRIBUTING](docs/CONTRIBUTING.md) を参照してください。

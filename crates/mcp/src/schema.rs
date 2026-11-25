@@ -281,17 +281,26 @@ mod tests {
             (json!({"query": "a", "limit": 0}), ">= 1"),
             (json!({"query": "a", "limit": 1.5}), "expected integer"),
             (json!({"query": "a", "limit": "3"}), "expected integer"),
-            (json!({"query": "a", "bogus": 1}), "unknown property \"bogus\""),
+            (
+                json!({"query": "a", "bogus": 1}),
+                "unknown property \"bogus\"",
+            ),
             (json!({"query": "a", "id": "nope"}), "UUID"),
             (
                 json!({"query": "a", "id": "00000000-0000-0000-0000-000000000000"}),
                 "UUID",
             ),
-            (json!({"query": "a", "tags": ["x", "y", "z"]}), "at most 2 item"),
+            (
+                json!({"query": "a", "tags": ["x", "y", "z"]}),
+                "at most 2 item",
+            ),
             (json!({"query": "a", "tags": ["x", "x"]}), "duplicate"),
             (json!({"query": "a", "tags": ["long"]}), "arguments.tags[0]"),
             (json!({"query": "a", "kind": "c"}), "one of"),
-            (json!({"query": "a", "url": "file:///etc/passwd"}), "http(s)"),
+            (
+                json!({"query": "a", "url": "file:///etc/passwd"}),
+                "http(s)",
+            ),
             (json!({"query": "a\u{0}"}), "NUL"),
             (json!([1]), "expected object"),
         ] {
