@@ -52,6 +52,12 @@ pub struct CapturePreview {
     /// Common #33 preview (duplicate matches hidden without LibraryRead).
     pub preview: ImportPreview,
     pub resolution: CaptureResolution,
+    /// Rows that exactly duplicate an existing paper while the matches were hidden from this
+    /// client (no LibraryRead). The daemon turns their `Create` into `Skip` on commit, so the
+    /// client can say so before saving without parsing the (constant) warning text. Always 0
+    /// when matches are shown. Absent from older daemons (= 0).
+    #[serde(default)]
+    pub hidden_duplicates: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -72,4 +78,36 @@ pub enum CaptureReply {
     Committed(Box<CaptureCommitted>),
     Cancelled,
     PdfJob(Box<JobStatus>),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hidden_duplicates_defaults_to_zero_for_older_daemons() {
+        let preview = CapturePreview {
+            preview: ImportPreview {
+                id: PreviewId("p".into()),
+                candidates: Vec::new(),
+                warnings: Vec::new(),
+            },
+            resolution: CaptureResolution {
+                page_url: "https://example.org/a".into(),
+                draft: crate::import::PaperDraft::titled("A"),
+                identifiers: Vec::new(),
+                fields: Vec::new(),
+                tiers_used: Vec::new(),
+                provider_outcomes: Vec::new(),
+                provisional: false,
+                pdf_candidates: Vec::new(),
+            },
+            hidden_duplicates: 1,
+        };
+        let mut value = serde_json::to_value(&preview).unwrap();
+        assert_eq!(value["hidden_duplicates"], 1);
+        value.as_object_mut().unwrap().remove("hidden_duplicates");
+        let old: CapturePreview = serde_json::from_value(value).unwrap();
+        assert_eq!(old.hidden_duplicates, 0);
+    }
 }

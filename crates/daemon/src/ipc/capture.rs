@@ -3,7 +3,7 @@
 //! grant that created it, its PDF can only be one of the candidates that preview offered,
 //! and without LibraryWrite only Create/Skip decisions are accepted (no merge into an
 //! existing paper the client cannot even read).
-use super::{Session, auth::now_ms, redact_matches};
+use super::{PreviewOwner, Session, auth::now_ms, redact_matches};
 use cm_core::{
     ServiceError,
     policy::{self, Capability, CapabilitySet, Denial, GrantId, Operation},
@@ -114,11 +114,25 @@ impl Session {
                         done(
                             result
                                 .map(|(mut preview, resolution)| {
+                                    // #27: the same redaction as import previews; the
+                                    // unredacted exact-duplicate rows stay with the binding.
+                                    let hidden_duplicates =
+                                        redact.then(|| redact_matches(&mut preview));
+                                    let hidden_count =
+                                        hidden_duplicates.as_ref().map_or(0, |rows| {
+                                            rows.iter().filter(|exact| **exact).count() as u32
+                                        });
                                     shared
                                         .previews
                                         .lock()
                                         .unwrap_or_else(|e| e.into_inner())
-                                        .insert(preview.id.clone(), grant);
+                                        .insert(
+                                            preview.id.clone(),
+                                            PreviewOwner {
+                                                grant,
+                                                hidden_duplicates,
+                                            },
+                                        );
                                     shared
                                         .captures
                                         .lock()
@@ -135,13 +149,11 @@ impl Session {
                                                 created: Instant::now(),
                                             },
                                         );
-                                    if redact {
-                                        redact_matches(&mut preview);
-                                    }
                                     Reply::Capture(CaptureReply::Preview(Box::new(
                                         CapturePreview {
                                             preview,
                                             resolution,
+                                            hidden_duplicates: hidden_count,
                                         },
                                     )))
                                 })
@@ -150,7 +162,7 @@ impl Session {
                     }),
                 )
             }
-            CaptureCommand::Commit(CaptureCommit { commit, pdf }) => {
+            CaptureCommand::Commit(CaptureCommit { mut commit, pdf }) => {
                 let url = {
                     let captures = shared.captures.lock().unwrap_or_else(|e| e.into_inner());
                     let Some(binding) = captures.owned(&commit.preview_id, grant) else {
@@ -180,6 +192,11 @@ impl Session {
                     done(denied(Operation::ImportCommit));
                     return Ok(());
                 }
+                // #27: the same rule as import commits. Rows the preview hid as exact
+                // duplicates (no LibraryRead, the preview's redaction rule) are skipped, as the
+                // redaction warning and `hidden_duplicates` say, instead of failing the commit
+                // with a conflict. Only Create becomes Skip; Merge was refused above.
+                self.skip_hidden_duplicates(&mut commit, !held.contains(&Capability::LibraryRead));
                 let preview_id = commit.preview_id.clone();
                 self.engine.import(
                     ImportRequestUi::Commit(commit),

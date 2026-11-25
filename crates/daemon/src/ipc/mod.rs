@@ -2,7 +2,8 @@
 //!
 //! Start order: private dirs -> exclusive library lock -> migrations (with pre-migration
 //! backup) -> grant registry + owner bootstrap credential -> library worker + job runner ->
-//! stale socket cleanup -> bind (0600 socket in a 0700 directory). No HTTP listener.
+//! stale socket cleanup -> bind (0600 socket in a 0700 directory) -> #27 REST listener
+//! manager (listens only while the persisted API settings enable it).
 //!
 //! Per connection: OS peer check, a bounded/timed Hello, credential -> stored grant, then
 //! every request is authorized against the *current* grant (default deny).
@@ -12,6 +13,8 @@
 //! the allowed export folders, and records denials and non-read operations in the audit log.
 pub mod auth;
 mod capture;
+/// #27 in-process adapters (REST) dispatch through the same `Session::dispatch`.
+pub mod gateway;
 
 use crate::{
     desktop_worker::InProcessLibraryClient,
@@ -38,7 +41,7 @@ use cm_protocol::{
 use cm_protocol::{
     attachments::PdfReply,
     exchange::{ImportReply, ImportRequestUi},
-    import::{ImportPreview, PreviewId},
+    import::{ImportAction, ImportCommit, ImportPreview, PreviewId},
     ipc::{
         ClientFrame, Command, DaemonStatus, GrantCommand, GrantReply, HandshakeRejection,
         MAX_HANDSHAKE_FRAME, MAX_IN_FLIGHT, MAX_REQUEST_FRAME, MAX_RESPONSE_FRAME,
@@ -47,7 +50,7 @@ use cm_protocol::{
     },
     jobs::{JobCommand, JobReply},
     library::LibraryClient,
-    search::{FulltextReply, FulltextRequest, SearchReply, SearchRequest},
+    search::{FulltextReply, FulltextRequest, PageTextRequest, SearchReply, SearchRequest},
 };
 use cm_storage::{LibraryDb, LibraryDirectory, SqlFault, StorageError, fts::SearchReader};
 use std::{
@@ -89,6 +92,9 @@ pub struct DaemonConfig {
     pub secret_store: Option<Arc<dyn SecretStore>>,
     /// #26 size of each of the two audit log files.
     pub audit_max_bytes: u64,
+    /// #27 REST listener options (origins, limits, request log). Whether it listens, and
+    /// where, comes only from the persisted API settings.
+    pub rest: crate::rest::RestConfig,
     /// #22 capture PDF fetch policy and name resolution.
     pub capture: CaptureConfig,
 }
@@ -119,6 +125,7 @@ impl DaemonConfig {
             extractor: None,
             secret_store: None,
             audit_max_bytes: crate::audit::DEFAULT_MAX_BYTES,
+            rest: crate::rest::RestConfig::default(),
         }
     }
 }
@@ -159,13 +166,15 @@ struct Shared {
     activity: Arc<Activity>,
     sessions: AtomicU64,
     /// Import preview handle -> grant that created it (preview grant binding).
-    previews: Mutex<HashMap<PreviewId, GrantId>>,
+    previews: Mutex<HashMap<PreviewId, PreviewOwner>>,
     /// Live authenticated connections, closed on explicit shutdown.
     streams: Mutex<HashMap<u64, UnixStream>>,
     /// #26 token management, API settings and the audit log.
     api: crate::api::ApiService,
     /// #26 per-grant burst limit for trash/delete and membership changes.
     bulk: Mutex<BulkGuard>,
+    /// #27 in-process adapter sessions (closed and drained before the lock is released).
+    internal: Arc<gateway::Tracker>,
     /// #22 capture preview -> creating grant and offered PDF candidates.
     captures: Mutex<capture::Bindings>,
     capture: CaptureConfig,
@@ -279,9 +288,11 @@ pub fn start(config: DaemonConfig) -> Result<RunningDaemon, StartError> {
         streams: Mutex::new(HashMap::new()),
         api,
         bulk: Mutex::new(BulkGuard::default()),
+        internal: Arc::default(),
         captures: Mutex::new(capture::Bindings::default()),
         capture: config.capture,
     });
+    let rest = crate::rest::Manager::start(gateway::Gateway(shared.clone()), config.rest)?;
     let stop = Arc::new(AtomicBool::new(false));
     let accept_stop = stop.clone();
     let idle = config.idle_timeout;
@@ -289,7 +300,10 @@ pub fn start(config: DaemonConfig) -> Result<RunningDaemon, StartError> {
         .name("papersd-accept".into())
         .spawn(move || {
             accept_loop(&listener, &shared, &accept_stop, idle);
-            // Stop accepting first, then remove our socket while still holding the lock.
+            // Stop the REST listener (its runtime and every in-flight request session, so no
+            // adapter thread keeps `shared` alive), stop accepting, then remove our socket while
+            // still holding the lock.
+            rest.stop();
             drop(listener);
             let _ = std::fs::remove_file(&shared.paths.socket);
             for stream in shared
@@ -519,7 +533,32 @@ impl Session {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .get(preview)
-            == Some(&self.grant)
+            .map(|owner| owner.grant)
+            == Some(self.grant)
+    }
+    /// #27: a caller that cannot read papers gets exact duplicates skipped on commit,
+    /// decided from the unredacted preview (it never learned which rows matched).
+    fn skip_hidden_duplicates(&self, commit: &mut ImportCommit, redacted: bool) {
+        if !redacted {
+            return;
+        }
+        let hidden = self
+            .shared
+            .previews
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&commit.preview_id)
+            .and_then(|owner| owner.hidden_duplicates.clone());
+        let Some(hidden) = hidden else {
+            return;
+        };
+        for decision in &mut commit.decisions {
+            if hidden.get(decision.candidate_index) == Some(&true)
+                && decision.action == ImportAction::Create
+            {
+                decision.action = ImportAction::Skip;
+            }
+        }
     }
     fn cancellation(&self, id: u64) -> Cancellation {
         let cancel = Cancellation::default();
@@ -536,30 +575,19 @@ impl Session {
             return;
         }
         let operation = command.operation();
-        let now = now_ms();
-        let held =
-            match self
-                .shared
-                .auth
-                .authorize(self.grant, self.requested.as_ref(), operation, now)
-            {
-                Ok(held) => held,
-                Err(denial) => {
-                    self.audit(operation, &Err(WireError::Denied(denial)), None);
-                    self.respond_now(id, Err(WireError::Denied(denial)));
-                    return;
-                }
-            };
-        if let Err(error) = self.guard(&command, &held) {
-            // Bulk refusals are recorded as the bulk decision (admin audit sink).
-            let decided = match &error {
-                WireError::Denied(Denial::Forbidden(op)) => *op,
-                _ => operation,
-            };
-            self.audit(decided, &Err(error.clone()), None);
-            self.respond_now(id, Err(error));
-            return;
-        }
+        let held = match admit(
+            &self.shared,
+            self.grant,
+            self.requested.as_ref(),
+            &command,
+            now_ms(),
+        ) {
+            Ok(held) => held,
+            Err(error) => {
+                self.respond_now(id, Err(error));
+                return;
+            }
+        };
         let target = match &command {
             Command::Api(c) => api_target(c),
             Command::Grants(GrantCommand::Revoke(g)) => Some(*g),
@@ -631,7 +659,12 @@ impl Session {
                 settings,
                 Box::new(move |r| done(r.map(|()| Reply::Unit).map_err(Into::into))),
             ),
-            Command::Import(request) => {
+            Command::Import(mut request) => {
+                let redact = !held.contains(&Capability::LibraryRead)
+                    && !held.contains(&Capability::MetadataRead);
+                if let ImportRequestUi::Commit(commit) = &mut request {
+                    self.skip_hidden_duplicates(commit, redact);
+                }
                 match &request {
                     ImportRequestUi::Commit(c) if !self.preview_owned(&c.preview_id) => {
                         done(denied(Operation::ImportCommit));
@@ -645,22 +678,24 @@ impl Session {
                 }
                 let previews = self.shared.clone();
                 let grant = self.grant;
-                let redact = !held.contains(&Capability::LibraryRead)
-                    && !held.contains(&Capability::MetadataRead);
                 self.engine.import(
                     request,
                     Box::new(move |r| {
                         done(
                             r.map(|reply| match reply {
                                 ImportReply::Preview(mut p) => {
+                                    let hidden_duplicates = redact.then(|| redact_matches(&mut p));
                                     previews
                                         .previews
                                         .lock()
                                         .unwrap_or_else(|e| e.into_inner())
-                                        .insert(p.id.clone(), grant);
-                                    if redact {
-                                        redact_matches(&mut p);
-                                    }
+                                        .insert(
+                                            p.id.clone(),
+                                            PreviewOwner {
+                                                grant,
+                                                hidden_duplicates,
+                                            },
+                                        );
                                     Reply::Import(ImportReply::Preview(p))
                                 }
                                 other => Reply::Import(other),
@@ -684,7 +719,12 @@ impl Session {
                 request,
                 Box::new(move |r| done(r.map(Reply::Exported).map_err(Into::into))),
             ),
-            Command::Pdf(command) => {
+            Command::Pdf(mut command) => {
+                let redact = !held.contains(&Capability::LibraryRead)
+                    && !held.contains(&Capability::MetadataRead);
+                if let PdfCommand::CommitNew { commit, .. } = &mut command {
+                    self.skip_hidden_duplicates(commit, redact);
+                }
                 if let PdfCommand::CommitNew { commit, .. } = &command
                     && !self.preview_owned(&commit.preview_id)
                 {
@@ -700,8 +740,6 @@ impl Session {
                         | PdfCommand::CommitNew { .. }
                         | PdfCommand::RetryAttachment { .. }
                 );
-                let redact = !held.contains(&Capability::LibraryRead)
-                    && !held.contains(&Capability::MetadataRead);
                 self.engine.pdf(
                     command.into_request(self.cancellation(id)),
                     Box::new(move |report| {
@@ -709,15 +747,19 @@ impl Session {
                     }),
                     Box::new(move |mut r| {
                         if let Ok(PdfReply::Preview(p)) = &mut r {
+                            // Same rule as import previews: no read scope, no existing matches.
+                            let hidden_duplicates = redact.then(|| redact_matches(p));
                             previews
                                 .previews
                                 .lock()
                                 .unwrap_or_else(|e| e.into_inner())
-                                .insert(p.id.clone(), grant);
-                            // Same rule as import previews: no LibraryRead, no existing matches.
-                            if redact {
-                                redact_matches(p);
-                            }
+                                .insert(
+                                    p.id.clone(),
+                                    PreviewOwner {
+                                        grant,
+                                        hidden_duplicates,
+                                    },
+                                );
                         }
                         if adds_attachments && r.is_ok() {
                             previews.jobs.ensure_extraction();
@@ -848,6 +890,10 @@ impl Session {
                 {
                     *cancel = self.cancellation(id);
                 }
+                if let Err(error) = annotation_provenance(&request, &held) {
+                    done(Err(error));
+                    return;
+                }
                 self.engine.annotations(
                     request,
                     Box::new(move |r| done(r.map(Reply::Annotations).map_err(Into::into))),
@@ -872,50 +918,83 @@ impl Session {
     }
 }
 
-impl Session {
-    /// #26 checks after the operation's capability requirement passed: the bulk guard
-    /// (decided as `BulkTrash`/`BulkMove`) and export folders for `exports:write` tokens.
-    fn guard(&self, command: &Command, held: &CapabilitySet) -> Result<(), WireError> {
-        let kind = bulk_kind(command);
-        // Exempt: the owner's permanent BulkElevated, or a running elevation for exactly this
-        // kind (and the session was not narrowed to exclude BulkElevated).
-        let exempt = kind.is_some_and(|kind| {
-            held.contains(&Capability::BulkElevated)
-                && (self
-                    .shared
-                    .auth
-                    .stored(self.grant)
-                    .is_some_and(|s| s.grant.capabilities.contains(&Capability::BulkElevated))
-                    || self.shared.auth.elevation_of(self.grant) == Some(kind))
-        });
-        self.shared
-            .bulk
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .check(self.grant, kind, exempt, Instant::now())
-            .map_err(|bulk| WireError::Denied(Denial::Forbidden(bulk)))?;
-        if let Command::Export(request) = command
-            && !held.contains(&Capability::LocalFileWrite)
-            && !export_allowed(request, &self.shared.api.export_dirs())
-        {
-            return Err(WireError::Denied(Denial::Forbidden(Operation::Export)));
+/// The per-request decision shared by every transport (IPC sessions and the in-process REST
+/// adapter, which dispatches through `Session::dispatch` as well): the operation's capability
+/// requirement against the grant's *current* state, then the #26 guards. Denials are audited.
+fn admit(
+    shared: &Shared,
+    grant: GrantId,
+    requested: Option<&CapabilitySet>,
+    command: &Command,
+    now: i64,
+) -> Result<CapabilitySet, WireError> {
+    let operation = command.operation();
+    let held = match shared.auth.authorize(grant, requested, operation, now) {
+        Ok(held) => held,
+        Err(denial) => {
+            let error = WireError::Denied(denial);
+            record_denial(shared, grant, operation, &error);
+            return Err(error);
         }
-        Ok(())
+    };
+    if let Err(error) = guard(shared, grant, command, &held) {
+        // Bulk refusals are recorded as the bulk decision (admin audit sink).
+        let decided = match &error {
+            WireError::Denied(Denial::Forbidden(op)) => *op,
+            _ => operation,
+        };
+        record_denial(shared, grant, decided, &error);
+        return Err(error);
     }
-    fn audit(
-        &self,
-        operation: Operation,
-        result: &Result<Reply, WireError>,
-        target: Option<GrantId>,
-    ) {
-        self.shared.api.audit.record(audit_entry(
-            self.grant,
-            self.shared.auth.kind_of(self.grant),
-            operation,
-            result,
-            target,
-        ));
+    Ok(held)
+}
+
+/// #26 checks after the operation's capability requirement passed: the per-kind bulk guard
+/// (decided as `BulkTrash`/`BulkMove`) and export folders for tokens without
+/// `LocalFileWrite` (real-directory containment, `.bib`/`.ris` only).
+fn guard(
+    shared: &Shared,
+    grant: GrantId,
+    command: &Command,
+    held: &CapabilitySet,
+) -> Result<(), WireError> {
+    let kind = bulk_kind(command);
+    // Exempt: the owner's permanent BulkElevated, or a running elevation for exactly this
+    // kind (and the session was not narrowed to exclude BulkElevated).
+    let exempt = kind.is_some_and(|kind| {
+        held.contains(&Capability::BulkElevated)
+            && (shared
+                .auth
+                .stored(grant)
+                .is_some_and(|s| s.grant.capabilities.contains(&Capability::BulkElevated))
+                || shared.auth.elevation_of(grant) == Some(kind))
+    });
+    shared
+        .bulk
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .check(grant, kind, exempt, Instant::now())
+        .map_err(|bulk| WireError::Denied(Denial::Forbidden(bulk)))?;
+    if let Command::Export(request) = command
+        && !held.contains(&Capability::LocalFileWrite)
+        && !export_allowed(request, &shared.api.export_dirs())
+    {
+        return Err(WireError::Denied(Denial::Forbidden(Operation::Export)));
     }
+    Ok(())
+}
+
+fn record_denial(shared: &Shared, grant: GrantId, operation: Operation, error: &WireError) {
+    shared.api.audit.record(audit_entry(
+        grant,
+        shared.auth.kind_of(grant),
+        operation,
+        &Err(error.clone()),
+        None,
+    ));
+}
+
+impl Session {
     /// #18 search on a pooled read connection, inside one read snapshot and within the
     /// request's `timeout_ms` (enforced inside SQLite; an interrupted lookup is reported as
     /// a timed-out page by the search service).
@@ -981,6 +1060,29 @@ impl Session {
             }
             FulltextRequest::Pages(request) => {
                 FulltextReply::Pages(Box::new(reader.pages(&request)?))
+            }
+            FulltextRequest::PaperPages(request) => {
+                // Same limits as `Pages`, checked before anything is looked up.
+                PageTextRequest {
+                    attachment: cm_protocol::domain::AttachmentId(request.paper.0),
+                    from_page: request.from_page,
+                    max_pages: request.max_pages,
+                    max_chars: request.max_chars,
+                }
+                .validate()?;
+                let attachments = reader.for_paper(request.paper)?;
+                let attachment = match request.attachment {
+                    Some(wanted) => attachments.iter().find(|a| a.attachment_id == wanted),
+                    None => attachments.first(),
+                }
+                .ok_or(ServiceError::NotFound)?
+                .attachment_id;
+                FulltextReply::Pages(Box::new(reader.pages(&PageTextRequest {
+                    attachment,
+                    from_page: request.from_page,
+                    max_pages: request.max_pages,
+                    max_chars: request.max_chars,
+                })?))
             }
             _ => {
                 return Err(WireError::Service(ServiceError::InvalidInput(
@@ -1082,19 +1184,61 @@ fn audit_entry(
 /// How long a full-text status/page read waits for a free search reader.
 const FULLTEXT_READ_WAIT: Duration = Duration::from_secs(5);
 
-/// Without LibraryRead a preview must not reveal existing papers (native host capture).
-fn redact_matches(preview: &mut ImportPreview) {
-    let mut hidden = 0;
+/// #27 provenance: `source` decides whether the GUI shows an annotation as an unreviewed AI
+/// proposal; `ConfirmAi` is the person's review and `Undo`/`Redo` replay a whole client-supplied
+/// row (source and confirmation included). Only the owner (GrantAdmin, i.e. the desktop) may do
+/// those; token clients (API/MCP/CLI) create `ai` annotations and edit/delete them.
+fn annotation_provenance(
+    request: &cm_protocol::annotations::AnnotationRequest,
+    held: &CapabilitySet,
+) -> Result<(), WireError> {
+    use cm_protocol::annotations::{AnnotationRequest as A, Source};
+    if held.contains(&Capability::GrantAdmin) {
+        return Ok(());
+    }
+    match request {
+        A::Create(new) if new.source != Source::Ai => {
+            Err(WireError::Service(ServiceError::InvalidInput(
+                "annotations created with a token are always source=ai".into(),
+            )))
+        }
+        A::ConfirmAi(_) | A::Undo(_) | A::Redo(_) => Err(WireError::Denied(Denial::Forbidden(
+            Operation::AnnotationWrite,
+        ))),
+        _ => Ok(()),
+    }
+}
+
+/// The grant that created a preview (preview binding) and, for a caller that cannot read
+/// papers, which rows exactly duplicate existing papers (skipped on its commit).
+struct PreviewOwner {
+    grant: GrantId,
+    hidden_duplicates: Option<Vec<bool>>,
+}
+
+/// Same text for every redacted preview: it must not say whether anything matched.
+pub const REDACTED_PREVIEW_WARNING: &str = "Existing-library matches are hidden for this \
+    client; rows that exactly duplicate an existing paper are skipped on commit.";
+
+/// Without a read scope a preview must not reveal existing papers (native host capture,
+/// write-only tokens): matches, the exact-match id, citation-key collision notes and the
+/// re-allocated key are removed, and the warning is constant. Returns which rows were exact
+/// duplicates of existing papers, decided before redaction.
+fn redact_matches(preview: &mut ImportPreview) -> Vec<bool> {
+    let mut duplicates = Vec::with_capacity(preview.candidates.len());
     for candidate in &mut preview.candidates {
-        hidden += candidate.matches.len();
+        duplicates.push(
+            candidate.existing_match.is_some() || candidate.matches.iter().any(|m| m.kind.exact()),
+        );
         candidate.matches.clear();
         candidate.existing_match = None;
+        candidate.draft.bibliography.citation_key = None;
+        candidate
+            .diagnostics
+            .retain(|d| !(d.field == "citation_key" && !d.error));
     }
-    if hidden > 0 {
-        preview.warnings.push(format!(
-            "{hidden} possible existing-library matches hidden for this client"
-        ));
-    }
+    preview.warnings.push(REDACTED_PREVIEW_WARNING.into());
+    duplicates
 }
 
 #[cfg(test)]

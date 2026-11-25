@@ -1,0 +1,5685 @@
+{
+  "components": {
+    "schemas": {
+      "Anchor": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "page_index": {
+                "type": "integer"
+              },
+              "page_label": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "quads": {
+                "items": {
+                  "items": {
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "y"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              "state": {
+                "const": "resolved"
+              }
+            },
+            "required": [
+              "state",
+              "page_index"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "reason": {
+                "type": "string"
+              },
+              "state": {
+                "const": "unresolved"
+              }
+            },
+            "required": [
+              "state",
+              "reason"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "Annotation": {
+        "properties": {
+          "anchor": {
+            "$ref": "#/components/schemas/Anchor"
+          },
+          "attachment_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "color": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "comment": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "confirmed_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "context_after": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "context_before": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "highlight",
+              "note"
+            ],
+            "type": "string"
+          },
+          "quote": {
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "human",
+              "ai",
+              "import"
+            ],
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "attachment_id",
+          "kind",
+          "source",
+          "anchor",
+          "quote",
+          "created_at",
+          "updated_at"
+        ],
+        "type": "object"
+      },
+      "AnnotationEnvelope": {
+        "properties": {
+          "annotation": {
+            "$ref": "#/components/schemas/Annotation"
+          }
+        },
+        "required": [
+          "annotation"
+        ],
+        "type": "object"
+      },
+      "AnnotationList": {
+        "properties": {
+          "annotations": {
+            "items": {
+              "$ref": "#/components/schemas/Annotation"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "annotations"
+        ],
+        "type": "object"
+      },
+      "AnnotationPatch": {
+        "additionalProperties": false,
+        "properties": {
+          "color": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "comment": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "AnnotationWrite": {
+        "properties": {
+          "annotation": {
+            "$ref": "#/components/schemas/Annotation",
+            "description": "Only for tokens that also hold annotations:read"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "updated_at"
+        ],
+        "type": "object"
+      },
+      "AttachmentExtraction": {
+        "properties": {
+          "attachment_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "page_count": {
+            "type": "integer"
+          },
+          "pages_done": {
+            "type": "integer"
+          },
+          "pages_with_text": {
+            "type": "integer"
+          },
+          "paper_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "truncated_pages": {
+            "type": "integer"
+          },
+          "updated_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "attachment_id",
+          "paper_id",
+          "state",
+          "page_count",
+          "pages_done"
+        ],
+        "type": "object"
+      },
+      "AttachmentSummary": {
+        "properties": {
+          "byte_size": {
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "media_type": {
+            "type": "string"
+          },
+          "original_name": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "Present",
+              "Missing",
+              "Corrupt"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "original_name",
+          "media_type",
+          "byte_size",
+          "sha256",
+          "status"
+        ],
+        "type": "object"
+      },
+      "BulkIds": {
+        "additionalProperties": false,
+        "properties": {
+          "paper_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "type": "array",
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "paper_ids"
+        ],
+        "type": "object"
+      },
+      "BulkMove": {
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "paper_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "type": "array",
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "paper_ids"
+        ],
+        "type": "object"
+      },
+      "BulkResult": {
+        "properties": {
+          "results": {
+            "items": {
+              "properties": {
+                "error": {
+                  "type": "string"
+                },
+                "id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "ok": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "ok"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "stopped": {
+            "description": "Why the batch stopped early (later items are not_attempted)",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "results",
+          "stopped"
+        ],
+        "type": "object"
+      },
+      "Collection": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "parent": {
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sort_order": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "sort_order"
+        ],
+        "type": "object"
+      },
+      "CollectionEnvelope": {
+        "properties": {
+          "collection": {
+            "$ref": "#/components/schemas/Collection"
+          }
+        },
+        "required": [
+          "collection"
+        ],
+        "type": "object"
+      },
+      "CollectionList": {
+        "properties": {
+          "collections": {
+            "items": {
+              "$ref": "#/components/schemas/Collection"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "collections"
+        ],
+        "type": "object"
+      },
+      "CollectionUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "parent": {
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sort_order": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "parent",
+          "sort_order"
+        ],
+        "type": "object"
+      },
+      "Contributor": {
+        "properties": {
+          "family_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "given_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "literal_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "orcid": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "role": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "role"
+        ],
+        "type": "object"
+      },
+      "Error": {
+        "properties": {
+          "error": {
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "details": {},
+              "message": {
+                "type": "string"
+              },
+              "request_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "request_id"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "ExportRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "file_name": {
+            "description": "Plain file name: no path separators, no leading dot",
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          },
+          "folder": {
+            "description": "One of the export folders configured by the owner (optional when exactly one exists)",
+            "type": "string"
+          },
+          "format": {
+            "enum": [
+              "bibtex",
+              "ris"
+            ],
+            "type": "string"
+          },
+          "selection": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "all"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "kind": {
+                    "const": "ids"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "ids"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "collection"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "id"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "format",
+          "file_name"
+        ],
+        "type": "object"
+      },
+      "ExportResult": {
+        "properties": {
+          "diagnostics": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "file_name": {
+            "type": "string"
+          },
+          "folder": {
+            "type": "string"
+          },
+          "migration_notice": {
+            "type": "string"
+          },
+          "records": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "folder",
+          "file_name",
+          "records",
+          "diagnostics"
+        ],
+        "type": "object"
+      },
+      "ExternalId": {
+        "properties": {
+          "namespace": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "namespace",
+          "value"
+        ],
+        "type": "object"
+      },
+      "FulltextStatus": {
+        "properties": {
+          "attachments": {
+            "items": {
+              "$ref": "#/components/schemas/AttachmentExtraction"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "attachments"
+        ],
+        "type": "object"
+      },
+      "Health": {
+        "properties": {
+          "status": {
+            "const": "ok"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
+      "ImportRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "description": "BibTeX/RIS text (at most this many bytes)",
+            "maxLength": 2097152,
+            "type": "string"
+          },
+          "destination": {
+            "additionalProperties": false,
+            "properties": {
+              "collection": {
+                "format": "uuid",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "tags": {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [],
+            "type": "object"
+          },
+          "dry_run": {
+            "type": "boolean"
+          },
+          "format": {
+            "enum": [
+              "bibtex",
+              "ris"
+            ],
+            "type": "string"
+          },
+          "start": {
+            "description": "First record of this batch (see next_start)",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "format",
+          "content"
+        ],
+        "type": "object"
+      },
+      "ImportResult": {
+        "properties": {
+          "candidates": {
+            "items": {},
+            "type": "array"
+          },
+          "created": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "diagnostics": {
+            "items": {
+              "properties": {
+                "error": {
+                  "type": "boolean"
+                },
+                "line": {
+                  "type": "integer"
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "line",
+                "message",
+                "error"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "diagnostics_omitted": {
+            "type": "integer"
+          },
+          "dry_run": {
+            "type": "boolean"
+          },
+          "merged": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "migration_notice": {
+            "type": "string"
+          },
+          "next_start": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "rows": {
+            "items": {},
+            "type": "array"
+          },
+          "skipped": {
+            "type": "integer"
+          },
+          "start": {
+            "type": "integer"
+          },
+          "total_records": {
+            "type": "integer"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "dry_run",
+          "total_records",
+          "start",
+          "next_start",
+          "diagnostics"
+        ],
+        "type": "object"
+      },
+      "JobEnvelope": {
+        "properties": {
+          "job": {
+            "$ref": "#/components/schemas/JobStatus"
+          }
+        },
+        "required": [
+          "job"
+        ],
+        "type": "object"
+      },
+      "JobStatus": {
+        "properties": {
+          "attempts": {
+            "type": "integer"
+          },
+          "cancel_requested": {
+            "type": "boolean"
+          },
+          "created_at_ms": {
+            "type": "integer"
+          },
+          "deadline_at_ms": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "detected_committed": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "idempotency_key": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "max_attempts": {
+            "type": "integer"
+          },
+          "next_attempt_at_ms": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "progress": {
+            "properties": {
+              "done": {
+                "type": "integer"
+              },
+              "message": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "total": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "done"
+            ],
+            "type": "object"
+          },
+          "result": {},
+          "state": {
+            "enum": [
+              "queued",
+              "running",
+              "retry_wait",
+              "succeeded",
+              "failed",
+              "cancelled"
+            ],
+            "type": "string"
+          },
+          "updated_at_ms": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "state",
+          "attempts",
+          "max_attempts",
+          "created_at_ms",
+          "updated_at_ms"
+        ],
+        "type": "object"
+      },
+      "JobSubmit": {
+        "additionalProperties": false,
+        "properties": {
+          "deadline_at_ms": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "idempotency_key": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "kind": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "max_attempts": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "payload": {}
+        },
+        "required": [
+          "kind",
+          "idempotency_key"
+        ],
+        "type": "object"
+      },
+      "Membership": {
+        "additionalProperties": false,
+        "properties": {
+          "member": {
+            "type": "boolean"
+          },
+          "paper_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "paper_id"
+        ],
+        "type": "object"
+      },
+      "MembershipResult": {
+        "properties": {
+          "collection_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "member": {
+            "type": "boolean"
+          },
+          "paper_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "collection_id",
+          "paper_id",
+          "member"
+        ],
+        "type": "object"
+      },
+      "NewAnnotation": {
+        "additionalProperties": false,
+        "properties": {
+          "anchor": {
+            "$ref": "#/components/schemas/Anchor"
+          },
+          "color": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "comment": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "context_after": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "context_before": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "enum": [
+              "highlight",
+              "note"
+            ],
+            "type": "string"
+          },
+          "quote": {
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "ai"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "anchor",
+          "quote"
+        ],
+        "type": "object"
+      },
+      "NewCollection": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "parent": {
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sort_order": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "NewPaper": {
+        "additionalProperties": false,
+        "properties": {
+          "abstract": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "authors": {
+            "items": {
+              "$ref": "#/components/schemas/Contributor"
+            },
+            "type": "array"
+          },
+          "citation_key": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "doi": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "external_ids": {
+            "items": {
+              "$ref": "#/components/schemas/ExternalId"
+            },
+            "type": "array"
+          },
+          "extra_json": {},
+          "issue": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "journal": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "language": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pages": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "publication_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "volume": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "year": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "type": "object"
+      },
+      "NewTag": {
+        "additionalProperties": false,
+        "properties": {
+          "color": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "PageText": {
+        "properties": {
+          "attachment_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "extraction": {
+            "$ref": "#/components/schemas/AttachmentExtraction"
+          },
+          "next_page": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "pages": {
+            "items": {
+              "properties": {
+                "page_index": {
+                  "type": "integer"
+                },
+                "page_label": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "text": {
+                  "type": "string"
+                },
+                "truncated": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "page_index",
+                "text",
+                "truncated"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "paper_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "paper_id",
+          "attachment_id",
+          "extraction",
+          "pages",
+          "next_page"
+        ],
+        "type": "object"
+      },
+      "Paper": {
+        "properties": {
+          "abstract": {
+            "type": "string"
+          },
+          "authors": {
+            "items": {
+              "$ref": "#/components/schemas/Contributor"
+            },
+            "type": "array"
+          },
+          "citation_key": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "deleted_at": {
+            "type": "string"
+          },
+          "doi": {
+            "type": "string"
+          },
+          "external_ids": {
+            "items": {
+              "$ref": "#/components/schemas/ExternalId"
+            },
+            "type": "array"
+          },
+          "extra_json": {},
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "issue": {
+            "type": "string"
+          },
+          "journal": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          },
+          "pages": {
+            "type": "string"
+          },
+          "publication_date": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "volume": {
+            "type": "string"
+          },
+          "year": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "external_ids"
+        ],
+        "type": "object"
+      },
+      "PaperDetail": {
+        "properties": {
+          "attachments": {
+            "items": {
+              "$ref": "#/components/schemas/AttachmentSummary"
+            },
+            "type": "array"
+          },
+          "collections": {
+            "items": {
+              "$ref": "#/components/schemas/Collection"
+            },
+            "type": "array"
+          },
+          "paper": {
+            "$ref": "#/components/schemas/Paper"
+          },
+          "tags": {
+            "items": {
+              "$ref": "#/components/schemas/Tag"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "paper",
+          "collections",
+          "tags",
+          "attachments"
+        ],
+        "type": "object"
+      },
+      "PaperEnvelope": {
+        "properties": {
+          "paper": {
+            "$ref": "#/components/schemas/Paper"
+          }
+        },
+        "required": [
+          "paper"
+        ],
+        "type": "object"
+      },
+      "PaperLifecycle": {
+        "properties": {
+          "deleted": {
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "deleted"
+        ],
+        "type": "object"
+      },
+      "PaperPage": {
+        "properties": {
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "papers": {
+            "items": {
+              "$ref": "#/components/schemas/Paper"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "papers",
+          "next_cursor"
+        ],
+        "type": "object"
+      },
+      "PaperPatch": {
+        "additionalProperties": false,
+        "properties": {
+          "abstract": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "authors": {
+            "items": {
+              "$ref": "#/components/schemas/Contributor"
+            },
+            "type": "array"
+          },
+          "citation_key": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "doi": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "external_ids": {
+            "items": {
+              "$ref": "#/components/schemas/ExternalId"
+            },
+            "type": "array"
+          },
+          "extra_json": {},
+          "issue": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "journal": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "language": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pages": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "publication_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "volume": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "year": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "PaperWrite": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "paper": {
+            "$ref": "#/components/schemas/Paper",
+            "description": "Only for tokens that also hold papers:read"
+          },
+          "updated_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "RenderedPage": {
+        "properties": {
+          "attachment_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "data": {
+            "contentEncoding": "base64",
+            "type": "string"
+          },
+          "format": {
+            "const": "rgba8"
+          },
+          "has_text": {
+            "type": "boolean"
+          },
+          "height": {
+            "type": "integer"
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "page": {
+            "type": "integer"
+          },
+          "page_count": {
+            "type": "integer"
+          },
+          "rotation": {
+            "type": "string"
+          },
+          "width": {
+            "type": "integer"
+          },
+          "zoom": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "attachment_id",
+          "page",
+          "page_count",
+          "width",
+          "height",
+          "format",
+          "data"
+        ],
+        "type": "object"
+      },
+      "Resolution": {
+        "properties": {
+          "resolution": {
+            "properties": {
+              "canonical_doi": {
+                "type": "string"
+              },
+              "draft": {},
+              "fields": {
+                "items": {},
+                "type": "array"
+              },
+              "manual_add": {
+                "type": "boolean"
+              },
+              "outcomes": {
+                "items": {},
+                "type": "array"
+              },
+              "pdf_candidates": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "required": [
+              "canonical_doi",
+              "draft",
+              "manual_add"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "resolution"
+        ],
+        "type": "object"
+      },
+      "ResolveDoi": {
+        "additionalProperties": false,
+        "properties": {
+          "doi": {
+            "maxLength": 512,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "doi"
+        ],
+        "type": "object"
+      },
+      "SearchCoverage": {
+        "properties": {
+          "complete": {
+            "type": "boolean"
+          },
+          "continuation": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fts_truncated": {
+            "type": "boolean"
+          },
+          "scan": {
+            "enum": [
+              "not_needed",
+              "complete",
+              "partial"
+            ],
+            "type": "string"
+          },
+          "scanned_documents": {
+            "type": "integer"
+          },
+          "short_terms": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "timed_out": {
+            "type": "boolean"
+          },
+          "unresolved": {
+            "items": {},
+            "type": "array"
+          },
+          "unsearched": {
+            "items": {},
+            "type": "array"
+          }
+        },
+        "required": [
+          "complete",
+          "timed_out",
+          "scan",
+          "unsearched"
+        ],
+        "type": "object"
+      },
+      "SearchHit": {
+        "properties": {
+          "annotation_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "attachment_id": {
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "deleted": {
+            "type": "boolean"
+          },
+          "doi": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "highlights": {
+            "items": {
+              "properties": {
+                "end": {
+                  "type": "integer"
+                },
+                "start": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "start",
+                "end"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "matched_fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "page_index": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "page_label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "paper_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "score": {
+            "type": "number"
+          },
+          "snippet": {
+            "type": "string"
+          },
+          "snippet_field": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "snippet_truncated": {
+            "type": "boolean"
+          },
+          "source": {
+            "enum": [
+              "paper",
+              "annotation",
+              "page"
+            ],
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "paper_id",
+          "title",
+          "source",
+          "snippet",
+          "score",
+          "deleted",
+          "highlights",
+          "matched_fields"
+        ],
+        "type": "object"
+      },
+      "SearchResults": {
+        "properties": {
+          "coverage": {
+            "$ref": "#/components/schemas/SearchCoverage"
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/SearchHit"
+            },
+            "type": "array"
+          },
+          "total_hits": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "results",
+          "next_cursor",
+          "total_hits",
+          "coverage"
+        ],
+        "type": "object"
+      },
+      "Tag": {
+        "properties": {
+          "color": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "key"
+        ],
+        "type": "object"
+      },
+      "TagEnvelope": {
+        "properties": {
+          "tag": {
+            "$ref": "#/components/schemas/Tag"
+          }
+        },
+        "required": [
+          "tag"
+        ],
+        "type": "object"
+      },
+      "TagList": {
+        "properties": {
+          "tags": {
+            "items": {
+              "$ref": "#/components/schemas/Tag"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "tags"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "description": "API token issued in the desktop app (API & integrations) or with `papersd token issue`",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "Local-only HTTP API served by papersd (DESIGN §13, docs/ADR/rest-api.md). Disabled by default; binds 127.0.0.1 or ::1 only. Every endpoint except /health needs `Authorization: Bearer <token>` with the scopes listed in x-required-scopes (the same daemon decision as IPC, CLI and MCP). Requests with a Host other than 127.0.0.1/localhost/[::1] plus the API port, or with a browser Origin that is not configured, are refused. Limits: JSON bodies 1048576 bytes, import bodies 5242880 bytes, URI 16384 bytes, 30 s per request (120 s for imports, exports, DOI lookups and bulk operations), 32 concurrent requests. Errors: {\"error\":{\"code\",\"message\",\"details\",\"request_id\"}}. Paging: papers default limit 50, full text default 10 pages / 100000 characters, search query at most 4096 bytes.",
+    "title": "citation-manager local REST API",
+    "version": "1"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/annotations/{id}": {
+      "delete": {
+        "operationId": "deleteAnnotation",
+        "parameters": [
+          {
+            "description": "Resource UUID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid input, JSON, query or Host header (code says which)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, unknown, revoked or expired token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, browser origin refused, elevation or export folder required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Busy or unavailable (Retry-After)"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request time limit reached"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "annotations:write"
+            ]
+          }
+        ],
+        "summary": "Delete an annotation",
+        "x-daemon-operations": [
+          "AnnotationWrite"
+        ],
+        "x-required-scopes": [
+          "annotations:write"
+        ]
+      },
+      "patch": {
+        "operationId": "updateAnnotation",
+        "parameters": [
+          {
+            "description": "Resource UUID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnnotationPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnotationWrite"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid input, JSON, query or Host header (code says which)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, unknown, revoked or expired token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, browser origin refused, elevation or export folder required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Body or result too large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Body is not application/json"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Busy or unavailable (Retry-After)"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request time limit reached"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "annotations:write"
+            ]
+          }
+        ],
+        "summary": "Change an annotation's color or comment",
+        "x-daemon-operations": [
+          "AnnotationWrite"
+        ],
+        "x-required-scopes": [
+          "annotations:write"
+        ]
+      }
+    },
+    "/attachments/{id}/annotations": {
+      "post": {
+        "operationId": "createAnnotation",
+        "parameters": [
+          {
+            "description": "Resource UUID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewAnnotation"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnotationEnvelope"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid input, JSON, query or Host header (code says which)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, unknown, revoked or expired token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, browser origin refused, elevation or export folder required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Body or result too large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Body is not application/json"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Busy or unavailable (Retry-After)"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request time limit reached"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "annotations:write"
+            ]
+          }
+        ],
+        "summary": "Create an annotation on a PDF attachment",
+        "x-daemon-operations": [
+          "AnnotationWrite"
+        ],
+        "x-required-scopes": [
+          "annotations:write"
+        ]
+      }
+    },
+    "/attachments/{id}/pages/{page}": {
+      "get": {
+        "operationId": "renderPage",
+        "parameters": [
+          {
+            "description": "Resource UUID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "0-based physical page index",
+            "in": "path",
+            "name": "page",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Pixels per PDF point, 0.1..=8 (default 1)",
+            "in": "query",
+            "name": "zoom",
+            "required": false,
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RenderedPage"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid input, JSON, query or Host header (code says which)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, unknown, revoked or expired token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, browser origin refused, elevation or export folder required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict with existing data or state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "PDF cannot be read"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Busy or unavailable (Retry-After)"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request time limit reached"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "files:read"
+            ]
+          }
+        ],
+        "summary": "Render one PDF page as RGBA pixels",
+        "x-daemon-operations": [
+          "PdfRender"
+        ],
+        "x-required-scopes": [
+          "files:read"
+        ]
+      }
+    },
+    "/collections": {
+      "get": {
+        "operationId": "listCollections",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionList"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid input, JSON, query or Host header (code says which)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, unknown, revoked or expired token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, browser origin refused, elevation or export folder required"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Busy or unavailable (Retry-After)"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request time limit reached"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "papers:read"
+            ]
+          }
+        ],
+        "summary": "All collections",
+        "x-daemon-operations": [
+          "OrganizationList"
+        ],
+        "x-required-scopes": [
+          "papers:read"
+        ]
+      },
+      "post": {
+        "operationId": "createCollection",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewCollection"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionEnvelope"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid input, JSON, query or Host header (code says which)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, unknown, revoked or expired token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, browser origin refused, elevation or export folder required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Body or result too large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Body is not application/json"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Busy or unavailable (Retry-After)"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request time limit reached"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "papers:write"
+            ]
+          }
+        ],
+        "summary": "Create a collection",
+        "x-daemon-operations": [
+          "OrganizationWrite"
+        ],
+        "x-required-scopes": [
+          "papers:write"
+        ]
+      }
+    },
+    "/collections/{id}": {
+      "delete": {
+        "operationId": "deleteCollection",
+        "parameters": [
+          {
+            "description": "Resource UUID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid input, JSON, query or Host header (code says which)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, unknown, revoked or expired token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, browser origin refused, elevation or export folder required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Busy or unavailable (Retry-After)"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request time limit reached"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "papers:delete"
+            ]
+          }
+        ],
+        "summary": "Delete a collection (children move up; papers stay)",
+        "x-daemon-operations": [
+          "OrganizationDelete"
+        ],
+        "x-required-scopes": [
+          "papers:delete"
+        ]
+      },
+      "patch": {
+        "operationId": "updateCollection",
+        "parameters": [
+          {
+            "description": "Resource UUID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CollectionUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionEnvelope"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid input, JSON, query or Host header (code says which)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, unknown, revoked or expired token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, browser origin refused, elevation or export folder required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Body or result too large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Body is not application/json"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Busy or unavailable (Retry-After)"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request time limit reached"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "papers:write"
+            ]
+          }
+        ],
+        "summary": "Replace a collection's name, parent and order",
+        "x-daemon-operations": [
+          "OrganizationWrite"
+        ],
+        "x-required-scopes": [
+          "papers:write"
+        ]
+      }
+    },
+    "/collections/{id}/papers": {
+      "post": {
+        "operationId": "setCollectionMember",
+        "parameters": [
+          {
+            "description": "Resource UUID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Membership"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipResult"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid input, JSON, query or Host header (code says which)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, unknown, revoked or expired token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, browser origin refused, elevation or export folder required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Body or result too large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Body is not application/json"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Busy or unavailable (Retry-After)"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request time limit reached"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "papers:write"
+            ]
+          }
+        ],
+        "summary": "Add a paper to (or remove it from) a collection",
+        "x-daemon-operations": [
+          "OrganizationWrite"
+        ],
+        "x-required-scopes": [
+          "papers:write"
+        ]
+      }
+    },
+    "/collections/{id}/papers/bulk-move": {
+      "post": {
+        "operationId": "bulkMoveToCollection",
+        "parameters": [
+          {
+            "description": "Resource UUID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkMove"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkResult"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid input, JSON, query or Host header (code says which)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, unknown, revoked or expired token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, browser origin refused, elevation or export folder required"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Body or result too large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Body is not application/json"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Busy or unavailable (Retry-After)"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request time limit reached"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "papers:write",
+              "bulk:elevated"
+            ]
+          }
+        ],
+        "summary": "Add/move several papers into a collection (needs a time-limited elevation)",
+        "x-daemon-operations": [
+          "BulkMove"
+        ],
+        "x-required-scopes": [
+          "papers:write",
+          "bulk:elevated"
+        ]
+      }
+    },
+    "/exports": {
+      "post": {
+        "operationId": "exportBibliography",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportResult"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid input, JSON, query or Host header (code says which)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, unknown, revoked or expired token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, browser origin refused, elevation or export folder required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict with existing data or state"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Body or result too large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Body is not application/json"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Busy or unavailable (Retry-After)"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request time limit reached"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "papers:read",
+              "exports:write"
+            ]
+          }
+        ],
+        "summary": "Write BibTeX/RIS into an allowed export folder",
+        "x-daemon-operations": [
+          "Export"
+        ],
+        "x-required-scopes": [
+          "papers:read",
+          "exports:write"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "health",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid input, JSON, query or Host header (code says which)"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, browser origin refused, elevation or export folder required"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Busy or unavailable (Retry-After)"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request time limit reached"
+          }
+        },
+        "security": [],
+        "summary": "Service status only (no authentication, no library data)",
+        "x-daemon-operations": [],
+        "x-required-scopes": []
+      }
+    },
+    "/imports": {
+      "post": {
+        "operationId": "importBibliography",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportResult"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportResult"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid input, JSON, query or Host header (code says which)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, unknown, revoked or expired token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, browser origin refused, elevation or export folder required"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict with existing data or state"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Body or result too large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Body is not application/json"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Busy or unavailable (Retry-After)"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request time limit reached"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "papers:write"
+            ]
+          }
+        ],
+        "summary": "Import BibTeX/RIS text (up to 100 records per request; dry_run previews)",
+        "x-daemon-operations": [
+          "ImportPreview",
+          "ImportCommit",
+          "ImportCancel"
+        ],
+        "x-required-scopes": [
+          "papers:write"
+        ]
+      }
+    },
+    "/jobs": {
+      "post": {
+        "operationId": "submitJob",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobSubmit"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobEnvelope"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid input, JSON, query or Host header (code says which)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, unknown, revoked or expired token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, browser origin refused, elevation or export folder required"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict with existing data or state"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Body or result too large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Body is not application/json"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Busy or unavailable (Retry-After)"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request time limit reached"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "jobs:write"
+            ]
+          }
+        ],
+        "summary": "Submit a job owned by this token (idempotent on kind + key; kinds add their own requirements)",
+        "x-daemon-operations": [
+          "JobSubmit"
+        ],
+        "x-required-scopes": [
+          "jobs:write"
+        ]
+      }
+    },
+    "/jobs/{id}": {
+      "get": {
+        "operationId": "getJob",
+        "parameters": [
+          {
+            "description": "Resource UUID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobEnvelope"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid input, JSON, query or Host header (code says which)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, unknown, revoked or expired token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, browser origin refused, elevation or export folder required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Busy or unavailable (Retry-After)"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request time limit reached"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "jobs:read"
+            ]
+          }
+        ],
+        "summary": "Status of one of this token's jobs",
+        "x-daemon-operations": [
+          "JobRead"
+        ],
+        "x-required-scopes": [
+          "jobs:read"
+        ]
+      }
+    },
+    "/jobs/{id}/cancel": {
+      "post": {
+        "operationId": "cancelJob",
+        "parameters": [
+          {
+            "description": "Resource UUID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobEnvelope"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid input, JSON, query or Host header (code says which)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, unknown, revoked or expired token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, browser origin refused, elevation or export folder required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Busy or unavailable (Retry-After)"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request time limit reached"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "jobs:write"
+            ]
+          }
+        ],
+        "summary": "Cancel one of this token's jobs",
+        "x-daemon-operations": [
+          "JobCancel"
+        ],
+        "x-required-scopes": [
+          "jobs:write"
+        ]
+      }
+    },
+    "/jobs/{id}/retry": {
+      "post": {
+        "operationId": "retryJob",
+        "parameters": [
+          {
+            "description": "Resource UUID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobEnvelope"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid input, JSON, query or Host header (code says which)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, unknown, revoked or expired token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, browser origin refused, elevation or export folder required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict with existing data or state"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Busy or unavailable (Retry-After)"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request time limit reached"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "jobs:write"
+            ]
+          }
+        ],
+        "summary": "Retry one of this token's failed or cancelled jobs",
+        "x-daemon-operations": [
+          "JobRetry"
+        ],
+        "x-required-scopes": [
+          "jobs:write"
+        ]
+      }
+    },
+    "/papers": {
+      "get": {
+        "operationId": "listPapers",
+        "parameters": [
+          {
+            "description": "Page size: papers 1..=500 (default 50); search 1..=100 (default 20)",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Opaque next_cursor from the previous page (repeat the same filters)",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trash filter (default active)",
+            "in": "query",
+            "name": "visibility",
+            "required": false,
+            "schema": {
+              "enum": [
+                "active",
+                "deleted",
+                "all"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Direct members of this collection",
+            "in": "query",
+            "name": "collection",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Comma-separated tag UUIDs (at most 100)",
+            "in": "query",
+            "name": "tags",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Tag combination (default all)",
+            "in": "query",
+            "name": "tag_match",
+            "required": false,
+            "schema": {
+              "enum": [
+                "all",
+                "any"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Literal substrings over bibliographic fields (no full text or annotations)",
+            "in": "query",
+            "name": "keyword",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Literal substring of author names",
+            "in": "query",
+            "name": "author",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Lowest year",
+            "in": "query",
+            "name": "year_from",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Highest year",
+            "in": "query",
+            "name": "year_to",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Exact paper type",
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "With/without a PDF attachment",
+            "in": "query",
+            "name": "has_pdf",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Sort field (default id)",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "enum": [
+                "id",
+                "title",
+                "year",
+                "created_at",
+                "updated_at"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Sort direction (default asc)",
+            "in": "query",
+            "name": "direction",
+            "required": false,
+            "schema": {
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperPage"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid input, JSON, query or Host header (code says which)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, unknown, revoked or expired token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, browser origin refused, elevation or export folder required"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Busy or unavailable (Retry-After)"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request time limit reached"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "papers:read"
+            ]
+          }
+        ],
+        "summary": "List papers with filters and cursor paging",
+        "x-daemon-operations": [
+          "PaperList",
+          "LibraryQuery"
+        ],
+        "x-required-scopes": [
+          "papers:read"
+        ]
+      },
+      "post": {
+        "operationId": "createPaper",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewPaper"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperEnvelope"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid input, JSON, query or Host header (code says which)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, unknown, revoked or expired token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, browser origin refused, elevation or export folder required"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Body or result too large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Body is not application/json"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Busy or unavailable (Retry-After)"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request time limit reached"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "papers:write"
+            ]
+          }
+        ],
+        "summary": "Create a paper",
+        "x-daemon-operations": [
+          "PaperCreate"
+        ],
+        "x-required-scopes": [
+          "papers:write"
+        ]
+      }
+    },
+    "/papers/bulk-delete": {
+      "post": {
+        "operationId": "bulkTrashPapers",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkIds"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkResult"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid input, JSON, query or Host header (code says which)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, unknown, revoked or expired token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, browser origin refused, elevation or export folder required"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Body or result too large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Body is not application/json"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Busy or unavailable (Retry-After)"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request time limit reached"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "papers:delete",
+              "bulk:elevated"
+            ]
+          }
+        ],
+        "summary": "Trash several papers (needs a time-limited elevation)",
+        "x-daemon-operations": [
+          "BulkTrash"
+        ],
+        "x-required-scopes": [
+          "papers:delete",
+          "bulk:elevated"
+        ]
+      }
+    },
+    "/papers/resolve-doi": {
+      "post": {
+        "operationId": "resolveDoi",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveDoi"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Resolution"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid input, JSON, query or Host header (code says which)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, unknown, revoked or expired token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, browser origin refused, elevation or export folder required"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Body or result too large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Body is not application/json"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Busy or unavailable (Retry-After)"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request time limit reached"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "papers:write"
+            ]
+          }
+        ],
+        "summary": "Resolve a DOI to a draft for preview (nothing is saved)",
+        "x-daemon-operations": [
+          "MetadataResolve"
+        ],
+        "x-required-scopes": [
+          "papers:write"
+        ]
+      }
+    },
+    "/papers/{id}": {
+      "delete": {
+        "operationId": "trashPaper",
+        "parameters": [
+          {
+            "description": "Resource UUID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperLifecycle"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid input, JSON, query or Host header (code says which)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, unknown, revoked or expired token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, browser origin refused, elevation or export folder required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Busy or unavailable (Retry-After)"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request time limit reached"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "papers:delete"
+            ]
+          }
+        ],
+        "summary": "Move a paper to the trash (soft delete)",
+        "x-daemon-operations": [
+          "PaperTrash"
+        ],
+        "x-required-scopes": [
+          "papers:delete"
+        ]
+      },
+      "get": {
+        "operationId": "getPaper",
+        "parameters": [
+          {
+            "description": "Resource UUID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperDetail"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid input, JSON, query or Host header (code says which)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, unknown, revoked or expired token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, browser origin refused, elevation or export folder required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Busy or unavailable (Retry-After)"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request time limit reached"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "papers:read"
+            ]
+          }
+        ],
+        "summary": "One paper with its collections, tags and attachments",
+        "x-daemon-operations": [
+          "PaperGet",
+          "OrganizationForPaper",
+          "AttachmentList"
+        ],
+        "x-required-scopes": [
+          "papers:read"
+        ]
+      },
+      "patch": {
+        "operationId": "updatePaper",
+        "parameters": [
+          {
+            "description": "Resource UUID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PaperPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperWrite"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid input, JSON, query or Host header (code says which)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, unknown, revoked or expired token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, browser origin refused, elevation or export folder required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict with existing data or state"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Body or result too large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Body is not application/json"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Busy or unavailable (Retry-After)"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request time limit reached"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "papers:write"
+            ]
+          }
+        ],
+        "summary": "Merge-patch bibliographic fields (null clears a field)",
+        "x-daemon-operations": [
+          "PaperUpdate"
+        ],
+        "x-required-scopes": [
+          "papers:write"
+        ]
+      }
+    },
+    "/papers/{id}/annotations": {
+      "get": {
+        "operationId": "listAnnotations",
+        "parameters": [
+          {
+            "description": "Resource UUID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnotationList"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid input, JSON, query or Host header (code says which)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, unknown, revoked or expired token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, browser origin refused, elevation or export folder required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Busy or unavailable (Retry-After)"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request time limit reached"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "annotations:read"
+            ]
+          }
+        ],
+        "summary": "Highlights, comments and notes of the paper",
+        "x-daemon-operations": [
+          "AnnotationRead"
+        ],
+        "x-required-scopes": [
+          "annotations:read"
+        ]
+      }
+    },
+    "/papers/{id}/fulltext": {
+      "get": {
+        "operationId": "getFulltext",
+        "parameters": [
+          {
+            "description": "Resource UUID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "PDF attachment of this paper (default: its first PDF)",
+            "in": "query",
+            "name": "attachment",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "0-based first page (default 0)",
+            "in": "query",
+            "name": "from_page",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Pages to return, 1..=50 (default 10)",
+            "in": "query",
+            "name": "max_pages",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Characters across pages, 1..=400000 (default 100000)",
+            "in": "query",
+            "name": "max_chars",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageText"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid input, JSON, query or Host header (code says which)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, unknown, revoked or expired token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, browser origin refused, elevation or export folder required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Busy or unavailable (Retry-After)"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request time limit reached"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "files:read"
+            ]
+          }
+        ],
+        "summary": "Bounded extracted page text of the paper's PDF",
+        "x-daemon-operations": [
+          "FulltextRead"
+        ],
+        "x-required-scopes": [
+          "files:read"
+        ]
+      }
+    },
+    "/papers/{id}/fulltext/status": {
+      "get": {
+        "operationId": "getFulltextStatus",
+        "parameters": [
+          {
+            "description": "Resource UUID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FulltextStatus"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid input, JSON, query or Host header (code says which)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, unknown, revoked or expired token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, browser origin refused, elevation or export folder required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Busy or unavailable (Retry-After)"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request time limit reached"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "papers:read"
+            ]
+          }
+        ],
+        "summary": "Text extraction state of the paper's PDF attachments",
+        "x-daemon-operations": [
+          "FulltextStatus"
+        ],
+        "x-required-scopes": [
+          "papers:read"
+        ]
+      }
+    },
+    "/papers/{id}/restore": {
+      "post": {
+        "operationId": "restorePaper",
+        "parameters": [
+          {
+            "description": "Resource UUID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperLifecycle"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid input, JSON, query or Host header (code says which)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, unknown, revoked or expired token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, browser origin refused, elevation or export folder required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Busy or unavailable (Retry-After)"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request time limit reached"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "papers:delete"
+            ]
+          }
+        ],
+        "summary": "Restore a paper from the trash",
+        "x-daemon-operations": [
+          "PaperRestore"
+        ],
+        "x-required-scopes": [
+          "papers:delete"
+        ]
+      }
+    },
+    "/search": {
+      "get": {
+        "operationId": "search",
+        "parameters": [
+          {
+            "description": "Search DSL (docs/ADR/search-dsl.md), at most 4096 bytes",
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Page size: papers 1..=500 (default 50); search 1..=100 (default 20)",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Opaque next_cursor from the previous page (repeat the same filters)",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trash filter (default active)",
+            "in": "query",
+            "name": "visibility",
+            "required": false,
+            "schema": {
+              "enum": [
+                "active",
+                "deleted",
+                "all"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Direct members of this collection",
+            "in": "query",
+            "name": "collection",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Comma-separated paper UUIDs to search within (at most 500)",
+            "in": "query",
+            "name": "papers",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Comma-separated subset of bibliographic,annotations,pages",
+            "in": "query",
+            "name": "sources",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Where 1-2 character terms are scanned",
+            "in": "query",
+            "name": "short_term_scope",
+            "required": false,
+            "schema": {
+              "enum": [
+                "bounded",
+                "all_pages"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Documents per short-term scan window, 1..=20000",
+            "in": "query",
+            "name": "candidate_limit",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Snippet length in characters, 32..=1000 (default 160)",
+            "in": "query",
+            "name": "snippet_chars",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Search time budget, 1..=10000 ms (default 2000)",
+            "in": "query",
+            "name": "timeout_ms",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResults"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid input, JSON, query or Host header (code says which)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, unknown, revoked or expired token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, browser origin refused, elevation or export folder required"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Busy or unavailable (Retry-After)"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request time limit reached"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "papers:read",
+              "files:read",
+              "annotations:read"
+            ]
+          }
+        ],
+        "summary": "Full-text search over bibliographic records, annotations and PDF pages",
+        "x-daemon-operations": [
+          "FulltextSearch"
+        ],
+        "x-required-scopes": [
+          "papers:read",
+          "files:read",
+          "annotations:read"
+        ]
+      }
+    },
+    "/tags": {
+      "get": {
+        "operationId": "listTags",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagList"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid input, JSON, query or Host header (code says which)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, unknown, revoked or expired token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, browser origin refused, elevation or export folder required"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Busy or unavailable (Retry-After)"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request time limit reached"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "papers:read"
+            ]
+          }
+        ],
+        "summary": "All tags",
+        "x-daemon-operations": [
+          "OrganizationList"
+        ],
+        "x-required-scopes": [
+          "papers:read"
+        ]
+      },
+      "post": {
+        "operationId": "createTag",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewTag"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagEnvelope"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid input, JSON, query or Host header (code says which)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, unknown, revoked or expired token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, browser origin refused, elevation or export folder required"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict with existing data or state"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Body or result too large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Body is not application/json"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Busy or unavailable (Retry-After)"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request time limit reached"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "papers:write"
+            ]
+          }
+        ],
+        "summary": "Create a tag",
+        "x-daemon-operations": [
+          "OrganizationWrite"
+        ],
+        "x-required-scopes": [
+          "papers:write"
+        ]
+      }
+    },
+    "/tags/{id}": {
+      "delete": {
+        "operationId": "deleteTag",
+        "parameters": [
+          {
+            "description": "Resource UUID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid input, JSON, query or Host header (code says which)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, unknown, revoked or expired token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Scope missing, browser origin refused, elevation or export folder required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Busy or unavailable (Retry-After)"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request time limit reached"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "papers:delete"
+            ]
+          }
+        ],
+        "summary": "Delete a tag (papers stay)",
+        "x-daemon-operations": [
+          "OrganizationDelete"
+        ],
+        "x-required-scopes": [
+          "papers:delete"
+        ]
+      }
+    }
+  },
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "servers": [
+    {
+      "url": "http://127.0.0.1:{port}/api/v1",
+      "variables": {
+        "port": {
+          "default": "39271"
+        }
+      }
+    }
+  ]
+}

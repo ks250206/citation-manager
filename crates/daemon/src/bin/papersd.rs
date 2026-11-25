@@ -1,5 +1,6 @@
 //! `papersd`: on-demand per-library daemon (#25). Normally started by a client's
-//! `LocalConnector` (GUI/CLI/MCP/native host); exits when idle. No HTTP listener.
+//! `LocalConnector` (GUI/CLI/MCP/native host); exits when idle. #27: when the persisted
+//! API settings enable the loopback REST API, it listens and the daemon stays running.
 //!
 //! Exit status: 0 idle exit, 75 another daemon already serves the library, 2 usage, 1 error.
 //!
@@ -23,10 +24,12 @@ fn main() {
     let mut runtime_dir = None;
     let mut settings = None;
     let mut idle = None;
+    let mut origins = Vec::new();
     let usage = || -> ! {
         eprintln!(
             "Usage: papersd --library /absolute/library [--runtime-dir /absolute/private-dir] \
-             [--settings /absolute/ui.json] [--idle-timeout-ms N]"
+             [--settings /absolute/ui.json] [--idle-timeout-ms N] \
+             [--api-allow-origin scheme://host[:port]]..."
         );
         std::process::exit(2);
     };
@@ -39,6 +42,12 @@ fn main() {
                 runtime_dir = Some(path)
             }
             Some("--settings") if settings.is_none() && path.is_absolute() => settings = Some(path),
+            Some("--api-allow-origin") => match value.to_str() {
+                Some(origin) if cm_daemon::rest::valid_origin(origin) => {
+                    origins.push(origin.to_owned())
+                }
+                _ => usage(),
+            },
             Some("--idle-timeout-ms") if idle.is_none() => {
                 idle = Some(
                     value
@@ -54,6 +63,7 @@ fn main() {
     let mut config = DaemonConfig::new(library);
     config.runtime_dir = runtime_dir;
     config.settings = settings;
+    config.rest.allowed_origins = origins;
     if let Some(ms) = idle {
         config.idle_timeout = Duration::from_millis(ms);
     }

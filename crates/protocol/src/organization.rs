@@ -18,4 +18,12 @@ pub enum OrganizationRequest {
 pub struct Organization {
     pub collections: Vec<Collection>,
     pub tags: Vec<Tag>,
+    /// #27 the collection/tag a create/update request produced (REST returns only this).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub item: Option<OrganizationItem>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum OrganizationItem {
+    Collection(Collection),
+    Tag(Tag),
 }

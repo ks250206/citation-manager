@@ -90,7 +90,8 @@ Linux では ⌘ の代わりに Ctrl を使います（Ctrl+N / Ctrl+S / Ctrl+F
 テーブルでは ↑/↓ で選択移動、↩ で Title 欄へ移動、Esc で入力欄からテーブルへ戻ります。
 ⌘1 Library、⌘2 Import review、⌘, Organize & export。未保存の編集は下部ステータスバーに表示されます。
 ⌘Q で完全終了し、同じ library/settings で再起動します。
-既定の実ライブラリは自動接続しません。HTTP listener はありません。GUI は library ごとの `papersd` を
+既定の実ライブラリは自動接続しません。HTTP は既定で無効です（API & integrations で有効化すると
+`papersd` が 127.0.0.1/::1 の REST API を提供: [rest-api ADR](docs/ADR/rest-api.md)、[OpenAPI](docs/openapi.json)）。GUI は library ごとの `papersd` を
 同じディレクトリから遅延起動し、0700 の runtime directory 内 0600 Unix socket と library 内の
 bootstrap credential（0600）で接続します。GUI 終了後、client と active job が無ければ daemon は idle 終了します。
 
