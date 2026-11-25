@@ -180,8 +180,8 @@ pub fn start(config: DaemonConfig) -> Result<RunningDaemon, StartError> {
     let auth = Arc::new(Authenticator::load(control.clone()).map_err(StartError::Service)?);
     auth.bootstrap_desktop(&paths.desktop_credential, now_ms())?;
     let activity = Arc::new(Activity::default());
-    let engine =
-        InProcessLibraryClient::start_with_settings(paths.library.clone(), config.settings)?;
+    let (engine, engine_exit) =
+        InProcessLibraryClient::start_with_exit(paths.library.clone(), config.settings)?;
     // The live grant registry decides whether a job's owner may still run it.
     let mut handlers: Vec<Arc<dyn JobHandler>> = vec![Arc::new(CapturePdfFetchHandler::new(
         PdfFetcher::with_resolver(
@@ -240,6 +240,12 @@ pub fn start(config: DaemonConfig) -> Result<RunningDaemon, StartError> {
             }
             shared.jobs.stop();
             drop(shared);
+            // Release the single-writer lock only after the library worker has closed its
+            // connections; otherwise the next daemon could open the library (and see its
+            // WAL sidecars being torn down) while this one still holds it open.
+            if !engine_exit.wait(Duration::from_secs(10)) {
+                eprintln!("papersd: library worker did not exit within 10 s");
+            }
             drop(lock);
         })?;
     Ok(RunningDaemon {
