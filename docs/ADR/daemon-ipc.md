@@ -48,7 +48,9 @@ the connector launches again, at most every 500 ms, until its timeout. A connect
 during the handshake (the daemon accepted just before its idle exit) is retried exactly once
 (`connect_and_handshake`). Lifetime: a connection or any active job (queued/running/retry_wait) keeps the
 daemon alive. Idle time counts from when both reached zero; after `--idle-timeout-ms`
-(default 30 s) the daemon removes its socket and exits. The GUI keeps one connection open for
+(default 30 s) the daemon removes its socket and exits. A #22 capture preview awaiting its
+commit/cancel (bound to this daemon, at most the 330 s binding lifetime) also prevents the
+exit, because the native host disconnects right after `capture.preview`. The GUI keeps one connection open for
 its lifetime. A lost daemon fails in-flight requests with `Unavailable`; the next request
 reconnects (and restarts it).
 

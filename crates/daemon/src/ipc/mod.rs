@@ -78,7 +78,8 @@ pub struct DaemonConfig {
     pub library: PathBuf,
     pub runtime_dir: Option<PathBuf>,
     pub settings: Option<PathBuf>,
-    /// Exit after this long with no connection and no active job.
+    /// Exit after this long with no connection, no active job and no capture preview
+    /// awaiting its decision.
     pub idle_timeout: Duration,
     pub jobs: JobPolicy,
     /// Extra/overriding job handlers (registered after the built-in capture handler).
@@ -354,7 +355,15 @@ fn accept_loop(listener: &UnixListener, shared: &Arc<Shared>, stop: &AtomicBool,
                     });
             }
             Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                if shared.activity.idle_for(idle) {
+                // #22: an outstanding capture preview (committed/cancelled/expired later)
+                // also keeps the daemon alive; it is lost with this process.
+                if shared.activity.idle_for(idle)
+                    && !shared
+                        .captures
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .awaiting_decision()
+                {
                     return;
                 }
                 thread::sleep(Duration::from_millis(20));

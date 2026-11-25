@@ -680,3 +680,38 @@ fn captured_pdf_is_extracted_into_the_fulltext_index() {
         &mut desktop
     )));
 }
+
+/// The native host drops its session right after `capture.preview`. While that preview
+/// awaits the user's decision papersd must not idle out (a fresh daemon would not own the
+/// preview and deny the commit); once it is committed the daemon idles out as usual.
+#[test]
+fn an_outstanding_capture_preview_keeps_papersd_alive() {
+    let env = Env::new();
+    let mut config = config(&env);
+    config.idle_timeout = Duration::from_millis(300);
+    let daemon = start(config).unwrap();
+    let credential = issue(
+        &mut env.desktop(),
+        "browser host",
+        cm_core::policy::presets::native_host(),
+    );
+    let p = preview(
+        &mut env.session("desktop", credential.clone()),
+        page("10.9999/idle.1", "Reviewed Slowly", None),
+    );
+    // No connection and no job left, only the outstanding preview.
+    std::thread::sleep(Duration::from_millis(1500));
+    assert!(
+        env.paths().socket.exists(),
+        "papersd idled out while a capture preview awaited a decision"
+    );
+    let mut host = env.session("desktop", credential);
+    let saved = commit(&mut host, &p, ImportAction::Create, None);
+    assert!(saved.paper.is_some());
+    drop(host);
+    assert!(wait_until(Duration::from_secs(10), || !env
+        .paths()
+        .socket
+        .exists()));
+    daemon.wait();
+}
