@@ -198,6 +198,16 @@ impl Command {
             },
         }
     }
+    /// Most OS secret-store helper runs the daemon may wait on before answering (see
+    /// `ApiCommand::secret_store_steps`); 0 for commands that never touch the store.
+    pub fn secret_store_steps(&self) -> u32 {
+        match self {
+            Self::Api(c) => c.secret_store_steps(),
+            // Revoking deletes the grant's stored token copy, as `ApiCommand::Revoke` does.
+            Self::Grants(GrantCommand::Revoke(_)) => 1,
+            _ => 0,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

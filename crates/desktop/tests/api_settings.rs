@@ -1,12 +1,13 @@
 //! #26 API & Integrations screen state (headless).
 use cm_desktop::api_settings::{
-    ApiSettingsState, Group, ISSUABLE, ReplyKind, RevealedSecret, SecretText, TokenForm,
-    allows_writes, format_date, format_time, group, status, toggled_mcp_scopes,
+    ApiSettingsState, Confirm, ELEVATION_MINUTES, Group, ISSUABLE, ReplyKind, RevealedSecret,
+    SecretText, TokenForm, allows_writes, choose_elevation, elevate_confirm, elevation_kinds,
+    elevation_request, format_date, format_time, group, status, toggled_mcp_scopes,
 };
 use cm_protocol::{
     api::{
-        ApiOverview, ApiSettings, BindAddress, ClientKind, ListenerState, Scope, SecretBackend,
-        TokenInfo, profiles,
+        ApiCommand, ApiOverview, ApiSettings, BindAddress, BulkKind, ClientKind, ListenerState,
+        Scope, SecretBackend, TokenInfo, profiles, scope_capabilities,
     },
     ipc::GrantId,
 };
@@ -18,12 +19,13 @@ fn token(kind: ClientKind, scopes: &[Scope], revoked: bool) -> TokenInfo {
     let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let id: GrantId =
         serde_json::from_str(&format!("\"01900000-0000-7000-8000-{n:012}\"")).unwrap();
+    let scopes: cm_protocol::api::ScopeSet = scopes.iter().copied().collect();
     TokenInfo {
         id,
         label: "t".into(),
         kind,
-        scopes: scopes.iter().copied().collect(),
-        capabilities: Default::default(),
+        capabilities: scope_capabilities(&scopes),
+        scopes,
         created_at_ms: 0,
         expires_at_ms: Some(10 * DAY),
         last_used_at_ms: None,
@@ -157,5 +159,81 @@ fn utc_dates() {
     assert_eq!(
         format_time(951_782_400_000 + 61_000),
         "2000-02-29 00:01 UTC"
+    );
+}
+
+/// Codex review (PR #69): a token with both `papers:delete` and `papers:write` must be
+/// elevatable for bulk moves too; the chosen kind is the one sent.
+#[test]
+fn elevation_offers_every_allowed_kind_and_sends_the_chosen_one() {
+    let both = token(
+        ClientKind::Api,
+        &[Scope::PapersRead, Scope::PapersWrite, Scope::PapersDelete],
+        false,
+    );
+    assert_eq!(
+        elevation_kinds(&both),
+        vec![BulkKind::Delete, BulkKind::Move]
+    );
+    let opened = elevate_confirm(&both).unwrap();
+    assert_eq!(opened, Confirm::Elevate(both.id, BulkKind::Delete));
+    let moved = choose_elevation(opened, &both, BulkKind::Move).unwrap();
+    assert_eq!(moved, Confirm::Elevate(both.id, BulkKind::Move));
+    let Confirm::Elevate(_, kind) = moved else {
+        unreachable!()
+    };
+    assert_eq!(
+        elevation_request(&both, kind),
+        Some(ApiCommand::Elevate {
+            grant: both.id,
+            kind: BulkKind::Move,
+            duration_ms: ELEVATION_MINUTES * 60_000,
+        })
+    );
+    assert_eq!(
+        elevation_request(&both, BulkKind::Delete),
+        Some(ApiCommand::Elevate {
+            grant: both.id,
+            kind: BulkKind::Delete,
+            duration_ms: ELEVATION_MINUTES * 60_000,
+        })
+    );
+
+    // Only the kinds the scopes allow are offered (and sent).
+    let write = token(
+        ClientKind::Mcp,
+        &[Scope::PapersRead, Scope::PapersWrite],
+        false,
+    );
+    assert_eq!(elevation_kinds(&write), vec![BulkKind::Move]);
+    assert_eq!(
+        elevate_confirm(&write),
+        Some(Confirm::Elevate(write.id, BulkKind::Move))
+    );
+    assert_eq!(
+        choose_elevation(
+            Confirm::Elevate(write.id, BulkKind::Move),
+            &write,
+            BulkKind::Delete
+        ),
+        None
+    );
+    assert_eq!(elevation_request(&write, BulkKind::Delete), None);
+    let annotations = token(ClientKind::Api, &[Scope::AnnotationsWrite], false);
+    assert_eq!(elevation_kinds(&annotations), vec![BulkKind::Delete]);
+    let read = token(ClientKind::Api, &[Scope::PapersRead], false);
+    assert!(elevation_kinds(&read).is_empty());
+    assert_eq!(elevate_confirm(&read), None);
+    let revoked = token(
+        ClientKind::Api,
+        &[Scope::PapersWrite, Scope::PapersDelete],
+        true,
+    );
+    assert_eq!(elevate_confirm(&revoked), None);
+    // A choice never moves to another token's confirmation.
+    assert_eq!(choose_elevation(opened, &write, BulkKind::Move), None);
+    assert_eq!(
+        choose_elevation(Confirm::Revoke(both.id), &both, BulkKind::Move),
+        None
     );
 }

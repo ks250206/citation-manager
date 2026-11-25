@@ -6,9 +6,10 @@
 //! shown: that token is revoked at once (nobody received its secret).
 use super::*;
 use crate::api_settings::{
-    ApiSettingsState, Confirm, ELEVATE_WARNING, ELEVATION_MINUTES, FILE_STORE_WARNING, Group,
-    ISSUABLE, ReplyKind, RevealedSecret, SecretText, allows_writes, format_date, format_time,
-    scope_list, status, toggled_mcp_scopes,
+    ApiSettingsState, Confirm, FILE_STORE_WARNING, Group, ISSUABLE, ReplyKind, RevealedSecret,
+    SecretText, allows_writes, bulk_kind_label, choose_elevation, elevate_confirm, elevate_warning,
+    elevation_kinds, elevation_request, format_date, format_time, scope_list, status,
+    toggled_mcp_scopes,
 };
 use cm_protocol::api::{
     ApiCommand, ApiReply, BindAddress, ClientKind, IssueToken, ListenerState, SecretBackend,
@@ -331,19 +332,23 @@ impl LibraryView {
                 },
                 None => return,
             },
-            Confirm::Elevate(id) => match self.api.token(id) {
-                // One kind per elevation: delete when the token may delete, else move.
-                Some(t) => ApiCommand::Elevate {
-                    grant: id,
-                    kind: if t.scopes.contains(&cm_protocol::api::Scope::PapersDelete) {
-                        cm_protocol::api::BulkKind::Delete
-                    } else {
-                        cm_protocol::api::BulkKind::Move
-                    },
-                    duration_ms: ELEVATION_MINUTES * 60_000,
-                },
-                None => return,
-            },
+            // One kind per elevation: exactly the one the person chose in the confirmation.
+            Confirm::Elevate(id, kind) => {
+                match self.api.token(id).and_then(|t| elevation_request(t, kind)) {
+                    Some(command) => command,
+                    None => {
+                        self.api.notice = Some((
+                            format!(
+                                "This token no longer allows {}.",
+                                bulk_kind_label(kind).to_lowercase()
+                            ),
+                            true,
+                        ));
+                        cx.notify();
+                        return;
+                    }
+                }
+            }
         };
         self.api_send(command, ApiOp::Changed);
         cx.notify();
@@ -779,11 +784,15 @@ impl LibraryView {
             let confirm = state.confirm;
             let key = |name: &'static str| (SharedString::from(format!("{name}-{which:?}")), i);
             let mut actions = div().flex().flex_wrap().gap_1().flex_1().min_w_0();
-            if live && confirm.is_some_and(|c| matches!(c, Confirm::AllowWrites(g) | Confirm::Elevate(g) | Confirm::Revoke(g) | Confirm::Reissue(g) if g == id)) {
+            if live && confirm.is_some_and(|c| matches!(c, Confirm::AllowWrites(g) | Confirm::Elevate(g, _) | Confirm::Revoke(g) | Confirm::Reissue(g) if g == id)) {
                 let c = confirm.expect("checked");
+                let elevate_label;
                 let (text, primary_label) = match c {
                     Confirm::AllowWrites(_) => (profiles::MCP_WRITE_WARNING, "Allow writes"),
-                    Confirm::Elevate(_) => (ELEVATE_WARNING, "Elevate 15 min"),
+                    Confirm::Elevate(_, kind) => {
+                        elevate_label = format!("Elevate {} 15 min", bulk_kind_label(kind).to_lowercase());
+                        (elevate_warning(kind), elevate_label.as_str())
+                    }
                     Confirm::Revoke(_) => ("Clients using this token stop working immediately.", "Revoke"),
                     Confirm::Reissue(_) => ("A new secret replaces this one; the old one stops working now.", "Re-issue"),
                 };
@@ -799,7 +808,35 @@ impl LibraryView {
                         .items_center()
                         .gap_2()
                         .child(div().flex_1().min_w_0().text_size(px(12.)).child(text))
-                        .child(primary_button(key("confirm"), primary_label, true).on_click(
+                        // Several kinds allowed (e.g. papers:delete and papers:write): the
+                        // person picks which one this elevation lifts.
+                        .children(match c {
+                            Confirm::Elevate(_, chosen) => {
+                                let kinds = elevation_kinds(&t);
+                                let offer = if kinds.len() > 1 { kinds } else { Vec::new() };
+                                offer
+                                    .into_iter()
+                                    .map(|kind| {
+                                        let name = format!("elevate-kind-{kind:?}-{which:?}-{i}");
+                                        nav_item(SharedString::from(name), bulk_kind_label(kind), kind == chosen)
+                                            .border_1()
+                                            .border_color(rgb(BORDER))
+                                            .on_click(cx.listener(move |this, _, _, cx| {
+                                                if let Some(next) = this
+                                                    .api
+                                                    .token(id)
+                                                    .and_then(|t| choose_elevation(c, t, kind))
+                                                {
+                                                    this.api.confirm = Some(next);
+                                                    cx.notify();
+                                                }
+                                            }))
+                                    })
+                                    .collect::<Vec<_>>()
+                            }
+                            _ => Vec::new(),
+                        })
+                        .child(primary_button(key("confirm"), primary_label.to_owned(), true).on_click(
                             cx.listener(move |this, _, _, cx| this.api_confirmed(c, cx)),
                         ))
                         .child(button(key("cancel"), "Cancel", true).on_click(cx.listener(
@@ -836,13 +873,7 @@ impl LibraryView {
             }
             if live && scoped && which != Group::NativeHosts {
                 let elevated = t.elevated_until_ms.is_some_and(|at| at > now);
-                let can_elevate = t.scopes.iter().any(|s| {
-                    matches!(
-                        s,
-                        cm_protocol::api::Scope::PapersWrite
-                            | cm_protocol::api::Scope::PapersDelete
-                    )
-                });
+                let elevate = elevate_confirm(&t);
                 if elevated {
                     actions =
                         actions.child(button(key("unelevate"), "End elevation", true).on_click(
@@ -851,10 +882,10 @@ impl LibraryView {
                                 cx.notify();
                             }),
                         ));
-                } else if can_elevate {
+                } else if let Some(open) = elevate {
                     actions = actions.child(button(key("elevate"), "Elevate…", true).on_click(
                         cx.listener(move |this, _, _, cx| {
-                            this.api.confirm = Some(Confirm::Elevate(id));
+                            this.api.confirm = Some(open);
                             cx.notify();
                         }),
                     ));
