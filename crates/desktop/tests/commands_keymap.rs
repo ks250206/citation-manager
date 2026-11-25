@@ -163,7 +163,6 @@ fn availability_requires_connection_and_current_resources_without_grant_semantic
 fn known_pdf_api_commands_remain_disabled_even_when_host_claims_connection() {
     let registry = CommandRegistry::m1();
     for (id, owner) in [
-        ("pdf.save", 20),
         ("pdf.highlight_selection", 21),
         ("pdf.show_annotations", 21),
     ] {
@@ -931,7 +930,12 @@ fn quoted_braces_escapes_and_unicode_are_json_data_not_structural_depth_or_execu
 fn known_disabled_command_is_valid_configuration_but_cannot_become_enabled_by_matching() {
     let registry = CommandRegistry::m1();
     let loaded = load_or_default(
-        &document(vec![binding("library", "normal", &["p"], "pdf.save")]),
+        &document(vec![binding(
+            "library",
+            "normal",
+            &["p"],
+            "pdf.highlight_selection",
+        )]),
         &registry,
     )
     .unwrap();
@@ -946,8 +950,8 @@ fn known_disabled_command_is_valid_configuration_but_cannot_become_enabled_by_ma
     ) {
         Resolution::Command {
             id,
-            availability: Availability::Disabled(DisabledReason::Deferred { issue: 20, .. }),
-        } => assert_eq!(id, "pdf.save"),
+            availability: Availability::Disabled(DisabledReason::Deferred { issue: 21, .. }),
+        } => assert_eq!(id, "pdf.highlight_selection"),
         other => panic!("disabled binding must remain disabled: {other:?}"),
     }
     assert!(!resolver.has_pending());

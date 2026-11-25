@@ -47,5 +47,7 @@ Status: accepted for #19. Builds on #8 (annotations table), #17 (viewer, shared 
   A press always starts a text selection; only a click without a drag (≤ 3 px) selects the
   topmost annotation under it (note markers, then highlights in reverse drawing order). Page
   notes get fixed-size markers stacked down the left margin, each with its own hit rectangle.
+- **Export** (#20, [pdf-export](pdf-export.md)): highlights/comments/notes become standard PDF
+  annotations in a verified copy; unresolved anchors are listed, never silently dropped.
 - Opening a library created before this migration goes through `open_with_safety_backups`
   (pre-migration backup) in the in-process worker, matching the #25 daemon.

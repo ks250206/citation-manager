@@ -3,7 +3,7 @@ use crate::domain::{AttachmentId, PaperId};
 pub use cm_core::annotations::{
     Anchor, Annotation, AnnotationId, AnnotationKind, AnnotationPatch, COLORS, Edit, History,
     MAX_CONTEXT_CHARS, MAX_PROPOSAL_MATCHES, NewAnnotation, Proposal, Source, merge_line_quads,
-    pending_carry_over, valid_color,
+    pending_carry_over, rgb, valid_color,
 };
 use cm_core::{geometry::Quad, metadata_resolve::Cancellation};
 

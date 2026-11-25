@@ -56,10 +56,13 @@ fn ranking_puts_recent_first_for_empty_query_and_reports_availability() {
         copy.availability,
         Availability::Disabled(DisabledReason::SelectionRequired)
     );
-    let deferred = entries.iter().find(|e| e.id == "pdf.save").unwrap();
+    let deferred = entries
+        .iter()
+        .find(|e| e.id == "pdf.highlight_selection")
+        .unwrap();
     assert!(matches!(
         deferred.availability,
-        Availability::Disabled(DisabledReason::Deferred { issue: 20, .. })
+        Availability::Disabled(DisabledReason::Deferred { issue: 21, .. })
     ));
     let filtered = rank(&registry, &context, "vim", &recent);
     assert_eq!(filtered[0].id, workbench_ids::TOGGLE_VIM);

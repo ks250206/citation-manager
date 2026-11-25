@@ -40,7 +40,7 @@ satisfies every read. `Requirement::AnyOf` expresses "the bundle, or these fine 
 | `bulk:elevated` | BulkElevated | **not issuable**; only during a time-limited elevation |
 
 Never reachable by scopes: `GrantAdmin`, `UiSettings`, `LocalFileRead`, `LocalFileWrite`,
-`CapturePreview`, `DestinationRead`, `LibraryRead`. The native-host preset is unchanged.
+`LocalFileReplace` (#20), `CapturePreview`, `DestinationRead`, `LibraryRead`. The native-host preset is unchanged.
 
 `ENDPOINTS` maps every REST endpoint (DESIGN §13.2), MCP tool (§14.2) and CLI command (§15)
 to its operations and required scopes (`Access::Scoped`), `Public` (`GET /health`) or

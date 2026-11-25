@@ -39,6 +39,7 @@ pub(super) const CONNECTED: &[&str] = &[
     api_ids::OPEN_SETTINGS,
     api_ids::NEW_TOKEN,
     api_ids::NEW_MCP_PROFILE,
+    pdf_export_ui::SAVE_PDF,
 ];
 
 /// Platform shortcuts bound directly in GPUI (see `key_bindings`), shown next to commands.
@@ -331,6 +332,7 @@ impl LibraryView {
             api_ids::OPEN_SETTINGS => self.open_api(api_ui::ApiFocus::Settings, window, cx),
             api_ids::NEW_TOKEN => self.open_api(api_ui::ApiFocus::NewToken, window, cx),
             api_ids::NEW_MCP_PROFILE => self.open_api(api_ui::ApiFocus::NewMcpProfile, window, cx),
+            pdf_export_ui::SAVE_PDF => self.save_current_pdf(cx),
             _ => self.status(format!("{id} is not connected"), true, cx),
         }
         cx.notify();
