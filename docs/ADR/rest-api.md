@@ -73,7 +73,8 @@ The table rows are data for the adapter and the contract tests; authority stays 
 
 **Remaining existence oracles** (documented, inherent to a write API): a write-only import
 commit reports how many rows were `skipped` and which rows got a paper id, so the token learns
-that a skipped row matched an existing DOI/external id; creating or renaming to a tag name that already exists is refused (unique tag keys); ids that
+that a skipped row matched an existing DOI/external id (the #22 capture preview states
+the same up front as `hidden_duplicates`, only to `CapturePreview` holders, i.e. the native host); creating or renaming to a tag name that already exists is refused (unique tag keys); ids that
 exist answer differently from ids that do not (`404` vs success) for every id-addressed
 write. None of them returns stored content.
 

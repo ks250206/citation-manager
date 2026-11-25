@@ -164,7 +164,7 @@ failure:  {"v": 1, "id": <echo|null>, "ok": false,
 |---|---|---|---|
 | `hello` | – | none (does not start the daemon) | `{host_version, protocol, browser, paired, types, limits}` |
 | `destinations` | – | `Organization(List)` | `{collections:[{id,parent,name,sort_order}], tags:[{id,name,key,color}]}` |
-| `capture.preview` | `capture`: #22 `CaptureRequest` (`page_url`, `title?`, `html?`, `meta[]`, `json_ld[]`, `pdf_url?`, `destination{collection?,tags[]}`, `offline`) | `Capture(Preview)` | `CapturePreview` (`preview.id`, `preview.candidates`, `resolution.pdf_candidates`, diagnostics) |
+| `capture.preview` | `capture`: #22 `CaptureRequest` (`page_url`, `title?`, `html?`, `meta[]`, `json_ld[]`, `pdf_url?`, `destination{collection?,tags[]}`, `offline`) | `Capture(Preview)` | `CapturePreview` (`preview.id`, `preview.candidates`, `resolution.pdf_candidates`, diagnostics, `hidden_duplicates`: rows hidden as exact duplicates, skipped on commit) |
 | `capture.commit` | `preview_id`, `decisions[1..=16]` (`{candidate_index, action: "Create"|"Skip"}`), `pdf?` (index into `resolution.pdf_candidates`) | `Capture(Commit)` | `CaptureCommitted` (`paper`, `outcome`, `pdf_job?`, `pdf_error?`) |
 | `capture.cancel` | `preview_id` | `Capture(Cancel)` | `{cancelled: true}` |
 | `capture.pdf_job` | `job` (UUID) | `Capture(PdfJob)` | `JobStatus` (`state`, `attempts`, `error`, ...) |
@@ -212,7 +212,8 @@ and attached explicitly in the app (#22).
 3. `capture.preview` with the bounded page snapshot (`offline: false` allows the DOI complement).
 4. Show the candidate and `pdf_candidates`; on approval `capture.commit` with
    `Create`/`Skip` and an optional `pdf` index; on cancel `capture.cancel`. On `conflict`
-   preview again.
+   preview again. A row counted in `hidden_duplicates` is already in the library: the daemon
+   skips it (`outcome.skipped`, no `paper`) instead of creating a duplicate.
 5. Optionally poll `capture.pdf_job` / offer `capture.retry_pdf`.
 
 Use one-shot `sendNativeMessage` or a port; disconnect ports when done (an idle port is closed

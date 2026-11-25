@@ -79,6 +79,7 @@ fn reply_for(command: Command) -> Result<Reply, WireError> {
                         provisional: false,
                         pdf_candidates: Vec::new(),
                     },
+                    hidden_duplicates: 0,
                 },
             ))))
         }

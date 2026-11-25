@@ -1,7 +1,7 @@
 //! Tool failures as MCP `isError` results with a structured `error` object.
-use crate::daemon::CallError;
+use crate::{credential, daemon::CallError};
 use cm_protocol::{
-    ipc::{Capability, CapabilitySet, Denial, HandshakeRejection, Operation, WireError},
+    ipc::{Capability, Denial, HandshakeRejection, Operation, Requirement, WireError},
     library::ServiceError,
 };
 use rmcp::model::{CallToolResult, ContentBlock};
@@ -152,102 +152,129 @@ pub fn grant_command(library: &Path, flags: &str) -> String {
     )
 }
 
-/// The capabilities an operation needs, as (all-of, any-of) serde names. Computed through
-/// the public `satisfied_by` predicate so this crate does not depend on core's table type.
-pub fn required_capabilities(operation: Operation) -> (Vec<Capability>, Vec<Capability>) {
-    let requirement = operation.requirement();
-    let all: CapabilitySet = Capability::ALL.into_iter().collect();
-    let needed: Vec<Capability> = Capability::ALL
-        .into_iter()
-        .filter(|c| {
-            let mut without = all.clone();
-            without.remove(c);
-            !requirement.satisfied_by(&without)
-        })
-        .collect();
-    let any: Vec<Capability> = if needed.is_empty() {
-        Capability::ALL
-            .into_iter()
-            .filter(|c| requirement.satisfied_by(&CapabilitySet::from([*c])))
-            .collect()
-    } else {
-        Vec::new()
-    };
-    (needed, any)
+/// The capabilities an operation needs, as alternatives: any one alternative is enough and
+/// each needs all of its capabilities. `All` is one alternative, `Any` one per capability
+/// and #26's `AnyOf` (the #25 bundle or the fine-grained scope capabilities) is kept as is.
+pub fn required_capabilities(operation: Operation) -> Vec<Vec<Capability>> {
+    match operation.requirement() {
+        Requirement::All(needed) => vec![needed.to_vec()],
+        Requirement::Any(options) => options.iter().map(|c| vec![*c]).collect(),
+        Requirement::AnyOf(alternatives) => alternatives.iter().map(|a| a.to_vec()).collect(),
+    }
 }
 
 fn name<T: serde::Serialize>(value: &T) -> Value {
     serde_json::to_value(value).unwrap_or(Value::Null)
 }
 
+fn names(capabilities: &[Capability]) -> Vec<String> {
+    capabilities
+        .iter()
+        .filter_map(|c| name(c).as_str().map(str::to_owned))
+        .collect()
+}
+
+/// `a and b`, or `a or (b and c)` for several alternatives.
+fn describe(alternatives: &[Vec<Capability>]) -> String {
+    let several = alternatives.len() > 1;
+    alternatives
+        .iter()
+        .map(|alternative| {
+            let all = names(alternative).join(" and ");
+            if several && alternative.len() > 1 {
+                format!("({all})")
+            } else {
+                all
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" or ")
+}
+
+/// The `grant` flags an alternative needs beyond the read-only profile, or `None` when an
+/// MCP grant can never carry it (see `credential::Profile`).
+fn grant_flags(alternative: &[Capability]) -> Option<(bool, bool)> {
+    let (write, export) = (credential::write_extra(), credential::export_extra());
+    let read = credential::read_only();
+    let mut flags = (false, false);
+    for capability in alternative {
+        if write.contains(capability) {
+            flags.0 = true;
+        } else if export.contains(capability) {
+            flags.1 = true;
+        } else if !read.contains(capability) {
+            return None;
+        }
+    }
+    Some(flags)
+}
+
 fn denied(denial: Denial, library: &Path) -> ToolError {
     match denial {
         Denial::Forbidden(operation) => {
-            let (all, any) = required_capabilities(operation);
-            // Capabilities an MCP grant can carry (see credential::Profile).
-            let mcp_grantable = |c: &Capability| {
-                matches!(
-                    c,
-                    Capability::LibraryRead
-                        | Capability::JobsRead
-                        | Capability::LibraryWrite
-                        | Capability::NetworkLookup
-                        | Capability::LocalFileWrite
-                )
-            };
-            // All-of: every capability must be grantable. Any-of: offer the grantable ones.
-            let caps: Vec<Capability> = if all.is_empty() {
-                any.iter().copied().filter(mcp_grantable).collect()
-            } else if all.iter().all(mcp_grantable) {
-                all.clone()
-            } else {
-                Vec::new()
-            };
-            let write = caps
+            let alternatives = required_capabilities(operation);
+            // Offer only the alternatives an MCP grant can carry, cheapest grant first.
+            let mut grantable: Vec<(&Vec<Capability>, (bool, bool))> = alternatives
                 .iter()
-                .any(|c| matches!(c, Capability::LibraryWrite | Capability::NetworkLookup));
-            let export = caps.contains(&Capability::LocalFileWrite);
-            let shown: Vec<Capability> = if caps.is_empty() {
-                if all.is_empty() {
-                    any.clone()
-                } else {
-                    all.clone()
+                .filter_map(|a| grant_flags(a).map(|flags| (a, flags)))
+                .collect();
+            grantable.sort_by_key(|(_, (write, export))| u8::from(*write) + u8::from(*export));
+            let shown: Vec<Vec<Capability>> = if grantable.is_empty() {
+                alternatives.clone()
+            } else {
+                grantable.iter().map(|(a, _)| (*a).clone()).collect()
+            };
+            let hint = match grantable.first() {
+                None => "This operation is not available to MCP connections.".to_owned(),
+                Some((_, flags)) => {
+                    let flags = match flags {
+                        (true, true) => " --write --export",
+                        (true, false) => " --write",
+                        (false, true) => " --export",
+                        (false, false) => "",
+                    };
+                    format!(
+                        "This MCP server is read-only unless the library owner approves a \
+                         separate grant: {}. The running server uses the new credential on its \
+                         next call.",
+                        grant_command(library, flags)
+                    )
                 }
-            } else {
-                caps.clone()
             };
-            let hint = if write || export {
-                let flags = match (write, export) {
-                    (true, true) => " --write --export",
-                    (true, false) => " --write",
-                    _ => " --export",
-                };
-                format!(
-                    "This MCP server is read-only unless the library owner approves a separate \
-                     grant: {}. The running server uses the new credential on its next call.",
-                    grant_command(library, flags)
-                )
-            } else {
-                "This operation is not available to MCP connections.".to_owned()
-            };
+            // all_of: needed by every alternative; any_of: enough on its own (the #29 shape);
+            // alternatives: the complete requirement.
+            let all_of: Vec<Capability> = alternatives
+                .first()
+                .map(|first| {
+                    first
+                        .iter()
+                        .copied()
+                        .filter(|c| alternatives.iter().all(|a| a.contains(c)))
+                        .collect()
+                })
+                .unwrap_or_default();
+            let any_of: Vec<Capability> = alternatives
+                .iter()
+                .filter(|a| a.len() == 1)
+                .map(|a| a[0])
+                .collect();
             ToolError::new(
                 "permission_denied",
                 format!(
                     "this MCP connection's grant does not allow {} (needs {}). {hint}",
                     name(&operation).as_str().unwrap_or("this operation"),
-                    shown
-                        .iter()
-                        .filter_map(|c| name(c).as_str().map(str::to_owned))
-                        .collect::<Vec<_>>()
-                        .join(if all.is_empty() { " or " } else { " and " }),
+                    describe(&shown),
                 ),
             )
             .with("operation", name(&operation))
             .with("denial", Value::from("forbidden"))
             .with(
                 "required_capabilities",
-                json!({"all_of": all.iter().map(name).collect::<Vec<_>>(),
-                       "any_of": any.iter().map(name).collect::<Vec<_>>()}),
+                json!({"all_of": all_of.iter().map(name).collect::<Vec<_>>(),
+                       "any_of": any_of.iter().map(name).collect::<Vec<_>>(),
+                       "alternatives": alternatives.iter()
+                           .map(|a| a.iter().map(name).collect::<Vec<_>>())
+                           .collect::<Vec<_>>()}),
             )
             .with("hint", Value::from(hint))
         }
@@ -284,20 +311,29 @@ mod tests {
     fn requirements_are_reported_by_capability_name() {
         assert_eq!(
             required_capabilities(Operation::PaperCreate),
-            (vec![Capability::LibraryWrite], vec![])
+            vec![vec![Capability::LibraryWrite]]
         );
+        // #26: the #25 bundle (LibraryRead) or the fine-grained `papers:read` capability,
+        // each with an arbitrary path (LocalFileWrite) or an allowed export folder.
         assert_eq!(
             required_capabilities(Operation::Export),
-            (
+            vec![
                 vec![Capability::LibraryRead, Capability::LocalFileWrite],
-                vec![]
-            )
+                vec![Capability::MetadataRead, Capability::LocalFileWrite],
+                vec![Capability::MetadataRead, Capability::ExportAllowedDir],
+            ]
         );
-        let (all, any) = required_capabilities(Operation::ImportPreview);
-        assert!(all.is_empty());
         assert_eq!(
-            any,
-            vec![Capability::LibraryWrite, Capability::CapturePreview]
+            required_capabilities(Operation::ImportPreview),
+            vec![
+                vec![Capability::LibraryWrite],
+                vec![Capability::CapturePreview]
+            ]
+        );
+        // #26 split annotation writes from LibraryWrite.
+        assert_eq!(
+            required_capabilities(Operation::AnnotationWrite),
+            vec![vec![Capability::AnnotationsWrite]]
         );
     }
 
@@ -341,6 +377,42 @@ mod tests {
             false,
         );
         assert!(export.message.contains("--export"), "{}", export.message);
+        assert!(!export.message.contains("--write"), "{}", export.message);
+        // Only the any-of alternative an MCP grant can carry is offered.
+        assert!(
+            export
+                .message
+                .contains("needs library_read and local_file_write)"),
+            "{}",
+            export.message
+        );
+        assert!(!export.message.contains("export_allowed_dir"));
+        assert_eq!(
+            export.details["required_capabilities"]["alternatives"],
+            json!([
+                ["library_read", "local_file_write"],
+                ["metadata_read", "local_file_write"],
+                ["metadata_read", "export_allowed_dir"]
+            ])
+        );
+        // add_annotation is part of the write grant (#26: AnnotationsWrite).
+        let annotate = ToolError::from_call(
+            CallError::Wire(WireError::Denied(Denial::Forbidden(
+                Operation::AnnotationWrite,
+            ))),
+            library,
+            false,
+        );
+        assert!(annotate.message.contains("--write"), "{}", annotate.message);
+        assert!(
+            annotate.message.contains("needs annotations_write)"),
+            "{}",
+            annotate.message
+        );
+        assert_eq!(
+            annotate.details["required_capabilities"]["all_of"],
+            json!(["annotations_write"])
+        );
         // Any-of requirements offer only what an MCP grant can carry.
         let preview = ToolError::from_call(
             CallError::Wire(WireError::Denied(Denial::Forbidden(
