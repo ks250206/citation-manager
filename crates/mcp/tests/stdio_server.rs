@@ -580,6 +580,21 @@ fn read_tools_over_stdio_with_a_lazily_started_daemon() {
     assert_eq!(detail["collections"][0]["name"], "Reading");
     assert_eq!(detail["tags"][0]["name"], "anode");
 
+    // collection_id alone (the schema's alternative to the name) lists that collection.
+    let reading_id = detail["collections"][0]["collection_id"].clone();
+    let listed = mcp.ok("search_papers", json!({"collection_id": reading_id}));
+    let ids: Vec<&Value> = listed["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| &r["source"]["paper_id"])
+        .collect();
+    assert!(
+        !ids.is_empty() && ids.iter().all(|id| *id == paper.as_str()),
+        "{listed}"
+    );
+    assert_eq!(listed["total_hits"], 1, "{listed}");
+
     // No PDF runtime in this papersd: the page text is pending, never invented.
     let text = mcp.ok(
         "get_paper_fulltext",
@@ -855,6 +870,14 @@ fn writes_need_a_separate_grant_revocation_is_live_and_direct_ipc_is_refused_ali
         "exists"
     );
     let collection_id = collection["collection"]["collection_id"].clone();
+    // The reported collection is the one with the requested (normalized) name and parent.
+    let nested = mcp.ok(
+        "create_collection",
+        json!({"name": " Nested\tpicks ", "parent_id": collection_id}),
+    );
+    assert_eq!(nested["status"], "created", "{nested}");
+    assert_eq!(nested["collection"]["name"], "Nested picks");
+    assert_eq!(nested["collection"]["parent_id"], collection_id);
     let moved = mcp.ok(
         "move_paper_to_collection",
         json!({"paper_id": paper, "collection_id": collection_id, "mode": "move"}),

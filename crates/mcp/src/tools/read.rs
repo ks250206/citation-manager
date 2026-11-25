@@ -38,7 +38,8 @@ pub fn search_schema() -> Value {
                 "description": "Only papers carrying every one of these tags."},
             "collection": {"type": "string", "minLength": 1, "maxLength": 256,
                 "description": "Exact collection name."},
-            "collection_id": uuid("Collection ID (alternative to the name)."),
+            "collection_id": uuid("Collection ID (alternative to the name; unambiguous). \
+                Given alone, lists the papers directly in that collection."),
             "year_from": {"type": "integer", "minimum": 1, "maximum": 9999},
             "year_to": {"type": "integer", "minimum": 1, "maximum": 9999},
             "sources": {"type": "array", "minItems": 1, "maxItems": 3, "uniqueItems": true,
@@ -86,9 +87,12 @@ pub(crate) fn search_query(args: &Args) -> Result<String, ToolError> {
         }
         parts.push(format!("year:{from:04}..{to:04}"));
     }
-    if parts.is_empty() {
+    // collection_id travels as `SearchRequest.collection` (an ID scope, not DSL text); on
+    // its own it is a complete condition and papersd lists that collection's papers.
+    if parts.is_empty() && !args.has("collection_id") {
         return Err(ToolError::invalid(
-            "give a query or at least one filter (tags, collection, year_from/year_to)",
+            "give a query or at least one filter (tags, collection, collection_id, \
+             year_from/year_to)",
         ));
     }
     Ok(parts.join(" "))
@@ -614,5 +618,33 @@ mod tests {
         assert!(search_query(&args(json!({"year_from": 2025, "year_to": 2020}))).is_err());
         assert!(search_query(&Args(Map::new())).is_err());
         assert!(search_query(&args(json!({"query": "   "}))).is_err());
+    }
+
+    #[test]
+    fn a_collection_id_alone_is_a_complete_search() {
+        // Regression: collection_id is an ID scope sent beside the DSL, so on its own it
+        // must not be rejected for lacking DSL parts (papersd lists the collection).
+        let id = "00000000-0000-0000-0000-000000000007";
+        assert_eq!(
+            search_query(&args(json!({"collection_id": id}))).unwrap(),
+            ""
+        );
+        assert_eq!(
+            search_query(&args(json!({"collection_id": id, "query": "  "}))).unwrap(),
+            ""
+        );
+        assert_eq!(
+            search_query(&args(json!({"collection_id": id, "tags": ["a"]}))).unwrap(),
+            r#"tag:"a""#
+        );
+        // The published schema still offers it as a standalone filter.
+        let schema = search_schema();
+        assert_eq!(schema["required"], json!([]));
+        assert!(
+            schema["properties"]["collection_id"]["description"]
+                .as_str()
+                .unwrap()
+                .contains("alone")
+        );
     }
 }

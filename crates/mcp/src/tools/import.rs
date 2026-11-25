@@ -7,10 +7,10 @@
 use super::{
     Args, Ctx, ToolError,
     fragments::{object, uuid},
-    source::{author, contributor, get_paper, source, unexpected, uri},
+    source::{author, contributor, get_paper, partial_source, source, unexpected, uri},
 };
 use cm_protocol::{
-    domain::{CollectionId, PaperId},
+    domain::{CollectionId, Paper, PaperId},
     exchange::{ImportReply, ImportRequestUi, MetadataResolution},
     import::{
         ImportAction, ImportCommit, ImportDecision, ImportDestination, ImportOutcome,
@@ -352,19 +352,50 @@ async fn outcome_json(
     outcome: ImportOutcome,
     status: &str,
 ) -> Result<Value, ToolError> {
-    let paper: Option<PaperId> = outcome
+    // The commit is final at this point: a failing metadata read must not turn the confirmed
+    // write into a tool error (the caller would lose the paper ID and might import again).
+    let read = match committed_paper(&outcome) {
+        Some(id) => Some(get_paper(ctx, id).await),
+        None => None,
+    };
+    Ok(outcome_value(&outcome, status, read))
+}
+
+fn committed_paper(outcome: &ImportOutcome) -> Option<PaperId> {
+    outcome
         .created
         .first()
         .or_else(|| outcome.merged.first())
-        .copied();
-    let source = match paper {
-        Some(id) => {
-            let paper = get_paper(ctx, id).await?;
-            Some(source(&paper, None, None, None))
+        .copied()
+}
+
+/// The committed outcome; `read` is the follow-up metadata read of the committed paper.
+fn outcome_value(
+    outcome: &ImportOutcome,
+    status: &str,
+    read: Option<Result<Paper, ToolError>>,
+) -> Value {
+    let paper = committed_paper(outcome);
+    let mut warning = None;
+    let source = match (paper, read) {
+        (Some(_), Some(Ok(record))) => Some(source(&record, None, None, None)),
+        (Some(id), failed) => {
+            let reason = match failed {
+                Some(Err(e)) => format!("{}: {}", e.kind, e.message),
+                _ => "not read".to_owned(),
+            };
+            warning = Some(format!(
+                "the paper was {status}: the import is committed. Reading its metadata \
+                 afterwards failed ({reason}), so source is partial (paper_id and uri only); \
+                 read it later with get_paper. Do not import it again."
+            ));
+            let mut partial = partial_source(id, "", None, None, None, None);
+            partial["title"] = Value::Null;
+            Some(partial)
         }
-        None => None,
+        (None, _) => None,
     };
-    Ok(json!({
+    let mut result = json!({
         "status": if paper.is_none() { "skipped" } else { status },
         "paper_id": paper.map(|p| p.0),
         "source": source,
@@ -372,7 +403,12 @@ async fn outcome_json(
         "diagnostics": outcome.rows.iter().flat_map(|r| r.diagnostics.iter()).map(|d| json!({
             "field": d.field, "message": d.message, "error": d.error
         })).collect::<Vec<_>>(),
-    }))
+    });
+    if let Some(warning) = warning {
+        result["source_partial"] = Value::Bool(true);
+        result["warning"] = Value::from(warning);
+    }
+    result
 }
 
 async fn commit(ctx: &Ctx<'_>, args: &Args, preview: &str) -> Result<Value, ToolError> {
@@ -427,6 +463,49 @@ mod tests {
         assert_eq!(doi_in_url("https://example.com/v10.2/page"), None);
         assert_eq!(doi_in_url("https://example.com/10.12/x"), None);
         assert_eq!(doi_in_url("https://example.com/?doi=10.1234/x"), None);
+    }
+
+    #[test]
+    fn a_failed_read_after_a_commit_still_reports_the_committed_paper() {
+        // Regression: the metadata read after a successful commit used `?`, discarding the
+        // outcome (paper ID, status) of a write that had already happened.
+        let id = PaperId(uuid::Uuid::from_u128(42));
+        let outcome = ImportOutcome {
+            created: vec![id],
+            merged: Vec::new(),
+            skipped: 0,
+            rows: Vec::new(),
+        };
+        let failed = Err(ToolError::new("unavailable", "papersd stopped"));
+        let value = outcome_value(&outcome, "created", Some(failed));
+        assert_eq!(value["status"], "created");
+        assert_eq!(value["paper_id"], json!(id.0));
+        assert_eq!(value["uri"], json!(uri(id, None, None, None)));
+        assert_eq!(value["source"]["paper_id"], json!(id.0));
+        assert_eq!(value["source"]["title"], Value::Null);
+        assert_eq!(value["source_partial"], true);
+        let warning = value["warning"].as_str().unwrap();
+        assert!(warning.contains("committed") && warning.contains("papersd stopped"));
+        // A merge keeps its own status; a skip has no paper and no warning.
+        let merged = ImportOutcome {
+            created: Vec::new(),
+            merged: vec![id],
+            ..outcome.clone()
+        };
+        let value = outcome_value(&merged, "merged", Some(Err(ToolError::invalid("x"))));
+        assert_eq!(
+            (value["status"].as_str(), value["paper_id"].clone()),
+            (Some("merged"), json!(id.0))
+        );
+        let skipped = ImportOutcome {
+            created: Vec::new(),
+            merged: Vec::new(),
+            skipped: 1,
+            rows: Vec::new(),
+        };
+        let value = outcome_value(&skipped, "skipped", None);
+        assert_eq!(value["status"], "skipped");
+        assert!(value.get("warning").is_none());
     }
 
     #[test]

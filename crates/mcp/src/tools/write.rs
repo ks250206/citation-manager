@@ -14,7 +14,7 @@ use cm_protocol::{
         Source,
     },
     attachments::Rect,
-    domain::{AttachmentId, CollectionId, PaperId, TagKey},
+    domain::{AttachmentId, Collection, CollectionId, PaperId, TagKey, organization_name},
     exchange::{ExportRequest, ExportSelection, Exported, Format},
     ipc::{Command, Reply},
     library::{LibraryReply, LibraryRequest},
@@ -145,8 +145,9 @@ pub async fn update_paper(ctx: &Ctx<'_>, args: &Args) -> Result<Value, ToolError
 
 pub const COLLECTION_DESCRIPTION: &str = "Create a collection (optionally inside parent_id). \
 If a collection with the same name already exists under the same parent it is returned \
-instead (status \"exists\"). Needs the separately approved MCP write grant (the default MCP \
-grant is read-only).";
+instead (status \"exists\"). If an identical call creates a twin at the same moment, both \
+are returned as candidates (status \"created_ambiguous\") instead of a guessed ID. Needs the \
+separately approved MCP write grant (the default MCP grant is read-only).";
 
 pub fn collection_schema() -> Value {
     object(
@@ -165,15 +166,47 @@ async fn org(ctx: &Ctx<'_>, request: OrganizationRequest) -> Result<Organization
     }
 }
 
-fn display_name(raw: &str) -> String {
-    raw.split_whitespace().collect::<Vec<_>>().join(" ")
+fn describe(c: &Collection) -> Value {
+    json!({"collection_id": c.id.0, "name": c.name, "parent_id": c.parent.map(|p| p.0)})
+}
+
+/// Which collection a `CreateCollection` made. papersd replies with the whole hierarchy
+/// (ordered by ID, not creation), so the new one is found by diffing the snapshots and
+/// matching the requested parent and the stored (core-normalized) name: a concurrent
+/// creation of another name under the same parent is never reported as ours.
+#[derive(Debug)]
+enum Created<'a> {
+    One(&'a Collection),
+    Missing,
+    /// Several new collections with this name and parent (concurrent identical calls):
+    /// which one is ours cannot be told apart.
+    Ambiguous(Vec<&'a Collection>),
+}
+
+fn created_collection<'a>(
+    before: &[Collection],
+    after: &'a [Collection],
+    parent: Option<CollectionId>,
+    name: &str,
+) -> Created<'a> {
+    let mut new: Vec<&Collection> = after
+        .iter()
+        .filter(|c| c.parent == parent && c.name == name)
+        .filter(|c| !before.iter().any(|b| b.id == c.id))
+        .collect();
+    match new.len() {
+        0 => Created::Missing,
+        1 => Created::One(new.remove(0)),
+        _ => Created::Ambiguous(new),
+    }
 }
 
 pub async fn create_collection(ctx: &Ctx<'_>, args: &Args) -> Result<Value, ToolError> {
-    let name = display_name(args.str("name").expect("validated"));
+    // The exact rule core applies before storing (whitespace collapse, 1..=256 scalars).
+    let name = organization_name(args.str("name").expect("validated"))
+        .map_err(|e| ToolError::invalid(format!("name: {e}")))?;
     let parent = args.uuid("parent_id").map(CollectionId);
     let before = org(ctx, OrganizationRequest::List).await?;
-    let describe = |c: &cm_protocol::domain::Collection| json!({"collection_id": c.id.0, "name": c.name, "parent_id": c.parent.map(|p| p.0)});
     if let Some(existing) = before
         .collections
         .iter()
@@ -190,12 +223,26 @@ pub async fn create_collection(ctx: &Ctx<'_>, args: &Args) -> Result<Value, Tool
         }),
     )
     .await?;
-    let created = after
-        .collections
-        .iter()
-        .find(|c| c.parent == parent && !before.collections.iter().any(|b| b.id == c.id))
-        .ok_or_else(unexpected)?;
-    Ok(json!({"status": "created", "collection": describe(created)}))
+    match created_collection(&before.collections, &after.collections, parent, &name) {
+        Created::One(created) => Ok(json!({"status": "created", "collection": describe(created)})),
+        // Created, but a concurrent identical call made a twin: never guess which is ours.
+        Created::Ambiguous(candidates) => Ok(json!({
+            "status": "created_ambiguous",
+            "collection": null,
+            "candidates": candidates.into_iter().map(describe).collect::<Vec<_>>(),
+            "warning": "the collection was created, but another collection with the same \
+                        name was created under the same parent at the same time, so which \
+                        one this call made cannot be determined. Both are listed in \
+                        candidates; nothing was deleted.",
+        })),
+        // The write succeeded but its result is not in the reply (e.g. removed meanwhile).
+        Created::Missing => Err(ToolError::new(
+            "conflict",
+            "the collection was created but could not be identified in the library \
+             afterwards (it may have been changed or removed concurrently); list the \
+             collections again",
+        )),
+    }
 }
 
 pub const MOVE_DESCRIPTION: &str = "Put one paper into a collection. mode=add (default) keeps \
@@ -567,4 +614,56 @@ pub async fn export_citations(ctx: &Ctx<'_>, args: &Args) -> Result<Value, ToolE
         "migration_notice": exported.migration_notice,
         "papers": ids.iter().map(|id| json!({"paper_id": id.0, "uri": uri(*id, None, None, None)})).collect::<Vec<_>>(),
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use uuid::Uuid;
+
+    fn collection(id: u128, parent: Option<u128>, name: &str) -> Collection {
+        Collection {
+            id: CollectionId(Uuid::from_u128(id)),
+            parent: parent.map(|p| CollectionId(Uuid::from_u128(p))),
+            name: name.into(),
+            sort_order: 0,
+        }
+    }
+
+    #[test]
+    fn the_created_collection_is_matched_by_name_not_by_id_order() {
+        let parent = Some(CollectionId(Uuid::from_u128(1)));
+        let before = vec![collection(1, None, "Root")];
+        // Regression: a concurrent "Alpha" under the same parent sorts before our "Beta"
+        // (papersd lists by ID); the first new collection is not necessarily ours.
+        let after = vec![
+            collection(1, None, "Root"),
+            collection(2, Some(1), "Alpha"),
+            collection(3, Some(1), "Beta"),
+            collection(4, None, "Beta"),
+        ];
+        match created_collection(&before, &after, parent, "Beta") {
+            Created::One(c) => assert_eq!(c.id, CollectionId(Uuid::from_u128(3))),
+            other => panic!("{other:?}"),
+        }
+        match created_collection(&before, &after, parent, "Gamma") {
+            Created::Missing => {}
+            other => panic!("{other:?}"),
+        }
+        // Two identical concurrent creations: report both, never pick one.
+        let twins = vec![
+            collection(5, Some(1), "Beta"),
+            collection(6, Some(1), "Beta"),
+        ];
+        match created_collection(&before, &twins, parent, "Beta") {
+            Created::Ambiguous(c) => assert_eq!(c.len(), 2),
+            other => panic!("{other:?}"),
+        }
+        // A pre-existing twin is not new.
+        let before = vec![collection(5, Some(1), "Beta")];
+        match created_collection(&before, &twins, parent, "Beta") {
+            Created::One(c) => assert_eq!(c.id, CollectionId(Uuid::from_u128(6))),
+            other => panic!("{other:?}"),
+        }
+    }
 }
