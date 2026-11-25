@@ -210,6 +210,11 @@ UniJIS-UCS2-V を使った。埋め込みフォントの Identity-V は fixture 
 **未検証**。また縦書き 2 列は x 昇順（左の列から）に出て、右→左の読み順とは逆になる。
 検索は列内の連続性に依存するため問題ないが、抽出テキストの読み順は保証しない。
 
+**システム CJK フォント依存（CI で確認）**: 非埋め込みの HeiseiMin（UniJIS-UCS2-V）縦書きは、
+PDFium が代替のシステム CJK フォントを見つけられないと抽出結果が空になる。素の ubuntu runner では
+`layouts_runtime` が失敗し、`fonts-wqy-zenhei` を入れると成功した（PR #77 の CI）。macOS は標準で
+日本語フォントを持つ。Linux で縦書き PDF を検索対象にするには CJK フォントの導入が必要（INSTALL 系文書で案内する）。
+
 ## 実行したコマンドと結果
 
 Linux（本 worktree）で最終ソースに対して実行した exit code。新規の `daemon_recovery` と
