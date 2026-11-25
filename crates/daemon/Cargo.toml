@@ -100,6 +100,17 @@ name = "fulltext_runtime"
 path = "../../tests/integration/daemon/fulltext_runtime.rs"
 required-features = ["pdfium-runtime-tests"]
 
+# #30 longitudinal recovery with the real papersd: SIGKILL mid-write, integrity/orphans,
+# backup/restore, migration-history refusal and IPC-detected index damage -> rebuild job.
+[[test]]
+name = "daemon_recovery"
+path = "../../tests/integration/daemon/recovery.rs"
+
+# #30 hostile IPC input (seeded mutation of frames/Hello/requests) against the real papersd.
+[[test]]
+name = "daemon_hostile"
+path = "../../tests/integration/daemon/hostile.rs"
+
 # #22 browser/URL capture: native-host grant, common preview/commit, PDF fetch job.
 [[test]]
 name = "daemon_capture"
@@ -109,6 +120,12 @@ path = "../../tests/integration/daemon/capture.rs"
 [[example]]
 name = "backend_bench_import"
 path = "../../scripts/benchmarks/import.rs"
+test = true
+
+# #30 representative workload over real papersd IPC (warm start, switches, searches, recall).
+[[example]]
+name = "bench_representative_ipc"
+path = "../../scripts/benchmarks/representative_ipc.rs"
 test = true
 
 # #20 library annotations -> annotated PDF copy -> PDFium re-read, with the pinned runtime.

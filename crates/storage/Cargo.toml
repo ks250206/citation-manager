@@ -32,3 +32,9 @@ test = true
 name = "search_experiment"
 path = "../../scripts/search-experiments/experiment.rs"
 test = true
+
+# #30 representative library (10k papers + managed PDF attachments) and post-index stats.
+[[example]]
+name = "bench_representative_seed"
+path = "../../scripts/benchmarks/representative_seed.rs"
+test = true

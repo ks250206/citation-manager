@@ -54,3 +54,8 @@ required-features = ["runtime"]
 [[test]]
 name = "export_runtime"
 required-features = ["runtime"]
+
+# #30 two-column/math/table/vertical Japanese/rotated fixture (CM_PDFIUM_LIBRARY).
+[[test]]
+name = "layouts_runtime"
+required-features = ["runtime"]

@@ -62,7 +62,7 @@ GitHub runner の OS/Xcode 差による失敗は PR 上で実結果を確認す�
 | .app resource配置/遅延起動/寿命 #34 | implementing agent + macOS実機操作可能 agent。fallback Ryoji Kanno | **未実施**。.app 未作成。bundle移動/GUIなし/同時起動/idleとjob中の寿命/PDFium pathを記録 |
 | 認可境界 #25/#26 | implementing agent が自動セキュリティ回帰、ユーザー同意UIは実機可能 agent / Ryoji Kanno | #25: Linux 自動回帰 passed（[ISSUE_25](ISSUE_25.md)）。#26: Linux 自動回帰と Xvfb GUI 操作 passed（[ISSUE_26](ISSUE_26.md)）。macOS peer/.app と Keychain は**未実施** |
 | ローカル REST API #27 | implementing agent が Linux 自動回帰（実 papersd、ephemeral loopback port）と curl smoke | Linux 自動回帰と curl smoke passed（[ISSUE_27](ISSUE_27.md)）。macOS .app/launchd (#34)、PDFium 描画成功・DOI 実ネットワーク解決、GUI hint の実機操作は**未実施** |
-| 全文抽出/検索 #18 | implementing agent が Linux 自動回帰と pin 済み Linux PDFium 実抽出 | Linux 自動回帰と実 PDFium 抽出→検索 passed（[ISSUE_18](ISSUE_18.md)）。macOS PDFium/.app 同梱 (#34)、GUI 検索 (#21)、1万件/2万頁負荷 (#30) は**未実施** |
+| 全文抽出/検索 #18 | implementing agent が Linux 自動回帰と pin 済み Linux PDFium 実抽出 | Linux 自動回帰と実 PDFium 抽出→検索 passed（[ISSUE_18](ISSUE_18.md)）。macOS PDFium/.app 同梱 (#34)、GUI 検索 (#21) は**未実施**。1万件/1000 PDF/2万頁負荷は #30 で Linux コンテナと GitHub macOS VM runner で実測（[ISSUE_30](ISSUE_30.md)）、Apple Silicon 16 GB 実機は**未実施** |
 | Chrome/Firefox保存 #23/#24 | implementing agent がfixture、自動化可能な実ブラウザ agent。fallback Ryoji Kanno | #23 host: Linux の Chromium（Playwright 同梱）と Firefox ESR 153 で開発用 test 拡張 → host → 実 papersd の preview/commit、host 終了・ブラウザ終了・GUI 非起動のまま保存と PDF job 終端を確認（[ISSUE_23](ISSUE_23.md)）。macOS/Windows/正式版 Chrome・署名済み拡張は**未実施**。#24 の実拡張 UI と重複/再試行の手動記録は**未実施**。#22 の daemon 側 capture/PDF job は Linux 自動試験済み（[ISSUE_22](ISSUE_22.md)） |
 | MCP stdio tools #29 | implementing agent が公式SDK/clientから自動試験 | **未実施**。入口は Unavailable。read-only/write許可・出典ページ・stdout純度・transport停止を検証 |
 | Developer ID / notarization / DMG #31 | Ryoji Kanno が Developer ID と Apple 公証権限を用意し、権限を与えた配布担当 agent が実行 | **blocker**: `security find-identity -v -p codesigning` → `0 valid identities found`。Developer ID署名・notarizationは未検証。秘密は保存/Issue公開しない |
@@ -121,3 +121,21 @@ by the documented network-free path plus actual fallback/editing; a network-disa
 GUI experiment, offline DOI, failed-page retry and native queued-late-arrival remain
 unverified. PR45 stays Draft and #15 open pending independent acceptance review/current
 CI. No #34 or #23/#25 gate is opened by this evidence.
+
+## #30 横断回帰・代表負荷（2026-11-25）
+
+詳細・数値・コマンドと exit code は [ISSUE_30](ISSUE_30.md)、生 JSON は [ISSUE_30/](ISSUE_30/)。
+実行主体はすべて implementing agent。「実測」は記載の環境での値であり、DESIGN §16.1 の
+Apple Silicon 16 GB release 実機の値ではない。
+
+| 対象 | 環境 | 証跡 | 状態 |
+|---|---|---|---|
+| 強制終了→DB/job 復旧、migration 履歴不整合、backup 復元、索引破損→再構築、孤立添付 | Linux 自動（実 papersd） | `tests/integration/daemon/recovery.rs`（`daemon_recovery`）+ 既存 lifecycle/jobs/CRASH_RECOVERY | passed |
+| 2段組/数式/表/縦書き/回転 PDF | Linux 自動（pin 済み PDFium 8125） | `crates/pdf/tests/layouts_runtime.rs`、`fixtures/library/layouts.pdf` | passed（縦書きは非埋め込み UniJIS-UCS2-V のみ） |
+| スキャン/パスワード/破損 PDF | Linux 自動（同上） | 既存 `extract_runtime`、`tests/integration/daemon/fulltext.rs` | passed（既存） |
+| 悪意ある HTML/JSON/IPC frame・SSRF・認可迂回 | Linux 自動 | `crates/metadata/tests/mutation_lite.rs`、`tests/integration/daemon/hostile.rs` + 既存 auth/rest/api_tokens/fetch_policy | passed |
+| 1万件/1000 PDF/2万頁 headless 負荷（起動・切替・検索・日本語再現率・RSS/CPU/I/O） | Linux コンテナ / GitHub macOS VM runner | `scripts/benchmarks/representative.py`、`.github/workflows/benchmark.yml` | 実測（16 GB 実機は**未実施**） |
+| GUI idle / PDF 閲覧 RSS | Linux Xvfb（ソフトウェア描画） | 同上 `--gui`、`ISSUE_30/linux/gui.json` とスクリーンショット | 実測（macOS GUI は**未実施**） |
+| フレーム落ち（一覧スクロール） | なし | — | **未測定**（フレーム時間の計測手段なし） |
+| PDFium 以外での注釈表示 | Linux CI（pypdf + poppler） | 既存 `scripts/pdfium/validate_export.py`（ci.yml linux-native）、[pdf-export ADR](../ADR/pdf-export.md) | ISSUE_30 に再実行結果 |
+| host/daemon 寿命、lease/retry_wait 復帰 | Linux 自動 | 既存 `daemon_lifecycle`、`crates/native-host/tests/host_process.rs` | passed（既存、本 PR の全体実行で再確認） |
