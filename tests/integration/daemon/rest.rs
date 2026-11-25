@@ -1760,7 +1760,8 @@ fn write_only_imports_never_duplicate_and_never_reveal_existing_papers() {
     assert_eq!(dup_preview.status, 200);
     assert_eq!(shown(&dup_preview), shown(&fresh_preview));
     assert!(!dup_preview.text().contains(&existing));
-    assert!(!dup_preview.text().contains("hidden"));
+    // The warning is one constant text, present whether or not anything matched.
+    assert!(fresh_preview.text().contains("hidden for this client"));
     // Committing the duplicate skips it daemon-side (no second paper, no error).
     let committed = import(dup, false);
     assert_eq!(committed.status, 201, "{}", committed.text());

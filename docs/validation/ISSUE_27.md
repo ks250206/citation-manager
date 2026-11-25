@@ -10,7 +10,8 @@ Contract: [openapi.json](../openapi.json).
 |---|---|---|
 | Contract | `cm-daemon rest::openapi::tests::router_openapi_and_scope_table_list_the_same_endpoints` | router routes = OpenAPI operations = `ENDPOINTS` REST rows, both directions |
 | | `documented_scopes_match_the_shared_table`, `schema_references_resolve`, `openapi_document_is_committed` | `x-required-scopes` = table; 401/403 documented for every scoped row; refs resolve; committed file = generated |
-| Edge units | `rest::edge::tests::host_allowlist_is_exact`, `rest::ctx::tests::*`, `rest::tests::origins_are_bare_scheme_host_port`, `rest::handlers::tests::export_file_names_are_plain` | Host allowlist, strict bearer parsing (one header), URL-safe cursors, origin syntax, plain export names |
+| | `openapi_document_is_committed` under default features, `--features desktop-bootstrap` and `--features pdfium-runtime-tests` | one byte-identical contract for every feature set (keys canonicalized; GPUI turns on serde_json `preserve_order`) |
+| Edge units | `rest::edge::tests::host_allowlist_is_exact_and_follows_the_bound_address`, `a_handler_panic_becomes_a_standard_500`, `rest::ctx::tests::*`, `rest::tests::origins_are_bare_scheme_host_port`, `rest::handlers::tests::export_file_names_are_plain`, `a_denied_batch_reports_what_was_done_and_what_was_not` | Host allowlist per bound family (port optional only for 80), panic → 500 JSON + log line, strict bearer parsing, URL-safe cursors, origin syntax, plain export names, partial bulk results |
 | Core | `cm-core papers::tests::paper_patch_distinguishes_absent_null_and_value_and_round_trips`; existing 1024-combination scope tests (with `ImportCancel` added to `POST /imports`) | merge-patch semantics; table/authorizer agreement |
 | Daemon (`daemon_rest`, real papersd on an ephemeral loopback port) | `every_endpoint_requires_a_valid_rest_token` | every row: no token / `Basic` / unknown token → 401 with `WWW-Authenticate`; owner desktop credential → 403 `token_not_allowed`; health public |
 | | `every_endpoint_enforces_exactly_its_scopes` | every row × every required scope removed → 403 with `required_scopes`; bulk rows without elevation → `elevation_required`; exactly the required scopes pass |
@@ -27,6 +28,10 @@ Contract: [openapi.json](../openapi.json).
 | | `timeouts_connection_and_concurrency_limits` | slow headers cut off; connections over the limit closed; request deadline → 504; no free slot → 503 + `Retry-After` |
 | | `shutdown_with_the_api_enabled_releases_the_library_promptly` | shutdown drains REST sessions before the worker exits and the lock is released; a new daemon serves the API at once |
 | | `papersd_binary_serves_the_persisted_api_on_start` | real binary: persisted enabled API listens on start and pins the daemon past its idle timeout |
+| Review fixes | `write_only_imports_never_duplicate_and_never_reveal_existing_papers` | papers:write-only token: dry run of an existing DOI is identical to a new record (no id, no count, constant warning); commit skips it daemon-side (no duplicate, no 409); same over IPC with `Create` |
+| | `tokens_create_only_ai_annotations_and_cannot_confirm_them` | REST `source` human/import → 400; over IPC the same token cannot create `Human`, cannot `ConfirmAi`; the owner still confirms |
+| | `edge_cases_absolute_form_duplicate_host_http10_and_chunked_bodies` | foreign absolute-form target → 400, own absolute-form → 200, two Host headers → 400, HTTP/1.0 without Host → 400, chunked body over 1 MiB → 413 and nothing created |
+| | normal-case and scope tests after the #26 merge | per-kind elevation (Move does not lift bulk-delete), `POST /jobs` (owner-only kinds 403) and `POST /jobs/{id}/retry`, export extension must match the format, PNA header on configured preflights |
 
 Every response in `daemon_rest` is checked against `docs/openapi.json`: its status must be
 documented for that endpoint, its body must validate against the schema, and errors carry

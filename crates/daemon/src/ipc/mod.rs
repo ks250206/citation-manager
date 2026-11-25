@@ -1181,7 +1181,7 @@ struct PreviewOwner {
 }
 
 /// Same text for every redacted preview: it must not say whether anything matched.
-pub const REDACTED_PREVIEW_WARNING: &str = "Existing-library matches are not shown to this \
+pub const REDACTED_PREVIEW_WARNING: &str = "Existing-library matches are hidden for this \
     client; rows that exactly duplicate an existing paper are skipped on commit.";
 
 /// Without a read scope a preview must not reveal existing papers (native host capture,
