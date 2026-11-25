@@ -146,6 +146,23 @@ fn handshake_rejects_unknown_credentials_versions_libraries_and_oversized_frames
             supported: PROTOCOL_VERSION
         })
     ));
+    // #85: a protocol-1 client (base64 page bitmaps) learns which version the daemon speaks;
+    // the rejection is a plain JSON frame it can still read.
+    let mut hello = good.clone();
+    hello.protocol_version = 1;
+    let mut stream = raw(&env);
+    write_frame(&mut stream, &ClientFrame::Hello(hello), MAX_HANDSHAKE_FRAME).unwrap();
+    let mut head = [0u8; 5];
+    std::io::Read::read_exact(&mut stream, &mut head).unwrap();
+    assert_eq!(head[4], b'{');
+    let mut body = vec![0u8; u32::from_be_bytes(head[..4].try_into().unwrap()) as usize - 1];
+    std::io::Read::read_exact(&mut stream, &mut body).unwrap();
+    body.insert(0, b'{');
+    assert!(matches!(
+        serde_json::from_slice::<ServerFrame>(&body).unwrap(),
+        ServerFrame::Rejected(HandshakeRejection::VersionMismatch { supported: 2 })
+    ));
+    assert_eq!(PROTOCOL_VERSION, 2);
     let mut hello = good.clone();
     hello.library = Some(env.temp.path().join("other"));
     assert!(matches!(
@@ -164,6 +181,37 @@ fn handshake_rejects_unknown_credentials_versions_libraries_and_oversized_frames
     )
     .unwrap();
     assert_eq!(rejection(&mut stream), Some(HandshakeRejection::Malformed));
+    // Nor is one in the binary frame form, before or after authentication.
+    let binary_status = {
+        let json = serde_json::to_vec(&ClientFrame::Request {
+            id: 1,
+            command: Command::Status,
+        })
+        .unwrap();
+        let mut body = vec![0u8];
+        body.extend_from_slice(&(json.len() as u32).to_be_bytes());
+        body.extend_from_slice(&1u32.to_be_bytes());
+        body.extend_from_slice(&3u32.to_be_bytes());
+        body.extend_from_slice(&json);
+        body.extend_from_slice(b"xyz");
+        let mut frame = (body.len() as u32).to_be_bytes().to_vec();
+        frame.extend_from_slice(&body);
+        frame
+    };
+    let mut stream = raw(&env);
+    stream.write_all(&binary_status).unwrap();
+    assert_eq!(rejection(&mut stream), Some(HandshakeRejection::Malformed));
+    let mut stream = raw(&env);
+    handshake(&mut stream, good.clone()).unwrap();
+    // An unreferenced payload makes the frame malformed: the connection closes unanswered.
+    stream.write_all(&binary_status).unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(10)))
+        .unwrap();
+    assert!(matches!(
+        read_frame::<_, ServerFrame>(&mut stream, 1 << 20),
+        Ok(None) | Err(_)
+    ));
     // A declared pre-auth frame over the handshake limit is refused without reading it.
     let mut stream = raw(&env);
     stream

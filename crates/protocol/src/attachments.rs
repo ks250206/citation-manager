@@ -194,9 +194,10 @@ pub struct RenderedPage {
     pub zoom: f32,
     pub width: u32,
     pub height: u32,
-    /// Straight RGBA, row-major, `width * height * 4` bytes (base64 on the wire).
-    #[serde(with = "crate::ipc::b64")]
-    pub rgba: std::sync::Arc<[u8]>,
+    /// Straight RGBA, row-major, `width * height * 4` bytes. Raw binary payload in IPC
+    /// frames (protocol 2), base64 text in any other JSON (`ipc::blob`).
+    #[serde(with = "crate::ipc::blob")]
+    pub rgba: crate::ipc::blob::Bytes,
     /// False for image-only/scanned pages: viewing works, selection does not.
     pub has_text: bool,
     pub chars: Vec<PageChar>,

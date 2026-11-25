@@ -7,7 +7,9 @@ use cm_protocol::{
     domain::AttachmentId,
 };
 use std::{
+    cell::Cell,
     collections::{BTreeMap, HashMap, VecDeque},
+    rc::Rc,
     time::{Duration, Instant},
 };
 
@@ -17,11 +19,13 @@ pub const MIN_SCALE: f32 = 0.25;
 pub const MAX_SCALE: f32 = 4.0;
 /// Pages kept rendered around the visible range.
 pub const PREFETCH: u32 = 1;
-/// Decoded bitmaps kept in memory (RGBA bytes). DESIGN §16.2 asks for 64–128 MB. #30
+/// Rendered pages kept (RGBA bytes of their bitmaps). DESIGN §16.2 asks for 64–128 MB. #30
 /// measured that every cached bitmap is also held as a GPU atlas texture once drawn, so
-/// the process cost is about twice this budget: 192 MB let one 20-page PDF at fit-width
+/// the process cost was about twice this budget: 192 MB let one 20-page PDF at fit-width
 /// grow the GUI to 573 MiB RSS. 64 MB still holds the visible pages plus `PREFETCH` on
-/// each side at the 4 Mpx render cap (16 MiB per page).
+/// each side at the 4 Mpx render cap (16 MiB per page). Since #85 a drawn page keeps only
+/// its texture (`PageImage`), so the budget bounds texture memory plus the few pages not
+/// yet drawn.
 pub const CACHE_BUDGET_BYTES: usize = 64 * 1024 * 1024;
 pub const CACHE_MAX_ENTRIES: usize = 48;
 /// Gap between pages in logical pixels.
@@ -204,12 +208,18 @@ pub fn wanted_pages(visible: std::ops::Range<u32>, count: u32) -> Vec<u32> {
     pages
 }
 
-/// Rotate a straight-RGBA bitmap clockwise by quarter turns.
-pub fn rotate_rgba(width: u32, height: u32, rgba: &[u8], quarter_turns: u8) -> (u32, u32, Vec<u8>) {
+/// Rotate a straight-RGBA bitmap clockwise by quarter turns. Takes the buffer by value:
+/// without a turn (the common case) it is returned as is, not copied.
+pub fn rotate_rgba(
+    width: u32,
+    height: u32,
+    rgba: Vec<u8>,
+    quarter_turns: u8,
+) -> (u32, u32, Vec<u8>) {
     let (w, h) = (width as usize, height as usize);
     let turns = quarter_turns % 4;
     if turns == 0 || rgba.len() != w * h * 4 {
-        return (width, height, rgba.to_vec());
+        return (width, height, rgba);
     }
     let (nw, nh) = if turns % 2 == 1 { (h, w) } else { (w, h) };
     let mut out = vec![0u8; rgba.len()];
@@ -351,6 +361,72 @@ impl<V> RenderCache<V> {
     }
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
+    }
+}
+
+/// A cached page image and whether its pixels still live in CPU memory (#85).
+///
+/// Until the page is first drawn, `image` holds the full bitmap. Drawing copies it into the
+/// GPU texture atlas, and the drawing code then sets the page's upload flag;
+/// `RenderCache::release_uploaded` replaces such an image by a pixel-less stand-in with
+/// the same texture identity, so the CPU copy is freed while the texture keeps showing the
+/// page. Scrolling back or repainting draws from that texture. A texture is only released
+/// together with its cache entry (eviction, rotation, another document), so a page whose
+/// texture is gone is no longer cached and is rendered again, never drawn from a
+/// stand-in.
+pub struct PageImage<I> {
+    image: I,
+    uploaded: Rc<Cell<bool>>,
+    holds_pixels: bool,
+}
+impl<I> PageImage<I> {
+    pub fn new(image: I) -> Self {
+        Self {
+            image,
+            uploaded: Rc::new(Cell::new(false)),
+            holds_pixels: true,
+        }
+    }
+    pub fn image(&self) -> &I {
+        &self.image
+    }
+    pub fn into_image(self) -> I {
+        self.image
+    }
+    /// Set by the drawing code once the GPU holds a copy of the pixels.
+    pub fn upload_flag(&self) -> Rc<Cell<bool>> {
+        self.uploaded.clone()
+    }
+    pub fn uploaded(&self) -> bool {
+        self.uploaded.get()
+    }
+    /// False once the CPU copy was released.
+    pub fn holds_pixels(&self) -> bool {
+        self.holds_pixels
+    }
+}
+impl<I> RenderCache<PageImage<I>> {
+    /// Replaces the image of every page the GPU already holds by `stand_in(&image)` (which
+    /// must keep the texture identity), dropping the CPU pixels. Returns how many pages
+    /// released their pixels. Recency and byte accounting are unchanged: the budget keeps
+    /// bounding the textures.
+    pub fn release_uploaded(&mut self, mut stand_in: impl FnMut(&I) -> I) -> usize {
+        let mut released = 0;
+        for (page, _) in self.entries.values_mut() {
+            if page.holds_pixels && page.uploaded.get() {
+                page.image = stand_in(&page.image);
+                page.holds_pixels = false;
+                released += 1;
+            }
+        }
+        released
+    }
+    /// Pages whose CPU pixels are still held (not drawn yet).
+    pub fn pages_holding_pixels(&self) -> usize {
+        self.entries
+            .values()
+            .filter(|(p, _)| p.holds_pixels)
+            .count()
     }
 }
 

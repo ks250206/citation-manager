@@ -83,7 +83,7 @@ Xvfb（1400x900x24、GPU なし＝ソフトウェア描画）で起動。
 | 〃 collection 内 | 67.7 ms | 76.7 ms | 参考（短語は後述の制限あり） |
 | 短語 `AllPages` の 1 call（window/結果 page） | p95 121.3 ms | p95 106.7 ms | 1 call は目標内。完全回答は数十 call |
 | GUI アイドル RSS < 200 MB | GUI 160.9 MiB（+ papersd 13.3 = 174.2） | — | Linux Xvfb で達成。macOS は**未測定** |
-| PDF 1本閲覧時 RSS < 350 MB（総プロセス） | **409.7 MiB**（GUI 320.6 + papersd 89.1） | — | **未達**（Linux）。macOS は**未測定** |
+| PDF 1本閲覧時 RSS < 350 MB（総プロセス） | **409.7 MiB**（GUI 320.6 + papersd 89.1）→ #85 後 **263.4 MiB**（GUI 238.2 + papersd 25.2） | — | #30 時点は未達、[#85](#85-pdf-閲覧時のメモリ削減) で達成（Linux Xvfb）。macOS GUI は**未測定** |
 | PDF レンダリングキャッシュ上限 64–128 MB | 64 MB に調整（旧 192 MB） | 同コード | 達成（設定） |
 | 一覧スクロールでフレーム落ちなし | — | — | **未測定**（フレーム時間を取る手段がない） |
 | `papersd` idle RSS（warm 起動直後） | 13.3 MiB | 10.4 MiB | 参考 |
@@ -131,7 +131,7 @@ PDF page を「未検索」と返す（0 件表示と区別、#18 の設計ど�
 
 ## 未達・未測定と調整案
 
-1. **PDF 1本閲覧時の総 RSS（Linux 409.7 MiB > 350 MB、未達）**
+1. **PDF 1本閲覧時の総 RSS（Linux 409.7 MiB > 350 MB、未達）** → #85 で 263.4 MiB に削減（[下記](#85-pdf-閲覧時のメモリ削減)）
    - 根拠: 旧 192 MB キャッシュで 20 page を送ると GUI 573.3 MiB + papersd 89.1 MiB
      = 662.4 MiB（[cache192.json](ISSUE_30/linux-render-cache/cache192.json)）。
      各 bitmap（fit width 218%、約 9.5 MiB）が `RenderCache` の CPU 画像と、描画後の
@@ -255,3 +255,195 @@ Linux（本 worktree）で最終ソースに対して実行した exit code。�
 migration は追加・変更していない。新規依存なし（`Cargo.lock` 不変）。重い代表負荷は
 `cargo test` にも PR CI にも入れていない（examples の小さな単体テストのみ通常 CI で実行）。
 CI の `linux-native` job は新しい `layouts_runtime` も pin 済み PDFium で実行する。
+
+## #85 PDF 閲覧時のメモリ削減
+
+2026-11-25、implementing agent が branch `claude/issue-85-pdf-memory`（base `2cc9074` = origin/main）で実施。
+生データは [ISSUE_30/linux-m62/](ISSUE_30/linux-m62/)（ローカル絶対パスは `<scratch>`/`<worktree>`/`<tmp>` に置換）。
+
+### 結果（Linux、#30 と同じ手順）
+
+`representative.py --gui`（1万文献/1000 PDF/2万 page、同じ GUI 操作: paper:// link で 1 本目の PDF、
+Expand、ホイール 60 回、次 page ×24）。同じマシンで before（origin/main）と after を測った。
+
+| 段階 | before GUI + papersd (MiB) | after GUI + papersd (MiB) |
+|---|---:|---:|
+| idle（PDF なし） | 161.0 + 13.1 | 160.0 + 13.3 |
+| PDF を開いた直後 | 175.6 + 39.3 | 167.0 + 24.9 |
+| 60 回スクロール後 | 304.1 + 91.3 | 210.8 + 25.2 |
+| 20/20 page まで送った後 | 351.8 + 91.3 | 238.2 + 25.2 |
+| **PDF 1 本閲覧時の総 RSS（各段階の最大）** | **443.2** | **263.4（< 350 MB、達成）** |
+
+- before の総 RSS は #30 記録（409.7 MiB）より大きいが、同じ origin/main コードで本マシンで再測定した値を
+  比較の基準にした（GUI 側の差。共有ホストで他 agent の負荷は制御外）。
+- after は [after-summary.json](ISSUE_30/linux-m62/after-summary.json)、[after-gui.json](ISSUE_30/linux-m62/after-gui.json)。
+  スクリーンショット（[PDF 表示](ISSUE_30/linux-m62/after-gui-pdf-open.png)、
+  [スクロール後](ISSUE_30/linux-m62/after-gui-pdf-scrolled.png)、[20/20 page](ISSUE_30/linux-m62/after-gui-pdf-paged.png)）で
+  各段階に到達し、ページが描画されていることを確認した。before の同段階
+  （[before-gui-pdf-scrolled.png](ISSUE_30/linux-m62/before-gui-pdf-scrolled.png)）と画素単位で同一だった。
+- headless の新しい段階（`representative_ipc renders`: 1 本目の PDF 20 page を zoom 2.2、3 接続で IPC 描画）:
+  papersd 11.9 → 25.3 MiB（2 秒後、sampled peak 34.5 MiB）。macOS runner でも同じ段階を測った（下記）。
+- その他の指標は after でも目標内（warm 起動 p50 35.5 / p95 40.3 ms、collection 切替 p95 5.9 ms、
+  メタデータ p95 102.2 ms、全文 p95 34.3 ms、GUI idle 160.0 MiB）。re-exec（下記）による
+  warm 起動の悪化は見られない。before 実行の遅延系の値は、測定中に本 worktree の build を並行させた
+  ため比較に使わない（RSS の GUI 段階は build なしで別途実行）。
+
+### 原因の特定（測定）
+
+測定の手順は 2 つ。(1) GUI 段階の最後に `/proc/<pid>/smaps`（mapping 種別ごとの Rss）を取り、
+gdb で `malloc_trim(0)` を呼んで前後の RSS を比べる（glibc が free 済みなのに保持している量）。
+(2) papersd を単独で起動し、IPC client で 1 本目の PDF の 20 page を描画して（zoom 1.7、3 件同時）、
+各応答後の RSS を見る。allocator 設定を変えた実行で比べる。
+
+papersd（単独描画、開始時 11.7 MiB、20 page 後）:
+
+| 条件 | 20 page 後 | malloc_trim 後 |
+|---|---:|---:|
+| before | 74.6 MiB（9 page 目以降は横ばい） | 64.5 MiB |
+| before、`GLIBC_TUNABLES=glibc.malloc.mmap_threshold=262144` | 24.6 | — |
+| before、`glibc.malloc.arena_max=1` | 59.1 | — |
+| before、同時 1 件 | 40.9 | — |
+| binary frame 化のみ（閾値は既定） | 40.0 | 29.1 |
+| after（binary frame + 固定閾値） | 24.6 | 19.1 |
+
+- 応答 frame は before が 7.9 MB の JSON（base64）、after が 6.0 MB（生 RGBA + 小さな JSON）。
+  before は 1 page ごとに PDFium の bitmap、BGRA→RGBA の Vec、`Arc<[u8]>` へのコピー、base64 文字列、
+  JSON 本体、frame バッファと、page の数倍の一時領域を確保していた。
+- **保持の主因は glibc の動的 mmap 閾値**: 大きな mmap 領域が free されると閾値がそのサイズ
+  （最大 32 MiB）まで上がり、以後の bitmap 大の確保は heap（thread arena）から取られて free 後も
+  OS に返らない。閾値を固定すると 74.6 → 24.6 MiB。`malloc_trim` では 10 MiB しか戻らず、
+  arena 数を 1 にしても 59.1 MiB 残る（断片化した heap に残るため）。
+- 残る約 13 MiB（11.7 → 24.6）は PDFium 側（文書を閉じた後のフォント等のキャッシュ）で、
+  描画回数に比例しない。
+
+GUI（20/20 page 段階の smaps、KiB）:
+
+| mapping | before | after |
+|---|---:|---:|
+| memfd（Mesa lavapipe の device memory = atlas テクスチャ、swapchain） | 99,396 | 99,424 |
+| heap（brk） | 93,584 | 23,764 |
+| 匿名 mmap | 56,024 | 9,908 |
+| libLLVM（lavapipe の JIT、file-backed） | 55,352 | 55,388 |
+| `malloc_trim` で戻った量 | 41.4 MiB | 1.8 MiB |
+
+- before は描画キャッシュの CPU 側画像（最大 64 MB）が GPU テクスチャと二重に残り、加えて
+  一時領域（受信 frame、base64 文字列、デコード後 Vec、Arc コピー、回転用コピー）が heap に残った。
+
+寄与の切り分け（同じ library・同じ GUI 操作、総 RSS = GUI + papersd の最大）:
+
+| 構成 | 総 RSS (MiB) | 証跡 |
+|---|---:|---|
+| before | 443.2 | before-gui.json |
+| before + 固定閾値（環境変数のみ） | 318.9（293.9 + 25.0） | variant-tunable.json |
+| after のコードから re-exec だけ外したもの | 292.5（267.4 + 25.1） | variant-notune.json |
+| after（同じ library での GUI 段階） | 262.3（237.2 + 25.1） | variant-v1.json |
+| after（通しの再測定） | 263.4（238.2 + 25.2） | after-summary.json |
+
+### 変更内容
+
+1. **IPC の binary frame（protocol version 2）**: 描画済み page の RGBA を JSON/base64 ではなく frame の
+   binary 部で送る。frame は従来どおり 4 byte 長 + 本体で、上限（応答 64 MiB、要求 8 MiB、
+   handshake 64 KiB）は本体全体に掛かる。本体が `0x00` で始まる場合は
+   `json_len | count | 各 blob 長 | JSON | blob…`。JSON 側は `{"blob": i}` で参照する。部分の合計と
+   frame 長の一致（payload を確保する前に検査）、count 1..=8、全 blob をちょうど 1 回参照、を満たさない
+   frame は malformed として接続を閉じる。受信側は各 blob を最終的に保持する buffer に直接読み、
+   送信側は元の buffer から書く。handshake は平文 JSON のままなので、version 1 の client は
+   `VersionMismatch{supported: 2}` を受け取れる。認可は従来どおり request ごとで、binary 形式でも
+   認証前の request は実行されない（`daemon_ipc` で確認）。REST（`GET /attachments/{id}/pages/{page}`
+   の base64 JSON）と MCP は IPC frame を経由しないため契約は不変（OpenAPI 契約 test を含む既存 test が通る）。
+   `RenderedPage.rgba` は frame 外の JSON では従来どおり base64 文字列になる。
+2. **PDFium が RGBA を直接書く**（`FPDF_REVERSE_BYTE_ORDER`）: BGRA→RGBA の変換コピーをなくした。
+   daemon 側の `Arc` への再コピーもなくした（`rgba` は `Arc<Vec<u8>>`）。
+3. **GUI: GPU 転送後に CPU 側の画素を解放**: page は canvas で `paint_image` し、成功した page に
+   upload 済みの印を付ける。16 ms ごとの message pump で、その page の `RenderImage` を同じ image id を持つ
+   1x1 の代替に置き換える。CPU 側の画素は解放され、atlas のテクスチャがそのまま表示を続ける。テクスチャは
+   cache entry と一緒にしか解放しないため、スクロールで戻る・再描画するときはテクスチャから描かれる。
+   evict・回転・文書切替で entry が消えた page は再描画を要求し、代替画像から描くことはない。
+   回帰テスト `drawn_pages_release_their_cpu_pixels_and_redisplay_from_the_texture` でこれを確認している。
+   受信 buffer は GPUI 画像にそのまま変換し、回転なしではコピーしない。
+   付随して、render 中・クリック処理中に `drop_image(_, None)` を呼ぶと、更新中の window の atlas に
+   届かずテクスチャが残る問題があった（回転・文書切替でリーク）。テクスチャの解放も message pump から行うよう直した。
+4. **glibc の mmap 閾値を固定**（`cm_daemon::malloc_tuning`）: papersd と GUI は、glibc の Linux で
+   起動直後に一度だけ `GLIBC_TUNABLES=glibc.malloc.mmap_threshold=262144` を付けて自分を re-exec する
+   （`/proc/self/exe`、PID・引数・fd は不変）。`mallopt` は FFI（unsafe）で workspace の方針に反するため、
+   この方法にした。利用者が閾値を設定済みなら尊重し、exec に失敗しても既定のまま動く。子プロセスは
+   この変数を継承するが、変わるのは allocator の閾値だけ。macOS・他の libc では何もしない。
+
+### Xvfb での手動確認（after のコード）
+
+`citation-manager` を Xvfb（1400x900x24）で起動し、xdotool で操作した。使った build は製品コードが
+after と同一のもの（test・文書・harness の変更前）。
+- PDF 表示、スクロール、次 page ×12、上方向へ 200 回スクロール（解放済み page の再表示を含む）。
+- zoom +2 段（400%）、−4 段（125%）、Width。
+- 回転 1 回、その後 3 回で元に戻す。
+- page 2 へジャンプし、1 行目をドラッグ選択して Highlight。次 page/前 page ×4 の後もハイライトが残る。
+- 1 ページ目を表示したまま 6 回下へスクロールし、3 秒待ってから 6 回戻した。この画面は、最初の画面と
+  page 領域が画素単位で同一だった（差分は「Exit reading」ボタンの hover 表示のみ）。
+
+いずれもページが空白にならず正しく描画された。スクリーンショット:
+[解放後の再表示](ISSUE_30/linux-m62/manual-redisplay-released-page.png)、
+[上方向スクロール](ISSUE_30/linux-m62/manual-scrolled-back.png)、
+[zoom in](ISSUE_30/linux-m62/manual-zoom-in.png)、[zoom out](ISSUE_30/linux-m62/manual-zoom-out.png)、
+[回転](ISSUE_30/linux-m62/manual-rotated.png)、[ハイライト](ISSUE_30/linux-m62/manual-highlight.png)。
+
+### macOS runner（headless）
+
+`benchmark.yml`（macos-15、`VirtualMac2,1` Apple M1 Virtual、3 vCPU、7 GiB）を本 branch で
+workflow_dispatch した。run [45636732626](https://github.com/ks250206/citation-manager/actions/runs/45636732626)
+（head `6b9d5f5`、[macos-m62/](ISSUE_30/macos-m62/)）と、先行 run
+[45633567308](https://github.com/ks250206/citation-manager/actions/runs/45633567308)
+（head `69a2d1d`、同じ製品コード、`run1-*.json`）。どちらも成功。
+
+| 指標 | run 45636732626 | run 45633567308 | #30（`ee2a33b`） |
+|---|---:|---:|---:|
+| papersd: 20 page 描画後の `ps` RSS | 71.0 MiB（開始時 8.7） | 71.8 MiB（開始時 8.9） | — |
+| 同、phys_footprint（`footprint`/`vmmap`） | **7.1 MB**（peak 29 MB） | 未取得 | — |
+| warm 起動 p50 / p95 | 122.6 / 241.8 ms | 176.7 / 289.5 ms | 121.0 / 209.5 ms |
+| collection 切替 p95 | 9.8 ms | 7.6 ms | 3.2 ms |
+| メタデータ検索 p95 | 137.8 ms | 129.6 ms | 77.2 ms |
+| 全文検索 p95 | 62.7 ms | 43.3 ms | 28.8 ms |
+| 索引中 peak / クエリ中 peak RSS | 46.5 / 19.9 MiB | 47.0 / 20.0 MiB | 45.1 / 20.2 MiB |
+
+- **macOS の `ps` RSS 71 MiB は、解放済みの大きな割り当てを libmalloc がキャッシュしている分**:
+  `vmmap` では `MALLOC_LARGE_REUSABLE` が 42.3 MB（resident だが reusable、footprint には数えない）で、
+  phys_footprint は 7.1 MB だった。OS が必要に応じて回収するので、Activity Monitor の「メモリ」
+  （footprint）では保持にならない。glibc の固定閾値に相当する対処は macOS では不要と判断した。
+  binary frame 化前の macOS 値は、この段階が protocol 2 専用のため**未測定**。
+- 遅延系の値は、#30 時点と 2 本の run の間で一様にばらついた（本変更が通らない経路も含めて 30–100%）。
+  共有 VM runner の差と判断し、目標（§16.2）はすべて満たしている。
+- **GUI の RSS は macOS では未測定**（`benchmark.yml` は headless のみで、GUI を操作する手段がない）。
+  re-exec は glibc 専用で macOS では何もしない。
+
+### 実行したコマンドと結果（#85）
+
+Linux（本 worktree、最終 head のソース）での exit code。
+
+| コマンド | exit |
+|---|---|
+| `cargo fmt --all -- --check` | 0 |
+| `cargo clippy --workspace --all-targets --locked -- -D warnings` | 0 |
+| `cargo clippy -p cm-desktop --all-targets --features native-gpui --locked -- -D warnings` | 0 |
+| `cargo clippy -p cm-daemon --all-targets --features desktop-bootstrap --locked -- -D warnings` | 0 |
+| `cargo test --workspace --locked --no-fail-fast` | 0（606 passed、0 failed、0 ignored） |
+| `cargo test -p cm-daemon -p cm-desktop --features cm-daemon/desktop-bootstrap --locked` | 0（247 passed） |
+| `cargo build -p cm-daemon --bin citation-manager --features desktop-bootstrap --locked` | 0 |
+| `python3 scripts/check_architecture.py` | 0 |
+| `python3 scripts/check_migrations.py --base origin/main` | 0 |
+| `python3 -m unittest discover -s scripts -p 'test_*.py'` | 0（54 tests） |
+| `CM_PDFIUM_LIBRARY=… cargo test -p cm-pdf --features runtime --locked --test metadata_runtime --test runtime --test extract_runtime --test export_runtime --test layouts_runtime` | 0（5 passed） |
+| `CM_PDFIUM_LIBRARY=… cargo test -p cm-daemon --features pdfium-runtime-tests --locked --test fulltext_runtime --test pdf_export_runtime` | 0（2 passed） |
+| `python3 scripts/benchmarks/representative.py --gui --out m62-final --pdfium <pinned libpdfium.so>` | 0 |
+| `benchmark.yml`（macos-15、workflow_dispatch、2 回） | success |
+
+migration の追加・変更なし、新規依存なし（`Cargo.lock` 不変）。
+
+### 未達・未測定・制限
+
+- Linux の GUI 値は Xvfb のソフトウェア描画（Mesa lavapipe）によるもの。テクスチャ（memfd 約 97 MiB）と
+  LLVM（約 54 MiB、file-backed）がプロセス RSS に計上される。GPU のある実機では、テクスチャは VRAM または
+  統合メモリに置かれ、計上のされ方が異なる。
+- GPU renderer が atlas を消去した場合（device loss、GPU エラーの連続）、解放済みの page は、cache から
+  外れるまで 1x1 の代替で描かれる（zoom や回転を変えれば再描画される）。この経路は Xvfb では再現できず、
+  **未検証**。
+- さらに減らす案: 描画キャッシュ予算を 64 → 32 MB にする（テクスチャを直接減らす）、画面外のテクスチャを
+  早めに解放する、lavapipe 環境でだけ swapchain の枚数を減らす。いずれも今回の目標には不要なので実施していない。

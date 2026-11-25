@@ -149,3 +149,18 @@ Apple Silicon 16 GB release 実機の値ではない。
 | 新規 install → ブラウザ保存（GUI/daemon 停止）→ GUI 再起動・検索 → CLI/REST/MCP → 注釈付き PDF → 可搬性・privacy・offline | implementing agent、Linux コンテナ（release build、Xvfb、Playwright Chromium、loopback のみの network namespace） | `tests/e2e/release/run.py`、[release-e2e/linux](release-e2e/linux/) | passed |
 | 同（ブラウザと GUI を除く）、`.dmg` から取り出した `.app` | GitHub hosted macOS VM（`package-macos.yml`） | run 45613061723、[release-e2e/macos](release-e2e/macos/) | passed（66 checks） |
 | 実機 Mac・Developer ID 署名・store 拡張・16 GB 実機計測 | 上表の fallback 担当（owner）/ 権限を持つ担当 | — | **未実施**（MVP 完了の blocker） |
+
+### #85 PDF 閲覧時のメモリ削減（2026-11-25）
+
+数値・手順は [ISSUE_30 の #85 節](ISSUE_30.md#85-pdf-閲覧時のメモリ削減)。
+
+| 対象 | 環境 | 証跡 | 状態 |
+|---|---|---|---|
+| binary frame（blob）の符号化・上限・不正 frame（長さ不一致/未参照/二重参照/過大宣言/切断） | Linux 自動 | `crates/protocol/src/ipc/frame.rs` の unit test | passed |
+| protocol 2: v1 client は平文 JSON の `VersionMismatch{supported: 2}`、認証前後の不正 binary frame は実行されない | Linux 自動（実 IPC） | `tests/integration/daemon/ipc.rs`（`daemon_ipc`）、既存 `daemon_hostile` | passed |
+| 実 PDFium の page render が binary frame の生 RGBA で届く | Linux 自動（pin 済み PDFium） | `tests/integration/daemon/fulltext_runtime.rs`（ci.yml linux-native） | passed |
+| REST/MCP の JSON 契約（base64 の page render を含む）不変 | Linux 自動 | 既存 `daemon_rest`（OpenAPI 契約）、MCP tests | passed |
+| GPU 転送後の CPU 画素解放と再表示（scroll back・再描画・evict 後の再要求・回転/文書切替） | Linux 自動 + Xvfb 操作 | `crates/desktop/tests/pdf_viewer.rs`、スクリーンショット | passed |
+| glibc mmap 閾値の再 exec（既存設定の尊重、無限 re-exec しない） | Linux 自動 | `crates/daemon/src/malloc_tuning.rs` の unit test | passed |
+| PDF 1 本閲覧時の総 RSS | Linux Xvfb | `representative.py --gui`（ISSUE_30/linux-m62/） | 実測（macOS GUI は**未測定**） |
+| papersd の描画後 RSS / footprint（headless） | Linux コンテナ / GitHub macOS VM runner | `representative_ipc renders`（ISSUE_30/linux-m62/、ISSUE_30/macos-m62/） | 実測 |
