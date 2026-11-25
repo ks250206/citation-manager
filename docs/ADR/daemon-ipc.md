@@ -173,7 +173,10 @@ lease owner/generation/expiry, next attempt, deadline, owner grant, and a unique
   "lease expired; attempt limit reached"; otherwise retry_wait due now.
 - This is **at-least-once execution, not exactly-once**. Handlers keep effects idempotent and
   detect committed results: `attachment.import` keys its effect by `(paper, sha256)` and returns
-  `AlreadyCommitted` (`detected_committed = true`) instead of registering twice.
+  `AlreadyCommitted` (`detected_committed = true`) instead of registering twice. The check is
+  repeated inside the registering write transaction (`AttachmentLibrary::import_once`, also
+  used by `capture.pdf_fetch` and the GUI attach), so a job and a GUI attach of the same
+  content racing on their separate connections still leave one reference.
 - Built-in kinds: `attachment.import`, `diagnostic.wait` (no library effect; used to test
   lifecycle/retry/lease recovery), `capture.pdf_fetch` (#22). #18 adds extraction kinds via
   `JobHandler`. A kind whose payload must come from a daemon-validated operation returns

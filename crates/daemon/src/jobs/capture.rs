@@ -197,7 +197,8 @@ impl JobHandler for CapturePdfFetchHandler {
             Ok(library) => library,
             Err(e) => return Outcome::Retryable(e.to_string()),
         };
-        let imported = AttachmentService::new(library).import(ImportAttachment {
+        // Deduplicated again inside the registering transaction (concurrent GUI attach).
+        let imported = AttachmentService::new(library).import_once(ImportAttachment {
             paper_id: job.paper,
             source: temp.path().to_path_buf(),
             original_name: file_name(&fetched.final_url),
@@ -205,7 +206,8 @@ impl JobHandler for CapturePdfFetchHandler {
             expected_sha256: Some(fetched.sha256),
         });
         match imported {
-            Ok(a) => Outcome::Succeeded(result(a.id.0)),
+            Ok(i) if i.existing => Outcome::AlreadyCommitted(result(i.attachment.id.0)),
+            Ok(i) => Outcome::Succeeded(result(i.attachment.id.0)),
             Err(AttachmentError::HashMismatch | AttachmentError::Unavailable) => {
                 Outcome::Retryable("download changed or storage busy".into())
             }
