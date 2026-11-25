@@ -207,3 +207,17 @@ the same page position when its width changes (Expand, or coming back to the PDF
 another width) instead of reusing a pixel offset from another scale, and "Place in PDF…"
 for an unresolved note opens at the top of the page in view (or the first page), not at a
 leftover offset that can sit in a blank margin. Evidence: [ISSUE_84](../validation/ISSUE_84.md).
+
+## #87 design tokens, theme and density (M6-4)
+
+Colours, spacing, font sizes, radii and shadows live in `crates/desktop/src/ui/theme` (no GPUI
+dependency), with a Light palette equal to the pre-#87 look and a Dark palette. `native/` never
+names a colour: it reads the active palette (`tok()`) and density metrics (`dims()`), resolved
+once per frame from `Settings.theme` (Light / Dark / System, where System follows the window
+appearance) and `Settings.density` (Compact / Comfortable). Both fields are serde-defaulted in the
+existing UI settings document, so no file or storage migration is involved. Every text/background
+and indicator/background pairing the views draw is listed in `theme::PAIRINGS` and tested
+against WCAG AA; a new colour combination in `native/` needs a new entry there. Icons are
+vendored Lucide SVGs (ISC) compiled into the binary; only icons in `ui::icons::Icon` may be
+vendored, and their license ships in the generated third-party notices. Validation:
+[ISSUE_87](../validation/ISSUE_87.md).

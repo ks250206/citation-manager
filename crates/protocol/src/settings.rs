@@ -24,6 +24,46 @@ pub struct Settings {
     /// Most-recent-first Command Palette history (command IDs only, no arguments).
     #[serde(default)]
     pub recent_commands: Vec<String>,
+    /// #87 colour scheme: Light, Dark or follow the system appearance.
+    #[serde(default)]
+    pub theme: ThemeMode,
+    /// #87 display density of tables, lists and buttons.
+    #[serde(default)]
+    pub density: Density,
+}
+/// #87 colour scheme preference. `System` follows the window appearance reported by the OS.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ThemeMode {
+    Light,
+    Dark,
+    #[default]
+    System,
+}
+impl ThemeMode {
+    pub const ALL: [ThemeMode; 3] = [ThemeMode::Light, ThemeMode::Dark, ThemeMode::System];
+    pub fn label(self) -> &'static str {
+        match self {
+            ThemeMode::Light => "Light",
+            ThemeMode::Dark => "Dark",
+            ThemeMode::System => "System",
+        }
+    }
+}
+/// #87 display density. `Comfortable` is the layout used before #87.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Density {
+    Compact,
+    #[default]
+    Comfortable,
+}
+impl Density {
+    pub const ALL: [Density; 2] = [Density::Compact, Density::Comfortable];
+    pub fn label(self) -> &'static str {
+        match self {
+            Density::Compact => "Compact",
+            Density::Comfortable => "Comfortable",
+        }
+    }
 }
 fn enabled() -> bool {
     true
@@ -66,6 +106,8 @@ impl Default for Settings {
             details_tab: "Info".into(),
             vim: true,
             recent_commands: vec![],
+            theme: ThemeMode::default(),
+            density: Density::default(),
         }
     }
 }

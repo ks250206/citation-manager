@@ -83,7 +83,7 @@ impl ColumnKind {
             Self::Title => paper.title.replace(['\r', '\n'], " "),
             Self::Year => b.year.map_or_else(|| "—".into(), |y| y.to_string()),
             Self::Journal => b.journal.clone().unwrap_or_default(),
-            Self::Pdf => if has_pdf { "📄" } else { "" }.into(),
+            Self::Pdf => if has_pdf { "PDF" } else { "" }.into(),
             Self::Type => b.paper_type.clone().unwrap_or_default(),
             Self::Doi => b.doi.clone().unwrap_or_default(),
             // RFC 3339 timestamps: the date part is enough for a list.
@@ -143,12 +143,20 @@ pub fn next_sort(current: LibrarySort, field: SortField) -> LibrarySort {
     }
 }
 
-/// Header arrow for a column under the current sort.
+/// Direction shown in a column header: only the column the table is sorted by has one.
+/// The native header draws it as a chevron icon (#87).
+pub fn sort_direction(kind: ColumnKind, sort: LibrarySort) -> Option<SortDirection> {
+    kind.sort_field()
+        .filter(|f| *f == sort.field)
+        .map(|_| sort.direction)
+}
+
+/// Header arrow for a column under the current sort, as text (for plain-text renderings).
 pub fn sort_arrow(kind: ColumnKind, sort: LibrarySort) -> &'static str {
-    match (kind.sort_field(), sort.direction) {
-        (Some(f), SortDirection::Asc) if f == sort.field => " ▲",
-        (Some(f), SortDirection::Desc) if f == sort.field => " ▼",
-        _ => "",
+    match sort_direction(kind, sort) {
+        Some(SortDirection::Asc) => " ▲",
+        Some(SortDirection::Desc) => " ▼",
+        None => "",
     }
 }
 

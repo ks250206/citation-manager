@@ -54,10 +54,6 @@ fn now_ms() -> i64 {
         .unwrap_or(0)
 }
 
-const DANGER: u32 = 0xb42318;
-const WARN_BG: u32 = 0xfff4d6;
-const WARN_TEXT: u32 = 0x6b4e00;
-
 impl LibraryView {
     pub(super) fn api_send(&mut self, command: ApiCommand, op: ApiOp) {
         let sender = self.sender.clone();
@@ -360,17 +356,17 @@ impl LibraryView {
         let card = || {
             div()
                 .p_4()
-                .rounded_lg()
+                .rounded(px(RADIUS.lg))
                 .border_1()
-                .border_color(rgb(BORDER))
-                .bg(rgb(SURFACE))
+                .border_color(rgb(tok().border))
+                .bg(rgb(tok().surface))
                 .flex()
                 .flex_col()
                 .gap_2()
         };
         let title = |text: &'static str| {
             div()
-                .text_size(px(15.))
+                .text_size(px(dims().font_title))
                 .font_weight(FontWeight::SEMIBOLD)
                 .child(text)
         };
@@ -393,9 +389,9 @@ impl LibraryView {
                     div()
                         .px_3()
                         .py_2()
-                        .rounded_md()
-                        .bg(rgb(if error { 0xffe5e5 } else { ACCENT_SOFT }))
-                        .text_color(rgb(if error { 0x9b1c1c } else { ACCENT_TEXT }))
+                        .rounded(px(RADIUS.md))
+                        .bg(rgb(if error { tok().error_bg } else { tok().accent_soft }))
+                        .text_color(rgb(if error { tok().error_text } else { tok().accent_text }))
                         .child(text),
                 )
             })
@@ -523,10 +519,10 @@ impl LibraryView {
                             div()
                                 .px_2()
                                 .py_1()
-                                .rounded_md()
-                                .bg(rgb(WARN_BG))
-                                .text_color(rgb(WARN_TEXT))
-                                .text_size(px(12.))
+                                .rounded(px(RADIUS.md))
+                                .bg(rgb(tok().warn_bg))
+                                .text_color(rgb(tok().warn_text))
+                                .text_size(px(dims().font_small))
                                 .child(FILE_STORE_WARNING),
                         )
                     }),
@@ -573,9 +569,9 @@ impl LibraryView {
                             .child(
                                 div().flex_1().flex().flex_wrap().gap_1().children(ISSUABLE.map(|scope| {
                                     let on = state.form.scopes.contains(&scope);
-                                    nav_item(scope.name(), if on { format!("✓ {}", scope.name()) } else { scope.name().to_owned() }, on)
+                                    nav_icon_item(scope.name(), crate::ui::icons::checkbox(on), scope.name(), on)
                                         .border_1()
-                                        .border_color(rgb(BORDER))
+                                        .border_color(rgb(tok().border))
                                         .on_click(cx.listener(move |this, _, _, cx| {
                                             this.api.form.toggle(scope);
                                             cx.notify();
@@ -638,7 +634,7 @@ impl LibraryView {
                         div()
                             .flex()
                             .gap_3()
-                            .text_size(px(12.))
+                            .text_size(px(dims().font_small))
                             .child(div().w(px(170.)).child(format_time(e.at_ms)))
                             .child(div().w(px(90.)).child(who))
                             .child(div().w(px(170.)).child(format!("{:?}", e.operation)))
@@ -646,12 +642,12 @@ impl LibraryView {
                                 div()
                                     .w(px(80.))
                                     .text_color(rgb(match e.outcome {
-                                        cm_protocol::api::AuditOutcome::Succeeded => TEXT,
-                                        _ => DANGER,
+                                        cm_protocol::api::AuditOutcome::Succeeded => tok().text,
+                                        _ => tok().danger,
                                     }))
                                     .child(format!("{:?}", e.outcome).to_lowercase()),
                             )
-                            .child(div().text_color(rgb(MUTED)).child(e.reason.clone().unwrap_or_default()))
+                            .child(div().text_color(rgb(tok().muted)).child(e.reason.clone().unwrap_or_default()))
                     })),
             )
     }
@@ -665,11 +661,11 @@ impl LibraryView {
         };
         div()
             .p_3()
-            .rounded_lg()
+            .rounded(px(RADIUS.lg))
             .border_1()
-            .border_color(rgb(0xe0b84d))
-            .bg(rgb(WARN_BG))
-            .text_color(rgb(WARN_TEXT))
+            .border_color(rgb(tok().warn_border))
+            .bg(rgb(tok().warn_bg))
+            .text_color(rgb(tok().warn_text))
             .flex()
             .flex_col()
             .gap_2()
@@ -682,9 +678,9 @@ impl LibraryView {
                 div()
                     .px_2()
                     .py_1()
-                    .rounded_md()
-                    .bg(rgb(SURFACE))
-                    .text_color(rgb(TEXT))
+                    .rounded(px(RADIUS.md))
+                    .bg(rgb(tok().surface))
+                    .text_color(rgb(tok().text))
                     .font_family("monospace")
                     .child(text),
             )
@@ -747,9 +743,9 @@ impl LibraryView {
             div()
                 .w(px(w))
                 .flex_shrink_0()
-                .text_size(px(11.))
+                .text_size(px(dims().font_caption))
                 .font_weight(FontWeight::SEMIBOLD)
-                .text_color(rgb(MUTED))
+                .text_color(rgb(tok().muted))
                 .child(text)
         };
         let cell = |text: String, w: f32| {
@@ -804,13 +800,13 @@ impl LibraryView {
                     div()
                         .ml_4()
                         .p_2()
-                        .rounded_md()
-                        .bg(rgb(WARN_BG))
-                        .text_color(rgb(WARN_TEXT))
+                        .rounded(px(RADIUS.md))
+                        .bg(rgb(tok().warn_bg))
+                        .text_color(rgb(tok().warn_text))
                         .flex()
                         .items_center()
                         .gap_2()
-                        .child(div().flex_1().min_w_0().text_size(px(12.)).child(text))
+                        .child(div().flex_1().min_w_0().text_size(px(dims().font_small)).child(text))
                         // Several kinds allowed (e.g. papers:delete and papers:write): the
                         // person picks which one this elevation lifts.
                         .children(match c {
@@ -823,7 +819,7 @@ impl LibraryView {
                                         let name = format!("elevate-kind-{kind:?}-{which:?}-{i}");
                                         nav_item(SharedString::from(name), bulk_kind_label(kind), kind == chosen)
                                             .border_1()
-                                            .border_color(rgb(BORDER))
+                                            .border_color(rgb(tok().border))
                                             .on_click(cx.listener(move |this, _, _, cx| {
                                                 if let Some(next) = this
                                                     .api
@@ -903,7 +899,7 @@ impl LibraryView {
             if !t.revoked {
                 actions = actions.child(
                     button(key("revoke"), "Revoke…", true)
-                        .text_color(rgb(DANGER))
+                        .text_color(rgb(tok().danger))
                         .on_click(cx.listener(move |this, _, _, cx| {
                             this.api.confirm = Some(Confirm::Revoke(id));
                             cx.notify();
@@ -947,10 +943,10 @@ impl LibraryView {
             .gap_2()
             .py(px(3.))
             .border_t_1()
-            .border_color(rgb(0xeef1f5))
-            .when(t.revoked, |el| el.text_color(rgb(MUTED)))
+            .border_color(rgb(tok().divider))
+            .when(t.revoked, |el| el.text_color(rgb(tok().muted)))
             .child(cell(label, 150.))
-            .child(cell(scope_list(&t.scopes), 210.).text_size(px(12.)))
+            .child(cell(scope_list(&t.scopes), 210.).text_size(px(dims().font_small)))
             .child(cell(format_date(Some(t.created_at_ms)), 86.))
             .child(cell(
                 t.last_used_at_ms

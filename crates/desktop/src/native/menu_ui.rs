@@ -111,7 +111,7 @@ impl LibraryView {
             .collections
             .iter()
             .filter(|c| Some(c.id) != viewing)
-            .map(|c| Entry::item(format!("📁 {}", c.name), MenuAction::Collection(c.id)))
+            .map(|c| Entry::item(c.name.clone(), MenuAction::Collection(c.id)))
             .collect();
         // One paper: check boxes from its loaded memberships (disabled until they arrive;
         // the open menu is rebuilt then). Several papers: a tag is added to all of them.
@@ -232,7 +232,7 @@ impl LibraryView {
             .library
             .focused()
             .and_then(|id| self.library.index_of(id))
-            .map_or(0., |i| (i + 1) as f32 * 32.);
+            .map_or(0., |i| (i + 1) as f32 * dims().row_height);
         let y = (bounds.origin.y + offset.y + px(row))
             .clamp(bounds.origin.y, bounds.origin.y + bounds.size.height);
         point(bounds.origin.x + px(160.), y)
@@ -562,11 +562,11 @@ impl LibraryView {
             .p_1()
             .flex()
             .flex_col()
-            .rounded_md()
+            .rounded(px(RADIUS.md))
             .border_1()
-            .border_color(rgb(BORDER))
-            .bg(rgb(SURFACE))
-            .shadow_lg()
+            .border_color(rgb(tok().border))
+            .bg(rgb(tok().surface))
+            .shadow(shadow_of(theme::Elevation::Floating))
             .children(entries.iter().enumerate().map(|(i, entry)| {
                 let (top, sub) = match parent {
                     Some(p) => (p, Some(i)),
@@ -580,7 +580,7 @@ impl LibraryView {
                         .h(px(SEPARATOR_H))
                         .flex()
                         .items_center()
-                        .child(div().h(px(1.)).w_full().bg(rgb(BORDER))),
+                        .child(div().h(px(1.)).w_full().bg(rgb(tok().border))),
                     Entry::Note(text) => row
                         .h(px(NOTE_H))
                         .px_3()
@@ -604,17 +604,31 @@ impl LibraryView {
                         let active = i == highlighted && enabled;
                         row.h(px(ITEM_H))
                             .px_2()
-                            .rounded_sm()
+                            .rounded(px(RADIUS.sm))
                             .flex()
                             .items_center()
                             .gap_2()
-                            .when(active, |el| el.bg(rgb(ACCENT_SOFT)))
-                            .text_color(rgb(if enabled { TEXT } else { 0x9aa3af }))
+                            .when(active, |el| el.bg(rgb(tok().accent_soft)))
+                            .text_color(rgb(if enabled {
+                                tok().text
+                            } else {
+                                tok().disabled_text
+                            }))
                             .when(any_checks, |el| {
-                                el.child(div().w(px(14.)).child(match checked {
-                                    Some(true) => "✓",
-                                    _ => "",
-                                }))
+                                let color = if enabled {
+                                    tok().text
+                                } else {
+                                    tok().disabled_text
+                                };
+                                el.child(
+                                    div()
+                                        .w(px(14.))
+                                        .flex()
+                                        .items_center()
+                                        .when(checked == Some(true), |el| {
+                                            el.child(icon(Icon::Check, color))
+                                        }),
+                                )
                             })
                             .child(
                                 div()
@@ -628,14 +642,14 @@ impl LibraryView {
                                 el.child(
                                     div()
                                         .pl_3()
-                                        .text_size(px(11.))
-                                        .text_color(rgb(MUTED))
+                                        .text_size(px(dims().font_caption))
+                                        .text_color(rgb(tok().muted))
                                         .whitespace_nowrap()
                                         .child(keys),
                                 )
                             })
                             .when(submenu, |el| {
-                                el.child(div().text_color(rgb(MUTED)).child("▸"))
+                                el.child(icon(Icon::ChevronRight, tok().muted))
                             })
                             .when(enabled, |el| {
                                 el.cursor_pointer()

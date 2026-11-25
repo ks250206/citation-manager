@@ -16,6 +16,10 @@ pub mod ids {
     pub const READING: &str = "layout.toggle_reading";
     pub const EXPORT: &str = "export.bibliography";
     pub const TOGGLE_VIM: &str = "keymap.toggle_vim";
+    /// #87 Light → Dark → System → Light.
+    pub const CYCLE_THEME: &str = "appearance.cycle_theme";
+    /// #87 Compact ↔ Comfortable.
+    pub const TOGGLE_DENSITY: &str = "appearance.toggle_density";
     pub const RELOAD_KEYMAP: &str = "keymap.reload";
     pub const COPY_DEFAULT_KEYMAP: &str = "keymap.copy_default";
 }
@@ -99,6 +103,18 @@ pub fn workbench_commands() -> Vec<Command> {
             ids::TOGGLE_VIM,
             "Toggle Vim Keys",
             "Turn j/k/gg/G/y and / navigation in the library table on or off",
+            Ui,
+        ),
+        (
+            ids::CYCLE_THEME,
+            "Switch Theme",
+            "Cycle Light, Dark and System (follows the OS) colours; saved in settings",
+            Ui,
+        ),
+        (
+            ids::TOGGLE_DENSITY,
+            "Toggle Density",
+            "Switch between Compact and Comfortable rows and controls; saved in settings",
             Ui,
         ),
         (

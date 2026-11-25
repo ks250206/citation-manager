@@ -19,12 +19,12 @@ impl LibraryView {
             .flex()
             .items_center()
             .gap_2()
-            .bg(rgb(SURFACE))
+            .bg(rgb(tok().surface))
             .border_b_1()
-            .border_color(rgb(BORDER))
+            .border_color(rgb(tok().border))
             .child(
                 div()
-                    .text_size(px(15.))
+                    .text_size(px(dims().font_title))
                     .font_weight(FontWeight::SEMIBOLD)
                     .mr_2()
                     .child("Citation Manager"),
@@ -34,8 +34,8 @@ impl LibraryView {
                     .flex()
                     .gap_1()
                     .p(px(2.))
-                    .rounded_md()
-                    .bg(rgb(SIDEBAR))
+                    .rounded(px(RADIUS.md))
+                    .bg(rgb(tok().sidebar))
                     .child(
                         tab("library", "Library", Screen::Library).on_click(
                             cx.listener(|this, _, w, cx| this.show(Screen::Library, w, cx)),
@@ -63,18 +63,29 @@ impl LibraryView {
             )
             .child(div().flex_1())
             .child(
-                primary_button("add-menu", "＋ Add ▾", enabled)
-                    .when(menu_open(menu_ui::MenuKind::Add), |b| b.bg(rgb(0x2654a8)))
+                primary_icon_button("add-menu", Icon::Plus, "Add", enabled)
+                    .child(icon(
+                        Icon::ChevronDown,
+                        if enabled {
+                            tok().on_accent
+                        } else {
+                            tok().disabled_text
+                        },
+                    ))
+                    .when(menu_open(menu_ui::MenuKind::Add), |b| {
+                        b.bg(rgb(tok().accent_pressed))
+                    })
                     .on_click(cx.listener(|this, event: &ClickEvent, window, cx| {
                         let position = point(event.position().x - px(40.), px(58.));
                         this.open_menu(menu_ui::MenuKind::Add, position, window, cx);
                     })),
             )
             .child(
-                button("settings-menu", "⚙ Settings ▾", true)
+                icon_button("settings-menu", Icon::Settings, "Settings", true)
+                    .child(icon(Icon::ChevronDown, tok().accent_text))
                     .when(
                         settings_screen.is_some() || menu_open(menu_ui::MenuKind::Settings),
-                        |b| b.bg(rgb(ACCENT_SOFT)),
+                        |b| b.bg(rgb(tok().accent_soft)),
                     )
                     .on_click(cx.listener(|this, event: &ClickEvent, window, cx| {
                         let position = point(event.position().x - px(60.), px(58.));
@@ -82,7 +93,7 @@ impl LibraryView {
                     })),
             )
             .child(
-                button("reload", "↻", !self.busy(Lane::Query))
+                icon_button("reload", Icon::Refresh, "", !self.busy(Lane::Query))
                     .on_click(cx.listener(|this, _, _, cx| this.reload(cx))),
             )
     }
@@ -311,14 +322,15 @@ impl LibraryView {
             .flex_col()
             .gap(px(2.))
             .overflow_y_scroll()
-            .bg(rgb(SIDEBAR))
+            .bg(rgb(tok().sidebar))
             .border_r_1()
-            .border_color(rgb(BORDER))
+            .border_color(rgb(tok().border))
             .child(section("LIBRARY"))
             .child(
-                nav_item(
+                nav_icon_item(
                     "all",
-                    "📚  All papers",
+                    Icon::Library,
+                    "All papers",
                     !trash && filter.collection.is_none(),
                 )
                 .on_click(cx.listener(|this, _, _, cx| {
@@ -329,24 +341,27 @@ impl LibraryView {
                 })),
             )
             .child(
-                nav_item("trash", "🗑  Trash", trash).on_click(cx.listener(|this, _, _, cx| {
-                    this.library.query.filter.collection = None;
-                    this.library.query.filter.visibility =
-                        cm_protocol::library_query::PaperVisibility::Deleted;
-                    this.reload(cx);
-                })),
+                nav_icon_item("trash", Icon::Trash, "Trash", trash).on_click(cx.listener(
+                    |this, _, _, cx| {
+                        this.library.query.filter.collection = None;
+                        this.library.query.filter.visibility =
+                            cm_protocol::library_query::PaperVisibility::Deleted;
+                        this.reload(cx);
+                    },
+                )),
             )
             .child(section("COLLECTIONS"))
             .when(ordered.is_empty(), |el| {
                 el.child(div().px_2().child(hint(
-                    "None yet — create one in ⚙ Settings › Organize & export",
+                    "None yet — create one in Settings › Organize & export",
                 )))
             })
             .children(ordered.into_iter().enumerate().map(|(i, (c, depth))| {
                 let id = c.id;
-                nav_item(
+                nav_icon_item(
                     ("collection", i),
-                    format!("📁  {}", c.name),
+                    Icon::Folder,
+                    c.name.clone(),
                     filter.collection == Some(id),
                 )
                 .pl(px(8. + depth as f32 * 14.))
@@ -374,8 +389,8 @@ impl LibraryView {
                                 false,
                             )
                             .mt_2()
-                            .text_size(px(11.))
-                            .text_color(rgb(ACCENT_TEXT))
+                            .text_size(px(dims().font_caption))
+                            .text_color(rgb(tok().accent_text))
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.library.query.filter.tag_match =
                                     if this.library.query.filter.tag_match == TagMatch::All {
@@ -394,9 +409,10 @@ impl LibraryView {
             .children(self.organization.tags.iter().enumerate().map(|(i, t)| {
                 let id = t.id;
                 let on = filter.tags.contains(&id);
-                nav_item(
+                nav_icon_item(
                     ("tag", i),
-                    format!("{} #{}", if on { "☑" } else { "☐" }, t.name),
+                    crate::ui::icons::checkbox(on),
+                    format!("#{}", t.name),
                     on,
                 )
                 .on_click(cx.listener(move |this, _, _, cx| {
@@ -462,19 +478,19 @@ impl LibraryView {
             .min_h_0()
             .mx_3()
             .mb_2()
-            .rounded_md()
+            .rounded(px(RADIUS.md))
             .border_1()
-            .border_color(rgb(BORDER))
-            .bg(rgb(SURFACE))
+            .border_color(rgb(tok().border))
+            .bg(rgb(tok().surface))
             .overflow_hidden()
             .child(
                 div()
                     .id("columns")
                     .overflow_x_scroll()
                     .flex_shrink_0()
-                    .bg(rgb(0xf8f9fb))
+                    .bg(rgb(tok().surface_alt))
                     .border_b_1()
-                    .border_color(rgb(BORDER))
+                    .border_color(rgb(tok().border))
                     // Right-click a header for the column toggles.
                     .on_mouse_down(
                         MouseButton::Right,
@@ -489,13 +505,26 @@ impl LibraryView {
                             cell(kind, width)
                                 .id(("column", i))
                                 .py_1()
-                                .text_size(px(12.))
+                                .text_size(px(dims().font_small))
                                 .font_weight(FontWeight::SEMIBOLD)
-                                .text_color(rgb(if active { ACCENT_TEXT } else { MUTED }))
-                                .child(format!("{}{}", kind.name(), columns::sort_arrow(kind, sort)))
+                                .text_color(rgb(if active { tok().accent_text } else { tok().muted }))
+                                .flex()
+                                .items_center()
+                                .gap_1()
+                                .child(kind.name())
+                                .when_some(columns::sort_direction(kind, sort), |el, direction| {
+                                    el.child(icon(
+                                        if direction == SortDirection::Asc {
+                                            Icon::ChevronUp
+                                        } else {
+                                            Icon::ChevronDown
+                                        },
+                                        tok().accent_text,
+                                    ))
+                                })
                                 .when_some(field, |el, field| {
                                     el.cursor_pointer()
-                                        .hover(|s| s.bg(rgb(0xeef1f5)))
+                                        .hover(|s| s.bg(rgb(tok().sidebar)))
                                         .on_click(cx.listener(move |this, _, _, cx| {
                                             this.sort_by(field, cx)
                                         }))
@@ -513,7 +542,7 @@ impl LibraryView {
                         .flex_col()
                         .items_center()
                         .gap_2()
-                        .text_color(rgb(MUTED))
+                        .text_color(rgb(tok().muted))
                         .child(if self.busy(Lane::Query) {
                             "Loading library…"
                         } else if trash {
@@ -523,7 +552,7 @@ impl LibraryView {
                         })
                         .when(!self.busy(Lane::Query) && !trash, |el| {
                             el.child(hint(format!(
-                                "Add one from ＋ Add (new paper: {}, DOI, PDFs, BibTeX/RIS), or clear filters.",
+                                "Add one from the Add menu (new paper: {}, DOI, PDFs, BibTeX/RIS), or clear filters.",
                                 shortcut("N")
                             )))
                         }),
@@ -545,27 +574,27 @@ impl LibraryView {
                                 div()
                                     .id(index)
                                     .w_full()
-                                    .h(px(32.))
+                                    .h(px(dims().row_height))
                                     .flex()
                                     .items_center()
                                     .bg(rgb(if selected {
-                                        ACCENT_SOFT
+                                        tok().accent_soft
                                     } else if index % 2 == 1 {
-                                        0xfafbfc
+                                        tok().row_alt
                                     } else {
-                                        SURFACE
+                                        tok().surface
                                     }))
-                                    .when(selected, |el| el.text_color(rgb(ACCENT_TEXT)))
-                                    .when(!selected, |el| el.hover(|s| s.bg(rgb(0xf0f4fa))))
+                                    .when(selected, |el| el.text_color(rgb(tok().accent_text)))
+                                    .when(!selected, |el| el.hover(|s| s.bg(rgb(tok().hover))))
                                     .overflow_hidden()
                                     .cursor_pointer()
                                     .children(visible.iter().map(|&(kind, width)| {
                                         cell(kind, width)
                                             .when(kind != ColumnKind::Title, |el| {
                                                 el.text_color(rgb(if selected {
-                                                    ACCENT_TEXT
+                                                    tok().accent_text
                                                 } else {
-                                                    MUTED
+                                                    tok().muted
                                                 }))
                                             })
                                             .map(|el| match kind {
@@ -573,9 +602,9 @@ impl LibraryView {
                                                 ColumnKind::Pdf if has_pdf => el.child(
                                                     div()
                                                         .px_1()
-                                                        .rounded_sm()
-                                                        .bg(rgb(0xfde8e4))
-                                                        .text_color(rgb(0xb42318))
+                                                        .rounded(px(RADIUS.sm))
+                                                        .bg(rgb(tok().danger_soft))
+                                                        .text_color(rgb(tok().danger))
                                                         .text_size(px(10.))
                                                         .font_weight(FontWeight::SEMIBOLD)
                                                         .child("PDF"),
@@ -635,8 +664,8 @@ impl LibraryView {
                     .items_center()
                     .gap_2()
                     .border_t_1()
-                    .border_color(rgb(BORDER))
-                    .bg(rgb(0xf8f9fb))
+                    .border_color(rgb(tok().border))
+                    .bg(rgb(tok().surface_alt))
                     .child(
                         // #98's page summary (paper/papers, selection) plus #84's sort label.
                         hint(format!(

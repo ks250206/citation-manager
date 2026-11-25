@@ -10,6 +10,7 @@ about signing. Installation: [INSTALL](INSTALL.md).
 | Citation Manager executables (`citation-manager`, `papersd`, `papers`, `papers-mcp`, `papers-native-host`) | `MacOS/` | MIT ([LICENSE](../LICENSE)) | `Resources/licenses/LICENSE` |
 | Rust crates linked into those executables (≈420, incl. GPUI from Zed at a pinned revision, SQLite via rusqlite `bundled`, rustls, tokio, axum, rmcp, pdfium-render) | inside the executables | per crate; MIT/Apache-2.0 dominate, also BSD-2/3-Clause, ISC, Zlib, Unicode-3.0, Unlicense, CC0-1.0, BSL-1.0, MPL-2.0 (`option-ext`) | `Resources/licenses/THIRD_PARTY_NOTICES.md` (+ `third-party-licenses.json`) |
 | PDFium chromium/8125 (bblanchon/pdfium-binaries, universal) | `Frameworks/libpdfium.dylib` | BSD-3-Clause, with bundled third-party code (FreeType, ICU, libjpeg-turbo, OpenJPEG, libpng, zlib, Little CMS, HarfBuzz, abseil, highway, simdutf, fast_float, dragonbox, AGG, llvm-libc) | `Resources/licenses/pdfium/` (LICENSE + all 18 upstream notices, hashes pinned in [pdfium-licenses/manifest.json](ADR/pdfium-licenses/manifest.json)) |
+| Lucide icons (lucide-static 0.460.0; only the 28 icons in `crates/desktop/src/ui/icons.rs`, #87) | compiled into `citation-manager` | ISC (portions MIT, from Feather) — [license](../crates/desktop/assets/icons/lucide/LICENSE), source `crates/desktop/assets/icons/lucide/LICENSE` | `Resources/licenses/THIRD_PARTY_NOTICES.md` (section "Vendored assets") |
 | App icon | `Resources/AppIcon.icns` | project asset | — |
 
 The notices are generated at packaging time, never edited by hand:
@@ -25,6 +26,11 @@ The notices are generated at packaging time, never edited by hand:
   standard texts of those licenses (MIT, Apache-2.0, Zlib) appear in the document through other
   crates. Obtaining the copyright lines from their upstream repositories is an open item
   before a public release.
+- Vendored non-crate assets compiled into the executables are listed in `VENDORED` of
+  `third_party_notices.py`; their license files are included verbatim in a "Vendored assets"
+  section, and the generator fails when a listed license file is missing. Today that is the
+  Lucide icon set (ISC, #87): only the icons the app uses are vendored, and a test
+  (`crates/desktop/tests/theme_tokens.rs`) keeps the directory equal to the icon enum.
 - PDFium's notices are copied from the checksum-verified archive by `build_app.py`
   (`scripts/pdfium/fetch.py` fails on any notice drift).
 - `option-ext` is MPL-2.0 (file-level copyleft, used unmodified). MPL-2.0 §3.2 asks a binary

@@ -18,9 +18,9 @@ impl LibraryView {
             .min_h_0()
             .flex()
             .flex_col()
-            .bg(rgb(SURFACE))
+            .bg(rgb(tok().surface))
             .border_l_1()
-            .border_color(rgb(BORDER))
+            .border_color(rgb(tok().border))
             .child(
                 div()
                     .flex()
@@ -29,7 +29,7 @@ impl LibraryView {
                     .py_2()
                     .gap_1()
                     .border_b_1()
-                    .border_color(rgb(BORDER))
+                    .border_color(rgb(tok().border))
                     .children(["Info", "Notes", "PDF"].into_iter().map(|name| {
                         nav_item(name, name, tab == name)
                             .px_3()
@@ -40,12 +40,17 @@ impl LibraryView {
                     }))
                     .child(div().flex_1())
                     .child(
-                        button(
+                        icon_button(
                             "reading",
                             if self.settings.reading {
-                                "⇤ Exit reading"
+                                Icon::Minimize
                             } else {
-                                "⇥ Expand"
+                                Icon::Maximize
+                            },
+                            if self.settings.reading {
+                                "Exit reading"
+                            } else {
+                                "Expand"
                             },
                             true,
                         )
@@ -62,7 +67,7 @@ impl LibraryView {
                         .px_3()
                         .py_2()
                         .border_b_1()
-                        .border_color(rgb(BORDER))
+                        .border_color(rgb(tok().border))
                         .child(self.pdf_host(cx)),
                 )
                 .child(viewer)
@@ -94,7 +99,7 @@ impl LibraryView {
                     .child(
                         div()
                             .flex_1()
-                            .text_size(px(15.))
+                            .text_size(px(dims().font_title))
                             .font_weight(FontWeight::SEMIBOLD)
                             .child(match &self.editor {
                                 Some(p) if p.deleted_at.is_some() => "Paper (in Trash)",
@@ -149,7 +154,7 @@ impl LibraryView {
                                 enabled,
                             )
                             .when(!deleted && enabled, |b| {
-                                b.text_color(rgb(0xb42318)).border_color(rgb(0xf1c4bf))
+                                b.text_color(rgb(tok().danger)).border_color(rgb(tok().danger_border))
                             })
                             .on_click(cx.listener(|this, _, _, cx| this.toggle_trash(cx))),
                         ),
@@ -233,7 +238,7 @@ impl LibraryView {
                 self.organization.collections.is_empty() && self.organization.tags.is_empty(),
                 |el| {
                     el.child(hint(
-                        "Create collections or tags in ⚙ Settings › Organize & export.",
+                        "Create collections or tags in Settings › Organize & export.",
                     ))
                 },
             )
@@ -245,9 +250,10 @@ impl LibraryView {
                     .map(|(index, c)| {
                         let id = c.id;
                         let present = self.membership.collections.iter().any(|v| v.id == id);
-                        nav_item(
+                        nav_icon_item(
                             ("member-collection", index),
-                            format!("{} {}", if present { "☑" } else { "☐" }, c.name),
+                            crate::ui::icons::checkbox(present),
+                            c.name.clone(),
                             present,
                         )
                         .on_click(cx.listener(move |this, _, _, cx| {
@@ -261,9 +267,10 @@ impl LibraryView {
             .children(self.organization.tags.iter().enumerate().map(|(index, t)| {
                 let id = t.id;
                 let present = self.membership.tags.iter().any(|v| v.id == id);
-                nav_item(
+                nav_icon_item(
                     ("member-tag", index),
-                    format!("{} #{}", if present { "☑" } else { "☐" }, t.name),
+                    crate::ui::icons::checkbox(present),
+                    format!("#{}", t.name),
                     present,
                 )
                 .on_click(cx.listener(move |this, _, _, cx| {
@@ -329,10 +336,11 @@ impl LibraryView {
                         .children(self.host.attachments.iter().enumerate().map(
                             |(index, (a, status))| {
                                 let id = a.id;
-                                nav_item(
+                                nav_icon_item(
                                     ("attachment", index),
+                                    Icon::FileText,
                                     format!(
-                                        "📄 {} · {} KB{}",
+                                        "{} · {} KB{}",
                                         a.original_name,
                                         a.byte_size.div_ceil(1024),
                                         match status {
@@ -358,7 +366,7 @@ impl LibraryView {
                 div()
                     .flex()
                     .gap_1()
-                    .text_size(px(11.))
+                    .text_size(px(dims().font_caption))
                     .when_some(paper, |el, id| {
                         el.child(
                             div()
@@ -366,8 +374,8 @@ impl LibraryView {
                                 .flex_1()
                                 .px_2()
                                 .py(px(3.))
-                                .rounded_md()
-                                .bg(rgb(0xe0eaff))
+                                .rounded(px(RADIUS.md))
+                                .bg(rgb(tok().info_bg))
                                 .min_w_0()
                                 .child("Drop PDFs to attach")
                                 .on_drop(cx.listener(move |this, paths: &ExternalPaths, _, cx| {
@@ -387,8 +395,8 @@ impl LibraryView {
                             .flex_1()
                             .px_2()
                             .py(px(3.))
-                            .rounded_md()
-                            .bg(rgb(0xe5efe8))
+                            .rounded(px(RADIUS.md))
+                            .bg(rgb(tok().success_bg))
                             .min_w_0()
                             .child("Drop PDFs as new papers")
                             .on_drop(cx.listener(|this, paths: &ExternalPaths, _, cx| {

@@ -173,10 +173,12 @@ pub(super) fn save_pdf_button(
     let row = div().flex().items_center().gap_1().child(save);
     if state.pending_for(attachment) {
         row.child(
-            button("pdf-save-dismiss", "✕", true).on_click(cx.listener(|this, _, _, cx| {
-                this.pdf_export.dismiss();
-                this.status("Nothing written; the existing file was kept", false, cx);
-            })),
+            icon_button("pdf-save-dismiss", Icon::X, "", true).on_click(cx.listener(
+                |this, _, _, cx| {
+                    this.pdf_export.dismiss();
+                    this.status("Nothing written; the existing file was kept", false, cx);
+                },
+            )),
         )
     } else {
         row

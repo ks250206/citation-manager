@@ -519,11 +519,11 @@ impl LibraryView {
                 .gap_2()
                 .child(div().flex_1().child(section("ANNOTATIONS")))
                 .child(
-                    button("ann-undo", "↶ Undo", self.ann_can_undo())
+                    icon_button("ann-undo", Icon::Undo, "Undo", self.ann_can_undo())
                         .on_click(cx.listener(|this, _, _, cx| this.ann_undo(cx))),
                 )
                 .child(
-                    button("ann-redo", "↷ Redo", self.ann_can_redo())
+                    icon_button("ann-redo", Icon::Redo, "Redo", self.ann_can_redo())
                         .on_click(cx.listener(|this, _, _, cx| this.ann_redo(cx))),
                 ),
         );
@@ -588,7 +588,7 @@ impl LibraryView {
                 None => "Unresolved".into(),
             };
             let excerpt: String = if a.kind == AnnotationKind::Note {
-                format!("📝 {}", a.comment.clone().unwrap_or_default())
+                a.comment.clone().unwrap_or_default()
             } else {
                 let q: String = a.quote.chars().take(140).collect();
                 format!("“{q}”")
@@ -597,10 +597,14 @@ impl LibraryView {
             let mut row = div()
                 .id(("ann-row", i))
                 .p_2()
-                .rounded_md()
+                .rounded(px(RADIUS.md))
                 .border_1()
-                .border_color(rgb(if selected { ACCENT } else { BORDER }))
-                .bg(rgb(if selected { ACCENT_SOFT } else { SURFACE }))
+                .border_color(rgb(if selected { tok().accent } else { tok().border }))
+                .bg(rgb(if selected {
+                    tok().accent_soft
+                } else {
+                    tok().surface
+                }))
                 .flex()
                 .flex_col()
                 .gap_1()
@@ -629,9 +633,13 @@ impl LibraryView {
                             el.child(
                                 div()
                                     .px_1()
-                                    .rounded_md()
-                                    .text_size(px(11.))
-                                    .bg(rgb(if ai_pending { 0xfff4d6 } else { 0xe5efe8 }))
+                                    .rounded(px(RADIUS.md))
+                                    .text_size(px(dims().font_caption))
+                                    .bg(rgb(if ai_pending {
+                                        tok().warn_bg
+                                    } else {
+                                        tok().success_bg
+                                    }))
                                     .child(if ai_pending {
                                         "AI · review"
                                     } else {
@@ -643,14 +651,24 @@ impl LibraryView {
                             el.child(
                                 div()
                                     .px_1()
-                                    .rounded_md()
-                                    .text_size(px(11.))
-                                    .bg(rgb(0xffe5e5))
+                                    .rounded(px(RADIUS.md))
+                                    .text_size(px(dims().font_caption))
+                                    .bg(rgb(tok().error_bg))
                                     .child("needs placement"),
                             )
                         }),
                 )
-                .child(div().text_size(px(12.)).child(excerpt))
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_1()
+                        .text_size(px(dims().font_small))
+                        .when(a.kind == AnnotationKind::Note, |el| {
+                            el.child(icon(Icon::StickyNote, tok().muted))
+                        })
+                        .child(excerpt),
+                )
                 .when(a.kind == AnnotationKind::Highlight, |el| {
                     el.when_some(a.comment.clone(), |el, c| el.child(hint(c)))
                 });
@@ -782,7 +800,7 @@ impl LibraryView {
                     .rounded_full()
                     .cursor_pointer()
                     .border_2()
-                    .border_color(rgb(if chosen { TEXT } else { SURFACE }))
+                    .border_color(rgb(if chosen { tok().text } else { tok().surface }))
                     .bg(rgb(crate::annotations::rgb(Some(color))))
                     .on_click(cx.listener(move |this, _, _, cx| on_pick(this, color, cx)))
             }))
