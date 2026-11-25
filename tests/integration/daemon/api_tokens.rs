@@ -785,37 +785,41 @@ fn cli_bootstrap_prints_a_token_once_and_only_where_allowed() {
     assert!(!stderr.contains(secret), "secret only on stdout");
     assert_eq!(store.len(), 1);
     // A token that cannot be delivered (stdout write fails) is revoked, exit 1.
-    let mut command = Process::new(env!("CARGO_BIN_EXE_papersd"));
-    command
-        .args(["token", "issue", "--library"])
-        .arg(&env.library)
-        .arg("--runtime-dir")
-        .arg(&env.runtime)
-        .args([
-            "--label",
-            "undelivered",
-            "--kind",
-            "cli",
-            "--scope",
-            "papers:read",
-        ])
-        .arg("--allow-non-tty")
-        .stdin(Stdio::null())
-        .stdout(
-            std::fs::OpenOptions::new()
-                .write(true)
-                .open("/dev/full")
-                .unwrap(),
-        )
-        .stderr(Stdio::piped());
-    let full = command.output().unwrap();
-    assert_eq!(
-        full.status.code(),
-        Some(cm_daemon::admin::EXIT_ERROR),
-        "{full:?}"
-    );
-    assert!(String::from_utf8_lossy(&full.stderr).contains("it was revoked"));
-    assert_eq!(store.len(), 1, "the undelivered token's copy was removed");
+    // /dev/full (writes fail with ENOSPC) exists only on Linux.
+    #[cfg(target_os = "linux")]
+    {
+        let mut command = Process::new(env!("CARGO_BIN_EXE_papersd"));
+        command
+            .args(["token", "issue", "--library"])
+            .arg(&env.library)
+            .arg("--runtime-dir")
+            .arg(&env.runtime)
+            .args([
+                "--label",
+                "undelivered",
+                "--kind",
+                "cli",
+                "--scope",
+                "papers:read",
+            ])
+            .arg("--allow-non-tty")
+            .stdin(Stdio::null())
+            .stdout(
+                std::fs::OpenOptions::new()
+                    .write(true)
+                    .open("/dev/full")
+                    .unwrap(),
+            )
+            .stderr(Stdio::piped());
+        let full = command.output().unwrap();
+        assert_eq!(
+            full.status.code(),
+            Some(cm_daemon::admin::EXIT_ERROR),
+            "{full:?}"
+        );
+        assert!(String::from_utf8_lossy(&full.stderr).contains("it was revoked"));
+        assert_eq!(store.len(), 1, "the undelivered token's copy was removed");
+    }
     let mut cli = env.session("cli", Credential(secret.into()));
     assert!(query(&mut cli).is_ok());
     assert!(create(&mut cli, "read only").is_err());
@@ -829,6 +833,7 @@ fn cli_bootstrap_prints_a_token_once_and_only_where_allowed() {
         .unwrap();
     let listing = String::from_utf8(listed.stdout).unwrap();
     assert!(listing.contains("terminal") && listing.contains("papers:read"));
+    #[cfg(target_os = "linux")]
     assert!(
         listing
             .lines()
