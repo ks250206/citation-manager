@@ -181,8 +181,12 @@ python3 scripts/benchmarks/frame_timing.py --out NAME                        # m
   `frame duration:` lines from stderr (whole `Window::draw` + `present`); they are paired with
   the recorder's frames by order when the counts agree.
 - **Input**: Linux uses xdotool/xclip on a private Xvfb (`--xvfb`, 1400x900x24, lavapipe
-  software Vulkan); macOS posts Quartz events via ctypes and needs the Accessibility
-  permission. A phase whose expected span never completed is reported `observed: false`.
+  software Vulkan); macOS posts Quartz events via ctypes (ANSI key codes, window frame from
+  `CGWindowListCopyWindowInfo`) and needs the Accessibility permission. Points are relative
+  to the window content and may count from the right/bottom edge (the macOS runner's
+  1024x768 display shrinks the window). If Return does not run the palette command, the
+  harness clicks its first row and records `input_method`. A phase whose expected span never
+  completed is reported `observed: false`.
 - **Phases**: startup idle; list wheel scrolling; list j/k (selection + details); list paging
   (Next ›); open the first corpus PDF through the palette's "Open paper:// Link from
   Clipboard" (input → first page painted); Expand; vim `J`×19 / `K`×19 page turns; far jumps

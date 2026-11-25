@@ -1,0 +1,7 @@
+hw.model=VirtualMac2,1
+machdep.cpu.brand_string=Apple M1 (Virtual)
+hw.memsize=7516192768
+kern.hv_vmm_present=1
+ProductName:		macOS
+ProductVersion:		15.8.2
+BuildVersion:		24H232
