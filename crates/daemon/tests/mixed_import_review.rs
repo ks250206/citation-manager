@@ -1,5 +1,8 @@
 //! Actual retained coordinator/SQLite regression, separate from native GUI acceptance.
-#![cfg(all(target_os = "macos", feature = "desktop-bootstrap"))]
+#![cfg(all(
+    any(target_os = "macos", target_os = "linux"),
+    feature = "desktop-bootstrap"
+))]
 use cm_daemon::desktop_worker::InProcessLibraryClient;
 use cm_desktop::{attachments::PdfForm, import_dialogs::ReviewSessions};
 use cm_protocol::{attachments::*, exchange::*, import::*, library::*, library_query::*};

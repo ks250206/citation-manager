@@ -53,7 +53,7 @@ cargo check -p cm-pdf --features bindings-check --locked
 ウィンドウ表示・PDFium dylib のロード/ABI・コード署名の成功は意味しません。
 実行結果、実機担当と未実施 blocker は [TEST_MATRIX](docs/validation/TEST_MATRIX.md) に記録します。
 
-#10 の実行ファイル（macOS、未署名のローカル開発用）:
+#10 の実行ファイル（macOS、未署名のローカル開発用。Linux は下記）:
 
 ```sh
 cargo build -p cm-daemon --bin citation-manager --features desktop-bootstrap --locked
@@ -62,8 +62,29 @@ python3 scripts/prepare_native_smoke.py --deny-network
 # 表示された open コマンドを実行。再起動も同じコマンド/同じ library を使う。
 ```
 
+#### Linux（x86_64、X11/Wayland）
+
+同じ native lane を Linux でもビルド・実行できます（GPUI の X11/Wayland backend、Vulkan 対応 GPU/ドライバが必要）。
+Ubuntu 24.04 の例:
+
+```sh
+sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-dev libx11-xcb-dev libxcb1-dev \
+  libwayland-dev libfontconfig-dev libfreetype-dev libvulkan-dev mesa-vulkan-drivers
+cargo build -p cm-daemon --bin citation-manager --features desktop-bootstrap --release --locked
+# ~/.local/bin と ~/.local/lib/citation-manager/libpdfium.so（chromium/8125, checksum 固定）に配置し、
+# デスクトップエントリを作成。PDFium の取得にはネットワークが必要（--skip-pdfium で省略可）。
+python3 scripts/install_linux.py
+~/.local/bin/citation-manager --library ~/.local/share/citation-manager/library \
+  --settings ~/.config/citation-manager/ui.json
+```
+
+Linux では ⌘ の代わりに Ctrl を使います（Ctrl+N / Ctrl+S / Ctrl+F / Ctrl+Q など）。
+ファイル選択ダイアログは XDG Desktop Portal を使うため、portal が動いているデスクトップ環境が必要です。
+
 ⌘N で新規、Info の metadata を入力し ⌘S で共通 preview を開き、明示的な decisions を確認して保存します。
-保存済み文献はテーブルから選んで編集し、⌘S で更新。⌘F で metadata 検索欄へ移動します。
+保存済み文献はテーブルから選んで編集し、⌘S で更新。⌘F で metadata 検索欄へ移動し、↩ で検索します。
+テーブルでは ↑/↓ で選択移動、↩ で Title 欄へ移動、Esc で入力欄からテーブルへ戻ります。
+⌘1 Library、⌘2 Import review、⌘, Organize & export。未保存の編集は下部ステータスバーに表示されます。
 ⌘Q で完全終了し、同じ library/settings で再起動します。
 既定の実ライブラリは自動接続しません。HTTP/IPC listener はありません。
 現在の追加経路は新規 metadata の preview、DOI（read-only）、UTF-8 BibTeX/RIS、PDF files/folder。

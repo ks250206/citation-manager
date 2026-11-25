@@ -300,27 +300,30 @@ impl LibraryView {
                 .child(button("cancel-import","Cancel preview / stop file",!busy).on_click(cx.listener(|this,_,_,cx|this.cancel_review(cx)))))
             .child(div().px_3().child("BibTeX/RIS transfer bibliography only; PDFs, notes and organization are not migrated. File and row warnings require review."));
         content = content.child(div().px_3().child(self.review_destination.clone()));
+        let batch_enabled = !busy && self.reviews.active.preview.is_none();
         content = content.child(
-            button(
-                "batch-size",
-                format!("Batch size: {} — cycle (maximum 100)", self.batch_size),
-                !busy && self.reviews.active.preview.is_none(),
-            )
-            .m_3()
-            .on_click(cx.listener(|this, _, _, cx| {
-                if this.locked() || this.reviews.active.preview.is_some() {
-                    return;
-                }
-                this.batch_size = match this.batch_size {
-                    100 => 50,
-                    50 => 20,
-                    20 => 10,
-                    10 => 5,
-                    5 => 1,
-                    _ => 100,
-                };
-                cx.notify();
-            })),
+            div()
+                .px_3()
+                .py_2()
+                .flex()
+                .items_center()
+                .gap_1()
+                .child(hint("Rows per preview batch:").mr_1())
+                .children([100usize, 50, 20, 10, 5, 1].into_iter().map(|size| {
+                    nav_item(
+                        ("batch-size", size),
+                        size.to_string(),
+                        self.batch_size == size,
+                    )
+                    .when(!batch_enabled, |el| el.cursor_default().opacity(0.5))
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        if this.locked() || this.reviews.active.preview.is_some() {
+                            return;
+                        }
+                        this.batch_size = size;
+                        cx.notify();
+                    }))
+                })),
         );
         if let Some(file) = &self.reviews.paused_file {
             content = content.child(line(format!("Bibliography paused: {} / {} processed, {} committed, {} skipped. Next batch still requires a fresh preview and decisions.", file.batch_start, file.total, file.committed, file.skipped)))
@@ -368,7 +371,7 @@ impl LibraryView {
                         })),
                     )
                     .child(
-                        button(
+                        primary_button(
                             "commit",
                             "Commit reviewed batch",
                             !busy && self.reviews.active.commit().is_some(),
@@ -384,6 +387,7 @@ impl LibraryView {
                     .child(
                         div()
                             .w(px(430.))
+                            .px_3()
                             .flex_shrink_0()
                             .flex()
                             .flex_col()
@@ -415,7 +419,8 @@ impl LibraryView {
                                                     };
                                                 let has_error =
                                                     c.diagnostics.iter().any(|d| d.error);
-                                                button(
+                                                let current = this.reviews.active.row == index;
+                                                nav_item(
                                                     ("review-row", index),
                                                     format!(
                                                         "{} {} · {} · {}",
@@ -424,11 +429,12 @@ impl LibraryView {
                                                         decision,
                                                         c.draft.title.replace(['\r', '\n'], " ")
                                                     ),
-                                                    true,
+                                                    current,
                                                 )
-                                                .h(px(44.))
-                                                .w_full()
-                                                .truncate()
+                                                .h(px(36.))
+                                                .flex()
+                                                .items_center()
+                                                .when(has_error, |el| el.text_color(rgb(0xb42318)))
                                                 .on_click(cx.listener(move |this, _, _, cx| {
                                                     this.reviews.active.row = index;
                                                     this.merge_target = 0;

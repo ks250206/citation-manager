@@ -3,27 +3,203 @@ impl LibraryView {
     pub(super) fn details_screen(&self, cx: &mut Context<Self>) -> Stateful<Div> {
         let enabled = !self.locked();
         let tab = self.settings.details_tab.as_str();
-        div().id("details-host").when(!self.settings.reading,|el|el.w(px(self.settings.details_width as f32)).flex_shrink_0()).when(self.settings.reading,|el|el.flex_1().min_w_0()).min_h_0().flex().flex_col().border_l_1().border_color(rgb(0xd5dce5))
-            .child(div().flex().p_2().gap_2().children(["Info","Notes","PDF"].into_iter().map(|tab|button(tab,tab,true).on_click(cx.listener(move|this,_,_,cx|{this.settings.details_tab=tab.into();this.persist(cx);}))))
-                .child(button("reading",if self.settings.reading{"Exit reading"}else{"Expand"},true).on_click(cx.listener(|this,_,_,cx|{this.settings.reading = !this.settings.reading;this.persist(cx);}))))
-            .child(div().id("details-content").flex_1().overflow_y_scroll().p_3()
-                .child(match tab{
-                    "PDF"=>self.pdf_host(cx).into_any_element(),
-                    "Notes"=>div().child(line("Notes" )).child(line("Notes editing is not available in this version. No note text is saved." )).into_any_element(),
-                    _=>div().flex().flex_col().gap_2()
-                        .child(line(if self.editor.is_some(){"Paper metadata"}else{"New paper — review before save"}))
-                        .child(button("save",if self.editor.is_some(){"Save changes  ⌘S"}else{"Preview new paper  ⌘S"},enabled).on_click(cx.listener(|this,_,w,cx|this.save(&Save,w,cx))))
-                        .when_some(self.editor.as_ref(),|el,p|{let id=p.id;let deleted=p.deleted_at.is_some();el.child(button("delete-restore",if deleted{"Restore paper"}else{"Move paper to Trash"},enabled).on_click(cx.listener(move|this,_,_,cx|{if this.locked() || !this.can_replace_editor(cx){return;}this.call(Lane::Editor,Event::Editor,|c,done|c.lifecycle(id,!deleted,Box::new(move|result|done(result.map(|p|LibraryReply::Paper(Box::new(p)))))));cx.notify();})))
-                            .child(line(format!("Citation key: {}",p.bibliography.citation_key.as_deref().unwrap_or("—"))))})
-                        .when(self.editor.as_ref().is_some_and(|p|p.deleted_at.is_none()),|el|el.child(self.memberships(cx)))
-                        .children(crate::details::FIELDS.iter().zip(self.fields.iter()).map(|(name,field)|div().child(line(*name)).child(field.clone())))
-                        .child(line("Unedited contributor roles, identifiers and extra metadata are preserved."))
-                        .child(line("DOI lookup (read-only; review a new import preview before save)"))
-                        .child(self.doi.clone())
-                        .child(button("resolve","Look up DOI",!self.busy(Lane::Doi)&&enabled).on_click(cx.listener(|this,_,_,cx|this.lookup_doi(cx))))
-                        .child(button("cancel-doi","Cancel lookup / keep manual draft",self.busy(Lane::Doi)).on_click(cx.listener(|this,_,_,cx|{this.invalidate_doi();this.status("Lookup cancelled. Manual draft retained",false,cx);})))
-                        .into_any_element(),
-                }))
+        div()
+            .id("details-host")
+            .when(!self.settings.reading, |el| {
+                el.w(px(self.settings.details_width as f32)).flex_shrink_0()
+            })
+            .when(self.settings.reading, |el| el.flex_1().min_w_0())
+            .min_h_0()
+            .flex()
+            .flex_col()
+            .bg(rgb(SURFACE))
+            .border_l_1()
+            .border_color(rgb(BORDER))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .px_2()
+                    .py_2()
+                    .gap_1()
+                    .border_b_1()
+                    .border_color(rgb(BORDER))
+                    .children(["Info", "Notes", "PDF"].into_iter().map(|name| {
+                        nav_item(name, name, tab == name).px_3().on_click(cx.listener(
+                            move |this, _, _, cx| {
+                                this.settings.details_tab = name.into();
+                                this.persist(cx);
+                            },
+                        ))
+                    }))
+                    .child(div().flex_1())
+                    .child(
+                        button(
+                            "reading",
+                            if self.settings.reading {
+                                "⇤ Exit reading"
+                            } else {
+                                "⇥ Expand"
+                            },
+                            true,
+                        )
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.settings.reading = !this.settings.reading;
+                            this.persist(cx);
+                        })),
+                    ),
+            )
+            .child(
+                div()
+                    .id("details-content")
+                    .flex_1()
+                    .overflow_y_scroll()
+                    .p_3()
+                    .child(match tab {
+                        "PDF" => self.pdf_host(cx).into_any_element(),
+                        "Notes" => div()
+                            .child(hint(
+                                "Notes editing is not available in this version. No note text is saved.",
+                            ))
+                            .into_any_element(),
+                        _ => self.info_tab(enabled, cx).into_any_element(),
+                    }),
+            )
+    }
+    fn info_tab(&self, enabled: bool, cx: &mut Context<Self>) -> Div {
+        div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                        div()
+                            .flex_1()
+                            .text_size(px(15.))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child(match &self.editor {
+                                Some(p) if p.deleted_at.is_some() => "Paper (in Trash)",
+                                Some(_) => "Paper metadata",
+                                None => "New paper",
+                            }),
+                    )
+                    .child(
+                        primary_button(
+                            "save",
+                            format!(
+                                "{}  {}",
+                                if self.editor.is_some() {
+                                    "Save"
+                                } else {
+                                    "Preview"
+                                },
+                                shortcut("S")
+                            ),
+                            enabled && (self.dirty || self.editor.is_none()),
+                        )
+                        .on_click(cx.listener(|this, _, w, cx| this.save(&Save, w, cx))),
+                    ),
+            )
+            .when(self.editor.is_none(), |el| {
+                el.child(hint(
+                    "Fill in the fields, then preview. Nothing is saved until you confirm the preview.",
+                ))
+            })
+            .when_some(self.editor.as_ref(), |el, p| {
+                let id = p.id;
+                let deleted = p.deleted_at.is_some();
+                el.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_2()
+                        .child(
+                            hint(format!(
+                                "Citation key: {}",
+                                p.bibliography.citation_key.as_deref().unwrap_or("—")
+                            ))
+                            .flex_1(),
+                        )
+                        .child(
+                            button(
+                                "delete-restore",
+                                if deleted {
+                                    "Restore paper"
+                                } else {
+                                    "Move to Trash"
+                                },
+                                enabled,
+                            )
+                            .when(!deleted && enabled, |b| {
+                                b.text_color(rgb(0xb42318)).border_color(rgb(0xf1c4bf))
+                            })
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                if this.locked() || !this.can_replace_editor(cx) {
+                                    return;
+                                }
+                                this.call(Lane::Editor, Event::Editor, |c, done| {
+                                    c.lifecycle(
+                                        id,
+                                        !deleted,
+                                        Box::new(move |result| {
+                                            done(result.map(|p| LibraryReply::Paper(Box::new(p))))
+                                        }),
+                                    )
+                                });
+                                cx.notify();
+                            })),
+                        ),
+                )
+            })
+            .children(
+                crate::details::FIELDS
+                    .iter()
+                    .zip(self.fields.iter())
+                    .map(|(name, field)| {
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(2.))
+                            .child(hint(*name))
+                            .child(field.clone())
+                    }),
+            )
+            .child(hint(
+                "Unedited contributor roles, identifiers and extra metadata are preserved.",
+            ))
+            .when(
+                self.editor.as_ref().is_some_and(|p| p.deleted_at.is_none()),
+                |el| el.child(self.memberships(cx)),
+            )
+            .child(section("DOI LOOKUP"))
+            .child(hint(
+                "Read-only lookup. The result opens as an import preview for review before saving.",
+            ))
+            .child(
+                div()
+                    .flex()
+                    .gap_2()
+                    .items_center()
+                    .child(div().flex_1().child(self.doi.clone()))
+                    .when(!self.busy(Lane::Doi), |el| {
+                        el.child(
+                            button("resolve", "Look up", enabled)
+                                .on_click(cx.listener(|this, _, _, cx| this.lookup_doi(cx))),
+                        )
+                    })
+                    .when(self.busy(Lane::Doi), |el| {
+                        el.child(button("cancel-doi", "Cancel lookup", true).on_click(
+                            cx.listener(|this, _, _, cx| {
+                                this.invalidate_doi();
+                                this.status("Lookup cancelled. Manual draft retained", false, cx);
+                            }),
+                        ))
+                    }),
+            )
     }
     fn memberships(&self, cx: &mut Context<Self>) -> Div {
         let Some(p) = &self.editor else {
@@ -31,7 +207,14 @@ impl LibraryView {
         };
         let paper = p.id;
         div()
-            .child(line("Memberships (multiple allowed)"))
+            .flex()
+            .flex_col()
+            .gap(px(2.))
+            .child(section("COLLECTIONS & TAGS"))
+            .when(
+                self.organization.collections.is_empty() && self.organization.tags.is_empty(),
+                |el| el.child(hint("Create collections or tags in Organize & export.")),
+            )
             .children(
                 self.organization
                     .collections
@@ -40,12 +223,11 @@ impl LibraryView {
                     .map(|(index, c)| {
                         let id = c.id;
                         let present = self.membership.collections.iter().any(|v| v.id == id);
-                        button(
+                        nav_item(
                             ("member-collection", index),
                             format!("{} {}", if present { "☑" } else { "☐" }, c.name),
-                            !self.locked(),
+                            present,
                         )
-                        .w_full()
                         .on_click(cx.listener(move |this, _, _, cx| {
                             this.organize(
                                 OrganizationRequest::CollectionMember(paper, id, !present),
@@ -57,12 +239,11 @@ impl LibraryView {
             .children(self.organization.tags.iter().enumerate().map(|(index, t)| {
                 let id = t.id;
                 let present = self.membership.tags.iter().any(|v| v.id == id);
-                button(
+                nav_item(
                     ("member-tag", index),
                     format!("{} #{}", if present { "☑" } else { "☐" }, t.name),
-                    !self.locked(),
+                    present,
                 )
-                .w_full()
                 .on_click(cx.listener(move |this, _, _, cx| {
                     this.organize(OrganizationRequest::TagMember(paper, id, !present), cx)
                 }))

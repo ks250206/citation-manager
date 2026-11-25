@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fetch exact macOS universal PDFium, never latest; fail closed on hash/version/license drift."""
+"""Fetch exact PDFium (macOS universal or Linux x86_64), never latest; fail closed on hash/version/license drift."""
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
@@ -17,8 +17,8 @@ NOTICE_MANIFEST = json.loads((ROOT/'docs/ADR/pdfium-licenses/manifest.json').rea
 def sha(data):
     return hashlib.sha256(data).hexdigest()
 
-def verify_notices(destination):
-    expected = NOTICE_MANIFEST['upstream_files_sha256']
+def verify_notices(destination, overrides=None):
+    expected = dict(NOTICE_MANIFEST['upstream_files_sha256'], **(overrides or {}))
     notices = destination/'licenses'
     if not notices.is_dir() or notices.is_symlink():
         raise ValueError('missing or unsafe upstream notice directory')
@@ -29,16 +29,25 @@ def verify_notices(destination):
         if not path.is_file() or path.is_symlink() or sha(path.read_bytes()) != digest:
             raise ValueError('upstream notice checksum mismatch: '+name)
 
-def fetch(destination):
+def artifact(platform):
+    """Pinned artifact fields for a platform; macOS stays the top-level lock entry."""
+    if platform == 'macos':
+        return dict(LOCK, archive='pdfium-mac-univ.tgz', notice_overrides_sha256={})
+    if platform == 'linux-x64':
+        return dict(LOCK['linux_x64'], archive='pdfium-linux-x64.tgz')
+    raise ValueError('unsupported platform: '+platform)
+
+def fetch(destination, platform='macos'):
+    pin = artifact(platform)
     destination.mkdir(parents=True, exist_ok=True)
-    archive = destination/'pdfium-mac-univ.tgz'
+    archive = destination/pin['archive']
     if not archive.exists():
-        with urllib.request.urlopen(LOCK['url'], timeout=60) as response:
+        with urllib.request.urlopen(pin['url'], timeout=60) as response:
             data = response.read(32*1024*1024+1)
-        if len(data) > 32*1024*1024 or sha(data) != LOCK['artifact_sha256']:
+        if len(data) > 32*1024*1024 or sha(data) != pin['artifact_sha256']:
             raise ValueError('download size/checksum mismatch')
         archive.write_bytes(data)
-    if sha(archive.read_bytes()) != LOCK['artifact_sha256']:
+    if sha(archive.read_bytes()) != pin['artifact_sha256']:
         raise ValueError('cached archive checksum mismatch')
     with tarfile.open(archive, 'r:gz') as tar:
         for member in tar.getmembers():
@@ -46,11 +55,15 @@ def fetch(destination):
             if path.is_absolute() or '..' in path.parts or member.issym() or member.islnk() or not (member.isdir() or member.isfile()):
                 raise ValueError('unsafe tar member')
         tar.extractall(destination, filter='data')
-    library = destination/LOCK['library']
-    assert sha(library.read_bytes()) == LOCK['library_sha256'], 'library checksum mismatch'
+    library = destination/pin['library']
+    assert sha(library.read_bytes()) == pin['library_sha256'], 'library checksum mismatch'
     assert (destination/'VERSION').read_text() == 'MAJOR=158\nMINOR=0\nBUILD=8125\nPATCH=0\n'
-    verify_notices(destination)
+    verify_notices(destination, pin['notice_overrides_sha256'])
     print(library.resolve())
 
 if __name__ == '__main__':
-    fetch(Path(sys.argv[1]) if len(sys.argv)>1 else ROOT/'target/pdfium-poc')
+    args = sys.argv[1:]
+    platform = 'macos'
+    if args[:1] == ['--platform']:
+        platform, args = args[1], args[2:]
+    fetch(Path(args[0]) if args else ROOT/('target/pdfium-poc' if platform == 'macos' else 'target/pdfium-'+platform), platform)

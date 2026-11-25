@@ -8,7 +8,7 @@ use gpui::{
     EntityInputHandler, FocusHandle, Focusable, GlobalElementId, KeyBinding, LayoutId, MouseButton,
     MouseDownEvent, MouseMoveEvent, MouseUpEvent, PaintQuad, Pixels, Point, ShapedLine,
     SharedString, Style, TextRun, UTF16Selection, UnderlineStyle, Window, actions, div, fill, hsla,
-    point, prelude::*, px, relative, rgb, rgba, size, white,
+    point, prelude::*, px, relative, rgb, rgba, size,
 };
 use unicode_segmentation::*;
 
@@ -33,11 +33,15 @@ actions!(
         Paste,
         Cut,
         Copy,
+        Submit,
     ]
 );
 
 pub(super) struct Edited;
 impl gpui::EventEmitter<Edited> for TextInput {}
+/// Enter pressed outside IME composition. Owners decide what submitting means.
+pub(super) struct Submitted;
+impl gpui::EventEmitter<Submitted> for TextInput {}
 
 pub(super) struct TextInput {
     focus_handle: FocusHandle,
@@ -56,6 +60,12 @@ pub(super) struct TextInput {
 impl TextInput {
     pub fn is_composing(&self) -> bool {
         self.marked_range.is_some()
+    }
+    fn submit(&mut self, _: &Submit, _: &mut Window, cx: &mut Context<Self>) {
+        // Enter confirms an IME conversion first; it must not also submit.
+        if self.enabled && !self.is_composing() {
+            cx.emit(Submitted);
+        }
     }
     fn left(&mut self, _: &Left, window: &mut Window, cx: &mut Context<Self>) {
         if self.selected_range.is_empty() {
@@ -300,7 +310,8 @@ impl TextInput {
     pub fn set_text(&mut self, text: String, cx: &mut Context<Self>) {
         self.content = text.into();
         self.scroll_x = px(0.);
-        self.selected_range = self.content.len()..self.content.len();
+        // Loaded values show their beginning; the end may be off-screen.
+        self.selected_range = 0..0;
         self.selection_reversed = false;
         self.marked_range = None;
         self.last_layout = None;
@@ -695,7 +706,8 @@ impl Element for TextElement {
 }
 
 impl Render for TextInput {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let focused = self.focus_handle.is_focused(window);
         div()
             .flex()
             .w_full()
@@ -716,19 +728,24 @@ impl Render for TextInput {
             .on_action(cx.listener(Self::paste))
             .on_action(cx.listener(Self::cut))
             .on_action(cx.listener(Self::copy))
+            .on_action(cx.listener(Self::submit))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_mouse_up_out(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_mouse_move(cx.listener(Self::on_mouse_move))
-            .bg(rgb(0xeeeeee))
-            .line_height(px(30.))
-            .text_size(px(16.))
+            .line_height(px(22.))
+            .text_size(px(14.))
             .child(
                 div()
-                    .h(px(30. + 4. * 2.))
+                    .h(px(32.))
                     .w_full()
-                    .p(px(4.))
-                    .bg(white())
+                    .px(px(8.))
+                    .py(px(4.))
+                    .rounded_md()
+                    .border_1()
+                    .border_color(rgb(if focused { 0x3b73d9 } else { 0xc9d1dc }))
+                    .bg(rgb(if self.enabled { 0xffffff } else { 0xf0f2f5 }))
+                    .text_color(rgb(if self.enabled { 0x1c2533 } else { 0x7a8494 }))
                     .child(TextElement { input: cx.entity() }),
             )
     }
@@ -740,24 +757,25 @@ impl Focusable for TextInput {
     }
 }
 
-pub(super) fn bind_keys(cx: &mut App) {
-    cx.bind_keys([
+pub(super) fn key_bindings() -> Vec<KeyBinding> {
+    vec![
         KeyBinding::new("backspace", Backspace, Some("TextInput")),
         KeyBinding::new("delete", Delete, Some("TextInput")),
         KeyBinding::new("left", Left, Some("TextInput")),
         KeyBinding::new("right", Right, Some("TextInput")),
         KeyBinding::new("shift-left", SelectLeft, Some("TextInput")),
         KeyBinding::new("shift-right", SelectRight, Some("TextInput")),
-        KeyBinding::new("cmd-a", SelectAll, Some("TextInput")),
-        KeyBinding::new("cmd-v", Paste, Some("TextInput")),
-        KeyBinding::new("cmd-c", Copy, Some("TextInput")),
-        KeyBinding::new("cmd-x", Cut, Some("TextInput")),
+        KeyBinding::new(primary!("a"), SelectAll, Some("TextInput")),
+        KeyBinding::new(primary!("v"), Paste, Some("TextInput")),
+        KeyBinding::new(primary!("c"), Copy, Some("TextInput")),
+        KeyBinding::new(primary!("x"), Cut, Some("TextInput")),
         KeyBinding::new("cmd-left", Home, Some("TextInput")),
         KeyBinding::new("home", Home, Some("TextInput")),
         KeyBinding::new("cmd-right", End, Some("TextInput")),
         KeyBinding::new("end", End, Some("TextInput")),
         KeyBinding::new("ctrl-cmd-space", ShowCharacterPalette, Some("TextInput")),
-    ]);
+        KeyBinding::new("enter", Submit, Some("TextInput")),
+    ]
 }
 
 #[cfg(test)]

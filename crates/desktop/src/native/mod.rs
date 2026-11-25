@@ -1,3 +1,17 @@
+/// Static binding for the primary modifier: `cmd-` on macOS, `ctrl-` on Linux.
+/// (`KeyBinding::new` rejects GPUI's runtime-resolved `secondary-` prefix.)
+#[cfg(target_os = "macos")]
+macro_rules! primary {
+    ($key:literal) => {
+        concat!("cmd-", $key)
+    };
+}
+#[cfg(not(target_os = "macos"))]
+macro_rules! primary {
+    ($key:literal) => {
+        concat!("ctrl-", $key)
+    };
+}
 mod details_ui;
 mod import_ui;
 mod library_ui;
@@ -23,7 +37,22 @@ use std::{
 };
 actions!(
     library,
-    [New, Save, Refresh, Find, NextField, PreviousField, Quit]
+    [
+        New,
+        Save,
+        Refresh,
+        Find,
+        NextField,
+        PreviousField,
+        Quit,
+        SelectNext,
+        SelectPrevious,
+        EditSelected,
+        Back,
+        ShowLibrary,
+        ShowImportReview,
+        ShowOrganize,
+    ]
 );
 enum Event {
     Query(Result<LibraryPage, ServiceError>),
@@ -72,6 +101,9 @@ struct LibraryView {
     name: Entity<TextInput>,
     doi: Entity<TextInput>,
     focus: FocusHandle,
+    table_focus: FocusHandle,
+    focus_layout: (Screen, String),
+    rows: UniformListScrollHandle,
     sender: mpsc::Sender<Message>,
     receiver: mpsc::Receiver<Message>,
     pdf_progress: Arc<Mutex<Option<(u64, PdfReport)>>>,
@@ -136,6 +168,9 @@ impl LibraryView {
             name: cx.new(|cx| TextInput::new("Collection or tag name", cx)),
             doi: cx.new(|cx| TextInput::new("DOI or doi.org URL", cx)),
             focus: cx.focus_handle(),
+            table_focus: cx.focus_handle(),
+            focus_layout: (Screen::Library, "Info".into()),
+            rows: UniformListScrollHandle::new(),
             sender,
             receiver,
             pdf_progress: Arc::new(Mutex::new(None)),
@@ -183,6 +218,22 @@ impl LibraryView {
             })
             .detach();
         }
+        for field in [
+            &view.search,
+            &view.author,
+            &view.year_from,
+            &view.year_to,
+            &view.paper_type,
+        ] {
+            cx.subscribe(field, |this, _, _: &text_input::Submitted, cx| {
+                this.filter(cx)
+            })
+            .detach();
+        }
+        cx.subscribe(&view.doi, |this, _, _: &text_input::Submitted, cx| {
+            this.lookup_doi(cx)
+        })
+        .detach();
         cx.subscribe(&view.doi, |this, _, _: &text_input::Edited, cx| {
             this.invalidate_doi();
             cx.notify();
@@ -598,6 +649,11 @@ impl LibraryView {
         self.reload(cx);
     }
     fn find(&mut self, _: &Find, window: &mut Window, cx: &mut Context<Self>) {
+        if self.screen != Screen::Library {
+            self.screen = Screen::Library;
+            cx.notify();
+        }
+        self.focus_layout = (self.screen, self.settings.details_tab.clone());
         self.search.focus_handle(cx).focus(window, cx);
     }
     fn next_field(&mut self, _: &NextField, window: &mut Window, cx: &mut Context<Self>) {
@@ -651,34 +707,273 @@ impl LibraryView {
         cx.notify();
     }
 }
+// Shared palette. Kept in one place so screens read as one app.
+const ACCENT: u32 = 0x3b73d9;
+const ACCENT_SOFT: u32 = 0xdde8fb;
+const ACCENT_TEXT: u32 = 0x163c80;
+const SURFACE: u32 = 0xffffff;
+const CANVAS: u32 = 0xf5f6f8;
+const SIDEBAR: u32 = 0xeef1f5;
+const BORDER: u32 = 0xd5dce5;
+const MUTED: u32 = 0x5f6b7c;
+const TEXT: u32 = 0x1c2533;
+/// Secondary action. Disabled buttons look inert and do not show a pointer.
 fn button(
     id: impl Into<ElementId>,
     label: impl Into<SharedString>,
     enabled: bool,
 ) -> Stateful<Div> {
+    styled_button(id, label.into(), enabled, false)
+}
+/// The main action of a screen.
+fn primary_button(
+    id: impl Into<ElementId>,
+    label: impl Into<SharedString>,
+    enabled: bool,
+) -> Stateful<Div> {
+    styled_button(id, label.into(), enabled, true)
+}
+// GPUI accepts one hover/active refinement per element, so pick the variant once.
+fn styled_button(
+    id: impl Into<ElementId>,
+    label: SharedString,
+    enabled: bool,
+    primary: bool,
+) -> Stateful<Div> {
+    let (bg, border, text, hover, active) = match (enabled, primary) {
+        (false, _) => (0xf2f3f5, 0xe1e5ea, 0x9aa3af, 0, 0),
+        (true, false) => (SURFACE, 0xc3cfe0, ACCENT_TEXT, 0xeef3fd, ACCENT_SOFT),
+        (true, true) => (ACCENT, ACCENT, SURFACE, 0x2f62c2, 0x2654a8),
+    };
     div()
         .id(id)
         .px_3()
-        .py_2()
+        .py_1()
         .rounded_md()
-        .bg(rgb(if enabled { 0xe0eaff } else { 0xeeeeee }))
-        .text_color(rgb(if enabled { 0x163c80 } else { 0x777777 }))
+        .border_1()
+        .whitespace_nowrap()
+        .border_color(rgb(border))
+        .bg(rgb(bg))
+        .text_color(rgb(text))
+        .when(enabled, |b| {
+            b.cursor_pointer()
+                .hover(move |s| s.bg(rgb(hover)))
+                .active(move |s| s.bg(rgb(active)))
+        })
+        .child(label)
+}
+/// Selectable list/tab item: flat until hovered, filled when active.
+fn nav_item(
+    id: impl Into<ElementId>,
+    label: impl Into<SharedString>,
+    active: bool,
+) -> Stateful<Div> {
+    div()
+        .id(id)
+        .px_2()
+        .py_1()
+        .rounded_md()
         .cursor_pointer()
+        .overflow_hidden()
+        .text_ellipsis()
+        .whitespace_nowrap()
+        .when(active, |b| {
+            b.bg(rgb(ACCENT_SOFT))
+                .text_color(rgb(ACCENT_TEXT))
+                .font_weight(FontWeight::SEMIBOLD)
+        })
+        .when(!active, |b| b.hover(|s| s.bg(rgb(0xe2e7ee))))
         .child(label.into())
+}
+/// Small uppercase group heading.
+fn section(text: impl Into<SharedString>) -> Div {
+    div()
+        .mt_3()
+        .mb_1()
+        .px_2()
+        .text_size(px(11.))
+        .font_weight(FontWeight::SEMIBOLD)
+        .text_color(rgb(MUTED))
+        .child(text.into())
+}
+/// Shortcut label for the primary modifier: ⌘ on macOS, Ctrl elsewhere.
+/// Bindings use GPUI's `secondary-` modifier, which follows the same rule.
+fn shortcut(key: &str) -> String {
+    if cfg!(target_os = "macos") {
+        format!("⌘{key}")
+    } else {
+        format!("Ctrl+{key}")
+    }
+}
+/// Secondary explanatory text.
+fn hint(text: impl Into<SharedString>) -> Div {
+    div()
+        .text_size(px(12.))
+        .text_color(rgb(MUTED))
+        .child(text.into())
 }
 fn line(text: impl Into<SharedString>) -> Div {
     div().mb_2().child(text.into())
 }
+impl LibraryView {
+    fn select_next(&mut self, _: &SelectNext, _: &mut Window, cx: &mut Context<Self>) {
+        self.move_selection(1, cx);
+    }
+    fn select_previous(&mut self, _: &SelectPrevious, _: &mut Window, cx: &mut Context<Self>) {
+        self.move_selection(-1, cx);
+    }
+    fn move_selection(&mut self, delta: isize, cx: &mut Context<Self>) {
+        if self.screen != Screen::Library {
+            return;
+        }
+        if let Some(id) = self.library.adjacent(delta) {
+            self.select(id, false, cx);
+            if let Some(index) = self.library.index_of(id) {
+                self.rows.scroll_to_item(index, ScrollStrategy::Nearest);
+            }
+        }
+    }
+    /// Enter on the table jumps into the first metadata field for editing.
+    fn edit_selected(&mut self, _: &EditSelected, window: &mut Window, cx: &mut Context<Self>) {
+        if self.screen != Screen::Library || self.settings.details_tab != "Info" {
+            return;
+        }
+        if let Some(field) = self.fields.first() {
+            field.focus_handle(cx).focus(window, cx);
+        }
+    }
+    /// Escape leaves a secondary screen, or returns focus from a field to the table.
+    fn back(&mut self, _: &Back, window: &mut Window, cx: &mut Context<Self>) {
+        if self.screen != Screen::Library && self.screen != Screen::Import {
+            self.screen = Screen::Library;
+            cx.notify();
+        }
+        if self.screen == Screen::Library {
+            self.table_focus.focus(window, cx);
+        }
+    }
+    fn show(&mut self, screen: Screen, window: &mut Window, cx: &mut Context<Self>) {
+        match screen {
+            Screen::Import => {
+                if self.locked() {
+                    return;
+                }
+                if self.invalidate_doi() {
+                    self.status(
+                        "DOI lookup cancelled; retained import review is unchanged",
+                        false,
+                        cx,
+                    );
+                }
+            }
+            Screen::Library => self.table_focus.focus(window, cx),
+            _ => (),
+        }
+        self.screen = screen;
+        cx.notify();
+    }
+    // Fixed-height bar: dirty/error notices never shift the panes under the pointer.
+    fn status_bar(&self, cx: &mut Context<Self>) -> Div {
+        let busy = [
+            Lane::Query,
+            Lane::Editor,
+            Lane::Import,
+            Lane::Pdf,
+            Lane::Doi,
+            Lane::Export,
+        ]
+        .into_iter()
+        .any(|lane| self.busy(lane));
+        let (bg, fg) = if self.error {
+            (0xffe5e5, 0x9b1c1c)
+        } else if self.dirty {
+            (0xfff4d6, 0x6b4e00)
+        } else {
+            (SIDEBAR, TEXT)
+        };
+        div()
+            .h(px(34.))
+            .flex_shrink_0()
+            .flex()
+            .items_center()
+            .gap_2()
+            .px_4()
+            .border_t_1()
+            .border_color(rgb(BORDER))
+            .bg(rgb(bg))
+            .text_color(rgb(fg))
+            .text_size(px(12.))
+            .child(if self.error {
+                "⚠"
+            } else if busy {
+                "⏳"
+            } else if self.dirty {
+                "✎"
+            } else {
+                "●"
+            })
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .overflow_hidden()
+                    .text_ellipsis()
+                    .whitespace_nowrap()
+                    .child(self.message.clone()),
+            )
+            .when(self.dirty, |el| {
+                el.child(div().font_weight(FontWeight::SEMIBOLD).child(
+                    if self.screen == Screen::Library {
+                        format!("Unsaved edits — {} to save", shortcut("S"))
+                    } else {
+                        "Unsaved edits — return to Library to save".into()
+                    },
+                ))
+                .child(
+                    button("discard-metadata-edits", "Discard edits", !self.locked())
+                        .py(px(1.))
+                        .on_click(cx.listener(|this, _, _, cx| this.discard_edits(cx))),
+                )
+            })
+            .when(!self.dirty, |el| {
+                el.child(
+                    div()
+                        .text_color(rgb(MUTED))
+                        .whitespace_nowrap()
+                        .child(format!(
+                            "{} new · {} search · ↑↓ select · ↩ edit · {} save · esc back",
+                            shortcut("N"),
+                            shortcut("F"),
+                            shortcut("S")
+                        )),
+                )
+            })
+    }
+}
 impl Render for LibraryView {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // Switching screen/tab unmounts whatever field had focus; with no focused
+        // descendant no "Library" binding (Esc, shortcuts) would fire. Hand focus
+        // to the table on Library, else to the root. Find opts out by updating
+        // `focus_layout` itself before focusing the search field.
+        let layout = (self.screen, self.settings.details_tab.clone());
+        if layout != self.focus_layout {
+            self.focus_layout = layout;
+            let target = if self.screen == Screen::Library {
+                self.table_focus.clone()
+            } else {
+                self.focus.clone()
+            };
+            window.defer(cx, move |window, cx| target.focus(window, cx));
+        }
         div()
             .size_full()
             .flex()
             .flex_col()
-            .bg(rgb(0xf5f6f8))
-            .text_color(rgb(0x1c2533))
-            .font_family(".AppleSystemUIFont")
-            .text_size(px(14.))
+            .bg(rgb(CANVAS))
+            .text_color(rgb(TEXT))
+            .font_family(".SystemUIFont")
+            .text_size(px(13.))
             .track_focus(&self.focus)
             .key_context("Library")
             .on_action(cx.listener(Self::new_paper))
@@ -687,33 +982,17 @@ impl Render for LibraryView {
             .on_action(cx.listener(Self::find))
             .on_action(cx.listener(Self::next_field))
             .on_action(cx.listener(Self::previous_field))
-            .child(self.toolbar(cx))
-            .when(self.dirty, |el| {
-                el.child(
-                    div()
-                        .px_4()
-                        .py_2()
-                        .flex()
-                        .items_center()
-                        .gap_2()
-                        .child("Unsaved metadata edits — return to Library to save")
-                        .child(
-                            button(
-                                "discard-metadata-edits",
-                                "Discard metadata edits",
-                                !self.locked(),
-                            )
-                            .on_click(cx.listener(|this, _, _, cx| this.discard_edits(cx))),
-                        ),
-                )
-            })
-            .child(
-                div()
-                    .px_4()
-                    .py_2()
-                    .bg(rgb(if self.error { 0xffe5e5 } else { 0xe8eff9 }))
-                    .child(self.message.clone()),
+            .on_action(cx.listener(Self::back))
+            .on_action(
+                cx.listener(|this, _: &ShowLibrary, w, cx| this.show(Screen::Library, w, cx)),
             )
+            .on_action(
+                cx.listener(|this, _: &ShowImportReview, w, cx| this.show(Screen::Import, w, cx)),
+            )
+            .on_action(
+                cx.listener(|this, _: &ShowOrganize, w, cx| this.show(Screen::Settings, w, cx)),
+            )
+            .child(self.toolbar(cx))
             .child(match self.screen {
                 Screen::Library => self.library_screen(cx).into_any_element(),
                 Screen::Import => self.import_screen(cx).into_any_element(),
@@ -724,23 +1003,21 @@ impl Render for LibraryView {
                     .flex_1()
                     .overflow_y_scroll()
                     .p_4()
+                    .child(div().mb_3().child(
+                        button("report-back", "← Back to library", true).on_click(
+                            cx.listener(|this, _, w, cx| this.show(Screen::Library, w, cx)),
+                        ),
+                    ))
                     .children(self.diagnostics.iter().cloned().map(line))
                     .into_any_element(),
             })
+            .child(self.status_bar(cx))
     }
 }
 pub fn run(client: Arc<dyn LibraryClient>) {
     gpui_platform::application().run(move |cx: &mut App| {
-        text_input::bind_keys(cx);
-        cx.bind_keys([
-            KeyBinding::new("cmd-n", New, Some("Library")),
-            KeyBinding::new("cmd-s", Save, Some("Library")),
-            KeyBinding::new("cmd-r", Refresh, Some("Library")),
-            KeyBinding::new("cmd-f", Find, Some("Library")),
-            KeyBinding::new("tab", NextField, Some("Library")),
-            KeyBinding::new("shift-tab", PreviousField, Some("Library")),
-            KeyBinding::new("cmd-q", Quit, None),
-        ]);
+        cx.bind_keys(text_input::key_bindings());
+        cx.bind_keys(key_bindings());
         cx.on_action(|_: &Quit, cx| cx.quit());
         cx.on_window_closed(|cx, _| {
             if cx.windows().is_empty() {
@@ -749,25 +1026,63 @@ pub fn run(client: Arc<dyn LibraryClient>) {
         })
         .detach();
         let bounds = Bounds::centered(None, size(px(1320.), px(860.)), cx);
-        let window = cx
-            .open_window(
-                WindowOptions {
-                    window_bounds: Some(WindowBounds::Windowed(bounds)),
-                    window_min_size: Some(size(px(1000.), px(680.))),
-                    titlebar: Some(TitlebarOptions {
-                        title: Some("Citation Manager — private local library".into()),
-                        ..Default::default()
-                    }),
-                    ..Default::default()
-                },
-                |_, cx| cx.new(|cx| LibraryView::new(client, cx)),
-            )
-            .expect("open native window");
-        window
-            .update(cx, |view, window, cx| {
-                view.focus.focus(window, cx);
-                cx.activate(true);
-            })
-            .expect("activate native window");
+        open_main_window(client, bounds, cx);
     });
+}
+fn key_bindings() -> Vec<KeyBinding> {
+    vec![
+        KeyBinding::new(primary!("n"), New, Some("Library")),
+        KeyBinding::new(primary!("s"), Save, Some("Library")),
+        KeyBinding::new(primary!("r"), Refresh, Some("Library")),
+        KeyBinding::new(primary!("f"), Find, Some("Library")),
+        KeyBinding::new("tab", NextField, Some("Library")),
+        KeyBinding::new("shift-tab", PreviousField, Some("Library")),
+        KeyBinding::new(primary!("q"), Quit, None),
+        KeyBinding::new("escape", Back, Some("Library")),
+        KeyBinding::new(primary!("1"), ShowLibrary, Some("Library")),
+        KeyBinding::new(primary!("2"), ShowImportReview, Some("Library")),
+        KeyBinding::new(primary!(","), ShowOrganize, Some("Library")),
+        KeyBinding::new("down", SelectNext, Some("PaperTable")),
+        KeyBinding::new("up", SelectPrevious, Some("PaperTable")),
+        KeyBinding::new("enter", EditSelected, Some("PaperTable")),
+    ]
+}
+fn open_main_window(client: Arc<dyn LibraryClient>, bounds: Bounds<Pixels>, cx: &mut App) {
+    let window = cx
+        .open_window(
+            WindowOptions {
+                window_bounds: Some(WindowBounds::Windowed(bounds)),
+                window_min_size: Some(size(px(1000.), px(680.))),
+                titlebar: Some(TitlebarOptions {
+                    title: Some("Citation Manager — private local library".into()),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+            |_, cx| cx.new(|cx| LibraryView::new(client, cx)),
+        )
+        .expect("open native window");
+    window
+        .update(cx, |view, window, cx| {
+            view.table_focus.focus(window, cx);
+            cx.activate(true);
+        })
+        .expect("activate native window");
+}
+#[cfg(test)]
+mod tests {
+    // KeyBinding::new panics on an unparsable keystroke only at app start;
+    // build every binding here so the default test lane catches it.
+    #[test]
+    fn every_key_binding_parses_on_this_platform() {
+        let library = super::key_bindings();
+        let text = super::text_input::key_bindings();
+        assert!(library.len() > 10 && text.len() > 10);
+        let primary = if cfg!(target_os = "macos") {
+            "cmd-n"
+        } else {
+            "ctrl-n"
+        };
+        assert_eq!(primary!("n"), primary);
+    }
 }

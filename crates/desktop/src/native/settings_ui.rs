@@ -2,6 +2,25 @@ use super::*;
 impl LibraryView {
     pub(super) fn settings_screen(&self, cx: &mut Context<Self>) -> Stateful<Div> {
         let enabled = !self.locked() && !self.busy(Lane::Organization);
+        let card = || {
+            div()
+                .p_4()
+                .rounded_lg()
+                .border_1()
+                .border_color(rgb(BORDER))
+                .bg(rgb(SURFACE))
+                .flex()
+                .flex_col()
+                .gap_2()
+        };
+        let title = |text: &'static str| {
+            div()
+                .text_size(px(15.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .child(text)
+        };
+        let row = || div().flex().items_center().gap_2();
+        let label = |text: SharedString| div().w(px(150.)).child(text);
         div()
             .id("settings")
             .flex_1()
@@ -9,242 +28,148 @@ impl LibraryView {
             .p_4()
             .flex()
             .flex_col()
-            .gap_3()
-            .child(line(
-                "Table and panes — saved automatically in this private library",
-            ))
-            .children(self.settings.columns.iter().enumerate().map(|(i, c)| {
-                div()
-                    .flex()
-                    .gap_2()
-                    .child(
-                        button(
-                            ("visible", i),
-                            format!("{} {}", if c.visible { "☑" } else { "☐" }, c.name),
-                            i != 0,
-                        )
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            if i != 0 {
-                                this.settings.columns[i].visible =
-                                    !this.settings.columns[i].visible;
-                                this.persist(cx);
-                            }
-                        })),
-                    )
-                    .child(button(("narrow", i), "− 20 px", true).on_click(cx.listener(
-                        move |this, _, _, cx| {
-                            this.settings.columns[i].width =
-                                this.settings.columns[i].width.saturating_sub(20).max(50);
-                            this.persist(cx);
-                        },
-                    )))
-                    .child(line(format!("{} px", c.width)))
-                    .child(button(("wide", i), "+ 20 px", true).on_click(cx.listener(
-                        move |this, _, _, cx| {
-                            this.settings.columns[i].width =
-                                (this.settings.columns[i].width + 20).min(800);
-                            this.persist(cx);
-                        },
-                    )))
-            }))
+            .gap_4()
+            .max_w(px(900.))
+            // Collections & tags first: it is the most frequent task on this screen.
             .child(
-                div()
-                    .flex()
-                    .gap_2()
+                card()
+                    .child(title("Collections & tags"))
+                    .child(hint(
+                        "Deleting a collection or tag keeps its papers. Papers can belong to several collections.",
+                    ))
                     .child(
-                        button(
-                            "navigation-width",
-                            format!(
-                                "Navigation width {} px — cycle",
-                                self.settings.navigation_width
-                            ),
-                            true,
-                        )
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.settings.navigation_width =
-                                if this.settings.navigation_width >= 340 {
-                                    160
-                                } else {
-                                    this.settings.navigation_width + 20
-                                };
-                            this.persist(cx);
-                        })),
-                    )
-                    .child(
-                        button(
-                            "details-width",
-                            format!("Details width {} px — cycle", self.settings.details_width),
-                            true,
-                        )
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.settings.details_width = if this.settings.details_width >= 660 {
-                                300
-                            } else {
-                                this.settings.details_width + 40
-                            };
-                            this.persist(cx);
-                        })),
-                    )
-                    .child(
-                        button("reset-layout", "Reset layout", true).on_click(cx.listener(
-                            |this, _, _, cx| {
-                                this.settings = Settings::default();
-                                this.library.query.sort = this.settings.sort;
-                                this.persist(cx);
-                                this.reload(cx);
-                            },
-                        )),
-                    ),
-            )
-            .child(
-                div()
-                    .flex()
-                    .gap_2()
-                    .children(
-                        [
-                            SortField::Id,
-                            SortField::Title,
-                            SortField::Year,
-                            SortField::CreatedAt,
-                            SortField::UpdatedAt,
-                        ]
-                        .into_iter()
-                        .enumerate()
-                        .map(|(i, field)| {
-                            button(("sort", i), format!("Sort {:?}", field), true).on_click(
-                                cx.listener(move |this, _, _, cx| {
-                                    this.settings.sort.field = field;
-                                    this.library.query.sort = this.settings.sort;
-                                    this.persist(cx);
-                                    this.reload(cx);
-                                }),
-                            )
-                        }),
-                    )
-                    .child(
-                        button(
-                            "direction",
-                            format!("{:?}", self.settings.sort.direction),
-                            true,
-                        )
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.settings.sort.direction =
-                                if this.settings.sort.direction == SortDirection::Asc {
-                                    SortDirection::Desc
-                                } else {
-                                    SortDirection::Asc
-                                };
-                            this.library.query.sort = this.settings.sort;
-                            this.persist(cx);
-                            this.reload(cx);
-                        })),
-                    ),
-            )
-            .child(line("Collections and tags"))
-            .child(div().w(px(420.)).child(self.name.clone()))
-            .child(
-                div()
-                    .flex()
-                    .gap_2()
-                    .child(
-                        button(
-                            "parent",
-                            format!(
-                                "Parent: {} — cycle",
-                                self.parent
-                                    .and_then(|id| self
-                                        .organization
-                                        .collections
-                                        .iter()
-                                        .find(|c| c.id == id))
-                                    .map(|c| c.name.as_str())
-                                    .unwrap_or("Root")
-                            ),
-                            enabled,
-                        )
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            let next = this
-                                .parent
-                                .and_then(|id| {
-                                    this.organization
-                                        .collections
-                                        .iter()
-                                        .position(|c| c.id == id)
-                                })
-                                .map_or(0, |i| i + 1);
-                            this.parent = this.organization.collections.get(next).map(|c| c.id);
-                            cx.notify();
-                        })),
-                    )
-                    .child(
-                        button(
-                            "collection-save",
-                            if self.editing_collection.is_some() {
-                                "Save collection"
-                            } else {
-                                "Create collection"
-                            },
-                            enabled,
-                        )
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            let input = CollectionInput {
-                                name: this.name.read(cx).content.to_string(),
-                                parent: this.parent,
-                                sort_order: 0,
-                            };
-                            let request = if let Some(id) = this.editing_collection {
-                                OrganizationRequest::UpdateCollection(id, input)
-                            } else {
-                                OrganizationRequest::CreateCollection(input)
-                            };
-                            this.organize(request, cx);
-                        })),
-                    )
-                    .child(
-                        button(
-                            "tag-save",
-                            if self.editing_tag.is_some() {
-                                "Save tag"
-                            } else {
-                                "Create tag"
-                            },
-                            enabled,
-                        )
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            let input = TagInput::named(this.name.read(cx).content.to_string());
-                            let request = if let Some(id) = this.editing_tag {
-                                OrganizationRequest::UpdateTag(id, input)
-                            } else {
-                                OrganizationRequest::CreateTag(input)
-                            };
-                            this.organize(request, cx);
-                        })),
-                    )
-                    .child(
-                        button("new-name", "New collection / tag", enabled).on_click(cx.listener(
-                            |this, _, _, cx| {
-                                this.editing_collection = None;
-                                this.editing_tag = None;
-                                this.parent = None;
-                                this.name.update(cx, |f, cx| f.set_text(String::new(), cx));
-                                cx.notify();
-                            },
-                        )),
-                    ),
-            )
-            .children(
-                self.organization
-                    .collections
-                    .iter()
-                    .enumerate()
-                    .map(|(i, c)| {
-                        let id = c.id;
-                        div()
-                            .flex()
-                            .gap_2()
-                            .child(line(format!("Collection: {}", c.name)))
+                        row()
+                            .child(div().w(px(320.)).child(self.name.clone()))
                             .child(
-                                button(("edit-collection", i), "Edit / move", enabled).on_click(
+                                primary_button(
+                                    "collection-save",
+                                    if self.editing_collection.is_some() {
+                                        "Save collection"
+                                    } else {
+                                        "Create collection"
+                                    },
+                                    enabled && self.editing_tag.is_none(),
+                                )
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    if this.editing_tag.is_some() {
+                                        return;
+                                    }
+                                    let input = CollectionInput {
+                                        name: this.name.read(cx).content.to_string(),
+                                        parent: this.parent,
+                                        sort_order: 0,
+                                    };
+                                    let request = if let Some(id) = this.editing_collection {
+                                        OrganizationRequest::UpdateCollection(id, input)
+                                    } else {
+                                        OrganizationRequest::CreateCollection(input)
+                                    };
+                                    this.organize(request, cx);
+                                })),
+                            )
+                            .child(
+                                button(
+                                    "tag-save",
+                                    if self.editing_tag.is_some() {
+                                        "Save tag"
+                                    } else {
+                                        "Create tag"
+                                    },
+                                    enabled && self.editing_collection.is_none(),
+                                )
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    if this.editing_collection.is_some() {
+                                        return;
+                                    }
+                                    let input =
+                                        TagInput::named(this.name.read(cx).content.to_string());
+                                    let request = if let Some(id) = this.editing_tag {
+                                        OrganizationRequest::UpdateTag(id, input)
+                                    } else {
+                                        OrganizationRequest::CreateTag(input)
+                                    };
+                                    this.organize(request, cx);
+                                })),
+                            )
+                            .when(
+                                self.editing_collection.is_some() || self.editing_tag.is_some(),
+                                |el| {
+                                    el.child(button("new-name", "Cancel edit", enabled).on_click(
+                                        cx.listener(|this, _, _, cx| {
+                                            this.editing_collection = None;
+                                            this.editing_tag = None;
+                                            this.parent = None;
+                                            this.name.update(cx, |f, cx| {
+                                                f.set_text(String::new(), cx)
+                                            });
+                                            cx.notify();
+                                        }),
+                                    ))
+                                },
+                            ),
+                    )
+                    .when(self.editing_tag.is_none(), |el| {
+                        el.child(
+                            row()
+                                .flex_wrap()
+                                .child(hint("Parent collection:"))
+                                .child(
+                                    nav_item("parent-root", "Top level", self.parent.is_none())
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.parent = None;
+                                            cx.notify();
+                                        })),
+                                )
+                                .children(
+                                    self.organization
+                                        .collections
+                                        .iter()
+                                        .enumerate()
+                                        // A collection cannot be its own parent.
+                                        .filter(|(_, c)| Some(c.id) != self.editing_collection)
+                                        .map(|(i, c)| {
+                                            let id = c.id;
+                                            nav_item(
+                                                ("parent", i),
+                                                c.name.clone(),
+                                                self.parent == Some(id),
+                                            )
+                                            .on_click(cx.listener(move |this, _, _, cx| {
+                                                this.parent = Some(id);
+                                                cx.notify();
+                                            }))
+                                        }),
+                                ),
+                        )
+                    })
+                    .child(section("COLLECTIONS"))
+                    .when(self.organization.collections.is_empty(), |el| {
+                        el.child(hint("No collections yet."))
+                    })
+                    .children(self.organization.collections.iter().enumerate().map(|(i, c)| {
+                        let id = c.id;
+                        row()
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .when(self.editing_collection == Some(id), |el| {
+                                        el.font_weight(FontWeight::SEMIBOLD)
+                                    })
+                                    .child(format!(
+                                        "{}{}",
+                                        c.name,
+                                        c.parent
+                                            .and_then(|p| self
+                                                .organization
+                                                .collections
+                                                .iter()
+                                                .find(|x| x.id == p))
+                                            .map(|p| format!("  (in {})", p.name))
+                                            .unwrap_or_default()
+                                    )),
+                            )
+                            .child(
+                                button(("edit-collection", i), "Rename / move", enabled).on_click(
                                     cx.listener(move |this, _, _, cx| {
                                         if let Some(c) = this
                                             .organization
@@ -263,84 +188,245 @@ impl LibraryView {
                                 ),
                             )
                             .child(
-                                button(("delete-collection", i), "Delete collection only", enabled)
+                                button(("delete-collection", i), "Delete", enabled)
+                                    .when(enabled, |b| b.text_color(rgb(0xb42318)))
                                     .on_click(cx.listener(move |this, _, _, cx| {
                                         this.organize(OrganizationRequest::DeleteCollection(id), cx)
                                     })),
                             )
-                    }),
+                    }))
+                    .child(section("TAGS"))
+                    .when(self.organization.tags.is_empty(), |el| {
+                        el.child(hint("No tags yet."))
+                    })
+                    .children(self.organization.tags.iter().enumerate().map(|(i, t)| {
+                        let id = t.id;
+                        row()
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .when(self.editing_tag == Some(id), |el| {
+                                        el.font_weight(FontWeight::SEMIBOLD)
+                                    })
+                                    .child(format!("#{}", t.name)),
+                            )
+                            .child(button(("edit-tag", i), "Rename", enabled).on_click(
+                                cx.listener(move |this, _, _, cx| {
+                                    if let Some(t) =
+                                        this.organization.tags.iter().find(|t| t.id == id)
+                                    {
+                                        this.editing_tag = Some(id);
+                                        this.editing_collection = None;
+                                        let name = t.name.clone();
+                                        this.name.update(cx, |f, cx| f.set_text(name, cx));
+                                        cx.notify();
+                                    }
+                                }),
+                            ))
+                            .child(
+                                button(("delete-tag", i), "Delete", enabled)
+                                    .when(enabled, |b| b.text_color(rgb(0xb42318)))
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        this.organize(OrganizationRequest::DeleteTag(id), cx)
+                                    })),
+                            )
+                    })),
             )
-            .children(self.organization.tags.iter().enumerate().map(|(i, t)| {
-                let id = t.id;
-                div()
-                    .flex()
-                    .gap_2()
-                    .child(line(format!("Tag: {}", t.name)))
+            .child(
+                card()
+                    .child(title("Export bibliography"))
+                    .child(hint(
+                        "Writes a new file. PDFs, annotations and collections/tags are not included.",
+                    ))
                     .child(
-                        button(("edit-tag", i), "Rename", enabled).on_click(cx.listener(
-                            move |this, _, _, cx| {
-                                if let Some(t) = this.organization.tags.iter().find(|t| t.id == id)
-                                {
-                                    this.editing_tag = Some(id);
-                                    this.editing_collection = None;
-                                    let name = t.name.clone();
-                                    this.name.update(cx, |f, cx| f.set_text(name, cx));
-                                    cx.notify();
-                                }
-                            },
-                        )),
+                        row().child(label("Format".into())).children(
+                            [(Format::Bibtex, "BibTeX"), (Format::Ris, "RIS")]
+                                .into_iter()
+                                .map(|(format, name)| {
+                                    nav_item(name, name, self.export_format == format).on_click(
+                                        cx.listener(move |this, _, _, cx| {
+                                            this.export_format = format;
+                                            cx.notify();
+                                        }),
+                                    )
+                                }),
+                        ),
                     )
                     .child(
-                        button(("delete-tag", i), "Delete tag only", enabled).on_click(
-                            cx.listener(move |this, _, _, cx| {
-                                this.organize(OrganizationRequest::DeleteTag(id), cx)
+                        row().child(label("Papers".into())).children(
+                            [
+                                "All active papers".to_string(),
+                                format!("Selected ({})", self.library.selected.len()),
+                                "Current collection".to_string(),
+                            ]
+                            .into_iter()
+                            .enumerate()
+                            .map(|(i, name)| {
+                                nav_item(("export-scope", i), name, self.export_scope == i)
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        this.export_scope = i;
+                                        cx.notify();
+                                    }))
                             }),
                         ),
                     )
-            }))
-            .child(line(
-                "Export bibliography — PDFs, annotations and organization are not transferred",
-            ))
+                    .child(
+                        row().child(
+                            primary_button("export", "Export to new file…", !self.busy(Lane::Export))
+                                .on_click(cx.listener(|this, _, _, cx| this.pick_export(cx))),
+                        ),
+                    ),
+            )
             .child(
-                div()
-                    .flex()
-                    .gap_2()
+                card()
+                    .child(title("Table & panes"))
+                    .child(hint("Saved automatically in this private library."))
+                    .children(self.settings.columns.iter().enumerate().map(|(i, c)| {
+                        row()
+                            .child(
+                                div().w(px(150.)).child(
+                                    nav_item(
+                                        ("visible", i),
+                                        format!("{} {}", if c.visible { "☑" } else { "☐" }, c.name),
+                                        false,
+                                    )
+                                    // Title stays visible so rows remain identifiable.
+                                    .when(i == 0, |el| el.cursor_default().text_color(rgb(MUTED)))
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        if i != 0 {
+                                            this.settings.columns[i].visible =
+                                                !this.settings.columns[i].visible;
+                                            this.persist(cx);
+                                        }
+                                    })),
+                                ),
+                            )
+                            .child(button(("narrow", i), "−", c.width > 50).on_click(cx.listener(
+                                move |this, _, _, cx| {
+                                    this.settings.columns[i].width =
+                                        this.settings.columns[i].width.saturating_sub(20).max(50);
+                                    this.persist(cx);
+                                },
+                            )))
+                            .child(div().w(px(64.)).text_center().child(format!("{} px", c.width)))
+                            .child(button(("wide", i), "+", c.width < 800).on_click(cx.listener(
+                                move |this, _, _, cx| {
+                                    this.settings.columns[i].width =
+                                        (this.settings.columns[i].width + 20).min(800);
+                                    this.persist(cx);
+                                },
+                            )))
+                    }))
                     .child(
-                        button(
-                            "export-format",
-                            format!("Format: {:?}", self.export_format),
-                            true,
-                        )
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.export_format = if this.export_format == Format::Bibtex {
-                                Format::Ris
-                            } else {
-                                Format::Bibtex
-                            };
-                            cx.notify();
-                        })),
-                    )
-                    .child(
-                        button(
-                            "export-scope",
-                            format!(
-                                "Scope: {}",
-                                [
-                                    "All active papers",
-                                    "Selected papers",
-                                    "Current direct collection"
-                                ][self.export_scope]
+                        row()
+                            .child(label("Sidebar width".into()))
+                            .child(
+                                button("navigation-narrow", "−", self.settings.navigation_width > 160)
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.settings.navigation_width =
+                                            this.settings.navigation_width.saturating_sub(20).max(160);
+                                        this.persist(cx);
+                                    })),
+                            )
+                            .child(
+                                div()
+                                    .w(px(64.))
+                                    .text_center()
+                                    .child(format!("{} px", self.settings.navigation_width)),
+                            )
+                            .child(
+                                button("navigation-wide", "+", self.settings.navigation_width < 340)
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.settings.navigation_width =
+                                            (this.settings.navigation_width + 20).min(340);
+                                        this.persist(cx);
+                                    })),
                             ),
-                            true,
-                        )
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.export_scope = (this.export_scope + 1) % 3;
-                            cx.notify();
-                        })),
                     )
                     .child(
-                        button("export", "Export to new file…", !self.busy(Lane::Export))
-                            .on_click(cx.listener(|this, _, _, cx| this.pick_export(cx))),
+                        row()
+                            .child(label("Details width".into()))
+                            .child(
+                                button("details-narrow", "−", self.settings.details_width > 300)
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.settings.details_width =
+                                            this.settings.details_width.saturating_sub(40).max(300);
+                                        this.persist(cx);
+                                    })),
+                            )
+                            .child(
+                                div()
+                                    .w(px(64.))
+                                    .text_center()
+                                    .child(format!("{} px", self.settings.details_width)),
+                            )
+                            .child(
+                                button("details-wide", "+", self.settings.details_width < 660)
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.settings.details_width =
+                                            (this.settings.details_width + 40).min(660);
+                                        this.persist(cx);
+                                    })),
+                            ),
+                    )
+                    .child(
+                        row()
+                            .flex_wrap()
+                            .child(label("Default sort".into()))
+                            .children(
+                                [
+                                    (SortField::Title, "Title"),
+                                    (SortField::Year, "Year"),
+                                    (SortField::CreatedAt, "Added"),
+                                    (SortField::UpdatedAt, "Modified"),
+                                    (SortField::Id, "ID"),
+                                ]
+                                .into_iter()
+                                .enumerate()
+                                .map(|(i, (field, name))| {
+                                    nav_item(("sort", i), name, self.settings.sort.field == field)
+                                        .on_click(cx.listener(move |this, _, _, cx| {
+                                            this.settings.sort.field = field;
+                                            this.library.query.sort = this.settings.sort;
+                                            this.persist(cx);
+                                            this.reload(cx);
+                                        }))
+                                }),
+                            )
+                            .child(
+                                button(
+                                    "direction",
+                                    if self.settings.sort.direction == SortDirection::Asc {
+                                        "▲ Ascending"
+                                    } else {
+                                        "▼ Descending"
+                                    },
+                                    true,
+                                )
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.settings.sort.direction =
+                                        if this.settings.sort.direction == SortDirection::Asc {
+                                            SortDirection::Desc
+                                        } else {
+                                            SortDirection::Asc
+                                        };
+                                    this.library.query.sort = this.settings.sort;
+                                    this.persist(cx);
+                                    this.reload(cx);
+                                })),
+                            ),
+                    )
+                    .child(
+                        row().child(
+                            button("reset-layout", "Reset layout to defaults", true).on_click(
+                                cx.listener(|this, _, _, cx| {
+                                    this.settings = Settings::default();
+                                    this.library.query.sort = this.settings.sort;
+                                    this.persist(cx);
+                                    this.reload(cx);
+                                }),
+                            ),
+                        ),
                     ),
             )
     }

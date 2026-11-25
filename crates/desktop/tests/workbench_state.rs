@@ -162,3 +162,63 @@ fn title_only_edit_preserves_abstract_absence_and_contributor_identity() {
     assert!(edited.bibliography.abstract_text.is_none());
     assert_eq!(edited.bibliography.authors, draft.bibliography.authors);
 }
+
+fn ids(n: u8) -> Vec<PaperId> {
+    (1..=n)
+        .map(|i| {
+            PaperId(
+                format!("00000000-0000-0000-0000-0000000000{i:02}")
+                    .parse()
+                    .unwrap(),
+            )
+        })
+        .collect()
+}
+
+fn loaded(ids: &[PaperId]) -> Library {
+    let mut library = Library::default();
+    library.reload();
+    let mut page = page("00000000-0000-0000-0000-000000000001", None);
+    let template = page.papers.remove(0);
+    page.papers = ids
+        .iter()
+        .map(|id| Paper {
+            id: *id,
+            ..template.clone()
+        })
+        .collect();
+    library.complete(library.generation, page);
+    library
+}
+
+#[test]
+fn keyboard_row_movement_starts_at_edges_and_clamps_to_loaded_page() {
+    assert_eq!(Library::default().adjacent(1), None);
+    let ids = ids(3);
+    let mut library = loaded(&ids);
+    assert_eq!(library.adjacent(1), Some(ids[0]));
+    assert_eq!(library.adjacent(-1), Some(ids[2]));
+    library.select(ids[1], false);
+    assert_eq!(library.adjacent(1), Some(ids[2]));
+    assert_eq!(library.adjacent(-1), Some(ids[0]));
+    library.select(ids[2], false);
+    assert_eq!(library.adjacent(1), Some(ids[2]));
+    assert_eq!(library.adjacent(isize::MAX), Some(ids[2]));
+    library.select(ids[0], false);
+    assert_eq!(library.adjacent(-1), Some(ids[0]));
+    assert_eq!(library.adjacent(isize::MIN), Some(ids[0]));
+    assert_eq!(library.index_of(ids[1]), Some(1));
+}
+
+#[test]
+fn keyboard_row_movement_follows_latest_visible_selection() {
+    let ids = ids(4);
+    let mut library = loaded(&ids);
+    library.select(ids[3], false);
+    library.select(ids[1], true);
+    assert_eq!(library.adjacent(1), Some(ids[2]));
+    // A selection retained from another page does not anchor movement.
+    let mut other = loaded(&ids[..2]);
+    other.selected = vec![ids[0], ids[3]];
+    assert_eq!(other.adjacent(1), Some(ids[1]));
+}
