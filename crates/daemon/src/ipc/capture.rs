@@ -77,6 +77,14 @@ impl Bindings {
             .get(id)
             .filter(|b| b.grant == grant && b.created.elapsed() < BINDING_LIFETIME)
     }
+    /// Whether a capture preview still awaits its commit or cancel. Such a preview keeps
+    /// papersd from idling out: the native host drops its connection right after
+    /// `capture.preview`, and only this daemon holds the preview and its binding.
+    pub(super) fn awaiting_decision(&self) -> bool {
+        self.0
+            .values()
+            .any(|b| b.created.elapsed() < BINDING_LIFETIME)
+    }
 }
 
 fn idempotency_key(paper: uuid::Uuid, url: &str) -> String {

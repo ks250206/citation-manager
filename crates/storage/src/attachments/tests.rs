@@ -100,6 +100,50 @@ fn interruptions_retain_old_associations_and_are_detectable_and_retryable() {
     }
 }
 
+/// The attachment job and the library worker import on separate connections. When both
+/// found no reference for `(paper, content)` before registering (the race), `import_once`
+/// still registers it once: the check is repeated inside the registering transaction.
+#[test]
+fn import_once_registers_the_same_content_once_per_paper() {
+    let (_temp, directory, mut db, request) = setup();
+    let mut other = LibraryDb::open(&directory).unwrap();
+    let paper = request.paper_id;
+    // Both callers' own pre-checks pass before either registers.
+    assert!(db.attachments().for_paper(paper).unwrap().is_empty());
+    assert!(other.attachments().for_paper(paper).unwrap().is_empty());
+    let first = db
+        .managed_attachments(&directory)
+        .unwrap()
+        .import_once(request.clone())
+        .unwrap();
+    assert!(!first.existing);
+    // Same bytes from another file name are the same content.
+    let mut copy = request.clone();
+    copy.source = request.source.with_file_name("copy.pdf");
+    fs::copy(&request.source, &copy.source).unwrap();
+    copy.original_name = "copy.pdf".into();
+    let second = other
+        .managed_attachments(&directory)
+        .unwrap()
+        .import_once(copy.clone())
+        .unwrap();
+    assert!(second.existing);
+    assert_eq!(second.attachment, first.attachment);
+    assert_eq!(
+        db.attachments().for_paper(paper).unwrap(),
+        vec![first.attachment.clone()]
+    );
+    assert!(db.check_integrity(&directory).unwrap().is_clean());
+    // Plain `import` (what both callers used before) appends a second reference in the same
+    // interleaving; it stays append-only for explicit retries.
+    other
+        .managed_attachments(&directory)
+        .unwrap()
+        .import(copy)
+        .unwrap();
+    assert_eq!(db.attachments().for_paper(paper).unwrap().len(), 2);
+}
+
 #[test]
 fn shared_blob_survives_association_failure_and_soft_delete() {
     let (_temp, directory, mut db, mut request) = setup();

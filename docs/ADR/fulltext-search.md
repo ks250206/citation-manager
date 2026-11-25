@@ -143,7 +143,11 @@ diagnostic, so a request never silently selects the whole library.
   `pdf_pages_for_short_terms` — missing page hits are unknown, not zero. Scope `all_pages`
   scans pages too. When the window ends early, `scan = partial`, `unsearched` contains
   `documents_after_window` and `continuation` is the cursor for the next window; hits of a
-  window are limited to documents inside it, so windows never repeat a hit.
+  window are limited to documents inside it, so windows never repeat a hit. The paper-level
+  AND is not limited to the window: a paper with a matching document in the window whose
+  other short clauses match only outside it is checked against all of its documents (same
+  sources, request deadline; running out of time sets `timed_out`), so clauses matched in
+  different windows still return the paper's documents, each in its own window.
 - Ranking: score = Σ over clauses of the best weighted score; field weights default to
   title 10, authors 8, tags 5, identifiers 5, journal 3, abstract 3, notes 2, body 1 and are
   overridable per request (0..100). Order: score desc, document id asc.

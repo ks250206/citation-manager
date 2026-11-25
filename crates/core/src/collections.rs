@@ -42,6 +42,14 @@ pub trait CollectionLibrary {
         collection: CollectionId,
         present: bool,
     ) -> Result<(), ServiceError>;
+    /// Adds the paper to `to` and removes it from `from` in one transaction: if the paper
+    /// or either collection is missing, nothing changes. Idempotent like `set_membership`.
+    fn move_membership(
+        &mut self,
+        paper: PaperId,
+        from: CollectionId,
+        to: CollectionId,
+    ) -> Result<(), ServiceError>;
     fn for_paper(&self, paper: PaperId) -> Result<Vec<Collection>, ServiceError>;
 }
 
@@ -87,6 +95,20 @@ impl<R: CollectionLibrary> CollectionService<R> {
         collection: CollectionId,
     ) -> Result<(), ServiceError> {
         self.repository.set_membership(paper, collection, false)
+    }
+    /// Atomic move between two different collections (see `move_membership`).
+    pub fn move_paper(
+        &mut self,
+        paper: PaperId,
+        from: CollectionId,
+        to: CollectionId,
+    ) -> Result<(), ServiceError> {
+        if from == to {
+            return Err(ServiceError::InvalidInput(
+                "source and target collection must differ".into(),
+            ));
+        }
+        self.repository.move_membership(paper, from, to)
     }
     pub fn for_paper(&self, paper: PaperId) -> Result<Vec<Collection>, ServiceError> {
         self.repository.for_paper(paper)

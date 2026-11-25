@@ -205,3 +205,41 @@ fn authenticated_session_is_bounded_and_oversized_requests_close_it() {
         "Credential(<redacted>)"
     );
 }
+
+/// A client that keeps sending requests but never reads its replies cannot make the daemon
+/// queue replies without bound: once its bounded outbound queue is full it is disconnected
+/// (its writes start failing), and other clients are unaffected.
+#[test]
+fn a_client_that_stops_reading_replies_is_disconnected() {
+    let env = Env::new();
+    let _daemon = start(env.config()).unwrap();
+    let mut stream = raw(&env);
+    let welcome = handshake(&mut stream, env.connector("desktop").hello().unwrap()).unwrap();
+    stream
+        .set_write_timeout(Some(Duration::from_secs(30)))
+        .unwrap();
+    // Far more replies than the queue plus both socket buffers can hold.
+    const REQUESTS: u64 = 50_000;
+    let sent = (0..REQUESTS)
+        .take_while(|id| {
+            write_frame(
+                &mut stream,
+                &ClientFrame::Request {
+                    id: *id,
+                    command: Command::Status,
+                },
+                welcome.max_request_frame,
+            )
+            .is_ok()
+        })
+        .count() as u64;
+    assert!(
+        sent < REQUESTS,
+        "all {sent} requests were accepted although no reply was read"
+    );
+    let mut session = env.desktop();
+    assert!(matches!(
+        ok(session.call(Command::Status)),
+        Reply::Status(_)
+    ));
+}
