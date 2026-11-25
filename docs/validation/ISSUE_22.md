@@ -95,3 +95,25 @@ Verification after the fixes (same environment and disk settings):
 | `python3 scripts/check_architecture.py` | passed |
 | `python3 scripts/check_migrations.py --base origin/main` | passed |
 | `python3 -m unittest discover -s scripts -p 'test_*.py'` | passed: 33 |
+
+## Merge with main (#62: #19/#25/#18)
+
+Merged `68c7a22` (the tree of `main` @ `ee2916f`) into this branch, then recorded `main` with an
+`ours` merge (no tree change). #22 adds no migration; storage and the migration manifest are
+main's. Integration change: a finished `capture.pdf_fetch` job now triggers the automatic #18
+`fulltext.extract {scope: pending}` submission, like `attachment.import`, so captured PDFs are
+indexed. Regression test: `daemon_capture::captured_pdf_is_extracted_into_the_fulltext_index`
+(fails within its 30 s wait without the trigger).
+
+| Command | Result |
+|---|---|
+| `cargo fmt --all -- --check` | passed |
+| `cargo clippy --workspace --all-targets --locked -- -D warnings` | passed |
+| `cargo clippy -p cm-daemon --all-targets --features desktop-bootstrap --locked -- -D warnings` | passed |
+| `cargo clippy -p cm-desktop --all-targets --features native-gpui --locked -- -D warnings` | passed (Linux) |
+| `cargo test --workspace --locked --no-fail-fast` | passed |
+| `cargo test -p cm-daemon -p cm-desktop --features cm-daemon/desktop-bootstrap --locked` | passed: 142 tests |
+| pinned Linux PDFium: `cm-pdf` `metadata_runtime`/`runtime`/`extract_runtime`, `cm-daemon` `fulltext_runtime` | passed |
+| `python3 scripts/check_architecture.py` | passed |
+| `python3 -m unittest discover -s scripts -p 'test_*.py'` | passed: 33 |
+| `python3 scripts/check_migrations.py --base origin/main` | passed (5 migrations, baseline preserved) |
