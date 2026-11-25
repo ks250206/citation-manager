@@ -273,6 +273,8 @@ impl LocalConnector {
         let mut spawned = Instant::now();
         let started = Instant::now();
         let mut delay = Duration::from_millis(10);
+        // Exit status of the last launched papersd that went away without serving.
+        let mut last_exit: Option<std::process::ExitStatus> = None;
         loop {
             match self.try_connect() {
                 Ok(stream) => {
@@ -281,23 +283,33 @@ impl LocalConnector {
                     return Ok(stream);
                 }
                 Err(e) if started.elapsed() >= launch.timeout => {
-                    let _ = child.try_wait();
+                    if let Ok(Some(status)) = child.try_wait() {
+                        last_exit = Some(status);
+                    }
                     thread::spawn(move || child.wait());
+                    let exit = last_exit
+                        .map(|s| format!("; last papersd exit: {s}"))
+                        .unwrap_or_default();
                     return Err(io::Error::new(
                         io::ErrorKind::TimedOut,
-                        format!("daemon did not start: {e}"),
+                        format!("daemon did not start: {e}{exit}"),
                     ));
                 }
                 Err(_) => {
                     // A loser of a start race exits EXIT_ALREADY_RUNNING; keep waiting for
                     // the winner's socket. If the lock holder was a daemon in its idle exit,
                     // no socket will come: start again (rate-limited) once it is gone.
-                    if let Ok(Some(status)) = child.try_wait()
-                        && status.code() == Some(EXIT_ALREADY_RUNNING)
-                        && spawned.elapsed() >= RESPAWN_INTERVAL
-                    {
-                        child = spawn()?;
-                        spawned = Instant::now();
+                    // Any other early exit (e.g. a transient I/O error while the previous
+                    // daemon is still releasing the library) is retried the same way, bounded
+                    // by the launch timeout; its status is reported if we finally give up.
+                    if let Ok(Some(status)) = child.try_wait() {
+                        if status.code() != Some(EXIT_ALREADY_RUNNING) {
+                            last_exit = Some(status);
+                        }
+                        if spawned.elapsed() >= RESPAWN_INTERVAL {
+                            child = spawn()?;
+                            spawned = Instant::now();
+                        }
                     }
                     thread::sleep(delay);
                     delay = (delay * 2).min(Duration::from_millis(200));
