@@ -30,9 +30,15 @@ pub fn generate(shell: Shell) -> Vec<u8> {
     buffer
 }
 
-pub fn write(shell: Shell, out: &mut dyn Write) {
-    let _ = out.write_all(&generate(shell));
-    let _ = out.flush();
+/// Exit code: 0 (also when the reader closed the pipe), 1 on another write error.
+pub fn write(shell: Shell, out: &mut dyn Write, err: &mut dyn Write) -> i32 {
+    match crate::output::write_stdout(out, &generate(shell)) {
+        Ok(()) => crate::output::exit::OK,
+        Err(e) => {
+            let _ = writeln!(err, "papers: error: {}", e.message);
+            crate::output::exit::OTHER
+        }
+    }
 }
 
 #[cfg(test)]

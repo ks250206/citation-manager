@@ -92,6 +92,13 @@ impl Env {
         self.papers_with(args, &[])
     }
     fn papers_with(&self, args: &[&str], env: &[(&str, &str)]) -> Run {
+        let args: Vec<&std::ffi::OsStr> = args.iter().map(std::ffi::OsStr::new).collect();
+        self.run(&args, env)
+    }
+    fn papers_os(&self, args: &[&std::ffi::OsStr]) -> Run {
+        self.run(args, &[])
+    }
+    fn run(&self, args: &[&std::ffi::OsStr], env: &[(&str, &str)]) -> Run {
         let mut command = Process::new(PAPERS);
         command
             .args(args)
@@ -108,8 +115,8 @@ impl Env {
         let output = command.output().unwrap();
         Run {
             code: output.status.code().unwrap_or(-1),
-            stdout: String::from_utf8(output.stdout).unwrap(),
-            stderr: String::from_utf8(output.stderr).unwrap(),
+            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
         }
     }
     fn write(&self, name: &str, contents: &str) -> PathBuf {
@@ -141,6 +148,124 @@ fn ok(
     result: Result<Result<Reply, cm_protocol::ipc::WireError>, cm_protocol::client::ClientError>,
 ) -> Reply {
     result.unwrap().unwrap()
+}
+
+/// Issues a grant through an owner session and stores its credential with `mode`.
+fn issue(env: &Env, name: &str, capabilities: &[Capability], mode: u32) -> PathBuf {
+    let mut owner = env.owner();
+    let credential = match ok(owner.call(Command::Grants(GrantCommand::Issue {
+        label: name.into(),
+        capabilities: capabilities.iter().copied().collect(),
+        expires_at_ms: None,
+    }))) {
+        Reply::Grants(GrantReply::Issued { credential, .. }) => credential,
+        other => panic!("{other:?}"),
+    };
+    let file = env.root.join(name);
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(mode)
+        .open(&file)
+        .and_then(|mut f| std::io::Write::write_all(&mut f, credential.0.as_bytes()))
+        .unwrap();
+    file
+}
+
+/// Two entries with the same DOI: with `--batch 1` they land in different preview batches.
+const SAME_DOI_BIB: &str = r#"@article{first,
+  title = {First copy},
+  year = {2020},
+  doi = {10.5555/same.doi}
+}
+@article{second,
+  title = {Second copy with another title},
+  year = {2021},
+  doi = {10.5555/SAME.DOI}
+}
+"#;
+
+#[test]
+fn duplicates_across_batches_are_decided_before_anything_is_committed() {
+    let env = Env::new();
+    env.write("same.bib", SAME_DOI_BIB);
+    let plan = env
+        .papers(&["import", "same.bib", "--batch", "1", "--dry-run"])
+        .expect(0);
+    assert_eq!(plan["plan"]["create"], 1);
+    assert_eq!(plan["plan"]["needs_decision"], 1);
+    assert_eq!(plan["rows"][1]["decision"]["code"], "duplicate");
+    // Without a policy nothing at all is committed, not even the first batch.
+    let refused = env.papers(&["import", "same.bib", "--batch", "1", "--yes"]);
+    refused.expect(4);
+    assert_eq!(refused.json()["data"]["saved"], false);
+    assert_eq!(env.paper_count(), 0);
+    let skipped = env
+        .papers(&[
+            "import",
+            "same.bib",
+            "--batch",
+            "1",
+            "--on-duplicate",
+            "skip",
+            "--yes",
+        ])
+        .expect(0);
+    assert_eq!(skipped["plan"]["skip_duplicate"], 1);
+    assert_eq!(skipped["result"]["created"].as_array().unwrap().len(), 1);
+    assert_eq!(env.paper_count(), 1);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn non_utf8_paths_never_panic_the_json_output() {
+    use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+    let env = Env::new();
+    // Inputs/outputs: the JSON protocol cannot carry them, so they are refused (exit 2) with a
+    // normal envelope instead of a panic (exit 101).
+    let bib = OsStr::from_bytes(b"refs-\xff.bib");
+    std::fs::write(env.root.join(bib), BIB).unwrap();
+    let pdf = OsStr::from_bytes(b"paper-\xff.pdf");
+    std::fs::write(env.root.join(pdf), "%PDF-1.4 bytes\n").unwrap();
+    let out = OsStr::from_bytes(b"out-\xff.bib");
+    for args in [
+        vec![OsStr::new("import"), bib, OsStr::new("--dry-run")],
+        vec![
+            OsStr::new("add"),
+            OsStr::new("file"),
+            pdf,
+            OsStr::new("--yes"),
+        ],
+        vec![OsStr::new("export"), OsStr::new("-o"), out],
+    ] {
+        let run = env.papers_os(&args);
+        run.expect(2);
+        assert_eq!(run.json()["error"]["code"], "invalid_input");
+        assert!(run.stderr.contains("UTF-8"), "{}", run.stderr);
+    }
+    // A non-UTF-8 library path is reported lossily in JSON.
+    let library = env.root.join(OsStr::from_bytes(b"lib-\xff"));
+    let library = library.as_os_str().to_str().map(str::to_owned);
+    assert!(library.is_none());
+    let output = Process::new(PAPERS)
+        .args(["server", "status"])
+        .env(
+            "PAPERS_LIBRARY",
+            env.root.join(OsStr::from_bytes(b"lib-\xff")),
+        )
+        .env("PAPERS_RUNTIME_DIR", &env.runtime)
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(0));
+    let v: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(v["data"]["running"], false);
+    assert!(
+        v["data"]["library"]
+            .as_str()
+            .unwrap()
+            .ends_with("lib-\u{fffd}")
+    );
 }
 
 const BIB: &str = r#"@article{alpha2024,
@@ -453,6 +578,57 @@ fn read_only_sessions_and_grants_are_refused_writes() {
         &[("PAPERS_CREDENTIAL_FILE", cred)],
     )
     .expect(5);
+    assert_eq!(env.paper_count(), 0);
+
+    // server stop needs GrantAdmin, proven by the daemon: refused for the read-only grant
+    // and under --read-only, and the daemon keeps running.
+    let refused = env.papers(&["--credential-file", cred, "server", "stop", "--force"]);
+    refused.expect(5);
+    env.papers(&["--read-only", "server", "stop", "--force"])
+        .expect(5);
+    assert_eq!(env.papers(&["server", "status"]).expect(0)["running"], true);
+
+    // add file --dry-run needs no write capability: a preview-only grant can review a PDF
+    // (0400 credential file) but cannot register it.
+    let preview_only = issue(
+        &env,
+        "preview-only.credential",
+        &[
+            Capability::LocalFileRead,
+            Capability::LibraryRead,
+            Capability::CapturePreview,
+        ],
+        0o400,
+    );
+    let preview_only = preview_only.to_str().unwrap();
+    let dry = env
+        .papers(&[
+            "--credential-file",
+            preview_only,
+            "add",
+            "file",
+            "paper.pdf",
+            "--dry-run",
+        ])
+        .expect(0);
+    assert_eq!(dry["preview"]["candidates"][0]["title"], "paper");
+    env.papers(&[
+        "--credential-file",
+        preview_only,
+        "add",
+        "file",
+        "paper.pdf",
+        "--yes",
+    ])
+    .expect(5);
+    env.papers(&[
+        "--credential-file",
+        preview_only,
+        "import",
+        "refs.bib",
+        "--dry-run",
+    ])
+    .expect(0);
     assert_eq!(env.paper_count(), 0);
 
     // A credential the daemon does not know is unauthenticated.

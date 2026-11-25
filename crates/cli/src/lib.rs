@@ -67,10 +67,7 @@ where
         format = Format::Text;
     }
     match &cli.command {
-        Command::Completions(args) => {
-            commands::completions::write(args.shell, out);
-            return exit::OK;
-        }
+        Command::Completions(args) => return commands::completions::write(args.shell, out, err),
         // stdout belongs to the MCP protocol: never print an envelope there.
         Command::Mcp => return commands::mcp::run(err),
         _ => {}

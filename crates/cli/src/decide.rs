@@ -120,6 +120,17 @@ pub fn decide(candidate: &PreviewCandidate, index: usize, policy: &Policy) -> De
                 ),
             );
         };
+        // The shared import service never merges into the trash (no implicit restore), so refuse
+        // here with the reason instead of failing at commit.
+        if candidate.matches[match_index].existing.deleted_at.is_some() {
+            return undecided(
+                Kind::Conflict,
+                format!(
+                    "--merge {}: that paper is in the trash; restore it first (merging never restores)",
+                    target.0
+                ),
+            );
+        }
         let differing: Vec<String> = candidate.matches[match_index]
             .differences
             .iter()
@@ -210,6 +221,69 @@ pub fn match_kind(kind: MatchKind) -> &'static str {
         MatchKind::ExternalId => "external_id",
         MatchKind::TitleAuthorYear => "title_author_year",
         MatchKind::SimilarTitle => "similar_title",
+    }
+}
+
+/// Exact identifiers (DOI and external IDs, as normalized in the preview) of rows that will be
+/// created, by global row index. Citation keys are deliberately excluded: the shared service
+/// resolves key collisions with a suffix (`_2`), so a repeated key is not the same work.
+#[derive(Debug, Default)]
+pub struct SeenIdentifiers(std::collections::HashMap<(String, String), usize>);
+impl SeenIdentifiers {
+    pub fn identifiers(draft: &cm_protocol::import::PaperDraft) -> Vec<(String, String)> {
+        let doi = |v: &str| v.trim().to_lowercase();
+        let mut ids: Vec<(String, String)> = draft
+            .bibliography
+            .doi
+            .iter()
+            .map(|d| ("doi".to_owned(), doi(d)))
+            .collect();
+        for id in &draft.external_ids {
+            let namespace = id.namespace.trim().to_ascii_lowercase();
+            let value = if namespace == "doi" {
+                doi(&id.value)
+            } else {
+                id.value.trim().to_owned()
+            };
+            ids.push((namespace, value));
+        }
+        ids
+    }
+    /// Turns a `create` that repeats an identifier of an earlier row into a duplicate
+    /// (skipped with `--on-duplicate skip`, otherwise a decision is required).
+    pub fn check(
+        &mut self,
+        candidate: &PreviewCandidate,
+        global_index: usize,
+        decision: Decision,
+        policy: &Policy,
+    ) -> Decision {
+        let Decision::Act {
+            action: ImportAction::Create,
+            ..
+        } = decision
+        else {
+            return decision;
+        };
+        let ids = Self::identifiers(&candidate.draft);
+        if let Some(&first) = ids.iter().find_map(|k| self.0.get(k)) {
+            return match policy.on_duplicate {
+                OnDuplicate::Skip => Decision::Act {
+                    action: ImportAction::Skip,
+                    label: "skip_duplicate",
+                },
+                _ => Decision::Undecided {
+                    kind: Kind::Duplicate,
+                    reason: format!(
+                        "exact identifier duplicate of row {first} (an earlier batch); use --on-duplicate skip"
+                    ),
+                },
+            };
+        }
+        for id in ids {
+            self.0.entry(id).or_insert(global_index);
+        }
+        decision
     }
 }
 
@@ -400,6 +474,18 @@ mod tests {
                 ..
             }
         ));
+        // A trashed target is refused up front (the service never merges into the trash).
+        let mut trashed = candidate(&[MatchKind::Doi]);
+        trashed.matches[0].existing.deleted_at = Some("2026-01-01T00:00:00Z".into());
+        p.merge = Some(trashed.matches[0].existing.id);
+        p.merge_fields = MergeFields::None;
+        assert!(matches!(
+            decide(&trashed, 0, &p),
+            Decision::Undecided {
+                kind: Kind::Conflict,
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -438,5 +524,49 @@ mod tests {
         let mut bulk = policy(OnDuplicate::Ask);
         bulk.skip_invalid = true;
         assert_eq!(action(decide(&invalid, 0, &bulk)), ImportAction::Skip);
+    }
+
+    #[test]
+    fn identifiers_repeated_in_a_later_batch_are_duplicates() {
+        let mut row = candidate(&[]);
+        row.draft.bibliography.doi = Some("10.1/ABC".into());
+        let mut later = candidate(&[]);
+        later
+            .draft
+            .external_ids
+            .push(cm_protocol::domain::ExternalId {
+                namespace: "DOI".into(),
+                value: "10.1/abc".into(),
+            });
+        let mut other = candidate(&[]);
+        other.draft.bibliography.doi = Some("10.1/other".into());
+        for (on_duplicate, expect_skip) in [
+            (OnDuplicate::Ask, false),
+            (OnDuplicate::Create, false),
+            (OnDuplicate::Skip, true),
+        ] {
+            let p = policy(on_duplicate);
+            let mut seen = SeenIdentifiers::default();
+            assert_eq!(
+                action(seen.check(&row, 0, decide(&row, 0, &p), &p)),
+                ImportAction::Create
+            );
+            let repeated = seen.check(&later, 100, decide(&later, 0, &p), &p);
+            if expect_skip {
+                assert_eq!(action(repeated), ImportAction::Skip);
+            } else {
+                assert!(matches!(
+                    repeated,
+                    Decision::Undecided {
+                        kind: Kind::Duplicate,
+                        ..
+                    }
+                ));
+            }
+            assert_eq!(
+                action(seen.check(&other, 101, decide(&other, 0, &p), &p)),
+                ImportAction::Create
+            );
+        }
     }
 }

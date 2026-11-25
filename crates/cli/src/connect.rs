@@ -128,52 +128,85 @@ pub struct Connection {
     stream: Box<dyn Stream>,
     next: u64,
     pub welcome: Welcome,
+    /// PID of the process serving the socket (`SO_PEERCRED`, Linux only).
+    pub peer_pid: Option<u32>,
 }
+
+/// Why a handshake failed: a daemon that vanished right after accepting earns one retry.
+enum HandshakeFailure {
+    Closed(CliError),
+    Failed(CliError),
+}
+impl HandshakeFailure {
+    fn into_error(self) -> CliError {
+        match self {
+            Self::Closed(e) | Self::Failed(e) => e,
+        }
+    }
+}
+
 impl Connection {
     /// Connects (starting papersd if allowed) and authenticates with `requested` capabilities.
     pub fn open(target: &Target, requested: CapabilitySet) -> Result<Self, CliError> {
         let connector = target.connector(requested, target.start)?;
-        Self::with(&connector)
+        let attempt = || {
+            let stream = connector
+                .connect_or_start()
+                .map_err(|e| HandshakeFailure::Failed(connect_error(e)))?;
+            Self::handshake(&connector, stream)
+        };
+        match attempt() {
+            // The daemon accepted just before its idle exit: one fresh connect (and start).
+            Err(HandshakeFailure::Closed(_)) => attempt().map_err(HandshakeFailure::into_error),
+            other => other.map_err(HandshakeFailure::into_error),
+        }
     }
-    /// Connects only if a daemon is already serving the library. `Ok(None)` = not running.
+    /// Connects only if a daemon is already serving the library. `Ok(None)` = not running
+    /// (no socket or connection refused); any other failure is an error.
     pub fn probe(target: &Target, requested: CapabilitySet) -> Result<Option<Self>, CliError> {
         let connector = target.connector(requested, false)?;
         match connector.connect_or_start() {
             Err(e) if not_running(&e) => Ok(None),
             Err(e) => Err(connect_error(e)),
-            Ok(stream) => Self::handshake(&connector, Box::new(stream)).map(Some),
-        }
-    }
-    fn with(connector: &LocalConnector) -> Result<Self, CliError> {
-        let attempt = || {
-            let stream = connector.connect_or_start().map_err(connect_error)?;
-            Self::handshake(connector, Box::new(stream))
-        };
-        match attempt() {
-            // The daemon accepted just before its idle exit: one fresh connect (and start).
-            Err(e) if e.message.contains(CLOSED) => attempt(),
-            other => other,
+            Ok(stream) => Self::handshake(&connector, stream)
+                .map(Some)
+                .map_err(HandshakeFailure::into_error),
         }
     }
     fn handshake(
         connector: &LocalConnector,
-        mut stream: Box<dyn Stream>,
-    ) -> Result<Self, CliError> {
+        stream: std::os::unix::net::UnixStream,
+    ) -> Result<Self, HandshakeFailure> {
+        let peer_pid = peer_pid(&stream);
         let hello = connector.hello().map_err(|e| {
-            CliError::new(
+            HandshakeFailure::Failed(CliError::new(
                 Kind::PermissionDenied,
                 format!("cannot read the library's credential: {e}"),
-            )
+            ))
         })?;
+        let mut stream: Box<dyn Stream> = Box::new(stream);
         let welcome =
-            handshake_within(stream.as_mut(), hello, HANDSHAKE).map_err(handshake_error)?;
+            handshake_within(stream.as_mut(), hello, HANDSHAKE).map_err(handshake_failure)?;
         Ok(Self {
             stream,
             next: 1,
             welcome,
+            peer_pid,
         })
     }
 }
+
+#[cfg(target_os = "linux")]
+fn peer_pid(stream: &std::os::unix::net::UnixStream) -> Option<u32> {
+    rustix::net::sockopt::socket_peercred(stream)
+        .ok()
+        .map(|cred| cred.pid.as_raw_nonzero().get() as u32)
+}
+#[cfg(not(target_os = "linux"))]
+fn peer_pid(_stream: &std::os::unix::net::UnixStream) -> Option<u32> {
+    None
+}
+
 impl Daemon for Connection {
     fn call(&mut self, command: Command, timeout: Duration) -> Result<Reply, CliError> {
         let id = self.next;
@@ -201,7 +234,7 @@ impl Daemon for Connection {
                 Ok(None) => {
                     return Err(CliError::new(
                         Kind::DaemonUnavailable,
-                        "daemon closed the connection",
+                        "daemon closed the connection; result unknown, check with `papers show`/`papers list`",
                     ));
                 }
                 Err(FrameError::Io(e))
@@ -217,7 +250,10 @@ impl Daemon for Connection {
                     );
                     return Err(CliError::new(
                         Kind::DaemonUnavailable,
-                        format!("daemon did not answer within {} s", timeout.as_secs()),
+                        format!(
+                            "daemon did not answer within {} s; result unknown, check with `papers show`/`papers list`",
+                            timeout.as_secs()
+                        ),
                     ));
                 }
                 Err(e) => return Err(client_error(ClientError::Frame(e))),
@@ -225,8 +261,6 @@ impl Daemon for Connection {
         }
     }
 }
-
-const CLOSED: &str = "closed during handshake";
 
 fn not_running(e: &io::Error) -> bool {
     matches!(
@@ -246,27 +280,27 @@ fn connect_error(e: io::Error) -> CliError {
     CliError::new(Kind::DaemonUnavailable, format!("papersd unavailable: {e}"))
 }
 
-pub fn client_error(e: ClientError) -> CliError {
-    classify(e, false)
-}
-
 /// A failure after the socket connected during Hello/Welcome. As in
 /// `cm_protocol::client::connect_and_handshake`, any transport error except a timeout means the
 /// daemon went away (idle-exit race; platforms disagree on the errno) and earns one retry.
-fn handshake_error(e: ClientError) -> CliError {
-    classify(e, true)
+fn handshake_failure(e: ClientError) -> HandshakeFailure {
+    let closed = match &e {
+        ClientError::Protocol(reason) => reason.contains("closed during handshake"),
+        ClientError::Io(e) | ClientError::Frame(FrameError::Io(e)) => !matches!(
+            e.kind(),
+            io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted
+        ),
+        _ => false,
+    };
+    let error = client_error(e);
+    if closed {
+        HandshakeFailure::Closed(error)
+    } else {
+        HandshakeFailure::Failed(error)
+    }
 }
 
-fn classify(e: ClientError, handshake: bool) -> CliError {
-    let closed = handshake
-        && match &e {
-            ClientError::Protocol(reason) => reason.contains("closed during handshake"),
-            ClientError::Io(e) | ClientError::Frame(FrameError::Io(e)) => !matches!(
-                e.kind(),
-                io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted
-            ),
-            _ => false,
-        };
+pub fn client_error(e: ClientError) -> CliError {
     match e {
         ClientError::Rejected(HandshakeRejection::Unauthenticated) => CliError::new(
             Kind::PermissionDenied,
@@ -284,9 +318,13 @@ fn classify(e: ClientError, handshake: bool) -> CliError {
             Kind::DaemonUnavailable,
             format!("daemon rejected the connection: {r:?}"),
         ),
-        e if closed => CliError::new(Kind::DaemonUnavailable, format!("daemon {CLOSED}: {e}")),
         e => CliError::new(Kind::DaemonUnavailable, e.to_string()),
     }
+}
+
+/// A service error computed locally with the shared core policy (e.g. the #33 PDF proposal).
+pub fn wire_error_from_service(e: ServiceError) -> CliError {
+    wire_error(WireError::Service(e))
 }
 
 pub fn wire_error(e: WireError) -> CliError {
@@ -358,28 +396,24 @@ mod tests {
             Kind::PermissionDenied
         );
         // Handshake transport errors (macOS: ENOTCONN/EINVAL too) earn the one retry; timeouts
-        // and errors on established sessions do not.
+        // and rejections do not.
+        let closed = |e| matches!(handshake_failure(e), HandshakeFailure::Closed(_));
         for kind in [
             io::ErrorKind::NotConnected,
             io::ErrorKind::InvalidInput,
             io::ErrorKind::BrokenPipe,
         ] {
-            assert!(
-                handshake_error(ClientError::Io(io::Error::from(kind)))
-                    .message
-                    .contains(CLOSED)
-            );
+            assert!(closed(ClientError::Io(io::Error::from(kind))));
         }
-        assert!(
-            !handshake_error(ClientError::Io(io::Error::from(io::ErrorKind::TimedOut)))
-                .message
-                .contains(CLOSED)
-        );
-        assert!(
-            !client_error(ClientError::Io(io::Error::from(io::ErrorKind::BrokenPipe)))
-                .message
-                .contains(CLOSED)
-        );
+        assert!(closed(ClientError::Protocol(
+            "daemon closed during handshake"
+        )));
+        assert!(!closed(ClientError::Io(io::Error::from(
+            io::ErrorKind::TimedOut
+        ))));
+        assert!(!closed(ClientError::Rejected(
+            HandshakeRejection::Unauthenticated
+        )));
         assert_eq!(
             connect_error(io::Error::from(io::ErrorKind::ConnectionRefused)).kind,
             Kind::DaemonUnavailable

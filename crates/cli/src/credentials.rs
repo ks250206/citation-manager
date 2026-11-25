@@ -5,16 +5,24 @@
 //! - default: the owner's local desktop bootstrap credential (`<library>/daemon/desktop.credential`,
 //!   0600), exactly like the GUI, presented with `client_kind = "cli"`;
 //! - `--credential-file` / `PAPERS_CREDENTIAL_FILE`: a credential issued through
-//!   `GrantCommand::Issue` (for example a read-only grant), read from a private 0600 file.
+//!   `GrantCommand::Issue` (for example a read-only grant), read from a private file
+//!   (opened with O_NOFOLLOW, checked with fstat: regular, single link, owned by the user,
+//!   mode without group/other/execute bits such as 0600 or 0400, in a directory owned by the
+//!   user that group/others cannot write).
 //!
 //! #26 (CLI bootstrap token flow) plugs in here: add a `CliCredential` variant and map it in
 //! `CliCredential::source`; nothing else in the CLI reads credentials.
 use crate::output::{CliError, Kind};
 use cm_protocol::{
-    client::local::{CredentialSource, read_private_file},
+    client::local::CredentialSource,
     ipc::{Capability, CapabilitySet, Credential},
 };
-use std::path::{Path, PathBuf};
+use std::{
+    fs::{self, OpenOptions},
+    io::Read,
+    os::unix::fs::{MetadataExt, OpenOptionsExt},
+    path::{Path, PathBuf},
+};
 
 /// Diagnostic only; the daemon never grants anything because of it.
 pub const CLIENT_KIND: &str = "cli";
@@ -32,8 +40,7 @@ impl CliCredential {
     pub fn from_option(file: Option<&Path>) -> Self {
         file.map_or(Self::DesktopBootstrap, |f| Self::File(f.to_owned()))
     }
-    /// Resolves to the connector's credential source. File credentials must be a regular,
-    /// single-link 0600 file owned by this user (the same rule papersd uses for its own).
+    /// Resolves to the connector's credential source (file rules: see the module docs).
     pub fn source(&self, uid: u32) -> Result<CredentialSource, CliError> {
         match self {
             Self::DesktopBootstrap => Ok(CredentialSource::DesktopBootstrap),
@@ -44,8 +51,7 @@ impl CliCredential {
                         format!("credential file {}: {reason}", path.display()),
                     )
                 };
-                let raw = read_private_file(path, uid, MAX_CREDENTIAL_BYTES)
-                    .map_err(|e| denied(e.to_string()))?;
+                let raw = read_credential_file(path, uid).map_err(denied)?;
                 let secret = String::from_utf8(raw)
                     .map_err(|_| denied("not UTF-8".into()))?
                     .trim()
@@ -59,11 +65,53 @@ impl CliCredential {
     }
 }
 
+/// Opens without following a final symlink and validates the open descriptor (no
+/// check-then-open race on the file itself); the parent must not be swappable by others.
+fn read_credential_file(path: &Path, uid: u32) -> Result<Vec<u8>, String> {
+    let parent = crate::connect::absolute(path)
+        .map_err(|e| e.message)?
+        .parent()
+        .map(Path::to_owned)
+        .ok_or("no parent directory")?;
+    let dir = fs::metadata(&parent).map_err(|e| format!("parent directory: {e}"))?;
+    if !dir.is_dir() || dir.uid() != uid || dir.mode() & 0o022 != 0 {
+        return Err("parent directory must be owned by you and not group/other-writable".into());
+    }
+    let mut file = OpenOptions::new()
+        .read(true)
+        .custom_flags(rustix::fs::OFlags::NOFOLLOW.bits() as i32)
+        .open(path)
+        .map_err(|e| format!("cannot open without following links: {e}"))?;
+    let m = file.metadata().map_err(|e| e.to_string())?;
+    if !m.is_file()
+        || m.uid() != uid
+        || m.mode() & 0o177 != 0
+        || m.nlink() != 1
+        || m.len() > MAX_CREDENTIAL_BYTES
+    {
+        return Err(
+            "must be a regular single-link file owned by you with mode 0600 or 0400".into(),
+        );
+    }
+    let mut raw = Vec::new();
+    file.by_ref()
+        .take(MAX_CREDENTIAL_BYTES + 1)
+        .read_to_end(&mut raw)
+        .map_err(|e| e.to_string())?;
+    if raw.len() as u64 > MAX_CREDENTIAL_BYTES {
+        return Err("too large".into());
+    }
+    Ok(raw)
+}
+
 /// Minimum capabilities per subcommand. Read commands never ask for write capabilities.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Need {
-    /// `server status|start|stop`: an authenticated live grant only.
+    /// `server status|start`: an authenticated live grant only.
     Status,
+    /// `server stop`: the owner's administrative capability (never in read-only or
+    /// restricted grants); the daemon proves it by answering `GrantCommand::List`.
+    Admin,
     /// list/show/search/fulltext/annotations.
     Read,
     /// DOI lookup + import preview without saving (`add doi --dry-run`).
@@ -84,6 +132,7 @@ impl Need {
         use Capability::*;
         let set: &[Capability] = match self {
             Self::Status => &[],
+            Self::Admin => &[GrantAdmin],
             Self::Read => &[LibraryRead],
             Self::LookupPreview => &[NetworkLookup, LibraryRead, CapturePreview],
             Self::LookupWrite => &[NetworkLookup, LibraryRead, LibraryWrite],
@@ -122,6 +171,11 @@ mod tests {
         }
         assert!(!requested(Need::Export, false).contains(&Capability::LibraryWrite));
         assert!(!requested(Need::Read, false).contains(&Capability::GrantAdmin));
+        assert_eq!(
+            requested(Need::Admin, false),
+            [Capability::GrantAdmin].into_iter().collect()
+        );
+        assert!(!requested(Need::Admin, true).contains(&Capability::GrantAdmin));
     }
 
     #[test]
@@ -158,5 +212,26 @@ mod tests {
             CliCredential::from_option(None).source(uid).unwrap(),
             CredentialSource::DesktopBootstrap
         ));
+        // Read-only 0400 is fine; execute or group bits are not.
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o400)).unwrap();
+        assert!(file.source(uid).is_ok());
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
+        assert!(file.source(uid).is_err());
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+        // A symlink is never followed, even to a valid credential.
+        let link = dir.path().join("link");
+        std::os::unix::fs::symlink(&path, &link).unwrap();
+        let denied = CliCredential::from_option(Some(&link)).source(uid);
+        assert!(denied.err().unwrap().message.contains("following links"));
+        // A group/other-writable parent directory could swap the file.
+        std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o777)).unwrap();
+        assert!(
+            file.source(uid)
+                .err()
+                .unwrap()
+                .message
+                .contains("parent directory")
+        );
+        std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
     }
 }

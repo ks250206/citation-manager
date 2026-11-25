@@ -248,3 +248,31 @@ fn dry_run_and_unresolved_metadata_never_commit() {
         json!("Manual")
     );
 }
+
+#[test]
+fn add_file_dry_run_never_requests_write() {
+    use cm_protocol::ipc::Capability;
+    let parse = |extra: &[&str]| {
+        let mut argv = vec!["papers", "add", "file", "x.pdf"];
+        argv.extend_from_slice(extra);
+        match Cli::try_parse_from(argv).unwrap().command {
+            CliCommand::Add(Add::File(args)) => file_need(&args),
+            _ => unreachable!(),
+        }
+    };
+    let id = "00000000-0000-7000-8000-000000000001";
+    for need in [
+        parse(&["--dry-run"]),
+        parse(&["--dry-run", "--attach-to", id]),
+    ] {
+        assert!(
+            !need.capabilities().contains(&Capability::LibraryWrite),
+            "{need:?}"
+        );
+    }
+    assert!(
+        parse(&["--yes"])
+            .capabilities()
+            .contains(&Capability::LibraryWrite)
+    );
+}

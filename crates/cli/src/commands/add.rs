@@ -7,7 +7,7 @@ use crate::{
     connect::{Daemon, INTERACTIVE, LONG},
     credentials::Need,
     decide::{self, Decision, MergeFields, Policy},
-    output::{CliError, Kind, Report},
+    output::{CliError, Kind, Report, path_json},
     paths,
 };
 use cm_protocol::{
@@ -16,7 +16,8 @@ use cm_protocol::{
     exchange::{ImportReply, ImportRequestUi, MetadataResolution},
     import::{
         ImportAction, ImportCommit, ImportDecision, ImportOutcome, ImportPreview, ImportRequest,
-        PaperDraft,
+        ImportSource, PaperDraft,
+        file_metadata::{FileMetadataCandidate, PdfProposal, propose},
     },
     ipc::{Command as Ipc, PdfCommand, Reply},
     library::{LibraryReply, LibraryRequest},
@@ -34,7 +35,9 @@ pub fn doi_need(args: &AddDoiArgs) -> Need {
 pub fn file_need(args: &AddFileArgs) -> Need {
     match (&args.attach_to, args.confirm.dry_run) {
         (Some(_), true) => Need::FileInspect,
-        _ => Need::FileWrite,
+        // New-paper dry run: the common preview with CapturePreview, never LibraryWrite.
+        (None, true) => Need::FilePreview,
+        (_, false) => Need::FileWrite,
     }
 }
 
@@ -211,16 +214,44 @@ pub fn file(
     data["unresolved"] = json!(unresolved);
     let mut text = vec![format!("register {} as a new paper", file.name)];
     text.extend(unresolved.iter().map(|m| format!("  unresolved: {m}")));
-    let preview = match daemon.call(
-        Ipc::Pdf(PdfCommand::PreviewNew {
-            index: 0,
-            explicit,
-            destination,
-        }),
-        LONG,
-    )? {
-        Reply::Pdf(PdfReply::Preview(preview)) => preview,
-        _ => return Err(unexpected()),
+    let preview = if args.confirm.dry_run {
+        // Same #33 proposal papersd applies in PreviewNew, previewed through the common
+        // ImportService without binding the file for a commit (no write capability).
+        let PdfProposal::Register { mut draft, .. } = propose(FileMetadataCandidate {
+            intent: PdfIntent::RegisterNew,
+            filename: file.name.clone(),
+            explicit: explicit.map(|d| *d),
+            embedded: file.draft.clone(),
+        })
+        .map_err(crate::connect::wire_error_from_service)?
+        else {
+            return Err(unexpected());
+        };
+        draft.source = ImportSource {
+            adapter: "pdf-local".into(),
+            locator: file.path.to_str().map(str::to_owned),
+            row: None,
+            sha256: file.sha256,
+        };
+        import_preview(
+            daemon,
+            ImportRequestUi::Preview(ImportRequest {
+                candidates: vec![*draft],
+                destination,
+            }),
+        )?
+    } else {
+        match daemon.call(
+            Ipc::Pdf(PdfCommand::PreviewNew {
+                index: 0,
+                explicit,
+                destination,
+            }),
+            LONG,
+        )? {
+            Reply::Pdf(PdfReply::Preview(preview)) => preview,
+            _ => return Err(unexpected()),
+        }
     };
     let mut report = Report {
         data,
@@ -340,7 +371,7 @@ fn disposition_name(d: &FileDisposition) -> &'static str {
 
 fn file_json(file: &PdfFile) -> Value {
     json!({
-        "path": file.path,
+        "path": path_json(&file.path),
         "name": file.name,
         "bytes": file.bytes,
         "sha256": file.sha256.map(hex),

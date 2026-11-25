@@ -4,7 +4,7 @@ use super::{Outcome, find_collection, organization, paper_id, unexpected};
 use crate::{
     args::{BibFormat, ExportArgs},
     connect::{Daemon, LONG, Target},
-    output::{CliError, Report},
+    output::{CliError, Report, path_json, write_stdout},
     paths::{Scratch, export_target},
 };
 use cm_protocol::{
@@ -66,9 +66,8 @@ pub fn run(
     match destination {
         None => {
             let bytes = scratch.read(&name, MAX_EXPORT_BYTES)?;
-            out.write_all(&bytes)
-                .and_then(|()| out.flush())
-                .map_err(|e| CliError::internal(format!("cannot write stdout: {e}")))?;
+            // A closed pipe ends quietly with exit 0, like every other command.
+            write_stdout(out, &bytes)?;
             let _ = writeln!(
                 err,
                 "papers: exported {} records ({label})",
@@ -83,7 +82,7 @@ pub fn run(
         Some(destination) => {
             scratch.publish(&name, &destination)?;
             let mut report = Report::new(json!({
-                "path": destination.path,
+                "path": path_json(&destination.path),
                 "format": label,
                 "records": exported.records,
                 "replaced": destination.replace,

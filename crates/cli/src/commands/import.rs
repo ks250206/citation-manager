@@ -10,7 +10,7 @@ use crate::{
     args::{BibFormat, ImportArgs},
     connect::{Daemon, LONG},
     decide::{self, Decision, MergeFields, Policy},
-    output::{CliError, Kind, Report},
+    output::{CliError, Kind, Report, path_json},
     paths,
 };
 use cm_protocol::{
@@ -63,7 +63,7 @@ pub fn run(
     };
     let batch = args.batch as usize;
     let mut report = Report::new(json!({
-        "path": path,
+        "path": path_json(&path),
         "format": match format { Format::Bibtex => "bibtex", Format::Ris => "ris" },
         "records": parsed.records,
         "file_diagnostics": file_diagnostics(&parsed),
@@ -214,6 +214,9 @@ fn review(
 ) -> Result<(Vec<Value>, Vec<Decision>), CliError> {
     let mut rows = Vec::new();
     let mut plan = Vec::new();
+    // Rows of earlier batches are not persisted during review, so the daemon cannot match
+    // them: carry their exact identifiers forward so every decision is known before commit.
+    let mut seen = decide::SeenIdentifiers::default();
     for start in (0..parsed.records).step_by(batch) {
         let count = batch.min(parsed.records - start);
         let preview = import_preview(
@@ -225,7 +228,12 @@ fn review(
             },
         )?;
         for (i, candidate) in preview.candidates.iter().enumerate() {
-            let decision = decide::decide(candidate, i, policy);
+            let decision = seen.check(
+                candidate,
+                start + i,
+                decide::decide(candidate, i, policy),
+                policy,
+            );
             rows.push(decide::candidate_json(candidate, start + i, &decision));
             plan.push(decision);
         }

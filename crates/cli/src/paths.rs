@@ -7,7 +7,7 @@ use std::{
     ffi::OsString,
     fs::{self, File},
     io,
-    os::unix::fs::{DirBuilderExt, MetadataExt},
+    os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt},
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -18,7 +18,7 @@ fn invalid(message: impl Into<String>) -> CliError {
 
 /// Absolute source path for the daemon: canonical parent directory + the literal file name.
 pub fn input_file(path: &Path) -> Result<PathBuf, CliError> {
-    let absolute = crate::connect::absolute(path)?;
+    let absolute = utf8(crate::connect::absolute(path)?)?;
     let name = file_name(&absolute)?;
     let parent = absolute
         .parent()
@@ -44,6 +44,17 @@ pub fn input_file(path: &Path) -> Result<PathBuf, CliError> {
     }
 }
 
+/// The daemon protocol is JSON, so it can only carry UTF-8 paths: refuse others up front.
+fn utf8(path: PathBuf) -> Result<PathBuf, CliError> {
+    if path.to_str().is_none() {
+        return Err(invalid(format!(
+            "{}: path is not valid UTF-8 (the daemon protocol carries UTF-8 paths only)",
+            path.display()
+        )));
+    }
+    Ok(path)
+}
+
 fn file_name(path: &Path) -> Result<OsString, CliError> {
     match path.components().next_back() {
         Some(std::path::Component::Normal(name)) => Ok(name.to_owned()),
@@ -66,7 +77,7 @@ pub struct ExportTarget {
 /// Validates `--output`: parent must exist and lie outside `library` (canonical); an existing
 /// destination is refused unless `force`, and is never a symlink or non-regular file.
 pub fn export_target(output: &Path, library: &Path, force: bool) -> Result<ExportTarget, CliError> {
-    let absolute = crate::connect::absolute(output)?;
+    let absolute = utf8(crate::connect::absolute(output)?)?;
     let name = file_name(&absolute)?;
     let parent = absolute
         .parent()
@@ -77,15 +88,29 @@ pub fn export_target(output: &Path, library: &Path, force: bool) -> Result<Expor
             parent.display()
         ))
     })?;
-    let library = fs::canonicalize(library).unwrap_or_else(|_| library.to_owned());
-    if dir.starts_with(&library) {
-        return Err(CliError::new(
-            Kind::PermissionDenied,
+    // Containment by identity, not spelling: refuse when the destination directory or any of
+    // its ancestors is the library directory (same device and inode).
+    let lib = fs::metadata(library).map_err(|e| {
+        CliError::new(
+            Kind::Internal,
             format!(
-                "refusing to write inside the library directory {}",
+                "cannot inspect the library directory {}: {e}",
                 library.display()
             ),
-        ));
+        )
+    })?;
+    for ancestor in dir.ancestors() {
+        let m =
+            fs::metadata(ancestor).map_err(|e| invalid(format!("{}: {e}", ancestor.display())))?;
+        if (m.dev(), m.ino()) == (lib.dev(), lib.ino()) {
+            return Err(CliError::new(
+                Kind::PermissionDenied,
+                format!(
+                    "refusing to write inside the library directory {}",
+                    library.display()
+                ),
+            ));
+        }
     }
     let path = dir.join(name);
     let replace = match fs::symlink_metadata(&path) {
@@ -150,9 +175,31 @@ impl Scratch {
         }
         fs::read(&path).map_err(|e| CliError::internal(format!("cannot read export: {e}")))
     }
+    /// Mode of a freshly created file under the current umask, observed (not set) by creating
+    /// a probe file, so no process-wide umask change is needed.
+    fn default_file_mode(&self) -> io::Result<u32> {
+        use std::os::unix::fs::OpenOptionsExt;
+        let probe = self.dir.join(".mode-probe");
+        let file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o666)
+            .open(&probe)?;
+        let mode = file.metadata()?.mode() & 0o777;
+        fs::remove_file(&probe)?;
+        Ok(mode)
+    }
     /// Atomically publishes `name` at `target`: no-clobber hard link, or rename with `--force`.
     pub fn publish(&self, name: &str, target: &ExportTarget) -> Result<(), CliError> {
         let source = self.dir.join(name);
+        // The daemon creates 0600; published files get the mode a new file would get here
+        // (0666 minus the umask), are flushed to disk, and only then become visible.
+        let mode = self
+            .default_file_mode()
+            .map_err(|e| CliError::internal(format!("cannot determine the file mode: {e}")))?;
+        fs::set_permissions(&source, fs::Permissions::from_mode(mode))
+            .and_then(|()| File::open(&source)?.sync_all())
+            .map_err(|e| CliError::internal(format!("cannot finalize the export: {e}")))?;
         let failed = |e: io::Error| {
             CliError::new(
                 if e.kind() == io::ErrorKind::AlreadyExists {
@@ -254,6 +301,21 @@ mod tests {
             Kind::InvalidInput
         );
         assert!(export_target(&root.join("missing/x.bib"), &library, false).is_err());
+        // A library that cannot be inspected is an error, never a silent pass.
+        assert_eq!(
+            export_target(&out.join("refs2.bib"), &root.join("no-library"), false)
+                .unwrap_err()
+                .kind,
+            Kind::Internal
+        );
+        // A bind-mount-like second spelling is caught by (dev, inode) even without symlinks:
+        // the library given by a different (non-canonical) path is the same directory.
+        assert_eq!(
+            export_target(&library.join("sub/x.bib"), &library.join("sub/.."), false)
+                .unwrap_err()
+                .kind,
+            Kind::PermissionDenied
+        );
     }
 
     #[test]
@@ -261,6 +323,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path().canonicalize().unwrap();
         let library = root.join("library");
+        fs::create_dir(&library).unwrap();
         let scratch = Scratch::new(&root).unwrap();
         let mode = fs::metadata(&scratch.dir).unwrap().mode() & 0o777;
         assert_eq!(mode, 0o700);
@@ -276,6 +339,21 @@ mod tests {
         assert_eq!(fs::read_to_string(root.join("refs.bib")).unwrap(), "theirs");
         let forced = export_target(&root.join("refs.bib"), &library, true).unwrap();
         scratch.publish("export.bib", &forced).unwrap();
+        // Published with the umask-derived mode of a new file, not the daemon's 0600.
+        let expected = {
+            use std::os::unix::fs::OpenOptionsExt;
+            let f = fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .mode(0o666)
+                .open(root.join("probe"))
+                .unwrap();
+            f.metadata().unwrap().mode() & 0o777
+        };
+        assert_eq!(
+            fs::metadata(root.join("refs.bib")).unwrap().mode() & 0o777,
+            expected
+        );
         assert_eq!(
             fs::read_to_string(root.join("refs.bib")).unwrap(),
             "@misc{a}"

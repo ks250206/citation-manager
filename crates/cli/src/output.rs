@@ -142,14 +142,17 @@ pub fn emit(
         Ok(report) => (Some(report), None),
         Err(mut e) => (e.report.take(), Some(e)),
     };
+    // Diagnostics: daemon/library strings may carry control characters; never let them
+    // drive the terminal.
     if let Some(report) = &report {
         for warning in &report.warnings {
-            let _ = writeln!(err, "papers: warning: {warning}");
+            let _ = writeln!(err, "papers: warning: {}", sanitize(warning, false));
         }
     }
     if let Some(e) = &error {
-        let _ = writeln!(err, "papers: error: {}", e.message);
+        let _ = writeln!(err, "papers: error: {}", sanitize(&e.message, false));
     }
+    let mut document = String::new();
     match format {
         Format::Json => {
             let mut envelope = json!({
@@ -170,22 +173,59 @@ pub fn emit(
                     "message": e.message,
                 });
             }
-            let _ = writeln!(
-                out,
-                "{}",
-                serde_json::to_string(&envelope).unwrap_or_else(|_| "{}".into())
-            );
+            document = serde_json::to_string(&envelope).unwrap_or_else(|_| "{}".into());
+            document.push('\n');
         }
         Format::Text => {
             if let Some(report) = &report {
                 for line in &report.text {
-                    let _ = writeln!(out, "{line}");
+                    document.push_str(&sanitize(line, true));
+                    document.push('\n');
                 }
             }
         }
     }
-    let _ = out.flush();
-    error.map_or(exit::OK, |e| e.kind.exit_code())
+    let code = error.map_or(exit::OK, |e| e.kind.exit_code());
+    match write_stdout(out, document.as_bytes()) {
+        Ok(()) => code,
+        Err(e) => {
+            let _ = writeln!(err, "papers: error: {}", e.message);
+            exit::OTHER
+        }
+    }
+}
+
+/// Writes data to stdout. A closed pipe (the reader stopped, e.g. `| head`) is not an error:
+/// the write is abandoned quietly and the command keeps its own exit code. Any other write
+/// failure is an internal error (exit 1) reported on stderr by the caller.
+pub fn write_stdout(out: &mut dyn Write, bytes: &[u8]) -> Result<(), CliError> {
+    match out.write_all(bytes).and_then(|()| out.flush()) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => Ok(()),
+        Err(e) => Err(CliError::internal(format!("cannot write to stdout: {e}"))),
+    }
+}
+
+/// Removes terminal control characters (ESC, CR, BEL, ...) from human output. Tabs are kept;
+/// newlines are kept in multi-line text (`keep_newlines`) and become spaces otherwise.
+pub fn sanitize(text: &str, keep_newlines: bool) -> String {
+    text.chars()
+        .filter_map(|c| match c {
+            '\t' => Some(c),
+            '\n' if keep_newlines => Some(c),
+            '\n' => Some(' '),
+            c if c.is_control() => None,
+            // Bidirectional overrides can disguise text in a terminal.
+            '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}' => None,
+            c => Some(c),
+        })
+        .collect()
+}
+
+/// A local path as a JSON string. Non-UTF-8 bytes are replaced (U+FFFD); the value is for
+/// display and correlation only, never for re-opening the file.
+pub fn path_json(path: &std::path::Path) -> Value {
+    Value::String(path.to_string_lossy().into_owned())
 }
 
 #[cfg(test)]
@@ -253,5 +293,58 @@ mod tests {
         assert_eq!(emit(Format::Text, "x", Ok(report), &mut out, &mut err), 0);
         assert_eq!(String::from_utf8(out).unwrap(), "hello\n");
         assert!(String::from_utf8(err).unwrap().contains("careful"));
+    }
+
+    struct Failing(std::io::ErrorKind);
+    impl Write for Failing {
+        fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::from(self.0))
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn closed_pipes_are_quiet_and_other_write_errors_exit_1() {
+        let mut err = Vec::new();
+        let ok = Ok(Report::new(json!({})));
+        let mut pipe = Failing(std::io::ErrorKind::BrokenPipe);
+        assert_eq!(emit(Format::Json, "list", ok, &mut pipe, &mut err), 0);
+        assert!(err.is_empty());
+        // A broken pipe never masks the command's own failure.
+        let failed = Err(CliError::new(Kind::NotFound, "gone"));
+        assert_eq!(emit(Format::Json, "show", failed, &mut pipe, &mut err), 3);
+        let mut err = Vec::new();
+        let mut full = Failing(std::io::ErrorKind::StorageFull);
+        let ok = Ok(Report::new(json!({})));
+        assert_eq!(emit(Format::Json, "list", ok, &mut full, &mut err), 1);
+        assert!(
+            String::from_utf8(err)
+                .unwrap()
+                .contains("cannot write to stdout")
+        );
+    }
+
+    #[test]
+    fn text_output_strips_terminal_controls() {
+        assert_eq!(sanitize("a\u{1b}[31mb\r\x07c\td", false), "a[31mbc\td");
+        assert_eq!(sanitize("l1\nl2", true), "l1\nl2");
+        assert_eq!(sanitize("l1\nl2", false), "l1 l2");
+        assert_eq!(sanitize("x\u{202e}y", false), "xy");
+        let (mut out, mut err) = (Vec::new(), Vec::new());
+        let mut report = Report::new(json!({})).line("Title\u{1b}]0;pwned\u{7}");
+        report.warnings.push("bad\u{1b}[2J".into());
+        emit(Format::Text, "x", Ok(report), &mut out, &mut err);
+        assert!(!out.contains(&0x1b) && !err.contains(&0x1b));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn non_utf8_paths_become_lossy_strings_instead_of_panicking() {
+        use std::os::unix::ffi::OsStringExt;
+        let path =
+            std::path::PathBuf::from(std::ffi::OsString::from_vec(b"/tmp/r\xffx.bib".to_vec()));
+        assert_eq!(path_json(&path), json!("/tmp/r\u{fffd}x.bib"));
     }
 }
