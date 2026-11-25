@@ -39,5 +39,7 @@ rmcp = { version = "=3.9.0", default-features = false, features = ["server", "tr
 tokio = { version = "=1.54.1", features = ["rt-multi-thread", "macros"] }
 axum = "=0.8.9"
 clap = { version = "=4.6.7", features = ["derive"] }
+# #28: shell completion generation for the `papers` CLI (no default features).
+clap_complete = { version = "=4.6.11", default-features = false }
 reqwest = { version = "=0.13.5", default-features = false, features = ["json", "rustls"] }
 tracing = "=0.1.44"

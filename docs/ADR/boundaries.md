@@ -15,7 +15,7 @@
 | protocol | core, domain | 機能別 wire DTO。IPC envelope/JobStatus は #25 |
 | desktop | protocol | GPUI (#10)、command/keymap (#16) |
 | daemon | protocol, core, storage, search, pdf, metadata | composition root、唯一の永続化操作主体、認可 (#25) |
-| cli | protocol, mcp | 将来の papers executable (#28) |
+| cli | protocol, mcp | `papers` executable、daemon IPC client (#28, [cli ADR](cli.md)) |
 | mcp | protocol | stdio 入口のみ、サーバー/tools は #29 |
 | native-host | protocol | browser capture 境界 |
 
