@@ -27,8 +27,9 @@ pub const ISSUABLE: [Scope; 9] = [
 pub const ELEVATION_MINUTES: i64 = 15;
 pub const ELEVATE_WARNING: &str = "Bulk delete/move without the per-minute limit for 15 minutes. \
     Only elevate right before a bulk operation you asked the client to do.";
-pub const FILE_STORE_WARNING: &str = "No OS keyring is available: token copies are kept in a \
-    0600 file inside the library (readable by any program running as you, and copied by backups).";
+pub const FILE_STORE_WARNING: &str = "No OS keyring is available: token copies are kept in \
+    0600 files in your user data folder, outside the library (readable by any program running \
+    as you, and copied by home-folder backups).";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TokenForm {
@@ -87,13 +88,42 @@ impl TokenForm {
     }
 }
 
-/// The secret of a just-issued token: shown once, then dropped.
-#[derive(Clone, PartialEq, Eq)]
+/// Secret bytes that are overwritten when dropped. Not `Clone`: the one copy lives in
+/// `RevealedSecret` until it is concealed. (Copies GPUI makes while the secret is
+/// revealed or on the clipboard are outside this wrapper's control.)
+pub struct SecretText(Vec<u8>);
+impl SecretText {
+    pub fn new(secret: String) -> Self {
+        Self(secret.into_bytes())
+    }
+    pub fn as_str(&self) -> &str {
+        std::str::from_utf8(&self.0).unwrap_or("")
+    }
+    /// Shown instead of the secret until the person asks to reveal it.
+    pub fn masked(&self) -> String {
+        "•".repeat(self.0.len().min(32))
+    }
+}
+impl Drop for SecretText {
+    fn drop(&mut self) {
+        self.0.fill(0);
+        std::hint::black_box(&self.0);
+    }
+}
+impl PartialEq<str> for SecretText {
+    fn eq(&self, other: &str) -> bool {
+        self.0 == other.as_bytes()
+    }
+}
+
+/// The secret of a just-issued token: shown once (masked until revealed), then dropped.
 pub struct RevealedSecret {
     pub token: TokenInfo,
-    pub secret: String,
+    pub secret: SecretText,
     pub stored_in: Option<SecretBackend>,
     pub copied: bool,
+    /// Masked by default; "Reveal" shows it.
+    pub shown: bool,
 }
 impl std::fmt::Debug for RevealedSecret {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -102,6 +132,17 @@ impl std::fmt::Debug for RevealedSecret {
             .field("secret", &"<redacted>")
             .finish()
     }
+}
+
+/// How long a copied secret may stay on the clipboard.
+pub const CLIPBOARD_CLEAR_AFTER: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Which request a reply answers; stale list/overview replies are dropped.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ReplyKind {
+    Overview,
+    Tokens,
+    Audit,
 }
 
 /// Actions that need a second, explicit click.
@@ -145,17 +186,35 @@ pub struct ApiSettingsState {
     pub notice: Option<(String, bool)>,
     /// Whether the settings draft differs from what the daemon last returned.
     pub dirty: bool,
+    /// Request sequence numbers: the next one, and the latest sent per reply kind.
+    pub next_seq: u64,
+    pub latest: std::collections::HashMap<ReplyKind, u64>,
 }
 
 pub const DAY_MS: i64 = 86_400_000;
 
 impl ApiSettingsState {
-    pub fn set_overview(&mut self, overview: ApiOverview) {
-        self.enabled = overview.settings.enabled;
-        self.bind = overview.settings.bind;
-        self.export_dirs = overview.settings.export_dirs.clone();
+    /// A refresh keeps an unsaved draft (only `saved` replaces it).
+    pub fn set_overview(&mut self, overview: ApiOverview, saved: bool) {
+        if saved || !self.dirty {
+            self.enabled = overview.settings.enabled;
+            self.bind = overview.settings.bind;
+            self.export_dirs = overview.settings.export_dirs.clone();
+            self.dirty = false;
+        }
         self.overview = Some(overview);
-        self.dirty = false;
+    }
+    /// A sequence number for a new request of `kind` (it becomes the latest).
+    pub fn begin(&mut self, kind: Option<ReplyKind>) -> u64 {
+        self.next_seq += 1;
+        if let Some(kind) = kind {
+            self.latest.insert(kind, self.next_seq);
+        }
+        self.next_seq
+    }
+    /// Whether a reply to request `seq` of `kind` is still the latest one.
+    pub fn current(&self, kind: ReplyKind, seq: u64) -> bool {
+        self.latest.get(&kind).is_none_or(|latest| *latest == seq)
     }
     /// The settings to save, with the port as typed.
     pub fn settings_request(&self, port: &str) -> Result<ApiSettings, String> {

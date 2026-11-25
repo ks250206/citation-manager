@@ -15,7 +15,7 @@ use cm_core::{
     policy::{
         self, CapabilitySet, Denial, GrantId, Operation,
         api::ApiSettings,
-        elevation,
+        elevation::{self, BulkKind},
         scopes::{self, TokenPolicyError},
     },
 };
@@ -34,6 +34,8 @@ pub struct ApiService {
     auth: Arc<Authenticator>,
     secrets: Arc<dyn SecretStore>,
     library_key: String,
+    /// Canonical library path (export folders may not be inside or above it).
+    library: PathBuf,
     settings: RwLock<ApiSettings>,
     pub audit: Arc<AuditLog>,
 }
@@ -54,7 +56,8 @@ fn policy_error(e: TokenPolicyError) -> WireError {
 }
 
 /// Grant metadata for display. Pre-#26 grants show the scopes their capabilities cover.
-pub fn token_info(stored: &StoredGrant) -> TokenInfo {
+/// `elevation`: the kind of the running (monotonic) elevation, if any.
+pub fn token_info(stored: &StoredGrant, elevation: Option<BulkKind>) -> TokenInfo {
     TokenInfo {
         id: stored.grant.id,
         label: stored.grant.label.clone(),
@@ -68,7 +71,8 @@ pub fn token_info(stored: &StoredGrant) -> TokenInfo {
         expires_at_ms: stored.grant.expires_at_ms,
         last_used_at_ms: stored.last_used_at_ms,
         revoked: stored.grant.revoked,
-        elevated_until_ms: stored.grant.elevated_until_ms,
+        elevated_until_ms: elevation.and(stored.grant.elevated_until_ms),
+        elevated_kind: elevation,
         issued_by: stored.issued_by,
         replaces: stored.replaces,
     }
@@ -79,11 +83,20 @@ fn real_directory(dir: &Path) -> bool {
     crate::desktop_worker::files::safe(dir, false).is_ok()
 }
 
+/// Canonical `$HOME`, refused as an export folder.
+fn home_dir() -> Option<PathBuf> {
+    std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .filter(|h| h.is_absolute())
+        .and_then(|h| std::fs::canonicalize(h).ok())
+}
+
 impl ApiService {
     pub fn new(
         auth: Arc<Authenticator>,
         secrets: Arc<dyn SecretStore>,
         library_key: String,
+        library: PathBuf,
         audit: Arc<AuditLog>,
     ) -> Result<Self, ServiceError> {
         let settings = auth
@@ -92,13 +105,67 @@ impl ApiService {
             .unwrap_or_else(|e| e.into_inner())
             .api_settings()
             .load()?;
+        // Remove stored copies of tokens that can no longer authenticate. In the background:
+        // an OS store helper may be slow; nothing depends on it finishing.
+        let stale: Vec<String> = auth
+            .list_stored()
+            .into_iter()
+            .filter(|s| {
+                s.client_kind.scoped_token()
+                    && (s.grant.revoked
+                        || s.grant
+                            .expires_at_ms
+                            .is_some_and(|at| at <= crate::ipc::auth::now_ms()))
+            })
+            .map(|s| secrets::account(&library_key, s.grant.id))
+            .collect();
+        if !stale.is_empty() {
+            let store = secrets.clone();
+            let _ = std::thread::Builder::new()
+                .name("papersd-secret-gc".into())
+                .spawn(move || {
+                    for account in stale {
+                        let _ = store.delete(&account);
+                    }
+                });
+        }
         Ok(Self {
             auth,
             secrets,
             library_key,
+            library,
             settings: RwLock::new(settings),
             audit,
         })
+    }
+    fn info(&self, stored: &StoredGrant) -> TokenInfo {
+        token_info(stored, self.auth.elevation_of(stored.grant.id))
+    }
+    fn overview(&self, settings: ApiSettings) -> ApiOverview {
+        ApiOverview {
+            settings,
+            secret_backend: self.secrets.backend(),
+            listener: ListenerState::NotAvailable,
+            audit_warning: self.audit.warning(),
+        }
+    }
+    /// Export folder rules beyond `ApiSettings::validate`: an existing directory reached
+    /// without symlinks, not `$HOME`, not the library, inside it or one of its ancestors.
+    fn check_export_dir(&self, dir: &Path) -> Result<(), WireError> {
+        if !real_directory(dir) {
+            return Err(invalid(format!(
+                "export folder is not an existing directory reached without symlinks: {}",
+                dir.display()
+            )));
+        }
+        let canonical = std::fs::canonicalize(dir).map_err(|e| invalid(e.to_string()))?;
+        if policy::export::export_dir_refused(&canonical, home_dir().as_deref(), &self.library) {
+            return Err(invalid(format!(
+                "export folder may not be your home folder, the library or a folder containing it: {}",
+                dir.display()
+            )));
+        }
+        Ok(())
     }
     pub fn settings(&self) -> ApiSettings {
         self.settings
@@ -128,18 +195,11 @@ impl ApiService {
         now: i64,
     ) -> Result<ApiReply, WireError> {
         match command {
-            ApiCommand::Overview => Ok(ApiReply::Overview(ApiOverview {
-                settings: self.settings(),
-                secret_backend: self.secrets.backend(),
-                listener: ListenerState::NotAvailable,
-            })),
+            ApiCommand::Overview => Ok(ApiReply::Overview(self.overview(self.settings()))),
             ApiCommand::SaveSettings(settings) => {
                 settings.validate().map_err(|e| invalid(e.to_string()))?;
-                if let Some(dir) = settings.export_dirs.iter().find(|d| !real_directory(d)) {
-                    return Err(invalid(format!(
-                        "export folder is not an existing directory reached without symlinks: {}",
-                        dir.display()
-                    )));
+                for dir in &settings.export_dirs {
+                    self.check_export_dir(dir)?;
                 }
                 self.auth
                     .control()
@@ -148,14 +208,14 @@ impl ApiService {
                     .api_settings()
                     .save(&settings, now)?;
                 *self.settings.write().unwrap_or_else(|e| e.into_inner()) = settings.clone();
-                Ok(ApiReply::Overview(ApiOverview {
-                    settings,
-                    secret_backend: self.secrets.backend(),
-                    listener: ListenerState::NotAvailable,
-                }))
+                Ok(ApiReply::Overview(self.overview(settings)))
             }
             ApiCommand::ListTokens => Ok(ApiReply::Tokens(
-                self.auth.list_stored().iter().map(token_info).collect(),
+                self.auth
+                    .list_stored()
+                    .iter()
+                    .map(|s| self.info(s))
+                    .collect(),
             )),
             ApiCommand::IssueToken(request) => self.issue(session, requested, request, None, now),
             ApiCommand::Reissue(old) => {
@@ -182,7 +242,14 @@ impl ApiService {
                     Some(old),
                     now,
                 )?;
-                self.revoke(old, jobs, now)?;
+                // Rotation is all or nothing: if the old token cannot be revoked, the new
+                // one (whose secret the caller will never see) is revoked as well.
+                if let Err(e) = self.revoke(old, jobs, now) {
+                    if let ApiReply::Issued { token, .. } = &reply {
+                        let _ = self.revoke(token.id, jobs, now);
+                    }
+                    return Err(e);
+                }
                 Ok(reply)
             }
             ApiCommand::Revoke(grant) => {
@@ -211,25 +278,34 @@ impl ApiService {
                     return Err(WireError::Service(ServiceError::NotFound));
                 }
                 // The running elevation needs the base scope it lifts.
-                if let Some(updated) = self.auth.stored(grant)
-                    && updated.grant.elevated_until_ms.is_some()
-                    && elevation::elevation_until(&updated.grant.capabilities, 1, now).is_err()
+                if let (Some(updated), Some(kind)) =
+                    (self.auth.stored(grant), self.auth.elevation_of(grant))
+                    && elevation::elevation_length(&updated.grant.capabilities, kind, 1).is_err()
                 {
-                    self.auth.set_elevation(grant, None)?;
+                    self.auth.set_elevation(grant, None, now)?;
                 }
                 self.updated(grant)
             }
-            ApiCommand::Elevate { grant, duration_ms } => {
+            ApiCommand::Elevate {
+                grant,
+                kind,
+                duration_ms,
+            } => {
                 let stored = self.scoped_live(grant, now)?;
-                let until =
-                    elevation::elevation_until(&stored.grant.capabilities, duration_ms, now)
+                let mut length =
+                    elevation::elevation_length(&stored.grant.capabilities, kind, duration_ms)
                         .map_err(|e| invalid(e.to_string()))?;
-                let until = stored.grant.expires_at_ms.map_or(until, |at| until.min(at));
-                self.auth.set_elevation(grant, Some(until))?;
+                // Never past the token's own expiry.
+                if let Some(at) = stored.grant.expires_at_ms {
+                    length = length.min(std::time::Duration::from_millis(
+                        u64::try_from(at - now).unwrap_or(0),
+                    ));
+                }
+                self.auth.set_elevation(grant, Some((length, kind)), now)?;
                 self.updated(grant)
             }
             ApiCommand::EndElevation(grant) => {
-                self.auth.set_elevation(grant, None)?;
+                self.auth.set_elevation(grant, None, now)?;
                 self.updated(grant)
             }
             ApiCommand::Audit { limit } => Ok(ApiReply::Audit(self.audit.tail(limit as usize))),
@@ -240,7 +316,7 @@ impl ApiService {
     fn updated(&self, grant: GrantId) -> Result<ApiReply, WireError> {
         self.auth
             .stored(grant)
-            .map(|s| ApiReply::Updated(token_info(&s)))
+            .map(|s| ApiReply::Updated(self.info(&s)))
             .ok_or(WireError::Service(ServiceError::NotFound))
     }
 
@@ -293,7 +369,7 @@ impl ApiService {
         let account = self.secret_account(stored.grant.id);
         let stored_in = self.secrets.put(&account, &credential).ok();
         Ok(ApiReply::Issued {
-            token: token_info(&stored),
+            token: self.info(&stored),
             credential,
             stored_in,
             secret_account: account,

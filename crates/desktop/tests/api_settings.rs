@@ -1,7 +1,7 @@
 //! #26 API & Integrations screen state (headless).
 use cm_desktop::api_settings::{
-    ApiSettingsState, Group, ISSUABLE, RevealedSecret, TokenForm, allows_writes, format_date,
-    format_time, group, status, toggled_mcp_scopes,
+    ApiSettingsState, Group, ISSUABLE, ReplyKind, RevealedSecret, SecretText, TokenForm,
+    allows_writes, format_date, format_time, group, status, toggled_mcp_scopes,
 };
 use cm_protocol::{
     api::{
@@ -29,6 +29,7 @@ fn token(kind: ClientKind, scopes: &[Scope], revoked: bool) -> TokenInfo {
         last_used_at_ms: None,
         revoked,
         elevated_until_ms: None,
+        elevated_kind: None,
         issued_by: None,
         replaces: None,
     }
@@ -61,11 +62,13 @@ fn issue_form_validates_label_scopes_and_policy_expiry() {
 #[test]
 fn settings_draft_only_produces_loopback_unprivileged_settings() {
     let mut state = ApiSettingsState::default();
-    state.set_overview(ApiOverview {
+    let overview = ApiOverview {
         settings: ApiSettings::default(),
         secret_backend: SecretBackend::File,
         listener: ListenerState::NotAvailable,
-    });
+        audit_warning: None,
+    };
+    state.set_overview(overview.clone(), false);
     assert!(!state.enabled, "off by default");
     assert!(state.settings_request("80").is_err());
     assert!(state.settings_request("port").is_err());
@@ -73,6 +76,12 @@ fn settings_draft_only_produces_loopback_unprivileged_settings() {
     state.bind = BindAddress::LoopbackV6;
     let saved = state.settings_request("40001").unwrap();
     assert_eq!(saved.listen_addr().to_string(), "[::1]:40001");
+    // A background refresh keeps the unsaved draft; a save reply replaces it.
+    state.dirty = true;
+    state.set_overview(overview.clone(), false);
+    assert!(state.enabled && state.bind == BindAddress::LoopbackV6);
+    state.set_overview(overview, true);
+    assert!(!state.enabled && !state.dirty);
     assert_eq!(state.secret_backend(), Some(SecretBackend::File));
 }
 
@@ -115,15 +124,29 @@ fn a_revealed_secret_is_redacted_in_debug_and_dropped_on_conceal() {
     let mut state = ApiSettingsState {
         revealed: Some(RevealedSecret {
             token: token(ClientKind::Api, &[Scope::PapersRead], false),
-            secret: "ab".repeat(32),
+            secret: SecretText::new("ab".repeat(32)),
             stored_in: Some(SecretBackend::Keychain),
             copied: false,
+            shown: false,
         }),
         ..Default::default()
     };
     assert!(!format!("{state:?}").contains(&"ab".repeat(32)));
+    let revealed = state.revealed.as_ref().unwrap();
+    assert!(!revealed.secret.masked().contains('a'), "masked by default");
+    assert!(revealed.secret == *"ab".repeat(32).as_str());
     state.conceal();
     assert!(state.revealed.is_none());
+}
+
+#[test]
+fn stale_list_replies_are_recognised_by_sequence() {
+    let mut state = ApiSettingsState::default();
+    let first = state.begin(Some(ReplyKind::Tokens));
+    let second = state.begin(Some(ReplyKind::Tokens));
+    assert!(!state.current(ReplyKind::Tokens, first));
+    assert!(state.current(ReplyKind::Tokens, second));
+    assert!(state.current(ReplyKind::Audit, 99), "nothing sent yet");
 }
 
 #[test]

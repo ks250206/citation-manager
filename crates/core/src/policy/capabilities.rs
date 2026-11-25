@@ -53,9 +53,14 @@ pub enum Capability {
     /// permanently only by the owner's bootstrap grant; other grants get it only through a
     /// time-limited, user-approved elevation (`Grant::elevated_until_ms`).
     BulkElevated,
+    /// Owner only: change the local API listener settings (enabled flag, address, port,
+    /// export folders). Never delegated (`GrantCommand::Issue` and scopes refuse it).
+    ApiAdmin,
+    /// Owner only: approve or end a time-limited bulk elevation of another grant.
+    ElevationAdmin,
 }
 impl Capability {
-    pub const ALL: [Capability; 18] = [
+    pub const ALL: [Capability; 20] = [
         Self::LibraryRead,
         Self::LibraryWrite,
         Self::LibraryDelete,
@@ -74,6 +79,16 @@ impl Capability {
         Self::AnnotationsWrite,
         Self::ExportAllowedDir,
         Self::BulkElevated,
+        Self::ApiAdmin,
+        Self::ElevationAdmin,
+    ];
+    /// Held only by the owner's bootstrap grant: no other grant can be issued or widened
+    /// to hold them (#26 review: a delegate admin must not mint admins or elevations).
+    pub const OWNER_ONLY: [Capability; 4] = [
+        Self::GrantAdmin,
+        Self::BulkElevated,
+        Self::ApiAdmin,
+        Self::ElevationAdmin,
     ];
 }
 pub type CapabilitySet = BTreeSet<Capability>;
@@ -154,8 +169,10 @@ pub enum Operation {
     /// #26 API listener settings (enabled flag, loopback address, port, export dirs).
     ApiSettingsRead,
     ApiSettingsWrite,
-    /// #26 change the scopes or elevation of an existing grant in place.
+    /// #26 change the scopes of an existing grant in place.
     GrantUpdate,
+    /// #26 start or end a time-limited bulk elevation of another grant (owner only).
+    GrantElevate,
     /// #26 bounded audit log (who/what/when/result; never content or secrets).
     AuditRead,
     /// Daemon version/limits/session diagnostics; still requires an authenticated live grant.
@@ -223,7 +240,9 @@ impl Operation {
             JobSubmit | JobCancel | JobRetry => All(&[JobsControl]),
             JobRead => All(&[JobsRead]),
             GrantIssue | GrantList | GrantRevoke | GrantUpdate => All(&[GrantAdmin]),
-            ApiSettingsRead | ApiSettingsWrite | AuditRead => All(&[GrantAdmin]),
+            GrantElevate => All(&[GrantAdmin, ElevationAdmin, BulkElevated]),
+            ApiSettingsRead | AuditRead => All(&[GrantAdmin]),
+            ApiSettingsWrite => All(&[GrantAdmin, ApiAdmin]),
             Status => All(&[]),
         }
     }

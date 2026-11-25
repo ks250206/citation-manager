@@ -46,6 +46,30 @@ No OS keyring/session bus was present, so the file fallback and its warning are 
 7. [Revoked token, MCP with writes, audit entries](issue-26/06-revoked-mcp-writes-audit.png).
 8. `papersd token issue … > /dev/null` against the GUI's daemon: refused, exit 3.
 
+## Review follow-up (2026-11-25)
+
+Fixes for the independent review, each with a regression test:
+
+| Item | Test |
+|---|---|
+| Owner-only `ApiAdmin`/`ElevationAdmin`/`GrantAdmin`/`BulkElevated`; not delegable; delegated grants always expire | `daemon_api::delegated_grants_never_get_owner_powers_or_unlimited_lifetimes`, narrowed-owner checks in `bulk_operations_need_a_short_explicit_elevation` and `export_tokens_write_only_inside_allowed_folders`, `scopes::owner_only_and_native_host_capabilities_are_never_reachable_by_scopes` |
+| Audit: coalesced denials with counts, separate admin sink, unsafe file moved aside and reported | `audit::tests::denials_are_coalesced_and_cannot_evict_admin_records`, `audit::tests::an_unsafe_log_is_moved_aside_and_reported` |
+| Bulk guard: annotation deletes count, monotonic window/elevation, one kind per elevation | `elevation::tests::*`, `ipc::tests::annotation_deletes_count_toward_the_delete_burst`, `daemon_api::bulk_operations_need_a_short_explicit_elevation` |
+| Export folders: home/library/state/ancestors refused, dev/ino containment, extension, caps | `export::tests::home_library_and_its_ancestors_are_refused_as_export_folders`, `ipc::tests::export_containment_uses_the_real_directory_and_the_format_extension`, `daemon_api::export_tokens_write_only_inside_allowed_folders` |
+| Secret store: no-follow read, fallback outside the library, helpers always reaped | `secrets::tests::file_store_is_private_round_trips_and_refuses_odd_names` (symlink case), `local::tests::secret_fallback_lives_outside_the_library` |
+| Admin CLI: undelivered token revoked (exit 1), control characters stripped | `daemon_api::cli_bootstrap_prints_a_token_once_and_only_where_allowed` (stdout = `/dev/full`), `admin::tests::labels_lose_control_characters` |
+| GUI: zeroizing wrapper, masked, sequence numbers, draft kept | `desktop tests/api_settings.rs` (`stale_list_replies_are_recognised_by_sequence`, draft and mask cases) |
+| Endpoint rows for job submit/retry | covered by the scope-combination test |
+
+GUI re-run on a private Xvfb display (`--skip-pdfium` install): a new secret is
+[masked by default](issue-26/07-secret-masked-by-default.png); after Copy the X clipboard held
+64 characters (`xclip -o -selection clipboard`), after Done it held 0; a second copied token
+was cleared from the clipboard after 30 s; an unsaved On/port draft
+[survived a refresh](issue-26/08-unsaved-draft-kept-on-refresh.png); file-fallback copies
+were created under `~/.local/share/citation-manager/secrets/<library key>/`, not in the
+library. Not exercised in the GUI: the `Issued`-after-leaving-the-screen revocation (timing),
+the Reissue rollback path (needs a failing revoke) and the unsafe-audit warning display.
+
 ## Not verified
 
 macOS Keychain (`security -i`) and Linux Secret Service (`secret-tool`) backends, and

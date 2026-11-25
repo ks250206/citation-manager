@@ -61,7 +61,8 @@ to its operations and required scopes (`Access::Scoped`), `Public` (`GET /health
 - `papers:delete + bulk:elevated`: `POST /papers/bulk-delete`;
   `papers:write + bulk:elevated`: `POST /collections/{id}/papers/bulk-move`.
 - `papers:read + exports:write`: `POST /exports`, `export_citations`, `papers export`.
-- `jobs:read` / `jobs:write`: `GET /jobs/{id}` / `POST /jobs/{id}/cancel`.
+- `jobs:read` / `jobs:write`: `GET /jobs/{id}` / `POST /jobs`, `POST /jobs/{id}/cancel`,
+  `POST /jobs/{id}/retry` (each job kind also needs its own capabilities).
 
 Core tests check, for **every one of the 1024 scope combinations** and every table row, that
 the shared authorizer's decision equals "required scopes ⊆ held scopes", that each listed
@@ -99,23 +100,42 @@ warning `profiles::MCP_WRITE_WARNING`; delete and export stay separate scopes.
 
 Bulk operations: the daemon only has per-item commands, so a client could split a bulk
 delete/move. The daemon's `BulkGuard` (`policy::elevation`) therefore counts per grant, in a
-60 s sliding window, trash/restore/delete (limit 10) and collection/tag membership changes
-(limit 25), for every transport. Beyond the limit the request is decided as `BulkTrash` /
-`BulkMove`, which needs `BulkElevated`. Only the owner's bootstrap grant holds it
-permanently (`GrantCommand::Issue` refuses it). Any other grant gets it only through
-`ApiCommand::Elevate` (owner-confirmed, at most 15 minutes, never past the token expiry,
-only for tokens already holding `papers:write` or `papers:delete`; session narrowing
-applies). `EndElevation` stops it immediately.
+60 s sliding window on the **monotonic** clock, `BulkKind::Delete` (paper trash/restore,
+collection/tag delete, annotation delete; limit 10) and `BulkKind::Move` (collection/tag
+membership changes; limit 25), for every transport. Beyond the limit the request is decided
+(and audited) as `BulkTrash` / `BulkMove`. The owner's bootstrap grant is exempt (it holds
+`BulkElevated` permanently; `GrantCommand::Issue` refuses it). Any other grant is exempt
+only through `ApiCommand::Elevate { kind, .. }`: owner-only (`GrantElevate` needs
+`GrantAdmin + ElevationAdmin + BulkElevated`), **one kind per elevation**, at most 15
+minutes, never past the token expiry, only for tokens holding that kind's base scope
+(`papers:delete`/`annotations:write` for delete, `papers:write` for move), and session
+narrowing applies. The deadline is a monotonic `Instant` in the daemon; the stored
+wall-clock end is display only, is cleared at daemon start, and elevations end with the
+daemon. `EndElevation` stops it immediately.
+
+### Owner-only capabilities
+
+`GrantAdmin`, `ApiAdmin` (API settings write), `ElevationAdmin` and `BulkElevated`
+(`Capability::OWNER_ONLY`) are held only by the desktop bootstrap grant. No scope maps to
+them, and `GrantCommand::Issue` refuses them, so a delegate can never mint grants, change
+the API exposure or approve elevations. Every delegated grant also expires
+(`scopes::lifetime_for_capabilities`, same limits as scoped tokens; omitted expiry = the
+default); only the bootstrap grant lives until revoked.
 
 ## API settings (listener is #27)
 
 `ApiSettings { enabled = false, bind = 127.0.0.1 | ::1, port = 39271 (1024..=65535),
 export_dirs }` in the singleton `api_settings` row; the table CHECKs repeat the loopback and
-port rules. Export folders must be absolute, existing and reached without symlinks.
-`exports:write` tokens may only create files inside them (`policy::export`), on top of the
-#12 writer's no-symlink/create-new rules; arbitrary paths stay with the owner's
-`LocalFileWrite` (GUI save dialog). #27 reads `ApiCommand::Overview`/`ApiService::settings`
-and must not listen while `enabled` is false.
+port rules. Export folders must be absolute, existing and reached without symlinks, and may
+not be `$HOME`, the library, anything inside it (its private state included) or an
+ancestor of it. `exports:write` tokens may only create files inside them: the path must be
+lexically inside a folder, the parent chain must contain that folder by device and inode,
+and the extension must match the format (`.bib`/`.ris`); on top of the #12 writer's
+no-symlink/create-new rules. Every export (owner included) is capped at
+`MAX_EXPORT_RECORDS` (50 000) and `MAX_EXPORT_BYTES` (64 MiB) before any file is created.
+Arbitrary paths stay with the owner's `LocalFileWrite` (GUI save dialog). Saving settings
+needs the owner-only `ApiAdmin`. #27 reads `ApiCommand::Overview`/`ApiService::settings` and
+must not listen while `enabled` is false.
 
 ## Secret store (`cm_protocol::client::secrets`, std-only)
 
@@ -123,9 +143,16 @@ and must not listen while `enabled` is false.
 |---|---|---|
 | macOS | login Keychain via `/usr/bin/security -i` (commands on stdin, so the secret is not in argv) | **not verified**; keychain ACL/prompt behavior for `papersd` vs. the GUI is #34 |
 | Linux | Secret Service via `/usr/bin/secret-tool` (secret on stdin) when `DBUS_SESSION_BUS_ADDRESS` is set | not exercised here (no session bus) |
-| fallback | `<library>/daemon/secrets/<account>.secret`, 0600 in a 0700 dir | **weaker**: readable by any same-UID process, copied by file backups; the GUI shows a warning |
+| fallback | `$XDG_DATA_HOME` or `~/.local/share` (macOS `~/Library/Application Support`) `/citation-manager/secrets/<library key>/<account>.secret`, 0600 in a 0700 dir **outside the library** (so syncing or copying the library folder does not carry token copies; `<library>/daemon/secrets` only without a home directory) | **weaker**: readable by any same-UID process, copied by home backups; the GUI shows a warning |
 
-Helpers run by absolute path with a 20 s timeout; a failed OS write falls back to the file.
+Helpers run by absolute path with a 20 s timeout and are always reaped (killed and waited
+for on every error path). The fallback reads with `lstat` + open + `fstat` and refuses a
+symlink, a non-0600/multi-link file or an inode swap between the calls (std has no
+`O_NOFOLLOW`); writes go through a `create_new` temp file and rename. A failed OS write
+falls back to the file. At daemon start, stored copies of revoked or expired tokens are
+deleted in the background. Revocation order is the same on both paths (`ApiCommand::Revoke`
+and `GrantCommand::Revoke`): live registry, then the grant's jobs, then the stored secret.
+A re-issue whose old token cannot be revoked revokes the new token too.
 `CM_SECRET_STORE=file` forces the fallback (headless/CI). Entries are keyed
 `SECRET_SERVICE = "citation-manager"`, account `"<library key>:<grant id>"`
 (`DaemonPaths::library_key`). No crate dependency was added. Tests use `MemorySecretStore`.
@@ -133,19 +160,28 @@ The owner's desktop credential stays the #25 0600 file.
 
 ## Audit log
 
-`<library>/daemon/audit.jsonl` (0600, no symlinks), rotated to `.1` past 512 KiB (two files
-at most). Records: time, grant id, issued kind, operation, outcome, fixed reason code,
-target grant. Never content, queries, paths, labels or secrets. Recorded: every denial and
-every non-read operation (writes, deletes, commits, exports, job control, grant/settings
-admin); reads and UI preference saves are not. A file, not the library database, for the
-preview-invalidation reason above. Readable by the owner through `ApiCommand::Audit`.
+Two sinks under `<library>/daemon/`, each 0600, opened with `O_NOFOLLOW`, rotated to `.1`:
+`audit-admin.jsonl` (256 KiB) for grant issue/revoke/scope change, elevation, API settings
+and bulk decisions, and `audit.jsonl` (512 KiB) for everything else. Ordinary denials never
+reach the admin sink, so they cannot evict who changed what. Identical denials (grant,
+operation, reason) within 60 s are written once and then counted: the count is written as
+one record (`count`) when the window ends, before the tail is read, and at daemon exit.
+Records: time, grant id, issued kind, operation, outcome, fixed reason code, target grant,
+count. Never content, queries, paths, labels or secrets. Recorded: every denial and every
+non-read operation; reads and UI preference saves are not. A sink file that is unsafe
+(symlink, extra links, group/other bits) is moved aside to `*.unsafe-<ms>`, a fresh file is
+started and the problem is reported as `ApiOverview::audit_warning`; a write failure is
+reported the same way instead of being dropped silently. Files, not the library database,
+for the preview-invalidation reason above. Readable by the owner through `ApiCommand::Audit`.
 
 ## CLI bootstrap (for #28)
 
 `papersd token issue|list|revoke|elevate` and `papersd api show|set` connect (or start the
 daemon) with the owner's desktop credential and send the same `Command::Api`. A new token
 is printed exactly once on stdout; when stdout is not a terminal the command refuses
-**before issuing** (exit 3) unless `--allow-non-tty` is given. Diagnostics go to stderr.
+**before issuing** (exit 3) unless `--allow-non-tty` is given. If writing the secret fails
+(closed pipe, full disk) nobody received it: the token is revoked and the command exits 1.
+Labels are stripped of control characters on input and output. Diagnostics go to stderr.
 #28 may wrap these or send `Command::Api` itself with an owner credential.
 
 ## Entry points for #27/#28/#29
@@ -161,10 +197,21 @@ is printed exactly once on stdout; when stdout is not a terminal the command ref
 - Secrets: `PlatformSecretStore::detect(paths.secrets_dir(), uid).get(&account(...))` lets
   `papers mcp` load its profile token without a config-file secret.
 
+## GUI secret handling
+
+The settings screen keeps a new secret in a non-`Clone` wrapper that is overwritten on drop,
+shows it masked until "Reveal", and builds the plaintext string only while revealed. Done,
+leaving the screen or issuing another token drops it and clears the clipboard if the
+clipboard still holds that secret; a copied secret is also cleared after 30 s. List replies
+carry a request sequence number (stale ones are ignored) and a refresh never overwrites an
+unsaved settings draft. An `Issued` reply that arrives after the person left the screen is
+never shown: that token is revoked at once (nobody received its secret).
+
 ## Not verified / limits
 
 macOS Keychain and Linux Secret Service backends (code only; file fallback and memory store
 tested); keychain ACL prompts between `papersd`, the GUI and `papers`. Same-UID processes
 can still read the fallback file and the desktop credential (security ADR). The bulk guard
 is a rate limit, not a transaction: up to 10 deletes/25 moves per minute succeed without
-elevation. Last-use timestamps are lost if the daemon crashes.
+elevation. Last-use timestamps are lost if the daemon crashes. The GUI wrapper cannot
+zeroize copies GPUI or the OS clipboard make while a secret is revealed or copied.

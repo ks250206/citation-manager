@@ -6,8 +6,8 @@ mod support;
 use cm_daemon::ipc::start;
 use cm_protocol::{
     api::{
-        ApiCommand, ApiReply, AuditOutcome, BindAddress, ClientKind, IssueToken, Scope, ScopeSet,
-        SecretBackend, TokenInfo, profiles,
+        ApiCommand, ApiReply, AuditOutcome, BindAddress, BulkKind, ClientKind, IssueToken, Scope,
+        ScopeSet, SecretBackend, TokenInfo, profiles,
     },
     client::{
         ClientError, Session, handshake,
@@ -346,9 +346,10 @@ fn read_only_profiles_cannot_widen_themselves() {
     forbidden(
         mcp.call(Command::Api(ApiCommand::Elevate {
             grant: info.id,
+            kind: BulkKind::Move,
             duration_ms: 60_000,
         })),
-        Operation::GrantUpdate,
+        Operation::GrantElevate,
     );
     forbidden(
         mcp.call(Command::Grants(GrantCommand::Issue {
@@ -447,6 +448,7 @@ fn bulk_operations_need_a_short_explicit_elevation() {
             &mut desktop,
             ApiCommand::Elevate {
                 grant: info.id,
+                kind: BulkKind::Delete,
                 duration_ms: 16 * 60_000
             }
         ))
@@ -463,6 +465,7 @@ fn bulk_operations_need_a_short_explicit_elevation() {
             &mut desktop,
             ApiCommand::Elevate {
                 grant: reader.id,
+                kind: BulkKind::Delete,
                 duration_ms: 60_000
             }
         ))
@@ -493,11 +496,48 @@ fn bulk_operations_need_a_short_explicit_elevation() {
         }
         other => panic!("{other:?}"),
     }
+    // An elevation for one kind does not lift the other: this token cannot even be
+    // elevated for moves (no papers:write), and a delete elevation is needed here.
+    assert!(
+        invalid(api(
+            &mut desktop,
+            ApiCommand::Elevate {
+                grant: info.id,
+                kind: BulkKind::Move,
+                duration_ms: 60_000
+            }
+        ))
+        .contains("neither")
+    );
+    // Only the owner approves elevations: a session narrowed below ElevationAdmin cannot.
+    let mut narrowed = {
+        let mut c = env.connector("desktop");
+        c.requested = Some(
+            cm_core::policy::presets::desktop()
+                .into_iter()
+                .filter(|c| *c != Capability::ElevationAdmin)
+                .collect(),
+        );
+        Session::open(&c).unwrap()
+    };
+    assert_eq!(
+        api(
+            &mut narrowed,
+            ApiCommand::Elevate {
+                grant: info.id,
+                kind: BulkKind::Delete,
+                duration_ms: 60_000,
+            },
+        )
+        .unwrap_err(),
+        WireError::Denied(Denial::Forbidden(Operation::GrantElevate))
+    );
     // Explicit, short elevation lifts the limit for the live session...
     let ApiReply::Updated(elevated) = api(
         &mut desktop,
         ApiCommand::Elevate {
             grant: info.id,
+            kind: BulkKind::Delete,
             duration_ms: 60_000,
         },
     )
@@ -505,6 +545,7 @@ fn bulk_operations_need_a_short_explicit_elevation() {
         panic!()
     };
     assert!(elevated.elevated_until_ms.is_some());
+    assert_eq!(elevated.elevated_kind, Some(BulkKind::Delete));
     assert!(trash(&mut client, 10).is_ok());
     assert!(trash(&mut client, 11).is_ok());
     // ...and ending it restores the limit immediately.
@@ -520,14 +561,18 @@ fn bulk_operations_need_a_short_explicit_elevation() {
     };
     let denied = entries
         .iter()
-        .find(|e| e.operation == Operation::PaperTrash && e.outcome == AuditOutcome::Denied)
+        .find(|e| e.operation == Operation::BulkTrash && e.outcome == AuditOutcome::Denied)
         .unwrap();
     assert_eq!(denied.grant, Some(info.id));
     assert_eq!(denied.kind, Some(ClientKind::Api));
     assert_eq!(denied.reason.as_deref(), Some("forbidden"));
-    assert!(entries.iter().any(|e| e.operation == Operation::GrantUpdate
-        && e.target == Some(info.id)
-        && e.outcome == AuditOutcome::Succeeded));
+    assert!(
+        entries
+            .iter()
+            .any(|e| e.operation == Operation::GrantElevate
+                && e.target == Some(info.id)
+                && e.outcome == AuditOutcome::Succeeded)
+    );
 }
 
 #[test]
@@ -583,6 +628,46 @@ fn export_tokens_write_only_inside_allowed_folders() {
     assert!(
         export(&mut client, allowed.join("../escape.bib")).is_err(),
         "dot components are refused"
+    );
+    // Only the format's extension.
+    assert_eq!(
+        export(&mut client, allowed.join("a.sh")).unwrap_err(),
+        WireError::Denied(Denial::Forbidden(Operation::Export))
+    );
+    // Home, the library, its private state and its ancestors are never export folders.
+    let canonical_library = env.library.canonicalize().unwrap();
+    for refused in [
+        canonical_library.clone(),
+        canonical_library.join("daemon"),
+        canonical_library.parent().unwrap().to_path_buf(),
+    ] {
+        assert!(
+            invalid(api(
+                &mut desktop,
+                ApiCommand::SaveSettings(cm_protocol::api::ApiSettings {
+                    export_dirs: vec![refused.clone()],
+                    ..Default::default()
+                }),
+            ))
+            .contains("home folder, the library"),
+            "{}",
+            refused.display()
+        );
+    }
+    // API settings are owner-only: a session narrowed below ApiAdmin cannot save them.
+    let mut narrowed = {
+        let mut c = env.connector("desktop");
+        c.requested = Some(
+            cm_core::policy::presets::desktop()
+                .into_iter()
+                .filter(|c| *c != Capability::ApiAdmin)
+                .collect(),
+        );
+        Session::open(&c).unwrap()
+    };
+    assert_eq!(
+        api(&mut narrowed, ApiCommand::SaveSettings(Default::default())).unwrap_err(),
+        WireError::Denied(Denial::Forbidden(Operation::ApiSettingsWrite))
     );
     assert!(!env.temp.path().join("escape.bib").exists());
 }
@@ -699,6 +784,38 @@ fn cli_bootstrap_prints_a_token_once_and_only_where_allowed() {
     let stderr = String::from_utf8(printed.stderr).unwrap();
     assert!(!stderr.contains(secret), "secret only on stdout");
     assert_eq!(store.len(), 1);
+    // A token that cannot be delivered (stdout write fails) is revoked, exit 1.
+    let mut command = Process::new(env!("CARGO_BIN_EXE_papersd"));
+    command
+        .args(["token", "issue", "--library"])
+        .arg(&env.library)
+        .arg("--runtime-dir")
+        .arg(&env.runtime)
+        .args([
+            "--label",
+            "undelivered",
+            "--kind",
+            "cli",
+            "--scope",
+            "papers:read",
+        ])
+        .arg("--allow-non-tty")
+        .stdin(Stdio::null())
+        .stdout(
+            std::fs::OpenOptions::new()
+                .write(true)
+                .open("/dev/full")
+                .unwrap(),
+        )
+        .stderr(Stdio::piped());
+    let full = command.output().unwrap();
+    assert_eq!(
+        full.status.code(),
+        Some(cm_daemon::admin::EXIT_ERROR),
+        "{full:?}"
+    );
+    assert!(String::from_utf8_lossy(&full.stderr).contains("it was revoked"));
+    assert_eq!(store.len(), 1, "the undelivered token's copy was removed");
     let mut cli = env.session("cli", Credential(secret.into()));
     assert!(query(&mut cli).is_ok());
     assert!(create(&mut cli, "read only").is_err());
@@ -712,6 +829,11 @@ fn cli_bootstrap_prints_a_token_once_and_only_where_allowed() {
         .unwrap();
     let listing = String::from_utf8(listed.stdout).unwrap();
     assert!(listing.contains("terminal") && listing.contains("papers:read"));
+    assert!(
+        listing
+            .lines()
+            .any(|l| l.contains("undelivered") && l.contains("revoked"))
+    );
     assert!(!listing.contains(secret));
     let set = Process::new(env!("CARGO_BIN_EXE_papersd"))
         .args(["api", "set", "--library"])
@@ -735,5 +857,63 @@ fn cli_bootstrap_prints_a_token_once_and_only_where_allowed() {
         String::from_utf8(set.stdout)
             .unwrap()
             .contains("enabled=true bind=127.0.0.1 port=40555")
+    );
+}
+
+#[test]
+fn delegated_grants_never_get_owner_powers_or_unlimited_lifetimes() {
+    let env = Env::new();
+    let (config, _) = with_memory_store(&env);
+    let _daemon = start(config).unwrap();
+    let mut desktop = env.desktop();
+    let issue_raw = |s: &mut Session, caps: CapabilitySet, expires_at_ms: Option<i64>| {
+        s.call(Command::Grants(GrantCommand::Issue {
+            label: "delegate".into(),
+            capabilities: caps,
+            expires_at_ms,
+        }))
+        .unwrap()
+    };
+    for owner_only in [
+        Capability::GrantAdmin,
+        Capability::ApiAdmin,
+        Capability::ElevationAdmin,
+    ] {
+        match issue_raw(
+            &mut desktop,
+            [Capability::LibraryRead, owner_only].into(),
+            None,
+        ) {
+            Err(WireError::Service(ServiceError::InvalidInput(r))) => {
+                assert!(r.contains("cannot be delegated"), "{owner_only:?}: {r}")
+            }
+            other => panic!("{owner_only:?}: {other:?}"),
+        }
+    }
+    let now = cm_daemon::ipc::auth::now_ms();
+    let day = 86_400_000;
+    // No expiry requested: the policy default applies (write capability: 30 days).
+    match issue_raw(&mut desktop, [Capability::LibraryWrite].into(), None).unwrap() {
+        Reply::Grants(cm_protocol::ipc::GrantReply::Issued { grant, .. }) => {
+            let at = grant.expires_at_ms.expect("delegates always expire");
+            assert!(at > now + 29 * day && at <= now + 31 * day, "{at}");
+        }
+        other => panic!("{other:?}"),
+    }
+    assert!(matches!(
+        issue_raw(
+            &mut desktop,
+            [Capability::LibraryWrite].into(),
+            Some(now + 91 * day)
+        ),
+        Err(WireError::Service(ServiceError::InvalidInput(r))) if r.contains("maximum lifetime")
+    ));
+    assert!(
+        issue_raw(
+            &mut desktop,
+            [Capability::LibraryRead].into(),
+            Some(now + 300 * day)
+        )
+        .is_ok()
     );
 }

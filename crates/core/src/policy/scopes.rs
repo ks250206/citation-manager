@@ -280,6 +280,10 @@ pub const ENDPOINTS: &[Endpoint] = endpoints! {
     Rest "POST /exports" [Export] Scoped(&[PapersRead, ExportsWrite]);
     Rest "GET /jobs/{id}" [JobRead] Scoped(&[JobsRead]);
     Rest "POST /jobs/{id}/cancel" [JobCancel] Scoped(&[JobsWrite]);
+    // Each job kind additionally needs its own capabilities (daemon `JobHandler::required`),
+    // e.g. `attachment.import` needs LocalFileRead and is therefore owner-only in practice.
+    Rest "POST /jobs" [JobSubmit] Scoped(&[JobsWrite]);
+    Rest "POST /jobs/{id}/retry" [JobRetry] Scoped(&[JobsWrite]);
     Mcp "search_papers" [LibraryQuery] Scoped(&[PapersRead]);
     Mcp "search_fulltext" [FulltextSearch] Scoped(&[PapersRead, FilesRead, AnnotationsRead]);
     Mcp "get_paper" [PaperGet, OrganizationForPaper, AttachmentList] Scoped(&[PapersRead]);
@@ -375,6 +379,30 @@ impl std::fmt::Display for TokenPolicyError {
             Self::ExpiryInPast => "expiry must be in the future",
             Self::ExpiryTooLong => "expiry exceeds the maximum lifetime for these scopes",
         })
+    }
+}
+
+/// Capabilities that change data, write files or start work. Delegated grants holding any of
+/// them get the shorter write lifetime.
+const WRITE_CAPABILITIES: [Capability; 9] = [
+    Capability::LibraryWrite,
+    Capability::LibraryDelete,
+    Capability::AnnotationsWrite,
+    Capability::ExportAllowedDir,
+    Capability::JobsControl,
+    Capability::LocalFileWrite,
+    Capability::LocalFileRead,
+    Capability::UiSettings,
+    Capability::NetworkLookup,
+];
+/// Lifetime policy for a delegated grant issued from raw capabilities
+/// (`GrantCommand::Issue`): the same limits as scoped tokens. Only the owner's bootstrap
+/// grant may live until revoked.
+pub fn lifetime_for_capabilities(capabilities: &CapabilitySet) -> Lifetime {
+    if capabilities.iter().any(|c| WRITE_CAPABILITIES.contains(c)) {
+        lifetime(&[Scope::PapersWrite].into())
+    } else {
+        lifetime(&ScopeSet::new())
     }
 }
 
@@ -508,6 +536,8 @@ mod tests {
         let all = capabilities(&Scope::ALL.into_iter().collect());
         for cap in [
             Capability::GrantAdmin,
+            Capability::ApiAdmin,
+            Capability::ElevationAdmin,
             Capability::UiSettings,
             Capability::LocalFileRead,
             Capability::LocalFileWrite,

@@ -7,9 +7,12 @@
 //! - macOS: the login Keychain through `/usr/bin/security`. Commands go through
 //!   `security -i` on stdin so the secret never appears in a process argument list.
 //! - Linux: the freedesktop Secret Service through `/usr/bin/secret-tool` (secret on stdin).
-//! - Fallback: one 0600 file per token in a 0700 directory inside the private library
-//!   daemon directory. Weaker: readable by any process of the same user and copied by
-//!   file-level backups. Chosen automatically when no OS store is usable.
+//! - Fallback: one 0600 file per token in a 0700 per-library directory **outside** the
+//!   library (`DaemonPaths::secrets_dir`: `$XDG_DATA_HOME` or `~/.local/share`, macOS
+//!   `~/Library/Application Support`, `/citation-manager/secrets/<library key>`), so a
+//!   library folder that is synced or copied does not carry token copies. Weaker than an
+//!   OS store: readable by any process of the same user and copied by home-directory
+//!   backups. Chosen automatically when no OS store is usable.
 //!
 //! Helpers are started by absolute path only (never a PATH search) with a timeout. Entries
 //! are keyed by `account(library, grant)`; names are hex/`-`/`:` only.
@@ -132,7 +135,11 @@ impl FileSecretStore {
             .join(format!("{}.secret", account.replace(':', "_"))))
     }
     fn prepare(&self) -> io::Result<()> {
-        match fs::DirBuilder::new().mode(0o700).create(&self.dir) {
+        match fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(&self.dir)
+        {
             Ok(()) => {}
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
             Err(e) => return Err(e),
@@ -163,7 +170,7 @@ impl SecretStore for FileSecretStore {
     }
     fn get(&self, account: &str) -> io::Result<Option<Credential>> {
         let path = self.path(account)?;
-        match super::local::read_private_file(&path, self.uid, MAX_SECRET) {
+        match read_no_follow(&path, self.uid) {
             Ok(raw) => String::from_utf8(raw)
                 .map(|s| Some(Credential(s.trim().to_owned())))
                 .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "not UTF-8")),
@@ -179,8 +186,44 @@ impl SecretStore for FileSecretStore {
     }
 }
 
+/// Reads a private secret file without following a symlink: `lstat` must show a regular
+/// 0600 single-link file owned by `uid`, and the opened file's `fstat` must be that same
+/// inode (a swap between the two calls is refused). std exposes no `O_NOFOLLOW`; this
+/// comparison gives the same guarantee without a platform constant.
+fn read_no_follow(path: &Path, uid: u32) -> io::Result<Vec<u8>> {
+    use std::os::unix::fs::MetadataExt;
+    let before = fs::symlink_metadata(path)?;
+    let private = |m: &fs::Metadata| {
+        m.is_file() && m.uid() == uid && m.mode() & 0o7777 == 0o600 && m.nlink() == 1
+    };
+    if before.file_type().is_symlink() || !private(&before) || before.len() > MAX_SECRET {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "unsafe secret file",
+        ));
+    }
+    let mut file = fs::File::open(path)?;
+    let after = file.metadata()?;
+    if (after.dev(), after.ino()) != (before.dev(), before.ino()) || !private(&after) {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "secret file changed while opening",
+        ));
+    }
+    let mut out = Vec::new();
+    (&mut file).take(MAX_SECRET + 1).read_to_end(&mut out)?;
+    if out.len() as u64 > MAX_SECRET {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "secret too large",
+        ));
+    }
+    Ok(out)
+}
+
 /// Runs a helper by absolute path with optional stdin, a timeout and captured stdout.
 /// Returns (exit code, stdout). stderr is discarded (it may echo attribute names only).
+/// The child is always reaped: every error after spawning kills and waits for it.
 fn run_helper(program: &Path, args: &[&str], stdin: Option<&[u8]>) -> io::Result<(i32, Vec<u8>)> {
     let mut child = Command::new(program)
         .args(args)
@@ -192,11 +235,22 @@ fn run_helper(program: &Path, args: &[&str], stdin: Option<&[u8]>) -> io::Result
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()?;
+    let reap = |child: &mut std::process::Child| {
+        let _ = child.kill();
+        let _ = child.wait();
+    };
     if let (Some(input), Some(mut pipe)) = (stdin, child.stdin.take()) {
-        pipe.write_all(input)?;
+        let written = pipe.write_all(input);
         drop(pipe);
+        if let Err(e) = written {
+            reap(&mut child);
+            return Err(e);
+        }
     }
-    let mut stdout = child.stdout.take().expect("piped");
+    let Some(mut stdout) = child.stdout.take() else {
+        reap(&mut child);
+        return Err(io::Error::other("helper stdout unavailable"));
+    };
     let reader = thread::spawn(move || {
         let mut out = Vec::new();
         let _ = (&mut stdout).take(64 * 1024).read_to_end(&mut out);
@@ -204,18 +258,25 @@ fn run_helper(program: &Path, args: &[&str], stdin: Option<&[u8]>) -> io::Result
     });
     let started = Instant::now();
     let status = loop {
-        if let Some(status) = child.try_wait()? {
-            break status;
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if started.elapsed() <= HELPER_TIMEOUT => {
+                thread::sleep(Duration::from_millis(10))
+            }
+            Ok(None) => {
+                reap(&mut child);
+                let _ = reader.join();
+                return Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "secret store helper timed out",
+                ));
+            }
+            Err(e) => {
+                reap(&mut child);
+                let _ = reader.join();
+                return Err(e);
+            }
         }
-        if started.elapsed() > HELPER_TIMEOUT {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err(io::Error::new(
-                io::ErrorKind::TimedOut,
-                "secret store helper timed out",
-            ));
-        }
-        thread::sleep(Duration::from_millis(10));
     };
     let out = reader.join().unwrap_or_default();
     Ok((status.code().unwrap_or(-1), out))
@@ -368,7 +429,7 @@ pub struct PlatformSecretStore {
     fallback: FileSecretStore,
 }
 impl PlatformSecretStore {
-    /// `fallback_dir`: normally `<library>/daemon/secrets`.
+    /// `fallback_dir`: normally `DaemonPaths::secrets_dir()` (outside the library).
     /// `CM_SECRET_STORE=file` forces the file store (headless sessions, CI).
     pub fn detect(fallback_dir: PathBuf, uid: u32) -> Self {
         let forced_file = std::env::var_os("CM_SECRET_STORE").is_some_and(|v| v == "file");
@@ -461,6 +522,15 @@ mod tests {
         // A widened file is refused rather than trusted.
         fs::set_permissions(file.path(), fs::Permissions::from_mode(0o644)).unwrap();
         assert!(store.get(&account).is_err());
+        fs::set_permissions(file.path(), fs::Permissions::from_mode(0o600)).unwrap();
+        // A symlink in place of the secret file is never followed.
+        let target = root.join("elsewhere");
+        fs::write(&target, "ab".repeat(32)).unwrap();
+        fs::set_permissions(&target, fs::Permissions::from_mode(0o600)).unwrap();
+        fs::remove_file(file.path()).unwrap();
+        std::os::unix::fs::symlink(&target, file.path()).unwrap();
+        assert!(store.get(&account).is_err());
+        fs::remove_file(file.path()).unwrap();
         store.delete(&account).unwrap();
         store.delete(&account).unwrap();
         assert_eq!(store.get(&account).unwrap(), None);

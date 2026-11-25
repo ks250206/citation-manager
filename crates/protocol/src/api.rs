@@ -1,14 +1,15 @@
 //! #26 token/grant management and local API settings over IPC (`Command::Api`).
 //!
 //! Every command needs the owner's `GrantAdmin` (the desktop GUI or the `papersd token`
-//! bootstrap using the desktop credential). Tokens are daemon grants: issuing, re-issuing,
+//! bootstrap using the desktop credential); `SaveSettings` additionally needs the owner-only
+//! `ApiAdmin`, and `Elevate`/`EndElevation` the owner-only `ElevationAdmin`. Tokens are daemon grants: issuing, re-issuing,
 //! scope changes, elevation and revocation update the daemon's live registry, so they apply
 //! to the next request of every live session regardless of transport.
 use crate::ipc::{Credential, GrantId, Operation};
 pub use cm_core::policy::{
     Capability, CapabilitySet,
     api::{ApiSettings, ApiSettingsError, BindAddress, DEFAULT_PORT},
-    elevation::MAX_ELEVATION_MS,
+    elevation::{BulkKind, MAX_ELEVATION_MS},
     scopes::{
         Access, ClientKind, ENDPOINTS, Endpoint, Lifetime, Scope, ScopeSet, Surface,
         TokenPolicyError, endpoint, lifetime, profiles, scopes_of, validate_token,
@@ -35,9 +36,10 @@ pub enum ApiCommand {
         grant: GrantId,
         scopes: ScopeSet,
     },
-    /// Time-limited bulk elevation (at most `MAX_ELEVATION_MS`).
+    /// Time-limited bulk elevation of one kind (at most `MAX_ELEVATION_MS`). Owner only.
     Elevate {
         grant: GrantId,
+        kind: BulkKind,
         duration_ms: i64,
     },
     EndElevation(GrantId),
@@ -54,9 +56,8 @@ impl ApiCommand {
             Self::ListTokens => Operation::GrantList,
             Self::IssueToken(_) | Self::Reissue(_) => Operation::GrantIssue,
             Self::Revoke(_) => Operation::GrantRevoke,
-            Self::SetScopes { .. } | Self::Elevate { .. } | Self::EndElevation(_) => {
-                Operation::GrantUpdate
-            }
+            Self::SetScopes { .. } => Operation::GrantUpdate,
+            Self::Elevate { .. } | Self::EndElevation(_) => Operation::GrantElevate,
             Self::Audit { .. } => Operation::AuditRead,
         }
     }
@@ -84,7 +85,11 @@ pub struct TokenInfo {
     pub expires_at_ms: Option<i64>,
     pub last_used_at_ms: Option<i64>,
     pub revoked: bool,
+    /// Wall-clock end of a running elevation, for display (the daemon enforces it on a
+    /// monotonic clock; elevations do not survive a daemon restart).
     pub elevated_until_ms: Option<i64>,
+    #[serde(default)]
+    pub elevated_kind: Option<BulkKind>,
     pub issued_by: Option<GrantId>,
     pub replaces: Option<GrantId>,
 }
@@ -97,8 +102,8 @@ pub enum SecretBackend {
     Keychain,
     /// freedesktop Secret Service (GNOME Keyring/KWallet) through `secret-tool`.
     SecretService,
-    /// 0600 file in the private library daemon directory. Weaker: any process of the same
-    /// user can read it and it is included in file-level backups.
+    /// 0600 file in a per-library 0700 folder outside the library (user data folder).
+    /// Weaker: any process of the same user can read it and home backups include it.
     File,
     /// Tests only.
     Memory,
@@ -108,7 +113,7 @@ impl SecretBackend {
         match self {
             Self::Keychain => "macOS Keychain",
             Self::SecretService => "Secret Service (desktop keyring)",
-            Self::File => "private 0600 file in the library (weaker fallback)",
+            Self::File => "private 0600 file outside the library (weaker fallback)",
             Self::Memory => "memory only (test store)",
         }
     }
@@ -128,6 +133,10 @@ pub struct ApiOverview {
     pub settings: ApiSettings,
     pub secret_backend: SecretBackend,
     pub listener: ListenerState,
+    /// Set when the audit log had to be moved aside (unsafe permissions/links) or cannot
+    /// be written; entries are not silently dropped.
+    #[serde(default)]
+    pub audit_warning: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -150,6 +159,13 @@ pub struct AuditEntry {
     pub reason: Option<String>,
     /// Grant the operation targeted (token management), if any.
     pub target: Option<GrantId>,
+    /// Identical denials (grant, operation, reason) within a minute are coalesced into one
+    /// record carrying how many occurred.
+    #[serde(default = "one")]
+    pub count: u32,
+}
+fn one() -> u32 {
+    1
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

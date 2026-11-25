@@ -279,6 +279,15 @@ impl LibraryView {
             api_inputs: api_ui::ApiInputs::new(cx),
         };
         view.subscribe_viewer_inputs(window, cx);
+        // An edited port is part of the unsaved API settings draft (kept across refreshes).
+        cx.subscribe(
+            &view.api_inputs.port,
+            |this, _, _: &text_input::Edited, cx| {
+                this.api.dirty = true;
+                cx.notify();
+            },
+        )
+        .detach();
         view.subscribe_annotation_inputs(window, cx);
         cx.subscribe(
             &view.palette_query,
@@ -1085,7 +1094,7 @@ impl Render for LibraryView {
         // `focus_layout` itself before focusing the search field.
         // A shown token secret never outlives the screen it was shown on.
         if self.screen != Screen::Api && self.api.revealed.is_some() {
-            self.api.conceal();
+            self.api_conceal(cx);
         }
         let layout = (self.screen, self.settings.details_tab.clone());
         if layout != self.focus_layout {
