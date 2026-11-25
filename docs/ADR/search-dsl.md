@@ -32,7 +32,8 @@ bare segments. A field value may be quoted, including year and has values.
   matching `str::trim`/`split_whitespace`. Space, tab, LF/CR, NBSP and full-width
   space separate clauses; zero-width space does not. No normalization is applied
   to ordinary text. Empty or whitespace-only queries fail, rather than selecting
-  every record. Every decoded value needs at least one non-whitespace character.
+  every record (the search service accepts a blank query only next to an explicit
+  collection-ID or paper-ID scope; see fulltext-search.md). Every decoded value needs at least one non-whitespace character.
 - Bare values are nonempty runs without whitespace, double quote, backslash or
   non-whitespace control characters. Colons after the field separator are value
   data (e.g. DOI resolver URLs). Quoted characters can contain Unicode whitespace,
