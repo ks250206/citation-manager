@@ -44,12 +44,13 @@ from benchmarks.run import quantile  # noqa: E402
 
 BUDGETS_MS = {'60hz': 1000 / 60, '120hz': 1000 / 120}
 PARENT = ROOT / 'target/frame-timing-benchmark'
-# Window-relative points (logical px) of the default 1320x860 window and layout, measured
-# from Linux screenshots of this build; the doc keeps the screenshots that confirm them.
-LIST_CENTER = (580, 450)
-LIST_NEXT_PAGE = (884, 797)
-EXPAND = (1269, 73)
-PDF_PAGE = (660, 520)  # page column after Expand
+# Points in the window's content area (logical px), measured from screenshots of this build.
+# A negative coordinate counts from the right/bottom edge: the window is 1320x860 on the
+# 1400x900 Xvfb screen but clamped to its 1000x680 minimum-ish on the 1024x768 macOS runner.
+LIST_CENTER = (430, 400)
+LIST_NEXT_PAGE = (-436, -63)
+EXPAND = (-51, 73)
+PDF_PAGE = (500, 520)  # page column after Expand
 PAGE_FIELD = (73, 297)  # the viewer toolbar's page number field after Expand
 # Far jumps through the page field: mostly pages outside the render cache and prefetch.
 JUMPS = (10, 20, 5, 15, 1, 12, 18, 3)
@@ -129,6 +130,11 @@ def summarize(doc, gpui, phases, budgets=BUDGETS_MS):
 
 # ---------------------------------------------------------------- input drivers
 
+def resolve(point, origin, size):
+    """Screen position of a content-area point; negative coordinates count from the far edge."""
+    return tuple(o + (p if p >= 0 else extent + p) for p, o, extent in zip(point, origin, size))
+
+
 class X11:
     """xdotool/xclip on the X display in $DISPLAY (window-relative coordinates)."""
     name = 'xdotool'
@@ -141,9 +147,11 @@ class X11:
         geometry = subprocess.check_output(['xdotool', 'getwindowgeometry', '--shell', self.window], text=True)
         values = dict(line.split('=', 1) for line in geometry.split())
         self.origin = (int(values['X']), int(values['Y']))
+        self.size = (int(values['WIDTH']), int(values['HEIGHT']))
 
     def _at(self, point):
-        return [str(self.origin[0] + point[0]), str(self.origin[1] + point[1])]
+        x, y = resolve(point, self.origin, self.size)
+        return [str(round(x)), str(round(y))]
 
     def wheel(self, point, down, count, delay_ms):
         subprocess.run(['xdotool', 'mousemove', *self._at(point)], check=True)
@@ -208,18 +216,66 @@ class Quartz:
         self.trusted = bool(cg.AXIsProcessTrusted())
         display = cg.CGDisplayBounds(cg.CGMainDisplayID())
         self.display = (display.w, display.h)
-        # GPUI centres the window on the main display (the title bar sits above the content).
-        self.origin = ((display.w - size[0]) / 2, (display.h - size[1]) / 2 + 14)
+        frame = self._window_frame(pid)
+        if frame:
+            # The standard title bar sits above the content view.
+            self.origin, self.size = (frame.x, frame.y + self.TITLE_BAR), (frame.w, frame.h - self.TITLE_BAR)
+        else:
+            self.origin, self.size = ((display.w - size[0]) / 2, (display.h - size[1]) / 2), size
+        self.window_found = frame is not None
         subprocess.run(['osascript', '-e', f'tell application "System Events" to set frontmost of '
                         f'(first process whose unix id is {pid}) to true'], check=False, timeout=20,
                        capture_output=True)
+
+    TITLE_BAR = 28
+
+    def _window_frame(self, pid):
+        """Bounds of the GUI's on-screen layer-0 window (CGWindowListCopyWindowInfo)."""
+        cg, cf = self.cg, self.cf
+        cf.CFStringCreateWithCString.restype = ctypes.c_void_p
+        cf.CFStringCreateWithCString.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_uint32]
+        cf.CFArrayGetCount.restype = ctypes.c_long
+        cf.CFArrayGetCount.argtypes = [ctypes.c_void_p]
+        cf.CFArrayGetValueAtIndex.restype = ctypes.c_void_p
+        cf.CFArrayGetValueAtIndex.argtypes = [ctypes.c_void_p, ctypes.c_long]
+        cf.CFDictionaryGetValue.restype = ctypes.c_void_p
+        cf.CFDictionaryGetValue.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+        cf.CFNumberGetValue.restype = ctypes.c_bool
+        cf.CFNumberGetValue.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p]
+        cg.CGWindowListCopyWindowInfo.restype = ctypes.c_void_p
+        cg.CGWindowListCopyWindowInfo.argtypes = [ctypes.c_uint32, ctypes.c_uint32]
+        cg.CGRectMakeWithDictionaryRepresentation.restype = ctypes.c_bool
+        cg.CGRectMakeWithDictionaryRepresentation.argtypes = [ctypes.c_void_p, ctypes.POINTER(self.Rect)]
+        key = {name: cf.CFStringCreateWithCString(None, name.encode(), 0x08000100)
+               for name in ('kCGWindowOwnerPID', 'kCGWindowLayer', 'kCGWindowBounds')}
+
+        def number(info, name):
+            value = ctypes.c_int32()
+            ref = cf.CFDictionaryGetValue(info, key[name])
+            return value.value if ref and cf.CFNumberGetValue(ref, 3, ctypes.byref(value)) else None
+
+        for _ in range(40):
+            windows = cg.CGWindowListCopyWindowInfo(1, 0)  # on-screen only
+            try:
+                for i in range(cf.CFArrayGetCount(windows) if windows else 0):
+                    info = cf.CFArrayGetValueAtIndex(windows, i)
+                    if number(info, 'kCGWindowOwnerPID') == pid and number(info, 'kCGWindowLayer') == 0:
+                        rect = self.Rect()
+                        bounds = cf.CFDictionaryGetValue(info, key['kCGWindowBounds'])
+                        if bounds and cg.CGRectMakeWithDictionaryRepresentation(bounds, ctypes.byref(rect)):
+                            return rect
+            finally:
+                if windows:
+                    cf.CFRelease(windows)
+            time.sleep(0.5)
+        return None
 
     def _post(self, event):
         self.cg.CGEventPost(0, event)
         self.cf.CFRelease(event)
 
     def _point(self, point):
-        return self.Point(self.origin[0] + point[0], self.origin[1] + point[1])
+        return self.Point(*resolve(point, self.origin, self.size))
 
     def click(self, point):
         at = self._point(point)
@@ -398,7 +454,9 @@ def drive(bin_dir, library, out, link, settle_s):
     try:
         driver = X11(gui.pid) if platform.system() == 'Linux' else Quartz(gui.pid)
         if isinstance(driver, Quartz):
-            notes.append(f'macOS AXIsProcessTrusted={driver.trusted}, main display {driver.display}')
+            notes.append(f'macOS AXIsProcessTrusted={driver.trusted}, main display {driver.display}, '
+                         f'window found={driver.window_found}')
+        notes.append(f'window content origin {driver.origin}, size {driver.size}')
         with phase('startup', tail_s=0) as entry:
             entry['start_unix'] = started
             time.sleep(settle_s)
