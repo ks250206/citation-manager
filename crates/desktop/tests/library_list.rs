@@ -544,6 +544,12 @@ fn the_page_version_of_a_changed_open_paper_is_detected() {
     changed[1].bibliography.journal = Some("Changed elsewhere".into());
     changed[1].updated_at = Some("2026-11-26T00:00:00.000Z".into());
     assert_eq!(newer_row(Some(&open), &changed), Some(&changed[1]));
+    // A page loaded before the editor fetched a newer version (search hit, deep link) must
+    // not replace it with the older cached row.
+    let mut fresh = changed[1].clone();
+    fresh.bibliography.journal = Some("Changed again".into());
+    fresh.updated_at = Some("2026-11-27T00:00:00.000Z".into());
+    assert_eq!(newer_row(Some(&fresh), &changed), None, "older cached row");
 }
 
 /// Review finding 2: one bulk run at a time, each completion matched to its own run.

@@ -227,13 +227,16 @@ impl Library {
         }
     }
 }
-/// The loaded page's version of the paper the editor shows, when it differs from the
+/// The loaded page's version of the paper the editor shows, when it is newer than the
 /// editor's copy (changed by another client or a background job since the editor loaded
-/// it). None for a new draft, a paper not on this page, or an unchanged paper. Callers
-/// refresh a clean editor from it and leave unsaved local edits alone (#84 review).
+/// it). None for a new draft, a paper not on this page, or a row that is the same or older
+/// — for example a page loaded before a search hit fetched the latest version into the
+/// editor. `updated_at` is the store's fixed-width UTC timestamp
+/// (`%Y-%m-%dT%H:%M:%fZ`), so it orders as text. Callers refresh a clean editor from it and
+/// leave unsaved local edits alone (#84 review).
 pub fn newer_row<'a>(editor: Option<&Paper>, page: &'a [Paper]) -> Option<&'a Paper> {
     let editor = editor?;
     page.iter()
         .find(|p| p.id == editor.id)
-        .filter(|p| *p != editor)
+        .filter(|p| *p != editor && p.updated_at > editor.updated_at)
 }
