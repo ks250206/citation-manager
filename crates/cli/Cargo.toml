@@ -11,3 +11,17 @@ workspace = true
 [dependencies]
 cm-protocol.workspace = true
 cm-mcp.workspace = true
+clap = { workspace = true, features = ["env"] }
+clap_complete.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+rustix = { workspace = true, features = ["process"] }
+
+# `papers`: GUI-less client of the per-library papersd (#28). Never opens the database.
+[[bin]]
+name = "papers"
+path = "src/main.rs"
+
+[dev-dependencies]
+tempfile.workspace = true
+serde_json.workspace = true
