@@ -723,15 +723,48 @@ fn usage_unavailable_features_and_daemon_errors_have_distinct_exit_codes() {
     assert_eq!(doi.json()["error"]["code"], "invalid_input");
     doi.expect(2);
 
-    // MCP: stdout stays clean (it belongs to the protocol); exit 7 with a clear message.
-    let mcp = env.papers(&["mcp"]);
-    assert_eq!(mcp.code, 7);
-    assert!(mcp.stdout.is_empty());
-    assert!(
-        mcp.stderr.contains("MCP is not available"),
-        "{}",
-        mcp.stderr
-    );
+    // MCP (#29) over the CLI's library: stdout carries protocol frames only. Closing stdin before
+    // initialization exits 0 with nothing on stdout; an initialize request is answered there.
+    let idle = env.papers(&["mcp"]);
+    assert_eq!(idle.code, 0, "{}", idle.stderr);
+    assert!(idle.stdout.is_empty());
+    {
+        use std::io::{BufRead, Write};
+        let mut server = Process::new(PAPERS)
+            .args(["mcp"])
+            .env_remove("PAPERS_CREDENTIAL_FILE")
+            .env_remove("XDG_RUNTIME_DIR")
+            .env("PAPERS_LIBRARY", &env.library)
+            .env("PAPERS_RUNTIME_DIR", &env.runtime)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let mut stdin = server.stdin.take().unwrap();
+        writeln!(
+            stdin,
+            r#"{{"jsonrpc":"2.0","id":1,"method":"initialize","params":{{"protocolVersion":"2025-06-18","capabilities":{{}},"clientInfo":{{"name":"cli-test","version":"0"}}}}}}"#
+        )
+        .unwrap();
+        let mut line = String::new();
+        std::io::BufReader::new(server.stdout.take().unwrap())
+            .read_line(&mut line)
+            .unwrap();
+        drop(stdin);
+        assert!(server.wait().unwrap().success());
+        let reply: Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(reply["id"], 1);
+        assert_eq!(reply["result"]["serverInfo"]["name"], "citation-manager");
+    }
+    let unconfigured = Process::new(PAPERS)
+        .args(["mcp"])
+        .env_remove("PAPERS_LIBRARY")
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert_eq!(unconfigured.status.code(), Some(2));
+    assert!(unconfigured.stdout.is_empty());
     let rest = env.papers(&["server", "start", "--rest"]);
     rest.expect(7);
     assert_eq!(rest.json()["error"]["code"], "feature_unavailable");

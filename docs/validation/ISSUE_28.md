@@ -91,3 +91,10 @@ cross-batch duplicate import exit 4 then `--on-duplicate skip` (1 created, 1 ski
 `list | head -c 1` and `export | head -c 1` exit 0, export into the library exit 5, `-o out.ris`
 published as `-rw-r--r--` (umask 022), `--read-only server stop` exit 5, `mcp` exit 7,
 `server stop`; no papersd left.
+
+## Update after #29 merged (papers mcp)
+
+`papers mcp` now serves MCP through `cm_mcp::run_stdio_with` for the CLI's library. The earlier
+"`mcp` exit 7" observations above describe the pre-#29 build. `crates/cli/tests/cli.rs` checks:
+stdin closed before initialization → exit 0 with empty stdout; an `initialize` request is
+answered on stdout with `serverInfo.name = "citation-manager"`; no library → exit 2.

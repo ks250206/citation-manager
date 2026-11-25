@@ -52,3 +52,21 @@ serde/serde_json/uuid は現在の契約・テストで利用する。他の既�
 workspace 宣言であり、まだ package が利用しないものを Cargo.lock が解決・コンパイルしたとは主張しない。
 #29 等で利用を追加した時点で lock 再生成と該当機能の検証を行う。
 この文書は「最新版」の継続保証ではなく、#7 着手時の確認記録である。
+
+## #29 MCP server での利用開始（2026-11-25）
+
+`cm-mcp` が rmcp 3.9.0（`server` + `transport-io`、default-features=false、macros 不使用）を
+利用し、lock を再解決した。workspace の既存 pin は変更していない。`cm-mcp` だけが以下を新たに
+解決・コンパイルする（`cargo tree -p cm-mcp` で確認、domain/core/protocol には入らない）:
+
+| crate | version | 理由 |
+|---|---|---|
+| rmcp | 3.9.0 | 公式 MCP Rust SDK（DESIGN §14.1、exact pin 済み） |
+| tokio-util | =0.7.20 | rmcp の `CancellationToken` を型名で扱うため（rmcp と同じ版に exact pin） |
+| sha2 | 0.11.1 | rmcp の依存（既存の sha2 0.10.9 と併存） |
+| digest / block-buffer / crypto-common | 0.11.3 / 0.12.1 / 0.2.2 | sha2 0.11 の依存 |
+| hybrid-array / const-oid | 0.4.15 / 0.10.3 | 同上 |
+
+schemars 1.2.3（chrono04）、futures、indexmap、pastey 0.2、thiserror 2 などは rmcp の依存だが
+既に lock に存在していた（他 crate 経由）。cargo-deny 設定はこのリポジトリに無い。
+判断と境界は [mcp-server ADR](../ADR/mcp-server.md)。

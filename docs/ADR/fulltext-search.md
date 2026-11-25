@@ -123,6 +123,9 @@ diagnostic; filter by `SearchRequest::collection` ID instead), `year:` inclusive
 `has:pdf` the #12 attachment-metadata predicate. Unknown tag/collection names return no
 hits with `coverage.unresolved`, never a silent broadening. Additional request scope:
 `visibility`, `collection` ID, `papers` (≤500), `sources` (bibliographic/annotations/pages).
+A blank DSL is accepted only together with a `collection` ID or `papers` scope and then
+lists that scope's papers (a filter-only query); without a scope it stays an `EmptyInput`
+diagnostic, so a request never silently selects the whole library.
 
 - Paper-level AND: every term/phrase must match some document of the same paper; hits are
   that paper's matching documents (bibliographic record, annotation, page).
