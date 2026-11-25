@@ -80,6 +80,9 @@ Driven with xdotool; every result was checked on the screenshot.
 | Palette "Switch Theme" (after clicking Comfortable) | pass | [08](ISSUE_87/08-palette-switch-theme.png) → [09](ISSUE_87/09-after-palette-dark.png) |
 | Restart: Dark + Comfortable were loaded from the saved settings | pass | [10](ISSUE_87/10-restart-keeps-dark.png) |
 | Switch Theme again → System: drawn Light under Xvfb (the X server reports no dark appearance) | pass (System → Light only) | [11](ISSUE_87/11-system-under-xvfb.png) |
+| After merging the updated #84 branch (main #98, #101, #103: frame timing probe, page summary footer), rebuilt and started in Dark + Compact: same result | pass | [12](ISSUE_87/12-after-merge-dark-compact.png) |
+
+Screenshots 00–11 were taken on the build before that merge.
 
 ## Not covered
 
