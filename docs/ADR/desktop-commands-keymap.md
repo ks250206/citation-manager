@@ -43,12 +43,12 @@ examples, with an issue and disabled reason:
 
 | ID | Connecting owner | Reason |
 |---|---|---|
-| `pdf.highlight_selection`, `pdf.show_annotations` | #21 | PDF selection/annotations are not connected |
-| `search.full_text` | #18 | Full-text search is not connected |
 | `api.open_settings` | #26 | API settings are not connected |
 
 `pdf.save` was connected by #20: `commands::pdf_export` registers "Save Current PDF…"
 (Selection requirement) and the native host dispatches it ([pdf-export](pdf-export.md)).
+`pdf.highlight_selection`, `pdf.show_annotations` and `search.full_text` were connected by #21:
+`commands::pdf` registers them with the other PDF navigation/find/link commands.
 
 The connecting feature removes/replaces its placeholder through the normal module integration;
 registration cannot overwrite another descriptor. PDF navigation/search/annotations are #21,

@@ -668,6 +668,38 @@ impl LibraryClient for IpcLibraryClient {
             },
         )
     }
+    fn search(
+        &self,
+        request: crate::search::SearchRequest,
+        complete: crate::library::Reply<crate::search::SearchReply>,
+    ) -> Result<(), ServiceError> {
+        self.typed(
+            Command::Search(Box::new(request)),
+            None,
+            None,
+            complete,
+            |r| match r {
+                Reply::Search(s) => Some(s),
+                _ => None,
+            },
+        )
+    }
+    fn fulltext(
+        &self,
+        request: crate::search::FulltextRequest,
+        complete: crate::library::Reply<crate::search::FulltextReply>,
+    ) -> Result<(), ServiceError> {
+        self.typed(
+            Command::Fulltext(request),
+            None,
+            None,
+            complete,
+            |r| match r {
+                Reply::Fulltext(f) => Some(f),
+                _ => None,
+            },
+        )
+    }
     fn annotations(
         &self,
         request: crate::annotations::AnnotationRequest,
