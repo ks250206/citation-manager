@@ -93,6 +93,9 @@ jobs:
         with:
           shared-key: pdfium-runtime
           save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Drop non-cargo outputs restored with the build cache
+        # rust-cache restores target/; PDF evidence, fetched runtimes and export fixtures must be fresh.
+        run: rm -rf target/pdfium-validation target/pdfium-poc target/pdfium-linux target/pdf-export-test-* target/pdfium-tools
       - name: Lint runtime feature (no GPUI policy change)
         run: cargo clippy -p cm-pdf --all-targets --features runtime --locked -- -D warnings
       - name: Pinned dylib runtime and independent PDFKit gate (missing prerequisites fail)
@@ -124,6 +127,9 @@ jobs:
         with:
           shared-key: linux-native
           save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Drop non-cargo outputs restored with the build cache
+        # rust-cache restores target/; PDF evidence, fetched runtimes and export fixtures must be fresh.
+        run: rm -rf target/pdfium-validation target/pdfium-poc target/pdfium-linux target/pdf-export-test-* target/pdfium-tools
       - run: cargo clippy -p cm-desktop --all-targets --features native-gpui --locked -- -D warnings
       - run: cargo clippy -p cm-daemon --all-targets --features desktop-bootstrap --locked -- -D warnings
       - run: cargo test -p cm-daemon -p cm-desktop --features cm-daemon/desktop-bootstrap --locked
