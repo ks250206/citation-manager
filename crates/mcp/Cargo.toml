@@ -8,5 +8,31 @@ publish.workspace = true
 [lints]
 workspace = true
 
+# #29: read-only-by-default MCP stdio server. A thin rmcp adapter over the #25 papersd IPC
+# (cm-protocol only); never opens the library, storage or REST. See docs/ADR/mcp-server.md.
 [dependencies]
 cm-protocol.workspace = true
+rmcp.workspace = true
+tokio = { workspace = true, features = ["io-std", "io-util", "sync", "time"] }
+# CancellationToken carried by rmcp's RequestContext (same minor version rmcp uses).
+tokio-util = { version = "=0.7.20", default-features = false }
+serde.workspace = true
+serde_json.workspace = true
+uuid = { workspace = true, features = ["v4"] }
+rustix = { workspace = true, features = ["fs", "process"] }
+tempfile.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+tempfile.workspace = true
+
+# Started by AI clients (directly, or via `papers mcp` from #28). Installed next to papersd.
+[[bin]]
+name = "papers-mcp"
+path = "src/main.rs"
+
+# Real papers-mcp + real papersd subprocesses over stdio/IPC (papersd must be built, as
+# `cargo test --workspace` does; see the test's module docs).
+[[test]]
+name = "stdio_server"
+path = "tests/stdio_server.rs"

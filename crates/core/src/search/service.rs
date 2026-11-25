@@ -228,9 +228,22 @@ fn plan(
     index: &dyn SearchIndex,
     request: &SearchRequest,
 ) -> Result<Result<Plan, SearchReply>, ServiceError> {
-    let parsed = match query::parse(&request.query) {
-        Ok(q) => q,
-        Err(e) => return Ok(Err(invalid_reply(e))),
+    // An explicit ID scope (collection or papers) is itself a bounded condition: with a
+    // blank DSL it lists that scope's papers. A blank DSL without a scope still fails
+    // (EmptyInput) rather than selecting every record.
+    let scoped = request.collection.is_some() || !request.papers.is_empty();
+    let parsed = if scoped
+        && request.query.len() <= query::MAX_INPUT_BYTES
+        && request.query.trim().is_empty()
+    {
+        query::Query {
+            clauses: Vec::new(),
+        }
+    } else {
+        match query::parse(&request.query) {
+            Ok(q) => q,
+            Err(e) => return Ok(Err(invalid_reply(e))),
+        }
     };
     let mut plan = Plan {
         texts: Vec::new(),

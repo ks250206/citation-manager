@@ -162,11 +162,13 @@ peer PIDs are verified there, #34); then waits until the socket is gone or refus
 yet: SIGTERM ends papersd immediately and its crash recovery (#25/#51, job lease reclaim)
 covers in-flight work. There is no REST listener; `--rest` exits 7.
 
-`papers mcp` calls the stable `cm_mcp::run_stdio()` entry point from #7. Until #29 it returns
-`StdioError::Unavailable` and the CLI exits 7 with "MCP is not available" on stderr. **#29 must**
-implement serving in `cm_mcp` (ideally `run_stdio_with(config)` taking a
-`cm_protocol::client::local::LocalConnector` or library/runtime paths, with `mcp_read_only`
-requested by default) and the CLI passes its resolved `Target`; until then no library is opened.
+`papers mcp` serves MCP (#29) for the library the CLI resolved: it builds its `Target`
+(`--library`/`PAPERS_LIBRARY`, `--runtime-dir`, `--credential-file`, `--no-start`, idle timeout)
+and calls `cm_mcp::run_stdio_with(StdioConfig::from_connector(..))`. The session is read-only;
+the owner's desktop credential is never presented (without `--credential-file` the default MCP
+credential file is used). stdout carries MCP frames only, so `main` passes an unlocked `Stdout`
+(a lock held for the whole run would deadlock the server's writer thread). No library: exit 2;
+the server fails to start: exit 7. Grants are managed with `papers-mcp grant|revoke|grants`.
 MVP final acceptance still requires #29/#30 integration.
 
 ## Completions
