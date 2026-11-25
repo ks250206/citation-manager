@@ -316,6 +316,8 @@ class Run:
         if not self.args.in_netns:
             return
         record = self.steps[-1] if self.steps and self.steps[-1]['name'] == name else None
+        if record is not None and record['status'] == 'skipped':
+            return  # nothing ran, so there is no traffic to assert on
         delta = (record or {}).get('network')
         self.check(f'{name}.no_external_network_attempt',
                    delta is not None and delta['ipv4_no_route'] == 0 and delta['ipv6_no_route'] == 0, delta)
@@ -783,17 +785,24 @@ class Run:
         except ImportError:
             self.results['pypdf_page0_annotations'] = 'skipped: pypdf not installed'
         # The CLI writes the bibliography; MCP needs the export grant for it.
+        self.export_bibliography()
+        # Disable REST again: the listener goes away.
+        self.run([self.bin / 'papersd', 'api', 'set', '--library', self.library, '--disable'], name='rest-disable',
+                 check_exit=0)
+        self.check('rest.listener_closed_after_disable', wait_for(lambda: not any(
+            tcp_listeners(pid) for pid in self.daemons()), 30))
+
+    def export_bibliography(self):
+        (self.work / 'Exports').mkdir(exist_ok=True)
         code, exports = self.papers('export', '--format', 'bibtex', '-o', self.work / 'Exports/library.bib',
                                     name='cli-export-bibtex')
         self.check('cli.export_bibtex', code == 0 and (self.work / 'Exports/library.bib').is_file())
         code, exports = self.papers('export', '--format', 'ris', '-o', self.work / 'Exports/library.ris',
                                     name='cli-export-ris')
         self.check('cli.export_ris', code == 0 and (self.work / 'Exports/library.ris').is_file())
-        # Disable REST again: the listener goes away.
-        self.run([self.bin / 'papersd', 'api', 'set', '--library', self.library, '--disable'], name='rest-disable',
-                 check_exit=0)
-        self.check('rest.listener_closed_after_disable', wait_for(lambda: not any(
-            tcp_listeners(pid) for pid in self.daemons()), 30))
+
+    def step_ran(self, name):
+        return any(s['name'] == name and s['status'] != 'skipped' for s in self.steps)
 
     def portability(self):
         """Exports re-import into fresh libraries; a stopped library copied and restored elsewhere
@@ -801,6 +810,11 @@ class Run:
         code, listing = self.papers('list', '--limit', '500', name='portability-list-source')
         source = {p['id']: p['title'] for p in listing['data']['papers']}
         self.results['library_papers'] = len(source)
+        annotated = self.step_ran('annotate_and_export')
+        if not annotated:
+            # The exports are normally written by annotate_and_export; without the owner helper
+            # that step is skipped, so write them here and keep the round trip checked.
+            self.export_bibliography()
         for fmt, path in (('bibtex', 'library.bib'), ('ris', 'library.ris')):
             other = self.work / f'reimport-{fmt}'
             code, imported = self.run_papers_on(other, 'import', self.work / 'Exports' / path, '--yes',
@@ -827,8 +841,12 @@ class Run:
         code, text = self.run_papers_on(restored, 'fulltext', self.ids['corpus'], '--page', '1',
                                         name='portability-fulltext-restored')
         self.check('portability.restored_fulltext', 'coordinate proof' in json.dumps(text, ensure_ascii=False))
-        code, notes = self.run_papers_on(restored, 'annotations', self.ids['corpus'], name='portability-annotations-restored')
-        self.check('portability.restored_annotations', code == 0 and len(notes['data']['annotations']) >= 2)
+        if annotated:  # the annotations exist only when annotate_and_export ran
+            code, notes = self.run_papers_on(restored, 'annotations', self.ids['corpus'],
+                                             name='portability-annotations-restored')
+            self.check('portability.restored_annotations', code == 0 and len(notes['data']['annotations']) >= 2)
+        else:
+            self.results['portability_restored_annotations'] = 'skipped: annotate_and_export did not run'
         code, shown = self.run_papers_on(restored, 'show', self.ids['corpus'], name='portability-show-restored')
         self.check('portability.restored_attachment', sha256(CORPUS) in json.dumps(shown))
         self.run_papers_on(restored, 'server', 'stop', name='portability-stop-restored', check_exit=None)
