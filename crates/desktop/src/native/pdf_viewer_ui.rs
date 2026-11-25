@@ -784,7 +784,7 @@ impl LibraryView {
                     .bg(rgb(tok().surface))
                     .border_1()
                     .border_color(rgb(tok().border))
-                    .shadow(floating_shadow())
+                    .shadow(shadow_of(theme::Elevation::Raised))
                     .child(match image {
                         Some(image) => img(ImageSource::Render(image))
                             .w(px(width))

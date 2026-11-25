@@ -107,10 +107,19 @@ fn compact_is_denser_than_comfortable_and_comfortable_is_the_old_spacing() {
     // Compact text stays legible and rows still fit their text.
     assert!(compact.font_caption >= 10.);
     assert!(compact.row_height >= compact.font_body * 1.8);
-    assert!(theme::RADIUS.sm < theme::RADIUS.md && theme::RADIUS.md < theme::RADIUS.lg);
+    const { assert!(theme::RADIUS.sm < theme::RADIUS.md && theme::RADIUS.md < theme::RADIUS.lg) };
+    use theme::Elevation::{Floating, Raised};
+    for scheme in Scheme::ALL {
+        let (raised, floating) = (
+            theme::shadow(scheme, Raised),
+            theme::shadow(scheme, Floating),
+        );
+        assert!(raised.blur < floating.blur && raised.offset_y < floating.offset_y);
+    }
+    // Dark shadows are denser so they still separate surfaces.
     assert!(
-        theme::shadow(Scheme::Dark).color_rgba & 0xff
-            > theme::shadow(Scheme::Light).color_rgba & 0xff
+        theme::shadow(Scheme::Dark, Floating).color_rgba & 0xff
+            > theme::shadow(Scheme::Light, Floating).color_rgba & 0xff
     );
 }
 

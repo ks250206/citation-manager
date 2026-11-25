@@ -259,25 +259,39 @@ pub const RADIUS: Radius = Radius {
     lg: 8.,
 };
 
-/// Drop shadow of floating surfaces (menus, palette). `color_rgba` is `0xRRGGBBAA`.
+/// Drop shadow. `color_rgba` is `0xRRGGBBAA`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Shadow {
     pub offset_y: f32,
     pub blur: f32,
     pub color_rgba: u32,
 }
-pub fn shadow(scheme: Scheme) -> Shadow {
-    match scheme {
-        Scheme::Light => Shadow {
-            offset_y: 4.,
-            blur: 16.,
-            color_rgba: 0x0f172a33,
-        },
-        Scheme::Dark => Shadow {
-            offset_y: 4.,
-            blur: 16.,
-            color_rgba: 0x00000099,
-        },
+
+/// How far a surface floats above the canvas.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Elevation {
+    /// PDF pages on the viewer canvas.
+    Raised,
+    /// Menus and the Command Palette.
+    Floating,
+}
+
+pub fn shadow(scheme: Scheme, elevation: Elevation) -> Shadow {
+    let (offset_y, blur) = match elevation {
+        Elevation::Raised => (1., 2.),
+        Elevation::Floating => (4., 16.),
+    };
+    // Dark surfaces need a denser shadow to separate from the canvas at all.
+    let color_rgba = match (scheme, elevation) {
+        (Scheme::Light, Elevation::Raised) => 0x0000000d,
+        (Scheme::Light, Elevation::Floating) => 0x0f172a33,
+        (Scheme::Dark, Elevation::Raised) => 0x00000066,
+        (Scheme::Dark, Elevation::Floating) => 0x00000099,
+    };
+    Shadow {
+        offset_y,
+        blur,
+        color_rgba,
     }
 }
 

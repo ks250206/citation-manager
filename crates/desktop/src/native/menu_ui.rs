@@ -566,7 +566,7 @@ impl LibraryView {
             .border_1()
             .border_color(rgb(tok().border))
             .bg(rgb(tok().surface))
-            .shadow(floating_shadow())
+            .shadow(shadow_of(theme::Elevation::Floating))
             .children(entries.iter().enumerate().map(|(i, entry)| {
                 let (top, sub) = match parent {
                     Some(p) => (p, Some(i)),

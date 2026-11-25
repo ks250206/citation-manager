@@ -1027,9 +1027,9 @@ fn activate_theme(settings: &Settings, window: &Window) {
     let scheme = theme::resolve(settings.theme, dark);
     ACTIVE_THEME.with(|t| t.set((scheme, settings.density)));
 }
-/// Shadow of floating surfaces (menus, palette, PDF pages).
-fn floating_shadow() -> Vec<BoxShadow> {
-    let s = theme::shadow(ACTIVE_THEME.with(|t| t.get().0));
+/// Shadow of a raised (PDF page) or floating (menu, palette) surface.
+fn shadow_of(elevation: theme::Elevation) -> Vec<BoxShadow> {
+    let s = theme::shadow(ACTIVE_THEME.with(|t| t.get().0), elevation);
     vec![BoxShadow {
         color: rgba(s.color_rgba).into(),
         offset: point(px(0.), px(s.offset_y)),
@@ -1160,6 +1160,9 @@ fn nav_item(
     label: impl Into<SharedString>,
     active: bool,
 ) -> Stateful<Div> {
+    nav_base(id, active).child(label.into())
+}
+fn nav_base(id: impl Into<ElementId>, active: bool) -> Stateful<Div> {
     div()
         .id(id)
         .px_2()
@@ -1175,7 +1178,6 @@ fn nav_item(
                 .font_weight(FontWeight::SEMIBOLD)
         })
         .when(!active, |b| b.hover(|s| s.bg(rgb(tok().nav_hover))))
-        .child(label.into())
 }
 /// A navigation item led by an icon.
 fn nav_icon_item(
@@ -1189,20 +1191,18 @@ fn nav_icon_item(
     } else {
         tok().muted
     };
-    nav_item(id, "", active).child(
-        div()
-            .flex()
-            .items_center()
-            .gap_2()
-            .child(icon(which, color))
-            .child(
-                div()
-                    .min_w_0()
-                    .overflow_hidden()
-                    .text_ellipsis()
-                    .child(label.into()),
-            ),
-    )
+    nav_base(id, active)
+        .flex()
+        .items_center()
+        .gap_2()
+        .child(icon(which, color))
+        .child(
+            div()
+                .min_w_0()
+                .overflow_hidden()
+                .text_ellipsis()
+                .child(label.into()),
+        )
 }
 /// A checkbox-style toggle row: square / checked square icon and a label.
 fn check_item(id: impl Into<ElementId>, on: bool, label: impl Into<SharedString>) -> Stateful<Div> {

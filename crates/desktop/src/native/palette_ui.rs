@@ -614,7 +614,7 @@ impl LibraryView {
                     .border_1()
                     .border_color(rgb(tok().border))
                     .bg(rgb(tok().surface))
-                    .shadow(floating_shadow())
+                    .shadow(shadow_of(theme::Elevation::Floating))
                     .overflow_hidden()
                     .child(
                         div()
