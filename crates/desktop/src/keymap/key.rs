@@ -127,15 +127,36 @@ impl KeyStroke {
                 token.push_str(name);
             } else {
                 let produced = key_char.filter(|c| c.len() == 1)?;
-                token.push_str(produced);
+                token.push_str(printable_token(produced));
             }
         } else {
-            if shift {
-                token.push_str("Shift+");
-            }
             match named {
-                Some(name) => token.push_str(name),
-                None if key.len() == 1 => token.push_str(&key.to_ascii_lowercase()),
+                Some(name) => {
+                    if shift {
+                        token.push_str("Shift+");
+                    }
+                    token.push_str(name);
+                }
+                None if key.len() == 1 && key.as_bytes()[0].is_ascii_alphabetic() => {
+                    if shift {
+                        token.push_str("Shift+");
+                    }
+                    token.push_str(&key.to_ascii_lowercase());
+                }
+                // Non-letters never carry explicit Shift in the vocabulary: Shift is already part
+                // of the produced character (`Cmd+?`, not `Cmd+Shift+/`). If the platform still
+                // reports Shift with the unshifted key, use the produced character instead.
+                None if key.len() == 1 => {
+                    let produced = if shift {
+                        key_char.filter(|c| c.len() == 1 && c.as_bytes()[0].is_ascii_graphic())?
+                    } else {
+                        key
+                    };
+                    if produced.as_bytes()[0].is_ascii_alphabetic() {
+                        return None;
+                    }
+                    token.push_str(printable_token(produced));
+                }
                 None => return None,
             }
         }
@@ -148,6 +169,11 @@ impl KeyStroke {
     pub(super) fn is_shortcut(&self) -> bool {
         self.modifiers & (CMD | CTRL) != 0
     }
+}
+
+/// `+` separates modifiers, so the plus character itself is spelled `Plus`.
+fn printable_token(produced: &str) -> &str {
+    if produced == "+" { "Plus" } else { produced }
 }
 
 impl std::fmt::Display for KeyStroke {
