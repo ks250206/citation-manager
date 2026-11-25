@@ -252,8 +252,11 @@ def summarize(queries, warm, index, stats, oracle, gui):
         # Explicit complete scan of 1-2 character terms: every window/result-page call.
         'short_term_all_pages_call_p95_ms': p95(window_calls),
         'daemon_idle_rss_mib_after_warm_start': max(warm_rss) / 1024 if warm_rss else None,
+        # Sampled `ps` RSS, not rusage: Linux keeps the pre-exec maximum (the forked Python
+        # runner) in ru_maxrss, so rusage overstates papersd there.
         'daemon_peak_rss_mib_indexing': index['peak_rss_kib'] / 1024 if index.get('peak_rss_kib') else None,
-        'daemon_max_rss_mib_queries': queries['rusage']['max_rss_kib'] / 1024,
+        'daemon_peak_rss_mib_queries': (queries['peak_rss_kib_sampled'] / 1024
+                                        if queries.get('peak_rss_kib_sampled') else None),
         'gui_idle_rss_mib': gui.get('gui_idle_rss_mib') if gui else None,
         'total_idle_rss_mib_gui_plus_daemon': gui.get('total_idle_rss_mib') if gui else None,
         'pdf_view_rss_mib': gui.get('pdf_view_rss_mib') if gui else None,
@@ -378,6 +381,16 @@ def gui_measure(bin_dir, library, out, settle_s, link, label='gui'):
     return result
 
 
+def resummarize(directory):
+    """Recomputes the derived summary fields from the raw JSON kept in `directory`."""
+    load = lambda name: json.loads((directory / f'{name}.json').read_text())
+    summary = load('summary')
+    gui = load('gui') if (directory / 'gui.json').exists() else None
+    summary.update(summarize(load('queries'), load('warm'), load('index'), load('stats'), load('oracle'), gui))
+    (directory / 'summary.json').write_text(json.dumps(summary, indent=2, ensure_ascii=False) + '\n')
+    print(json.dumps(summary['measured'], indent=2))
+
+
 def gui_rerun(args):
     """Rebuilds only the GUI from the current source and repeats the GUI phases on the
     library of an earlier run, so render-cache settings can be compared on identical data."""
@@ -412,7 +425,10 @@ def main():
     parser.add_argument('--gui-settle', type=float, default=20.0)
     parser.add_argument('--reuse', help='GUI-only rerun on an earlier --out (e.g. another render cache build)')
     parser.add_argument('--label', default='gui', help='file prefix for a --reuse GUI rerun')
+    parser.add_argument('--resummarize', help='recompute summary.json targets/cases from raw JSON in a directory')
     args = parser.parse_args()
+    if args.resummarize:
+        return resummarize(Path(args.resummarize))
     if args.reuse:
         return gui_rerun(args)
     if args.small:

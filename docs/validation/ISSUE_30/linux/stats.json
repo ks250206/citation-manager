@@ -1,0 +1,56 @@
+{
+  "attachments": 1000,
+  "extraction_states": {
+    "complete": {
+      "attachments": 1000,
+      "pages": 20000,
+      "pages_with_text": 20000
+    }
+  },
+  "file_bytes": {
+    "attachments_dir": 38458344,
+    "backups_dir": 311296,
+    "library_sqlite": 402014208,
+    "library_sqlite_wal": 0
+  },
+  "fulltext_pages": 20000,
+  "fulltext_text_bytes": 46929456,
+  "index_bytes": {
+    "fulltext_pages": 82112512,
+    "search_documents": 92385280,
+    "search_documents_attachment": 1105920,
+    "search_documents_paper": 1605632,
+    "search_fts_trigram_config": 4096,
+    "search_fts_trigram_data": 143159296,
+    "search_fts_trigram_docsize": 552960,
+    "search_fts_trigram_idx": 376832,
+    "search_fts_words_config": 4096,
+    "search_fts_words_data": 46198784,
+    "search_fts_words_docsize": 573440,
+    "search_fts_words_idx": 229376,
+    "search_index_state": 4096,
+    "sqlite_autoindex_search_documents_1": 978944
+  },
+  "index_bytes_total": 369291264,
+  "integrity_check": "ok",
+  "jobs": [
+    {
+      "attempts": 1,
+      "created_at_ms": 1795603025136,
+      "error": "",
+      "kind": "fulltext.extract",
+      "state": "succeeded",
+      "updated_at_ms": 1795603051529
+    },
+    {
+      "attempts": 1,
+      "created_at_ms": 1795603051531,
+      "error": "",
+      "kind": "fulltext.extract",
+      "state": "succeeded",
+      "updated_at_ms": 1795603080428
+    }
+  ],
+  "papers": 10000,
+  "search_documents": 30000
+}

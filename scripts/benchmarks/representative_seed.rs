@@ -170,7 +170,7 @@ fn seed(library: &Path, pdf_dir: &Path, papers: usize, pdfs: usize) -> Result<Va
     if pdfs > papers {
         return Err("more PDFs than papers".into());
     }
-    let directory = LibraryDirectory::prepare(library.to_path_buf())?;
+    let directory = LibraryDirectory::prepare(library)?;
     let papers_report = seed_papers(&directory, papers)?;
     let mut db = LibraryDb::open(&directory)?;
     let start = Instant::now();
@@ -219,7 +219,7 @@ fn tree_size(path: &Path) -> u64 {
 }
 
 fn stats(library: &Path) -> Result<Value> {
-    let directory = LibraryDirectory::prepare(library.to_path_buf())?;
+    let directory = LibraryDirectory::prepare(library)?;
     let db_path = directory.database_path();
     let sizes = json!({
         "library_sqlite": file_size(db_path.clone()),

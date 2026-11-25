@@ -173,10 +173,9 @@ fn load_oracle(oracle: &Path, seed: &Path) -> Result<Oracle> {
 
 /// Every page hit of a request, following result pages and (for short terms with
 /// `AllPages`) every continuation window until the scan is complete.
-fn all_page_hits(
-    session: &mut Session,
-    base: &SearchRequest,
-) -> Result<(BTreeSet<(Uuid, u32)>, usize, usize, Value)> {
+/// (page hits, non-page hits, windows, final coverage + per-call timings).
+type PageHits = (BTreeSet<(Uuid, u32)>, usize, usize, Value);
+fn all_page_hits(session: &mut Session, base: &SearchRequest) -> Result<PageHits> {
     let mut request = base.clone();
     request.limit = 100;
     let mut found = BTreeSet::new();
@@ -204,7 +203,7 @@ fn all_page_hits(
                 None => break,
             }
         }
-        match coverage.as_ref().and_then(|c| c.continuation.clone()) {
+        match coverage.as_ref().and_then(|c| c.continuation) {
             Some(next) => request.cursor = Some(next),
             None => break,
         }

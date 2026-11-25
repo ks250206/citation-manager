@@ -114,6 +114,7 @@ fn mutated_frames_never_crash_papersd_authenticate_or_write() {
     let (papers, grant_count) = (count(&mut owner), grants(&mut owner));
     let hello = env.connector_with("mcp", reader).hello().unwrap();
     let hello_json = serde_json::to_vec(&ClientFrame::Hello(hello.clone())).unwrap();
+    let secret = hello.credential.0.as_bytes().to_vec();
     // Writes and admin operations a read-only grant must never perform.
     let writes: Vec<Vec<u8>> = [
         Command::Library(LibraryRequest::Create(Box::new(NewPaper::titled("ATTACK")))),
@@ -162,7 +163,14 @@ fn mutated_frames_never_crash_papersd_authenticate_or_write() {
             continue;
         }
         match read_frame::<_, ServerFrame>(&mut stream, 1 << 20) {
-            Ok(Some(ServerFrame::Welcome(_))) => outcomes[1] += 1,
+            Ok(Some(ServerFrame::Welcome(_))) => {
+                // A mutated Hello is only ever accepted with the credential intact.
+                assert!(
+                    first.windows(secret.len()).any(|w| w == secret),
+                    "seed {seed}: authenticated without the exact credential"
+                );
+                outcomes[1] += 1
+            }
             _ => {
                 outcomes[0] += 1;
                 continue;

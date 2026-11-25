@@ -124,7 +124,7 @@ fn wait_exit(child: &mut Child) -> i32 {
 /// Opens and closes the library once so SQLite checkpoints the WAL into the main file
 /// (the last connection's close), making the database file the complete state.
 fn checkpoint(library: &Path) -> LibraryDirectory {
-    let directory = LibraryDirectory::prepare(library.to_path_buf()).unwrap();
+    let directory = LibraryDirectory::prepare(library).unwrap();
     drop(LibraryDb::open(&directory).unwrap());
     let wal = library.join("library.sqlite-wal");
     assert!(

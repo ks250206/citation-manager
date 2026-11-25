@@ -54,7 +54,7 @@ class Summary(unittest.TestCase):
             for sample in range(3):
                 rows.append(dict(case=case, sample=sample, elapsed_ms=ms + sample, returned=1,
                                  detail={} if complete is None else dict(complete=complete)))
-        queries = dict(rows=rows, recall=[], rusage=dict(max_rss_kib=2048))
+        queries = dict(rows=rows, recall=[], rusage=dict(max_rss_kib=2048), peak_rss_kib_sampled=3072)
         warm = dict(runs=[dict(first_page_ms=900.0, rss_kib_after_first_page=1024),
                           dict(first_page_ms=20.0, rss_kib_after_first_page=1024),
                           dict(first_page_ms=30.0, rss_kib_after_first_page=2048)])
@@ -74,6 +74,7 @@ class Summary(unittest.TestCase):
         self.assertEqual(measured['fulltext_search_p95_ms'], 22.0)
         self.assertEqual(measured['fulltext_search_p95_ms_all_terms_default_scope'], 22.0)
         self.assertEqual(measured['daemon_idle_rss_mib_after_warm_start'], 2.0)
+        self.assertEqual(measured['daemon_peak_rss_mib_queries'], 3.0)
         gui = self.fake(dict(gui_idle_rss_mib=150.0, total_idle_rss_mib=170.0, pdf_view_rss_mib=400.0))
         status = {r['metric']: r['status'] for r in gui['targets']}
         self.assertEqual((status['gui_idle_rss_mib'], status['pdf_view_rss_mib']), ('met', 'missed'))
