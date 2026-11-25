@@ -60,7 +60,7 @@ fn rotated_bitmap_matches_effective_viewport_for_every_rotation() {
             }
         }
         for turns in 0..4u8 {
-            let (rw, rh, rotated) = rotate_rgba(w, h, &rgba, turns);
+            let (rw, rh, rotated) = rotate_rgba(w, h, rgba.clone(), turns);
             let effective = viewport(crop, rotate(page_rotation, turns), 1.0).unwrap();
             assert_eq!(effective.size(), (rw as f32, rh as f32));
             for y in 0..rh {
@@ -80,7 +80,7 @@ fn rotated_bitmap_matches_effective_viewport_for_every_rotation() {
         }
     }
     // Malformed buffers are returned unchanged rather than panicking.
-    assert_eq!(rotate_rgba(2, 2, &[1, 2, 3], 1), (2, 2, vec![1, 2, 3]));
+    assert_eq!(rotate_rgba(2, 2, vec![1, 2, 3], 1), (2, 2, vec![1, 2, 3]));
 }
 
 #[test]
@@ -344,4 +344,122 @@ fn default_render_cache_budget_is_within_the_design_range() {
     }
     assert_eq!(cache.len(), CACHE_BUDGET_BYTES / page);
     assert_eq!(evicted, 20 - cache.len());
+}
+
+/// A page image as the GUI sees it: an atlas identity and, until released, its pixels.
+#[derive(Debug, Clone, PartialEq)]
+struct FakeImage {
+    id: u32,
+    pixels: Option<Vec<u8>>,
+}
+/// Stand-in for the GPU texture atlas: uploads on the first draw of an id, like
+/// `Window::paint_image`, and panics if it ever has to upload a released (pixel-less) image.
+#[derive(Default)]
+struct FakeAtlas(HashMap<u32, Vec<u8>>);
+impl FakeAtlas {
+    fn draw(&mut self, page: &PageImage<FakeImage>) -> Vec<u8> {
+        let image = page.image();
+        let texture = self.0.entry(image.id).or_insert_with(|| {
+            image
+                .pixels
+                .clone()
+                .expect("a released page image must never be uploaded")
+        });
+        page.upload_flag().set(true);
+        texture.clone()
+    }
+    fn drop_image(&mut self, image: FakeImage) {
+        self.0.remove(&image.id);
+    }
+}
+fn texture_only(image: &FakeImage) -> FakeImage {
+    FakeImage {
+        id: image.id,
+        pixels: None,
+    }
+}
+
+#[test]
+fn drawn_pages_release_their_cpu_pixels_and_redisplay_from_the_texture() {
+    let doc = attachment(9);
+    let key = |page| RenderKey::new(doc, page, 1.0);
+    let image = |id: u32| FakeImage {
+        id,
+        pixels: Some(vec![id as u8; 40]),
+    };
+    let mut atlas = FakeAtlas::default();
+    let mut cache: RenderCache<PageImage<FakeImage>> = RenderCache::new(120, 10);
+    for page in 0..2 {
+        assert!(
+            cache
+                .insert(key(page), PageImage::new(image(page)), 40)
+                .is_empty()
+        );
+    }
+    // Prefetched pages that were never drawn keep their pixels: nothing uploaded them yet.
+    assert_eq!(cache.release_uploaded(texture_only), 0);
+    assert_eq!(cache.pages_holding_pixels(), 2);
+
+    // First draw uploads; the next release frees the CPU copy but keeps the identity.
+    assert_eq!(atlas.draw(cache.peek(&key(0)).unwrap()), vec![0; 40]);
+    assert_eq!(cache.release_uploaded(texture_only), 1);
+    let released = cache.peek(&key(0)).unwrap();
+    assert!(!released.holds_pixels());
+    assert_eq!(released.image().pixels, None);
+    assert_eq!(released.image().id, 0);
+    assert_eq!(cache.release_uploaded(texture_only), 0, "released once");
+    assert_eq!(cache.bytes(), 80, "the budget still counts the texture");
+
+    // Re-display (scroll back, repaint, zoom back to this bucket): still cached, so it is
+    // not re-requested, and it draws the original pixels from the texture.
+    assert!(cache.contains(&key(0)));
+    for _ in 0..3 {
+        assert_eq!(atlas.draw(cache.get(&key(0)).unwrap()), vec![0; 40]);
+    }
+
+    // Eviction hands back the stand-in, whose identity releases the texture; the page is
+    // then rendered again (not cached) and uploads its new pixels on the next draw.
+    atlas.draw(cache.peek(&key(1)).unwrap());
+    cache.get(&key(1));
+    assert!(
+        cache
+            .insert(key(2), PageImage::new(image(2)), 40)
+            .is_empty()
+    );
+    let evicted = cache.insert(key(3), PageImage::new(image(3)), 40);
+    assert_eq!(evicted.len(), 1);
+    let evicted = evicted.into_iter().next().unwrap().into_image();
+    assert_eq!(evicted, texture_only(&image(0)));
+    atlas.drop_image(evicted);
+    assert!(!atlas.0.contains_key(&0));
+    assert!(
+        !cache.contains(&key(0)),
+        "an evicted page must be rendered again"
+    );
+    let fresh = FakeImage {
+        id: 10,
+        pixels: Some(vec![7; 40]),
+    };
+    for old in cache.insert(key(0), PageImage::new(fresh), 40) {
+        atlas.drop_image(old.into_image());
+    }
+    assert_eq!(atlas.draw(cache.peek(&key(0)).unwrap()), vec![7; 40]);
+
+    // Rotation / another document drain everything, released or not: no texture outlives
+    // its cache entry.
+    cache.release_uploaded(texture_only);
+    for old in cache.drain() {
+        atlas.drop_image(old.into_image());
+    }
+    assert!(atlas.0.is_empty());
+    assert_eq!(cache.pages_holding_pixels(), 0);
+}
+
+#[test]
+fn unrotated_bitmaps_are_not_copied() {
+    let rgba = vec![9u8; 2 * 3 * 4];
+    let before = rgba.as_ptr();
+    let (w, h, out) = rotate_rgba(2, 3, rgba, 0);
+    assert_eq!((w, h), (2, 3));
+    assert_eq!(out.as_ptr(), before);
 }

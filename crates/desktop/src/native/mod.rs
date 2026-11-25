@@ -191,6 +191,9 @@ struct LibraryView {
     palette_query: Entity<TextInput>,
     palette_scroll: ScrollHandle,
     viewer: Option<pdf_viewer_ui::Viewer>,
+    /// Page images that left the viewer cache; their GPU textures are released from the
+    /// message pump (outside any window update, so the current window's atlas is reached).
+    retired_images: Vec<Arc<RenderImage>>,
     ann: annotations_ui::AnnotationState,
     find_search: search_ui::SearchState,
     find: search_ui::FindState,
@@ -289,6 +292,7 @@ impl LibraryView {
             palette_query: cx.new(|cx| TextInput::new("Type a command…", cx)),
             palette_scroll: ScrollHandle::new(),
             viewer: None,
+            retired_images: Vec::new(),
             ann: annotations_ui::AnnotationState::new(cx),
             find_search: search_ui::SearchState::new(),
             find: search_ui::FindState::new(cx),
@@ -391,6 +395,7 @@ impl LibraryView {
                         while let Ok(message) = view.receiver.try_recv() {
                             view.receive(message, cx);
                         }
+                        view.release_page_memory(cx);
                     })
                     .is_err()
                 {

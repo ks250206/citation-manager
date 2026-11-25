@@ -204,7 +204,7 @@ def wait_rusage(process, timeout):
     raise ValueError('papersd did not exit in time')
 
 
-def summarize(queries, warm, index, stats, oracle, gui):
+def summarize(queries, warm, index, stats, oracle, gui, renders=None):
     groups = {}
     for row in queries['rows']:
         groups.setdefault(row['case'], []).append(row)
@@ -260,6 +260,12 @@ def summarize(queries, warm, index, stats, oracle, gui):
         'gui_idle_rss_mib': gui.get('gui_idle_rss_mib') if gui else None,
         'total_idle_rss_mib_gui_plus_daemon': gui.get('total_idle_rss_mib') if gui else None,
         'pdf_view_rss_mib': gui.get('pdf_view_rss_mib') if gui else None,
+        # #85: daemon side of the PDF viewer without a GUI (also on macOS runners): papersd
+        # RSS 2 s after rendering the first PDF's pages over IPC.
+        'daemon_rss_mib_after_renders': (renders['rss_kib_settled'] / 1024
+                                         if renders and renders.get('rss_kib_settled') else None),
+        'daemon_peak_rss_mib_renders': (renders['peak_rss_kib_sampled'] / 1024
+                                        if renders and renders.get('peak_rss_kib_sampled') else None),
     }
     comparison = []
     for key, (label, limit) in TARGETS.items():
@@ -386,7 +392,9 @@ def resummarize(directory):
     load = lambda name: json.loads((directory / f'{name}.json').read_text())
     summary = load('summary')
     gui = load('gui') if (directory / 'gui.json').exists() else None
-    summary.update(summarize(load('queries'), load('warm'), load('index'), load('stats'), load('oracle'), gui))
+    renders = load('renders') if (directory / 'renders.json').exists() else None
+    summary.update(summarize(load('queries'), load('warm'), load('index'), load('stats'), load('oracle'), gui,
+                             renders))
     (directory / 'summary.json').write_text(json.dumps(summary, indent=2, ensure_ascii=False) + '\n')
     print(json.dumps(summary['measured'], indent=2))
 
@@ -533,6 +541,22 @@ def main():
         (out / 'queries.json').write_text(json.dumps(queries, indent=2) + '\n')
         (out / 'query-samples.json').write_text(json.dumps(sampler.samples) + '\n')
 
+        print('page renders over IPC (daemon side of the PDF viewer)', flush=True)
+        log = (out / 'papersd-renders.log').open('w')
+        daemon = spawn_papersd(bin_dir, library, runtime, 1500, log)
+        with Sampler(lambda: dict(papersd=daemon.pid), 0.25) as sampler:
+            with (out / 'renders.json').open('w') as fh:
+                # 2.2 px/pt is the GUI's fit-width render zoom on the 1400x900 Xvfb screen;
+                # 3 connections match the viewer's 3 renders in flight.
+                run([str(ipc), 'renders', str(library), str(runtime), str(out / 'seed.json'),
+                     str(args.pages), '2.2', '3'], stdout=fh)
+            code, usage = wait_rusage(daemon, 120)
+        log.close()
+        renders = json.loads((out / 'renders.json').read_text())
+        renders.update(rusage=usage, peak_rss_kib_sampled=sampler.peak('papersd'),
+                       samples=sampler.samples)
+        (out / 'renders.json').write_text(json.dumps(renders, indent=2) + '\n')
+
         gui_result = None
         if args.gui:
             print('GUI idle RSS (Xvfb)', flush=True)
@@ -544,7 +568,7 @@ def main():
     finally:
         shutil.rmtree(runtime, ignore_errors=True)
 
-    summary = summarize(queries, warm, index, stats, oracle, gui_result)
+    summary = summarize(queries, warm, index, stats, oracle, gui_result, renders)
     summary.update(parameters=params, timings=timings, seed=dict(
         papers=seed['papers'], pdfs=seed['pdfs'], pdf_bytes=seed['pdf_bytes'], attach_ms=seed['attach_ms']),
         index=dict(wall_s_including_idle_exit=index['wall_s_including_idle_exit'],
@@ -561,6 +585,7 @@ def main():
         queries_rusage=queries['rusage'], queries_rss_kib_before=queries['rss_kib_before'],
         queries_rss_kib_after=queries['rss_kib_after'],
         gui={k: v for k, v in (gui_result or {}).items() if k != 'samples'},
+        renders={k: v for k, v in renders.items() if k not in ('samples', 'rows')},
         environment_file='environment.json')
     (out / 'summary.json').write_text(json.dumps(summary, indent=2, ensure_ascii=False) + '\n')
     for row in summary['targets']:
