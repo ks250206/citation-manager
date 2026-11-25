@@ -282,6 +282,8 @@ def main():
     parser.add_argument('--firefox-manifest-dir', type=Path,
                         help='register the Firefox manifest here instead of under the temp HOME')
     parser.add_argument('--report', type=Path, help='also write the checks as JSON here')
+    parser.add_argument('--report-timeout', type=float, default=120,
+                        help='seconds to wait for the extension to report (default 120)')
     args = parser.parse_args()
     bin_dir = args.bin_dir.resolve()
     # macOS: $TMPDIR (/var/folders/...) is too long for the daemon socket (104-byte sun_path).
@@ -330,7 +332,7 @@ def main():
         started = time.monotonic()
         browser = launch_browser(tmp, args.browser, args.executable.resolve(), ext, env, args.firefox_driver)
         log(f'launched {args.browser} pid {browser.pid}')
-        got = Driver.event.wait(120)
+        got = Driver.event.wait(args.report_timeout)
         checks['extension_reported'] = got
         if not got:
             for name in ('browser.log', 'geckodriver.log'):

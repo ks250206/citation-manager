@@ -31,6 +31,7 @@ build_app = load('build_app', 'scripts/package/macos/build_app.py')
 codesign = load('codesign', 'scripts/package/macos/codesign.py')
 smoke = load('layout_smoke', 'scripts/package/layout-smoke/smoke.py')
 browser_smoke = load('browser_smoke', 'scripts/native-host/browser_smoke.py')
+chrome_for_testing = load('chrome_for_testing', 'scripts/package/layout-smoke/chrome_for_testing.py')
 
 
 def fake_inputs(root, dylib=b'pdfium'):
@@ -198,6 +199,14 @@ class BrowserSmokeMacos(unittest.TestCase):
         self.assertTrue(browser_smoke.command_runs(exe, exe))
         self.assertFalse(browser_smoke.command_runs(exe + '-other --x', exe))
         self.assertFalse(browser_smoke.command_runs('/tmp/Install', exe))
+
+    def test_chrome_for_testing_picks_the_stable_mac_arm64_build(self):
+        index = {'channels': {'Stable': {'version': '158.0.1.2', 'downloads': {'chrome': [
+            {'platform': 'mac-x64', 'url': 'https://x/x64.zip'},
+            {'platform': 'mac-arm64', 'url': 'https://x/arm64.zip'}]}}}}
+        self.assertEqual(chrome_for_testing.download_url(index), ('158.0.1.2', 'https://x/arm64.zip'))
+        with self.assertRaises(ValueError):
+            chrome_for_testing.download_url(index, 'linux64')
 
     def test_branded_chrome_gets_the_load_extension_escape_hatch_on_macos_only(self):
         mac = browser_smoke.chromium_arguments(Path('/p'), Path('/e'), True)

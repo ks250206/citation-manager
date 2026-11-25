@@ -99,11 +99,24 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           app="$(cat "$RUNNER_TEMP/evidence/unsigned/moved-app-path.txt")"
-          chrome="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-          "$chrome" --version
-          python3 scripts/native-host/browser_smoke.py --bin-dir target/release --app "$app" \
-            --browser chromium --executable "$chrome" \
-            --report "$RUNNER_TEMP/evidence/browser-chrome.json" 2>&1 | tee "$RUNNER_TEMP/evidence/browser-chrome.log"
+          run() {
+            python3 scripts/native-host/browser_smoke.py --bin-dir target/release --app "$app" \
+              --browser chromium "$@"
+          }
+          # 1) the preinstalled branded Chrome; it ignores --load-extension since Chrome 137,
+          #    so the unpacked probe extension may never start (recorded, not a pass);
+          # 2) Chrome for Testing (same Chromium, still loads unpacked extensions).
+          branded="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+          "$branded" --version
+          if run --executable "$branded" --report-timeout 60 \
+              --report "$RUNNER_TEMP/evidence/browser-chrome-branded.json" \
+              2>&1 | tee "$RUNNER_TEMP/evidence/browser-chrome-branded.log"; then
+            exit 0
+          fi
+          cft="$(python3 scripts/package/layout-smoke/chrome_for_testing.py "$RUNNER_TEMP/cft")"
+          "$cft" --version
+          run --executable "$cft" --report "$RUNNER_TEMP/evidence/browser-chrome.json" \
+            2>&1 | tee "$RUNNER_TEMP/evidence/browser-chrome.log"
       - name: Firefox Native Messaging probe (release Firefox, temporary add-on via geckodriver)
         if: ${{ !cancelled() }}
         run: |
