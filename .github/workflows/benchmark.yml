@@ -1,5 +1,5 @@
 name: Representative benchmark
-# #30: manual only. Never runs on push/pull_request (it builds release binaries, generates
+# #30/#86: manual only. Never runs on push/pull_request (it builds release binaries, generates
 # 1,000 PDFs / 20,000 pages, indexes them with the pinned PDFium and measures over IPC).
 # GitHub-hosted runners are NOT the DESIGN §16.1 target (Apple Silicon, 16 GB RAM); the
 # runner's real hardware is recorded in the uploaded artifact.
@@ -18,6 +18,11 @@ on:
       samples:
         description: Timed repeats per query case
         default: '21'
+      suite:
+        description: Which measurement to run (#30 representative IPC/RSS, #86 GUI frame timing, or both)
+        type: choice
+        options: [all, representative, frame-timing]
+        default: all
 permissions:
   contents: read
 concurrency:
@@ -25,6 +30,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   macos-arm64:
+    if: ${{ inputs.suite != 'frame-timing' }}
     runs-on: macos-15
     timeout-minutes: 180
     steps:
@@ -68,4 +74,95 @@ jobs:
             target/representative-benchmark/runner-hardware.txt
             target/representative-benchmark/*/*.json
             target/representative-benchmark/*/*.log
+          if-no-files-found: error
+  # #86: frame times / spans of the real release GUI driven by scripted input. Xvfb + lavapipe
+  # (software Vulkan) on a shared VM: NOT representative of real GPUs or displays; the runner's
+  # hardware and the Vulkan driver are recorded in the artifact.
+  frame-timing-linux:
+    if: ${{ inputs.suite != 'representative' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.14'
+      - name: Exact toolchain, GPUI Linux libraries, X server, input tools, software Vulkan
+        run: |
+          rustup toolchain install 1.99.1 --profile minimal
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-dev libx11-xcb-dev \
+            libxcb1-dev libwayland-dev libfontconfig-dev libfreetype-dev libvulkan-dev \
+            xvfb xdotool xclip imagemagick mesa-vulkan-drivers fonts-wqy-zenhei
+      - name: Runner hardware (shared VM, no GPU)
+        run: |
+          mkdir -p target/frame-timing-benchmark
+          { lscpu; free -b; uname -a; cat /etc/os-release; dpkg -l mesa-vulkan-drivers | tail -1; } \
+            | tee target/frame-timing-benchmark/runner-hardware.txt
+      - name: Frame timing (release GUI on Xvfb, xdotool input)
+        env:
+          PAPERS: ${{ inputs.papers || '10000' }}
+          PDFS: ${{ inputs.pdfs || '1000' }}
+          PAGES: ${{ inputs.pages || '20' }}
+        run: |
+          python3 scripts/benchmarks/frame_timing.py --xvfb --out linux-ci \
+            --papers "$PAPERS" --pdfs "$PDFS" --pages "$PAGES"
+      - name: Keep results, not the generated library
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: frame-timing-linux
+          path: |
+            target/frame-timing-benchmark/runner-hardware.txt
+            target/frame-timing-benchmark/*/*.json
+            target/frame-timing-benchmark/*/*.log
+            target/frame-timing-benchmark/*/*.png
+          if-no-files-found: error
+  # macOS VM runner: has a window server and Metal (paravirtualized GPU). Input is posted as
+  # Quartz events; without the Accessibility permission they are dropped and the affected
+  # phases are reported as not observed.
+  frame-timing-macos:
+    if: ${{ inputs.suite != 'representative' }}
+    runs-on: macos-15
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.14'
+      - name: Exact Rust toolchain and Metal compiler
+        run: |
+          rustup toolchain install 1.99.1 --profile minimal
+          if ! xcrun --sdk macosx metal -v; then
+            xcodebuild -downloadComponent MetalToolchain
+          fi
+      - name: Runner hardware (not the 16 GB target machine)
+        run: |
+          mkdir -p target/frame-timing-benchmark
+          {
+            echo "hw.model=$(sysctl -n hw.model)"
+            echo "machdep.cpu.brand_string=$(sysctl -n machdep.cpu.brand_string)"
+            echo "hw.memsize=$(sysctl -n hw.memsize)"
+            echo "kern.hv_vmm_present=$(sysctl -n kern.hv_vmm_present)"
+            sw_vers
+            system_profiler SPDisplaysDataType
+          } | tee target/frame-timing-benchmark/runner-hardware.txt
+      - name: Frame timing (release GUI, Quartz events)
+        env:
+          PAPERS: ${{ inputs.papers || '10000' }}
+          PDFS: ${{ inputs.pdfs || '1000' }}
+          PAGES: ${{ inputs.pages || '20' }}
+        run: |
+          python3 scripts/benchmarks/frame_timing.py --out macos-ci \
+            --papers "$PAPERS" --pdfs "$PDFS" --pages "$PAGES"
+      - name: Keep results, not the generated library
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: frame-timing-macos
+          path: |
+            target/frame-timing-benchmark/runner-hardware.txt
+            target/frame-timing-benchmark/*/*.json
+            target/frame-timing-benchmark/*/*.log
+            target/frame-timing-benchmark/*/*.png
           if-no-files-found: error

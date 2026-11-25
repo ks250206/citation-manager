@@ -1,0 +1,3 @@
+papers-mcp info: serving MCP on stdio for library <work>/home/.local/share/citation-manager/library (read-only unless the grant allows writes; credential <work>/home/.local/share/citation-manager/library/daemon/mcp.credential)
+papers-mcp info: create_collection failed: permission_denied
+papers-mcp info: stdin closed; exiting (Closed)

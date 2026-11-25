@@ -5,6 +5,8 @@ Layout (what `cm_pdf::worker::bundled_library` expects):
   <prefix>/bin/citation-manager
   <prefix>/bin/papersd                            on-demand library daemon (#25), started by the GUI
   <prefix>/bin/papers-native-host                 browser Native Messaging host (#23), sibling of papersd
+  <prefix>/bin/papers, <prefix>/bin/papers-mcp    CLI (#28) and MCP stdio server (#29), when built;
+                                                  both start the sibling papersd (never via PATH)
   <prefix>/lib/citation-manager/libpdfium.so      pinned chromium/8125, checksum-verified
   <prefix>/share/doc/citation-manager/pdfium-licenses/
   <prefix>/share/applications/citation-manager.desktop
@@ -12,7 +14,8 @@ Layout (what `cm_pdf::worker::bundled_library` expects):
 
 The library and UI settings paths are always explicit; nothing connects to a default
 library automatically. Without --skip-pdfium the pinned PDFium is downloaded once
-(network required) and verified before it is installed.
+(network required) and verified before it is installed; --pdfium-dir keeps the verified
+archive in that directory, so a reinstall from it needs no network.
 
 Browser registration (#23): the installed host writes per-user Chrome/Chromium/Firefox
 manifests whose `path` is the absolute installed executable (never the build tree) via
@@ -54,6 +57,9 @@ def desktop_entry(executable, library, settings):
 
 
 NATIVE_HOST = 'papers-native-host'
+# Optional siblings of papersd: each starts `<own dir>/papersd`, so they must be installed
+# next to it (a copy left in the build tree would start the build tree's daemon).
+SIBLINGS = ('papersd', NATIVE_HOST, 'papers', 'papers-mcp')
 EXTENSION_IDS = ROOT / 'browser-extension/native-manifests/extension-ids.json'
 
 
@@ -112,7 +118,7 @@ def install(prefix, executable, library, settings, pdfium_dir=None):
     shutil.copy2(executable, target)
     target.chmod(0o755)
     # The GUI and the browser host start their sibling papersd by absolute path (#25/#23).
-    for name in ('papersd', NATIVE_HOST):
+    for name in SIBLINGS:
         sibling = executable.with_name(name)
         if sibling.is_file():
             shutil.copy2(sibling, bin_dir / name)
@@ -151,6 +157,9 @@ def main():
                         help='Issue the limited browser-capture grant now (starts papersd, creates the library).')
     parser.add_argument('--browser', action='append', default=[],
                         help='chrome, chromium or firefox[=MANIFEST_DIR]; default: browsers with a profile.')
+    parser.add_argument('--pdfium-dir', type=Path,
+                        help='Keep (or reuse) the checksum-verified PDFium archive here instead of a '
+                             'temporary directory; a cached archive is verified again before use.')
     args = parser.parse_args()
     if sys.platform != 'linux':
         parser.error('this installer is for Linux; macOS uses the .app layout')
@@ -163,7 +172,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='cm-pdfium-') as scratch:
         pdfium_dir = None
         if not args.skip_pdfium:
-            pdfium_dir = Path(scratch)
+            pdfium_dir = args.pdfium_dir.resolve() if args.pdfium_dir else Path(scratch)
             pdfium.fetch(pdfium_dir, 'linux-x64')
         target = install(args.prefix.resolve(), args.executable, args.library, args.settings, pdfium_dir)
     print(f'Installed {target}')

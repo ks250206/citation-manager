@@ -1,0 +1,6 @@
+$ <work>/prefix/bin/papers search Capturing
+exit 0 (0.0s)
+--- stdout
+{"command":"search","data":{"coverage":{"complete":true,"continuation":null,"fts_truncated":false,"scan":"NotNeeded","scanned_documents":0,"short_terms":[],"timed_out":false,"unresolved":[],"unsearched":[]},"hits":[{"annotation_id":null,"attachment_id":null,"deleted":false,"doi":"10.9999/e2e24.capture","highlights":[[0,9]],"matched_fields":["title","identifiers"],"page_index":null,"page_label":null,"page_number":null,"paper_id":"01a212b3-1038-7125-8b35-fc5962e77b4a","score":3.817782994204377,"snippet":"Capturing Papers With the Desktop App Closed","snippet_truncated":false,"source":"bibliographic","title":"Capturing Papers With the Desktop App Closed","uri":null}],"next_cursor":null,"query":"Capturing","total_hits":1},"ok":true,"schema":"papers.v1","warnings":[]}
+
+--- stderr

@@ -1,0 +1,6 @@
+$ <work>/prefix/bin/papers-mcp revoke --library <work>/home/.local/share/citation-manager/library
+exit 0 (0.0s)
+--- stdout
+{"revoked":"01a212b4-983d-764b-8181-94ba6233a704"}
+
+--- stderr

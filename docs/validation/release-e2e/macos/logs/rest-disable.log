@@ -1,0 +1,6 @@
+$ <work>/Applications/Citation Manager.app/Contents/MacOS/papersd api set --library <work>/home/.local/share/citation-manager/library --disable
+exit 0 (0.2s)
+--- stdout
+enabled=false bind=127.0.0.1 port=49285 export_dirs=0 secret_store=Keychain listener=Listening
+
+--- stderr

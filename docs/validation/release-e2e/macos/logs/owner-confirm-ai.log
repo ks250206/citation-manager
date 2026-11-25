@@ -1,0 +1,6 @@
+$ <repo>/target/release/examples/release_e2e_owner --library <work>/home/.local/share/citation-manager/library --runtime-dir <runtime>/citation-manager --papersd <work>/Applications/Citation Manager.app/Contents/MacOS/papersd confirm-ai --paper 01a212bc-a452-75a4-81d9-ee5a3097c64b
+exit 0 (0.1s)
+--- stdout
+{"annotations":2,"confirmed":["01a212bd-d404-77b8-a14b-bf69f7dcd45d","01a212bd-d5f7-71eb-94c4-30f2e5d0b7f2"],"ok":true}
+
+--- stderr

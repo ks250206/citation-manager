@@ -15,6 +15,7 @@ macro_rules! primary {
 mod annotations_ui;
 mod api_ui;
 mod details_ui;
+mod frame_probe;
 mod import_ui;
 mod library_ui;
 mod palette_ui;
@@ -1159,6 +1160,12 @@ impl LibraryView {
 }
 impl Render for LibraryView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let timing = crate::frame_timing::enabled();
+        if timing {
+            crate::frame_timing::frame_start();
+            let offset = self.rows.0.borrow().base_handle.offset().y;
+            crate::frame_timing::motion(crate::frame_timing::Span::ListScroll, offset.into());
+        }
         // Switching screen/tab unmounts whatever field had focus; with no focused
         // descendant no "Library" binding (Esc, shortcuts) would fire. Hand focus
         // to the table on Library, else to the root. Find opts out by updating
@@ -1234,10 +1241,13 @@ impl Render for LibraryView {
             .text_size(px(13.))
             .child(workbench)
             .when(self.palette_open, |el| el.child(self.palette_overlay(cx)))
+            .when(timing, |el| el.child(frame_probe::end_marker()))
     }
 }
 pub fn run(client: Arc<dyn LibraryClient>) {
+    crate::frame_timing::init_from_env();
     gpui_platform::application().run(move |cx: &mut App| {
+        frame_probe::flush_on_quit(cx);
         cx.bind_keys(text_input::key_bindings());
         cx.bind_keys(key_bindings());
         cx.on_action(|_: &Quit, cx| cx.quit());

@@ -1,0 +1,6 @@
+$ <work>/Applications/Citation Manager.app/Contents/MacOS/papersd api set --library <work>/home/.local/share/citation-manager/library --enable --port 49285
+exit 0 (0.0s)
+--- stdout
+enabled=true bind=127.0.0.1 port=49285 export_dirs=0 secret_store=Keychain listener=Stopped
+
+--- stderr

@@ -44,7 +44,7 @@ NO_IDENTITY = 'UNVERIFIED: no Developer ID'
 NO_NOTARY = 'UNVERIFIED: no notary credentials'
 NOT_RUN = 'not run'
 EXIT_UNVERIFIED = 3
-# Notarization ran but Apple did not accept it: the release must not be published.
+# Notarization or the final Gatekeeper assessment rejected the build: never publish it.
 EXIT_NOT_NOTARIZED = 4
 
 
@@ -170,6 +170,10 @@ def sign_app(app, dmg, env, identity, run=None):
                                      'context:primary-signature', '--verbose=2', str(dmg)],
                                     capture_output=True, text=True)
         status['gatekeeper'] = (gatekeeper.stdout + gatekeeper.stderr).strip()
+        if gatekeeper.returncode != 0:
+            # spctl exits nonzero when the assessment rejects the image: never publish it.
+            status['release'] = f'FAILED: Gatekeeper assessment (exit {gatekeeper.returncode})'
+            raise NotarizationRejected(status)
     return status
 
 

@@ -1,0 +1,8 @@
+$ <work>/Applications/Citation Manager.app/Contents/MacOS/papersd token issue --library <work>/home/.local/share/citation-manager/library --label release e2e --kind api --allow-non-tty --scope papers:read --scope files:read --scope annotations:read --scope annotations:write --scope papers:write
+exit 0 (20.2s)
+--- stdout
+<token>
+
+--- stderr
+Issued api token 01a212bd-34c8-7771-8bca-dd5509d6a983 "release e2e" scopes [papers:read papers:write files:read annotations:read annotations:write] expires in 30 days.
+Shown once. Stored in: private 0600 file outside the library (weaker fallback) (account 6fdd96f677c9cc8e:01a212bd-34c8-7771-8bca-dd5509d6a983).

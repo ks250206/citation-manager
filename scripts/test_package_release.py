@@ -213,6 +213,27 @@ class ReleaseSign(unittest.TestCase):
                 self.assertEqual(status['dmg'], 'not run')
         self.assertEqual(release_sign.EXIT_NOT_NOTARIZED, 4)
 
+    def test_rejected_gatekeeper_assessment_fails_the_release(self):
+        identity = 'Developer ID Application: A B (TEAM123456)'
+
+        def run(command):
+            if command[:2] == ['xcrun', 'notarytool']:
+                return mock.Mock(stdout=json.dumps({'status': 'Accepted', 'id': 'sub-1'}), stderr='')
+            return mock.Mock(stdout='', stderr='TeamIdentifier=TEAM123456')
+
+        rejected = mock.Mock(returncode=3, stdout='', stderr='/o/x.dmg: rejected')
+        with mock.patch.object(release_sign, 'Runner', return_value=run), \
+                mock.patch.object(release_sign.codesign, 'plan', return_value=[]), \
+                mock.patch.object(release_sign.codesign, 'verify_command', return_value=['true']), \
+                mock.patch.object(release_sign.create_dmg, 'build'), \
+                mock.patch.object(release_sign.subprocess, 'run', return_value=rejected):
+            with self.assertRaises(release_sign.NotarizationRejected) as raised:
+                release_sign.sign_app(Path('/o/A.app'), Path('/o/x.dmg'),
+                                      {'CM_NOTARY_KEYCHAIN_PROFILE': 'cm'}, identity)
+        status = raised.exception.status
+        self.assertEqual(status['release'], 'FAILED: Gatekeeper assessment (exit 3)')
+        self.assertIn('rejected', status['gatekeeper'])
+
     def test_workflow_never_prints_or_traces_secrets(self):
         workflow = (ROOT / '.github/workflows/package-macos.yml').read_text()
         self.assertNotRegex(workflow, r'-----BEGIN|MII[A-Za-z0-9+/]{40}')

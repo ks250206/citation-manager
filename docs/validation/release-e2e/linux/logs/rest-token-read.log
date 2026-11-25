@@ -1,0 +1,8 @@
+$ <work>/prefix/bin/papersd token issue --library <work>/home/.local/share/citation-manager/library --label read only --kind api --allow-non-tty --scope papers:read
+exit 0 (0.0s)
+--- stdout
+<token>
+
+--- stderr
+Issued api token 01a212b4-975f-7402-a516-16763399cc66 "read only" scopes [papers:read] expires in 90 days.
+Shown once. Stored in: private 0600 file outside the library (weaker fallback) (account f99ef58dd052c5e2:01a212b4-975f-7402-a516-16763399cc66).

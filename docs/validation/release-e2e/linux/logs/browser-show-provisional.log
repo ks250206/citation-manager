@@ -1,0 +1,6 @@
+$ <work>/prefix/bin/papers show 01a212b3-7f33-729e-a88a-1bf61f651b20
+exit 0 (0.0s)
+--- stdout
+{"command":"show","data":{"attachments":[],"collections":[],"paper":{"authors":[{"family_name":"Franklin","given_name":"Rosalind","literal_name":null,"orcid":null,"role":"author"},{"family_name":"Meitner","given_name":"Lise","literal_name":null,"orcid":null,"role":"author"}],"citation_key":"Franklin2025Lab","created_at":"2026-11-25T12:34:43.123Z","external_ids":[],"extra_json":{"capture":{"conflicts":[],"fields":[{"field":"title","tier":"highwire"},{"field":"year","tier":"highwire"},{"field":"publication_date","tier":"highwire"},{"field":"authors","tier":"highwire"}],"identifiers":[],"page_url":"http://127.0.0.1:39131/no-metadata.html"}},"id":"01a212b3-7f33-729e-a88a-1bf61f651b20","publication_date":"2025","title":"Lab Notes on Provisional Capture (corrected)","type":"journal-article","updated_at":"2026-11-25T12:34:43.123Z","year":2025},"tags":[]},"ok":true,"schema":"papers.v1","warnings":[]}
+
+--- stderr
