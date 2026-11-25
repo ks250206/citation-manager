@@ -122,6 +122,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-dev libx11-xcb-dev \
             libxcb1-dev libwayland-dev libfontconfig-dev libfreetype-dev libvulkan-dev
+          # PDFium substitutes a system CJK font for non-embedded Japanese fonts (layouts_runtime).
+          sudo apt-get install -y fonts-wqy-zenhei
       - name: Rust build cache (saved from main only; PRs restore it)
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
