@@ -19,6 +19,7 @@ use cm_protocol::{
     ipc::{Capability, Command, Denial, Operation, PdfCommand, Reply, WireError},
     jobs::{JobCommand, JobId, JobState, JobStatus, JobSubmit, kinds},
     library::{LibraryReply, LibraryRequest},
+    library_query::LibraryQuery,
     organization::{OrganizationRequest, TagInput},
 };
 use sha2::{Digest, Sha256};
@@ -394,8 +395,8 @@ fn duplicates_merge_cancel_and_preview_binding() {
         .paper
         .unwrap();
 
-    // Native host: the duplicate is hidden (no LibraryRead), Create is refused by the common
-    // exact-duplicate rule, Merge needs the general write grant.
+    // Native host: the duplicate is hidden (no LibraryRead) and Merge needs the general
+    // write grant. (Create on it is skipped: `hidden_exact_duplicates_are_skipped_on_commit`.)
     let dup = preview(
         &mut host,
         page(
@@ -406,10 +407,7 @@ fn duplicates_merge_cancel_and_preview_binding() {
     );
     assert!(dup.preview.candidates[0].matches.is_empty());
     assert!(dup.preview.warnings.iter().any(|w| w.contains("hidden")));
-    assert!(matches!(
-        commit_call(&mut host, &dup, ImportAction::Create, None).unwrap(),
-        Err(WireError::Service(_))
-    ));
+    assert_eq!(dup.hidden_duplicates, 1);
     denied(
         commit_call(
             &mut host,
@@ -506,6 +504,113 @@ fn duplicates_merge_cancel_and_preview_binding() {
             .unwrap()
             .unwrap_err(),
         WireError::Service(cm_protocol::library::ServiceError::NotFound)
+    );
+}
+
+fn paper_count(desktop: &mut Session) -> usize {
+    match ok(desktop.call(Command::Query(LibraryQuery::default()))) {
+        Reply::Page(page) => page.papers.len(),
+        other => panic!("{other:?}"),
+    }
+}
+
+/// #27 x #22: a capture grant cannot see existing papers, so an exact duplicate hidden in its
+/// preview is skipped on commit (as the redaction warning says), reported as a skipped row
+/// rather than a conflict, and nothing is created: no paper, no PDF job.
+#[test]
+fn hidden_exact_duplicates_are_skipped_on_commit() {
+    let server = TestServer::start(|r| match r.path.as_str() {
+        "/a.pdf" => Response::pdf(PDF),
+        _ => Response::new(404),
+    });
+    let env = Env::new();
+    let _daemon = start(config(&env)).unwrap();
+    let mut desktop = env.desktop();
+    let mut host = native_host(&env, &mut desktop);
+    assert!(!host.welcome.capabilities.contains(&Capability::LibraryRead));
+    assert!(
+        !host
+            .welcome
+            .capabilities
+            .contains(&Capability::LibraryWrite)
+    );
+    let doi = "10.9999/hidden.1";
+    let first = preview(&mut desktop, page(doi, "Already saved", None));
+    let existing = commit(&mut desktop, &first, ImportAction::Create, None)
+        .paper
+        .unwrap();
+    assert_eq!(paper_count(&mut desktop), 1);
+
+    // A new page: nothing hidden, Create creates.
+    let fresh = preview(&mut host, page("10.9999/hidden.2", "New paper", None));
+    assert_eq!(fresh.hidden_duplicates, 0);
+    assert!(
+        fresh
+            .preview
+            .warnings
+            .iter()
+            .any(|w| w == cm_daemon::ipc::REDACTED_PREVIEW_WARNING)
+    );
+    let created = commit(&mut host, &fresh, ImportAction::Create, None);
+    assert_eq!(created.outcome.created.len(), 1);
+    assert_eq!(paper_count(&mut desktop), 2);
+
+    // The same page again: the match is hidden, but the preview says one row duplicates an
+    // existing paper, with the same constant warning text.
+    let dup = preview(
+        &mut host,
+        page(
+            doi,
+            "Already saved",
+            Some(server.url("pdf.example.org", "/a.pdf")),
+        ),
+    );
+    assert_eq!(dup.hidden_duplicates, 1);
+    let candidate = &dup.preview.candidates[0];
+    assert!(candidate.matches.is_empty());
+    assert!(candidate.existing_match.is_none());
+    assert_eq!(dup.preview.warnings, fresh.preview.warnings);
+    // Create (and a PDF) on it is not a conflict: the row is skipped.
+    let skipped = commit(&mut host, &dup, ImportAction::Create, Some(0));
+    assert!(skipped.outcome.created.is_empty(), "{skipped:?}");
+    assert!(skipped.outcome.merged.is_empty());
+    assert_eq!(skipped.outcome.skipped, 1);
+    assert_eq!(skipped.paper, None);
+    assert!(skipped.pdf_job.is_none());
+    assert!(skipped.pdf_error.is_none());
+    // Nothing was created and the existing paper has no attachment.
+    assert_eq!(paper_count(&mut desktop), 2);
+    assert!(attachments(&mut desktop, existing).is_empty());
+    // The preview was consumed like any commit.
+    denied(
+        commit_call(&mut host, &dup, ImportAction::Create, None),
+        Operation::CaptureSave,
+    );
+    // Still Create/Skip only: Merge stays refused for the capture grant.
+    let again = preview(&mut host, page(doi, "Already saved", None));
+    denied(
+        commit_call(
+            &mut host,
+            &again,
+            ImportAction::Merge {
+                match_index: 0,
+                fields: vec![],
+            },
+            None,
+        ),
+        Operation::ImportCommit,
+    );
+
+    // The owner sees the match itself: nothing hidden, nothing skipped behind its back.
+    let owner = preview(&mut desktop, page(doi, "Already saved", None));
+    assert_eq!(owner.hidden_duplicates, 0);
+    assert_eq!(owner.preview.candidates[0].matches[0].existing.id, existing);
+    assert!(
+        !owner
+            .preview
+            .warnings
+            .iter()
+            .any(|w| w == cm_daemon::ipc::REDACTED_PREVIEW_WARNING)
     );
 }
 

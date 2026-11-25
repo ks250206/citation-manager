@@ -84,10 +84,18 @@ local file access, network lookup outside a capture, or job control.
   (longer than the coordinator's 300 s preview lifetime). Each grant holds at most 8; a ninth
   replaces that grant's own oldest, so one grant cannot evict another's. A daemon-wide safety
   cap of 256 evicts from the grant holding the most.
-- Without `LibraryRead` duplicate matches are redacted (as for #25 import previews). Without
-  `LibraryWrite` only `Create`/`Skip` are accepted; `Merge` is `Forbidden(ImportCommit)`.
-  An exact duplicate therefore cannot be created by the native host (#33 rule); the user
-  merges from the desktop, whose capture preview shows the matches and accepts `Merge`.
+- Without `LibraryRead` duplicate matches are redacted (as for #25 import previews; #27: the
+  constant `REDACTED_PREVIEW_WARNING`). Without `LibraryWrite` only `Create`/`Skip` are
+  accepted; `Merge` is `Forbidden(ImportCommit)`. An exact duplicate therefore cannot be
+  created by the native host (#33 rule): as for #27 import commits, the daemon turns `Create`
+  on a row the redacted preview hid as an exact duplicate into `Skip`, so the commit reports
+  it as `skipped` (no paper, no PDF job) instead of a `conflict`. `CapturePreview`
+  carries `hidden_duplicates` (count of such rows, `serde(default)` 0) so clients can say so
+  before saving without parsing the warning. For the page being captured it reveals what the
+  commit result (`skipped`) would, without creating anything (before #27 the warning text
+  carried a match count), and never which paper matched; import/REST dry runs keep the
+  constant output. The user merges from the desktop, whose capture preview shows
+  the matches and accepts `Merge`.
 - The PDF is chosen by **index** into the preview's candidate list; the client cannot supply
   a URL at commit. `capture.pdf_fetch` is not `ipc_submittable`: `JobCommand::Submit` of that
   kind is `Forbidden(JobSubmit)` even for the desktop, so no grant can turn the daemon into a
