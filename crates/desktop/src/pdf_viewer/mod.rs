@@ -225,6 +225,11 @@ impl<V> RenderCache<V> {
         }
         self.entries.get(key).map(|(v, _)| v)
     }
+    /// Reads without refreshing recency. Building the page column touches every page, so it
+    /// must not reorder the LRU; only the visible/prefetch working set is refreshed (`get`).
+    pub fn peek(&self, key: &RenderKey) -> Option<&V> {
+        self.entries.get(key).map(|(v, _)| v)
+    }
     pub fn contains(&self, key: &RenderKey) -> bool {
         self.entries.contains_key(key)
     }

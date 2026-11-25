@@ -276,6 +276,11 @@ impl LibraryView {
                 RenderKey::new(v.attachment, p, capped_zoom(base_zoom, size))
             })
             .collect();
+        // Refresh recency only for the working set, least important first, so visible pages
+        // end up most recent and offscreen pages are the ones evicted.
+        for key in wanted.iter().rev() {
+            v.cache.get(key);
+        }
         v.in_flight.retain(|key, (_, cancel)| {
             let keep = wanted.contains(key);
             if !keep {
@@ -613,7 +618,7 @@ impl LibraryView {
                 let width = size.0 * scale;
                 let image = v
                     .cache
-                    .get(&RenderKey::new(v.attachment, page, capped_zoom(zoom, size)))
+                    .peek(&RenderKey::new(v.attachment, page, capped_zoom(zoom, size)))
                     .cloned();
                 let failure = v.failures.get(&page).map(ToString::to_string);
                 let image_only = v.has_text.get(&page) == Some(&false);

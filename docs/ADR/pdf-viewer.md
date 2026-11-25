@@ -21,7 +21,9 @@ Status: accepted for #17. Builds on #11 (PDFium worker), #15 (Details › PDF sl
 - Continuous column layout with per-page sizes (estimates until a page is rendered), visible
   range + 1 page prefetch, at most 3 renders in flight; renders that scroll out are cancelled.
 - `RenderCache`: LRU keyed by (attachment, page, render zoom ×1000) with a 192 MiB / 48-entry
-  budget. Render zoom is bucketed to 0.05 so tiny layout changes reuse bitmaps.
+  budget. Render zoom is bucketed to 0.05 so tiny layout changes reuse bitmaps. Only the
+  visible/prefetch working set refreshes recency; building the page column reads cached
+  bitmaps without reordering (`peek`), so offscreen pages are evicted before visible ones.
 - User rotation is applied to the bitmap client-side (`rotate_rgba`); the effective rotation for
   geometry is page /Rotate + user turns. A test proves the rotated bitmap and the effective
   `Viewport` agree pixel-for-pixel for all 16 combinations.

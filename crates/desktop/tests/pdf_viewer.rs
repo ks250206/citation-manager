@@ -177,6 +177,42 @@ fn cache_is_lru_bounded_by_bytes_and_entries() {
 }
 
 #[test]
+fn building_the_page_column_does_not_evict_the_working_set() {
+    let a = attachment(1);
+    let key = |p: u32| RenderKey::new(a, p, 1.0);
+    let mut cache: RenderCache<u32> = RenderCache::new(1_000, 4);
+    // Browsed to the end of the document: later pages fill the cache.
+    for p in 6..10 {
+        cache.insert(key(p), p, 1);
+    }
+    // Scrolled back to the top: pages 0 and 1 are visible/prefetched.
+    let working = [0u32, 1];
+    let mut renders = 0;
+    for _frame in 0..10 {
+        // `schedule_renders`: refresh the working set and request one missing page.
+        for p in working.iter().rev() {
+            cache.get(&key(*p));
+        }
+        let requested = working.iter().copied().find(|p| !cache.contains(&key(*p)));
+        // The page column then reads every page in document order, including offscreen ones.
+        for p in 0..10 {
+            let _ = cache.peek(&key(p));
+        }
+        // The render reply arrives after the frame.
+        if let Some(p) = requested {
+            renders += 1;
+            cache.insert(key(p), p, 1);
+        }
+    }
+    assert_eq!(
+        renders, 2,
+        "each working page renders once, without thrashing"
+    );
+    assert!(working.iter().all(|p| cache.contains(&key(*p))));
+    assert_eq!(cache.peek(&key(0)), Some(&0));
+}
+
+#[test]
 fn render_zoom_is_capped_to_the_worker_bitmap_limits() {
     use cm_protocol::geometry::{MAX_RENDER_PIXELS, MAX_RENDER_SIDE};
     let letter = (612.0, 792.0);
