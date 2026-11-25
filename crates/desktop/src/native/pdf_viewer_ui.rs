@@ -574,7 +574,12 @@ impl LibraryView {
             .child(
                 button("pdf-copy", "Copy", selection.is_some())
                     .on_click(cx.listener(|this, _, _, cx| this.viewer_copy(cx))),
-            );
+            )
+            .child(super::pdf_export_ui::save_pdf_button(
+                &self.pdf_export,
+                self.host.selected,
+                cx,
+            ));
 
         if let Some(failure) = &v.document_failure {
             return div()

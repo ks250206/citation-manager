@@ -1,7 +1,7 @@
 use super::{Command, Requirement};
 
-/// #21: PDF navigation/search/annotation commands and cross search. `pdf.save` stays with
-/// #20 (PDF export); API settings with #26.
+/// #21: PDF navigation/search/annotation commands and cross search. `pdf.save` is #20's
+/// (`commands::pdf_export`); API settings stay with #26.
 pub mod ids {
     pub const NEXT_PAGE: &str = "pdf.next_page";
     pub const PREVIOUS_PAGE: &str = "pdf.previous_page";

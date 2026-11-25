@@ -36,9 +36,12 @@ fn main() {
         let export = |bounds: Rect| match call(Operation::Export {
             source: source.clone(),
             highlights: vec![Highlight {
+                name: String::new(),
                 page_index,
                 quads: vec![bounds.quad()],
                 comment: "regression".into(),
+                color: [255, 255, 0],
+                opacity: 0.5,
             }],
             notes: vec![],
         }) {

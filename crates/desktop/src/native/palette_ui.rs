@@ -55,6 +55,7 @@ pub(super) const CONNECTED: &[&str] = &[
     wb::TOGGLE_VIM,
     wb::RELOAD_KEYMAP,
     wb::COPY_DEFAULT_KEYMAP,
+    pdf_export_ui::SAVE_PDF,
 ];
 
 /// Platform shortcuts bound directly in GPUI (see `key_bindings`), shown next to commands.
@@ -405,6 +406,7 @@ impl LibraryView {
                     .unwrap_or_default();
                 self.open_link(&text, cx);
             }
+            pdf_export_ui::SAVE_PDF => self.save_current_pdf(cx),
             _ => self.status(format!("{id} is not connected"), true, cx),
         }
         cx.notify();

@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""EXPORT ONLY PoC fallback: add explicit normal appearances to PDFium-created annotations.
+"""RETIRED M0 PoC fallback (#20 generates /AP /N in Rust via FPDFAnnot_SetAP; the product never
+runs this). Kept so verify.py can prove it refuses exports that already carry appearances.
+EXPORT ONLY PoC fallback: add explicit normal appearances to PDFium-created annotations.
 No extraction/rendering replacement. Supports this PoC's axis-aligned Z-order quads and note icons.
 Never modifies source; refuses existing output. See docs/ADR/pdfium-runtime.md for production limits.
 """
