@@ -20,6 +20,8 @@ Status: accepted for #17. Builds on #11 (PDFium worker), #15 (Details › PDF sl
 
 - Continuous column layout with per-page sizes (estimates until a page is rendered), visible
   range + 1 page prefetch, at most 3 renders in flight; renders that scroll out are cancelled.
+  A page the worker rejects as `Busy` is held back for 300 ms (`BusyBackoff`), not resubmitted
+  on the next repaint.
 - `RenderCache`: LRU keyed by (attachment, page, render zoom ×1000) with a 192 MiB / 48-entry
   budget. Render zoom is bucketed to 0.05 so tiny layout changes reuse bitmaps. Only the
   visible/prefetch working set refreshes recency; building the page column reads cached

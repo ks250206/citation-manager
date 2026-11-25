@@ -4,9 +4,9 @@ use super::annotations_ui::page_of;
 use super::*;
 use crate::annotations::{MARKER_H, MARKER_W, is_marker, marker_origin, quads_of};
 use crate::pdf_viewer::{
-    self, RenderCache, RenderKey, TextPos, ZoomMode, capped_zoom, hit_char, layout_scale,
-    page_offsets, page_range, render_zoom, rotate, rotate_rgba, rotated_points, selected_text,
-    step_zoom, visible_pages, wanted_pages,
+    self, BusyBackoff, RenderCache, RenderKey, TextPos, ZoomMode, capped_zoom, hit_char,
+    layout_scale, page_offsets, page_range, render_zoom, rotate, rotate_rgba, rotated_points,
+    selected_text, step_zoom, visible_pages, wanted_pages,
 };
 use cm_protocol::annotations::{
     Annotation, AnnotationId, AnnotationKind, AnnotationPatch, NewAnnotation,
@@ -34,6 +34,8 @@ pub(super) struct Viewer {
     /// Request serial + cancellation per key; a reply applies only if its serial matches,
     /// so a late reply for a cancelled request cannot consume a newer request's slot.
     in_flight: HashMap<RenderKey, (u64, Cancellation)>,
+    /// `Busy` replies wait out their retry delay instead of being resubmitted every frame.
+    busy: BusyBackoff,
     serial: u64,
     scroll: ScrollHandle,
     anchor: Option<TextPos>,
@@ -66,6 +68,7 @@ impl Viewer {
             turns: 0,
             cache: RenderCache::default(),
             in_flight: HashMap::new(),
+            busy: BusyBackoff::default(),
             serial: 0,
             scroll: ScrollHandle::new(),
             anchor: None,
@@ -87,6 +90,7 @@ impl Viewer {
     fn reset_attempts(&mut self) {
         self.cancel_all();
         self.failures.clear();
+        self.busy.clear();
     }
     /// Size of a page in points after its own and the user's rotation.
     fn page_points(&self, page: u32) -> Option<(f32, f32)> {
@@ -278,6 +282,8 @@ impl LibraryView {
         for key in wanted.iter().rev() {
             v.cache.get(key);
         }
+        let now = std::time::Instant::now();
+        v.busy.prune(now);
         v.in_flight.retain(|key, (_, cancel)| {
             let keep = wanted.contains(key);
             if !keep {
@@ -289,7 +295,10 @@ impl LibraryView {
             if v.in_flight.len() >= MAX_IN_FLIGHT {
                 break;
             }
-            if v.cache.contains(&key) || v.in_flight.contains_key(&key) {
+            if v.cache.contains(&key)
+                || v.in_flight.contains_key(&key)
+                || v.busy.is_deferred(&key, now)
+            {
                 continue;
             }
             let cancel = Cancellation::default();
@@ -360,11 +369,11 @@ impl LibraryView {
             }
             Ok(PdfReply::Page(Err(RenderFailure::Cancelled))) => {}
             Ok(PdfReply::Page(Err(RenderFailure::Busy))) => {
-                // Transient: try again shortly instead of recording a failure.
+                // Transient: try again shortly instead of recording a failure. Until the
+                // deadline, repaints (including the notify below) skip this key.
+                v.busy.defer(key, std::time::Instant::now());
                 cx.spawn(async move |view, cx| {
-                    cx.background_executor()
-                        .timer(Duration::from_millis(300))
-                        .await;
+                    cx.background_executor().timer(pdf_viewer::BUSY_RETRY).await;
                     let _ = view.update(cx, |_, cx| cx.notify());
                 })
                 .detach();

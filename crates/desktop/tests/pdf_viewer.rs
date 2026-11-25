@@ -209,6 +209,35 @@ fn explicit_zoom_applies_before_the_first_page_has_rendered() {
 }
 
 #[test]
+fn busy_renders_wait_for_the_retry_delay_before_resubmission() {
+    use std::time::{Duration, Instant};
+    let a = attachment(1);
+    let key = RenderKey::new(a, 3, 1.5);
+    let other = RenderKey::new(a, 4, 1.5);
+    let t0 = Instant::now();
+    let mut busy = BusyBackoff::default();
+    assert!(!busy.is_deferred(&key, t0));
+    busy.defer(key, t0);
+    // The repaint right after the reply, and every frame within the delay, must skip it.
+    for ms in [0, 16, 150, 299] {
+        let now = t0 + Duration::from_millis(ms);
+        busy.prune(now);
+        assert!(busy.is_deferred(&key, now), "resubmitted after {ms} ms");
+        assert!(!busy.is_deferred(&other, now));
+    }
+    let due = t0 + BUSY_RETRY;
+    assert!(!busy.is_deferred(&key, due));
+    busy.prune(due);
+    assert!(busy.is_empty());
+    // Zoom/rotation changes start over.
+    busy.defer(key, due);
+    busy.defer(other, due);
+    assert_eq!(busy.len(), 2);
+    busy.clear();
+    assert!(!busy.is_deferred(&key, due));
+}
+
+#[test]
 fn building_the_page_column_does_not_evict_the_working_set() {
     let a = attachment(1);
     let key = |p: u32| RenderKey::new(a, p, 1.0);
