@@ -95,6 +95,8 @@ impl Env {
         let args: Vec<&std::ffi::OsStr> = args.iter().map(std::ffi::OsStr::new).collect();
         self.run(&args, env)
     }
+    /// Only the Linux-only non-UTF-8 path test needs raw OS-string arguments.
+    #[cfg(target_os = "linux")]
     fn papers_os(&self, args: &[&std::ffi::OsStr]) -> Run {
         self.run(args, &[])
     }
