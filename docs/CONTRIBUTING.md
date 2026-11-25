@@ -44,3 +44,19 @@ validator は名前、calendar、ID 衝突、未登録/欠損、SHA-256、symlin
 
 各 PR の独立した異モデル review は必須。#7 の実装 agent は PR 作成まで担当し、root が異モデル review を手配する。
 未実施の UI/PDFium/署名をチェック済みの acceptance box にしない。秘密/credential/文献本文をログや Issue に貼らない。
+
+## CI の構成
+
+`.github/workflows/ci.yml` は Linux を先に、macOS を 1 本だけ走らせる。
+
+- `linux-native` / `browser-extension`（ubuntu）: fmt、architecture / migration / Python の検査、
+  workspace と GPUI・desktop-bootstrap の clippy とテスト、Linux PDFium 実行時テスト、
+  pypdf/poppler による書き出し検証、拡張の build/lint/test。
+- `macos`（macos-15 1 台）: 上の 2 つが通ったときだけ起動する。macOS 固有の cfg を含む
+  workspace の clippy/test/build、GPUI（Metal）と desktop bootstrap、PDFium dylib と PDFKit の
+  独立ゲート。キャッシュは `macos` 1 つにまとめ、main でのみ保存する。
+
+テストは毎回全件を流す（変更箇所だけの選択実行はしない）。runner をまたぐ分割（sharding）も
+しない。所要時間の大半はコンパイルで、分割すると各 runner が同じ依存を再ビルドし、
+macOS runner の同時実行数も食い合うため。パッケージング（`package-macos.yml`）は関係する
+パスの変更時のみ、ベンチマーク（`benchmark.yml`）は手動実行のみ。
