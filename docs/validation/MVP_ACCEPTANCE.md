@@ -83,7 +83,11 @@ PDFium extraction from the bundle, a host-level capture (`hello`/`capture.previe
 search results from CLI, REST and MCP, MCP/REST annotations, the owner's annotated export
 through the bundle's `papersd` (complete, 1 highlight + 1 note, original unchanged), BibTeX/RIS
 round trip and backup by `ditto`/restore. pypdf is not installed on the runner, so the
-independent re-read was skipped there (it ran on Linux).
+independent re-read was skipped there (it ran on Linux). The workflow ran again on `5bf0e8f`
+(the last change to the E2E script and guide;
+[run 45617487454](https://github.com/ks250206/citation-manager/actions/runs/45617487454)):
+all steps succeeded, release E2E again 66 passed, 0 failed; the committed report is the
+`cc2f58b` one.
 
 Observed on the VM, not counted as failures: `papers server stop` is refused on macOS
 ("needs socket peer credentials", exit 7), so the run waited for the idle exit; each
