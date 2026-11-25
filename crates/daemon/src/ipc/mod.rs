@@ -1103,7 +1103,9 @@ fn bulk_kind(command: &Command) -> Option<BulkKind> {
         )
         | Command::Annotations(AnnotationRequest::Delete(_)) => Some(BulkKind::Delete),
         Command::Organization(
-            OrganizationRequest::CollectionMember(..) | OrganizationRequest::TagMember(..),
+            OrganizationRequest::CollectionMember(..)
+            | OrganizationRequest::MoveCollectionMember(..)
+            | OrganizationRequest::TagMember(..),
         ) => Some(BulkKind::Move),
         _ => None,
     }

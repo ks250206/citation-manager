@@ -1125,15 +1125,12 @@ async fn bulk_move(
     let reply = ctx
         .run(move |c| {
             Ok(run_batch(c, body.paper_ids, |c, paper| {
-                c.call(Command::Organization(
-                    OrganizationRequest::CollectionMember(paper, id, true),
-                ))?;
-                if let Some(from) = from {
-                    c.call(Command::Organization(
-                        OrganizationRequest::CollectionMember(paper, from, false),
-                    ))?;
-                }
-                Ok(())
+                // One command (one transaction) per item: a failed item changes nothing.
+                let request = match from {
+                    Some(from) => OrganizationRequest::MoveCollectionMember(paper, from, id),
+                    None => OrganizationRequest::CollectionMember(paper, id, true),
+                };
+                c.call(Command::Organization(request)).map(|_| ())
             }))
         })
         .await?;

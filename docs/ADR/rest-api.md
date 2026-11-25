@@ -99,7 +99,7 @@ write. None of them returns stored content.
 | `PATCH /annotations/{id}`, `DELETE /annotations/{id}` | annotations:write | color/comment |
 | `GET /collections`, `GET /tags` | papers:read | |
 | `POST /collections`, `PATCH /collections/{id}`, `POST /collections/{id}/papers`, `POST /tags` | papers:write | |
-| `POST /collections/{id}/papers/bulk-move` | papers:write + bulk:elevated | add, optional `from` removal |
+| `POST /collections/{id}/papers/bulk-move` | papers:write + bulk:elevated | add, optional `from` removal (one transaction per paper: a failed item changes nothing) |
 | `DELETE /collections/{id}`, `DELETE /tags/{id}` | papers:delete | |
 | `POST /imports` | papers:write | BibTeX/RIS text ≤2 MiB, ≤100 records per call (`start`/`next_start`), `dry_run`; exact duplicates skipped |
 | `POST /exports` | papers:read + exports:write | only into an owner-configured export folder |

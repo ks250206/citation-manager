@@ -2467,3 +2467,61 @@ fn bulk_batches_stop_when_the_elevation_ends_after_admission() {
         assert_eq!(ids, vec![from.as_str()], "{id} was not moved");
     }
 }
+
+/// Each bulk-move item is one transaction: an item that fails (here: `from` does not exist)
+/// leaves no destination membership behind, and a successful one is fully moved.
+#[test]
+fn a_failed_bulk_move_item_changes_nothing() {
+    let mut a = Api::start();
+    let (grant, token) = a.token("mover", &issuable());
+    let paper = create_paper(&a, &token, "Move me", "10.1234/move-atomic");
+    let collection = |a: &Api, name: &str| {
+        let resp = a.send(
+            &Req::new("POST", format!("{API}/collections"))
+                .token(&token)
+                .json(&json!({ "name": name })),
+        );
+        assert_eq!(resp.status, 201, "{}", resp.text());
+        resp.json()["collection"]["id"].as_str().unwrap().to_owned()
+    };
+    let collections_of = |a: &Api| -> Vec<String> {
+        let resp = a.send(&Req::new("GET", format!("{API}/papers/{paper}")).token(&token));
+        assert_eq!(resp.status, 200, "{}", resp.text());
+        resp.json()["collections"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| c["id"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    let from = collection(&a, "From");
+    let to = collection(&a, "To");
+    let added = a.send(
+        &Req::new("POST", format!("{API}/collections/{from}/papers"))
+            .token(&token)
+            .json(&json!({ "paper_id": paper })),
+    );
+    assert_eq!(added.status, 200, "{}", added.text());
+    elevate(&mut a, grant, BulkKind::Move);
+    let bulk_move = |a: &Api, from: &str| {
+        let resp = a.call(
+            "POST /collections/{id}/papers/bulk-move",
+            Req::new("POST", format!("{API}/collections/{to}/papers/bulk-move"))
+                .token(&token)
+                .json(&json!({ "paper_ids": [paper], "from": from })),
+        );
+        assert_eq!(resp.status, 200, "{}", resp.text());
+        resp.json()
+    };
+
+    let missing = uuid::Uuid::now_v7().to_string();
+    let failed = bulk_move(&a, &missing);
+    assert_eq!(failed["results"][0]["ok"], false, "{failed}");
+    assert_eq!(failed["results"][0]["error"], "not_found");
+    assert_eq!(failed["stopped"], Value::Null);
+    assert_eq!(collections_of(&a), vec![from.clone()], "nothing was added");
+
+    let moved = bulk_move(&a, &from);
+    assert_eq!(moved["results"][0]["ok"], true, "{moved}");
+    assert_eq!(collections_of(&a), vec![to.clone()]);
+}
