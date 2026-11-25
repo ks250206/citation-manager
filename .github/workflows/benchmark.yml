@@ -4,6 +4,11 @@ name: Representative benchmark
 # GitHub-hosted runners are NOT the DESIGN §16.1 target (Apple Silicon, 16 GB RAM); the
 # runner's real hardware is recorded in the uploaded artifact.
 on:
+  # TEMPORARY (removed before review): lets GitHub register this workflow from the
+  # feature branch; it never matches main or pull requests.
+  push:
+    branches: [claude/issue-30-reliability]
+    paths: ['.github/workflows/benchmark.yml']
   workflow_dispatch:
     inputs:
       papers:
@@ -52,10 +57,10 @@ jobs:
           } | tee target/representative-benchmark/runner-hardware.txt
       - name: Representative run (release; pinned PDFium fetched and checksum-verified)
         env:
-          PAPERS: ${{ inputs.papers }}
-          PDFS: ${{ inputs.pdfs }}
-          PAGES: ${{ inputs.pages }}
-          SAMPLES: ${{ inputs.samples }}
+          PAPERS: ${{ inputs.papers || '10000' }}
+          PDFS: ${{ inputs.pdfs || '1000' }}
+          PAGES: ${{ inputs.pages || '20' }}
+          SAMPLES: ${{ inputs.samples || '21' }}
         run: |
           python3 scripts/benchmarks/representative.py --out macos-ci \
             --papers "$PAPERS" --pdfs "$PDFS" --pages "$PAGES" --samples "$SAMPLES"
