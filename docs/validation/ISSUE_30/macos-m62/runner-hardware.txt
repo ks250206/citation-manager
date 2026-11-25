@@ -1,0 +1,12 @@
+hw.model=VirtualMac2,1
+machdep.cpu.brand_string=Apple M1 (Virtual)
+hw.memsize=7516192768
+hw.physicalcpu=3
+hw.logicalcpu=3
+kern.hv_vmm_present=1
+ProductName:		macOS
+ProductVersion:		15.8.2
+BuildVersion:		24H232
+Darwin iad20-gt1018-6ac55979-00a9-4275-9852-bb328ecdf10a-823864FBD197.local 24.6.0 Darwin Kernel Version 24.6.0: Sun Oct 11 23:44:11 PDT 2026; root:xnu-11417.140.69.713.47~2/RELEASE_ARM64_VMAPPLE arm64
+Filesystem      Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk2s5   320Gi   258Gi    44Gi    86%    2.2M  460M    0%   /System/Volumes/Data

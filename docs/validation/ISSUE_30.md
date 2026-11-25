@@ -267,7 +267,7 @@ Expand、ホイール 60 回、次 page ×24）。同じマシンで before（or
   各段階に到達し、ページが描画されていることを確認した。before の同段階
   （[before-gui-pdf-scrolled.png](ISSUE_30/linux-m62/before-gui-pdf-scrolled.png)）と画素単位で同一だった。
 - headless の新しい段階（`representative_ipc renders`: 1 本目の PDF 20 page を zoom 2.2、3 接続で IPC 描画）:
-  papersd 11.9 → 25.3 MiB（2 秒後、sampled peak 34.5 MiB）。macOS runner でも同じ段階を測る（下記）。
+  papersd 11.9 → 25.3 MiB（2 秒後、sampled peak 34.5 MiB）。macOS runner でも同じ段階を測った（下記）。
 - その他の指標は after でも目標内（warm 起動 p50 35.5 / p95 40.3 ms、collection 切替 p95 5.9 ms、
   メタデータ p95 102.2 ms、全文 p95 34.3 ms、GUI idle 160.0 MiB）。re-exec（下記）による
   warm 起動の悪化は見られない。before 実行の遅延系の値は、測定中に本 worktree の build を並行させた
@@ -371,11 +371,59 @@ after と同一のもの（test・文書・harness の変更前）。
 [zoom in](ISSUE_30/linux-m62/manual-zoom-in.png)、[zoom out](ISSUE_30/linux-m62/manual-zoom-out.png)、
 [回転](ISSUE_30/linux-m62/manual-rotated.png)、[ハイライト](ISSUE_30/linux-m62/manual-highlight.png)。
 
+### macOS runner（headless）
+
+`benchmark.yml`（macos-15、`VirtualMac2,1` Apple M1 Virtual、3 vCPU、7 GiB）を本 branch で
+workflow_dispatch した。run [45636732626](https://github.com/ks250206/citation-manager/actions/runs/45636732626)
+（head `6b9d5f5`、[macos-m62/](ISSUE_30/macos-m62/)）と、先行 run
+[45633567308](https://github.com/ks250206/citation-manager/actions/runs/45633567308)
+（head `69a2d1d`、同じ製品コード、`run1-*.json`）。どちらも成功。
+
+| 指標 | run 45636732626 | run 45633567308 | #30（`ee2a33b`） |
+|---|---:|---:|---:|
+| papersd: 20 page 描画後の `ps` RSS | 71.0 MiB（開始時 8.7） | 71.8 MiB（開始時 8.9） | — |
+| 同、phys_footprint（`footprint`/`vmmap`） | **7.1 MB**（peak 29 MB） | 未取得 | — |
+| warm 起動 p50 / p95 | 122.6 / 241.8 ms | 176.7 / 289.5 ms | 121.0 / 209.5 ms |
+| collection 切替 p95 | 9.8 ms | 7.6 ms | 3.2 ms |
+| メタデータ検索 p95 | 137.8 ms | 129.6 ms | 77.2 ms |
+| 全文検索 p95 | 62.7 ms | 43.3 ms | 28.8 ms |
+| 索引中 peak / クエリ中 peak RSS | 46.5 / 19.9 MiB | 47.0 / 20.0 MiB | 45.1 / 20.2 MiB |
+
+- **macOS の `ps` RSS 71 MiB は、解放済みの大きな割り当てを libmalloc がキャッシュしている分**:
+  `vmmap` では `MALLOC_LARGE_REUSABLE` が 42.3 MB（resident だが reusable、footprint には数えない）で、
+  phys_footprint は 7.1 MB だった。OS が必要に応じて回収するので、Activity Monitor の「メモリ」
+  （footprint）では保持にならない。glibc の固定閾値に相当する対処は macOS では不要と判断した。
+  binary frame 化前の macOS 値は、この段階が protocol 2 専用のため**未測定**。
+- 遅延系の値は、#30 時点と 2 本の run の間で一様にばらついた（本変更が通らない経路も含めて 30–100%）。
+  共有 VM runner の差と判断し、目標（§16.2）はすべて満たしている。
+- **GUI の RSS は macOS では未測定**（`benchmark.yml` は headless のみで、GUI を操作する手段がない）。
+  re-exec は glibc 専用で macOS では何もしない。
+
+### 実行したコマンドと結果（#85）
+
+Linux（本 worktree、最終 head のソース）での exit code。
+
+| コマンド | exit |
+|---|---|
+| `cargo fmt --all -- --check` | 0 |
+| `cargo clippy --workspace --all-targets --locked -- -D warnings` | 0 |
+| `cargo clippy -p cm-desktop --all-targets --features native-gpui --locked -- -D warnings` | 0 |
+| `cargo clippy -p cm-daemon --all-targets --features desktop-bootstrap --locked -- -D warnings` | 0 |
+| `cargo test --workspace --locked --no-fail-fast` | 0（606 passed、0 failed、0 ignored） |
+| `cargo test -p cm-daemon -p cm-desktop --features cm-daemon/desktop-bootstrap --locked` | 0（247 passed） |
+| `cargo build -p cm-daemon --bin citation-manager --features desktop-bootstrap --locked` | 0 |
+| `python3 scripts/check_architecture.py` | 0 |
+| `python3 scripts/check_migrations.py --base origin/main` | 0 |
+| `python3 -m unittest discover -s scripts -p 'test_*.py'` | 0（54 tests） |
+| `CM_PDFIUM_LIBRARY=… cargo test -p cm-pdf --features runtime --locked --test metadata_runtime --test runtime --test extract_runtime --test export_runtime --test layouts_runtime` | 0（5 passed） |
+| `CM_PDFIUM_LIBRARY=… cargo test -p cm-daemon --features pdfium-runtime-tests --locked --test fulltext_runtime --test pdf_export_runtime` | 0（2 passed） |
+| `python3 scripts/benchmarks/representative.py --gui --out m62-final --pdfium <pinned libpdfium.so>` | 0 |
+| `benchmark.yml`（macos-15、workflow_dispatch、2 回） | success |
+
+migration の追加・変更なし、新規依存なし（`Cargo.lock` 不変）。
+
 ### 未達・未測定・制限
 
-- **macOS**: GUI の RSS は macOS runner では測れない（`benchmark.yml` は headless のみ）。runner では
-  binary frame 化した papersd の描画後 RSS（`daemon_rss_mib_after_renders`）を測る。re-exec は glibc 専用で、
-  macOS には影響しない。
 - Linux の GUI 値は Xvfb のソフトウェア描画（Mesa lavapipe）によるもの。テクスチャ（memfd 約 97 MiB）と
   LLVM（約 54 MiB、file-backed）がプロセス RSS に計上される。GPU のある実機では、テクスチャは VRAM または
   統合メモリに置かれ、計上のされ方が異なる。

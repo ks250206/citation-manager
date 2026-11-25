@@ -153,3 +153,4 @@ Apple Silicon 16 GB release 実機の値ではない。
 | GPU 転送後の CPU 画素解放と再表示（scroll back・再描画・evict 後の再要求・回転/文書切替） | Linux 自動 + Xvfb 操作 | `crates/desktop/tests/pdf_viewer.rs`、スクリーンショット | passed |
 | glibc mmap 閾値の再 exec（既存設定の尊重、無限 re-exec しない） | Linux 自動 | `crates/daemon/src/malloc_tuning.rs` の unit test | passed |
 | PDF 1 本閲覧時の総 RSS | Linux Xvfb | `representative.py --gui`（ISSUE_30/linux-m62/） | 実測（macOS GUI は**未測定**） |
+| papersd の描画後 RSS / footprint（headless） | Linux コンテナ / GitHub macOS VM runner | `representative_ipc renders`（ISSUE_30/linux-m62/、ISSUE_30/macos-m62/） | 実測 |
