@@ -44,7 +44,20 @@ impl std::error::Error for AttachmentError {}
 pub trait AttachmentLibrary {
     /// Append a reference only after verified, durable byte publication. Existing references survive errors.
     fn import(&mut self, request: ImportAttachment) -> Result<Attachment, AttachmentError>;
+    /// Like `import`, but registers `(paper, sha256)` at most once: if the paper already
+    /// references exactly this content, that reference is returned and nothing is appended.
+    /// The check runs inside the registering write transaction, so importers racing on
+    /// separate connections (job runner, library worker) cannot both append it.
+    fn import_once(&mut self, request: ImportAttachment) -> Result<Imported, AttachmentError>;
     fn status(&self, id: AttachmentId) -> Result<AttachmentStatus, AttachmentError>;
+}
+
+/// Result of `import_once`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Imported {
+    pub attachment: Attachment,
+    /// The paper already referenced this content; nothing was written.
+    pub existing: bool,
 }
 
 pub struct AttachmentService<L>(L);
@@ -54,6 +67,9 @@ impl<L: AttachmentLibrary> AttachmentService<L> {
     }
     pub fn import(&mut self, request: ImportAttachment) -> Result<Attachment, AttachmentError> {
         self.0.import(request)
+    }
+    pub fn import_once(&mut self, request: ImportAttachment) -> Result<Imported, AttachmentError> {
+        self.0.import_once(request)
     }
     pub fn status(&self, id: AttachmentId) -> Result<AttachmentStatus, AttachmentError> {
         self.0.status(id)

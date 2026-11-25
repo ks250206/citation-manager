@@ -13,6 +13,9 @@ pub enum OrganizationRequest {
     UpdateTag(TagId, TagInput),
     DeleteTag(TagId),
     TagMember(PaperId, TagId, bool),
+    /// Atomic move of one paper: added to `to` and removed from `from` in one transaction
+    /// (nothing changes if either collection is missing). `(paper, from, to)`.
+    MoveCollectionMember(PaperId, CollectionId, CollectionId),
 }
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct Organization {

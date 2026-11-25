@@ -84,7 +84,9 @@ impl JobHandler for AttachmentImportHandler {
             Ok(library) => library,
             Err(e) => return Outcome::Retryable(e.to_string()),
         };
-        let imported = AttachmentService::new(library).import(ImportAttachment {
+        // `import_once`: the check above is repeated inside the registering transaction, so a
+        // concurrent GUI attach of the same content cannot produce a second reference.
+        let imported = AttachmentService::new(library).import_once(ImportAttachment {
             paper_id: job.paper,
             source: job.path,
             original_name: name,
@@ -94,9 +96,15 @@ impl JobHandler for AttachmentImportHandler {
             expected_sha256: Some(digest),
         });
         match imported {
-            Ok(a) => Outcome::Succeeded(
-                json!({"attachment": a.id.0, "sha256": hex(&digest), "bytes": size}),
-            ),
+            Ok(i) => {
+                let result =
+                    json!({"attachment": i.attachment.id.0, "sha256": hex(&digest), "bytes": size});
+                if i.existing {
+                    Outcome::AlreadyCommitted(result)
+                } else {
+                    Outcome::Succeeded(result)
+                }
+            }
             Err(AttachmentError::HashMismatch | AttachmentError::Unavailable) => {
                 Outcome::Retryable("source changed or storage busy".into())
             }

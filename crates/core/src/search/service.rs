@@ -12,7 +12,9 @@
 //! - A shorter clause is looked up as a unicode61 token plus a bounded literal substring
 //!   scan (ASCII case-insensitive, other text exact) over one window of documents.
 //!   Within a scan window only documents in that window are returned, so successive
-//!   continuation windows never repeat a hit.
+//!   continuation windows never repeat a hit. The paper-level AND still spans windows: a
+//!   paper with a document in the window is also checked for the short clauses in all of
+//!   its other documents (same sources, same deadline).
 //! - No width/NFC/kana normalization is applied (measured constraint, docs/validation/ISSUE_53.md).
 //! - `SearchRequest::timeout_ms` bounds the whole request: the port enforces it inside the
 //!   database (`SearchIndex::set_deadline`). An interrupted index lookup yields an explicit
@@ -352,11 +354,17 @@ fn execute(
     let mut meta: HashMap<i64, Meta> = HashMap::new();
     // Per clause (plan.texts order): document id -> score.
     let mut clauses: Vec<HashMap<i64, f64>> = vec![HashMap::new(); plan.texts.len()];
-    let mut add = |clause: &mut HashMap<i64, f64>, id: i64, paper_id: PaperId, score: f64| {
+    fn add(
+        meta: &mut HashMap<i64, Meta>,
+        clause: &mut HashMap<i64, f64>,
+        id: i64,
+        paper_id: PaperId,
+        score: f64,
+    ) {
         meta.entry(id).or_insert(Meta { paper_id });
         let entry = clause.entry(id).or_insert(score);
         *entry = entry.max(score);
-    };
+    }
     for (i, text) in plan.texts.iter().enumerate() {
         let tokenizers: &[Tokenizer] = if long.contains(&text) {
             &[Tokenizer::Words, Tokenizer::Trigram]
@@ -374,7 +382,13 @@ fn execute(
             )?;
             coverage.fts_truncated |= found.len() as u32 >= MAX_FTS_CANDIDATES;
             for c in found {
-                add(&mut clauses[i], c.id, c.paper_id, c.score.max(0.0));
+                add(
+                    &mut meta,
+                    &mut clauses[i],
+                    c.id,
+                    c.paper_id,
+                    c.score.max(0.0),
+                );
             }
         }
     }
@@ -412,15 +426,26 @@ fn execute(
         };
         coverage.scanned_documents = scan.examined;
         coverage.timed_out = scan.timed_out;
-        for row in &scan.rows {
-            for (n, mask) in row.masks.iter().enumerate() {
-                if *mask != 0
-                    && let Some(i) = plan.texts.iter().position(|t| *t == needles[n])
-                {
-                    add(&mut clauses[i], row.id, row.paper_id, weights.best(*mask));
+        let record =
+            |meta: &mut HashMap<i64, Meta>, clauses: &mut [HashMap<i64, f64>], rows: &[ScanRow]| {
+                for row in rows {
+                    for (n, mask) in row.masks.iter().enumerate() {
+                        if *mask != 0
+                            && let Some(i) = plan.texts.iter().position(|t| *t == needles[n])
+                        {
+                            add(
+                                meta,
+                                &mut clauses[i],
+                                row.id,
+                                row.paper_id,
+                                weights.best(*mask),
+                            );
+                        }
+                    }
                 }
-            }
-        }
+            };
+        record(&mut meta, &mut clauses, &scan.rows);
+        let full = cursor.scan_after == 0 && scan.exhausted && !scan.timed_out;
         if scan.exhausted && !scan.timed_out {
             coverage.scan = ScanStatus::Complete;
             window = Some((cursor.scan_after, None));
@@ -435,6 +460,60 @@ fn execute(
                 scan_after: end,
                 offset: 0,
             });
+        }
+        // Paper-level AND across windows: when this window did not cover every document, a
+        // paper with a document in it may match a short clause only in a document of another
+        // window. Those clauses are looked up in all documents of such papers, so the paper's
+        // in-window documents are still returned here (and only here).
+        if !full && !scan_sources.is_empty() {
+            let (after, end) = window.expect("set above");
+            let in_window = |id: i64| id > after && end.is_none_or(|end| id <= end);
+            let is_short: Vec<bool> = plan.texts.iter().map(|t| short.contains(&t)).collect();
+            let clause_papers: Vec<HashSet<PaperId>> = clauses
+                .iter()
+                .map(|c| c.keys().map(|id| meta[id].paper_id).collect())
+                .collect();
+            let mut candidates: Vec<PaperId> = clauses
+                .iter()
+                .flat_map(|c| c.keys())
+                .filter(|id| in_window(**id))
+                .map(|id| meta[id].paper_id)
+                .collect::<HashSet<_>>()
+                .into_iter()
+                .filter(|p| {
+                    let has = |i: usize| clause_papers[i].contains(p);
+                    (0..is_short.len()).all(|i| is_short[i] || has(i))
+                        && (0..is_short.len()).any(|i| is_short[i] && !has(i))
+                })
+                .collect();
+            candidates.sort_unstable_by_key(|p| p.0);
+            'papers: for chunk in candidates.chunks(MAX_SCOPE_PAPERS) {
+                let scoped = ResolvedFilter {
+                    papers: chunk.to_vec(),
+                    ..filter.clone()
+                };
+                let mut from = 0;
+                loop {
+                    let found = index.scan(
+                        &needles,
+                        &scoped,
+                        &scan_sources,
+                        from,
+                        MAX_CANDIDATE_LIMIT,
+                        deadline,
+                    )?;
+                    record(&mut meta, &mut clauses, &found.rows);
+                    if found.timed_out {
+                        // Papers not checked in time are not returned; the page says so.
+                        coverage.timed_out = true;
+                        break 'papers;
+                    }
+                    match found.last_id {
+                        Some(last) if !found.exhausted => from = last,
+                        _ => break,
+                    }
+                }
+            }
         }
     }
 

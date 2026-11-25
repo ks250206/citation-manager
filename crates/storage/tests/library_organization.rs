@@ -304,6 +304,50 @@ fn tag_collisions_rename_set_membership_delete_and_import_destination() {
 }
 
 #[test]
+fn moving_a_paper_between_collections_is_one_transaction() {
+    let (_temp, _dir, mut db) = library();
+    let from = db
+        .collections()
+        .create(CollectionInput::named("from"))
+        .unwrap();
+    let to = db
+        .collections()
+        .create(CollectionInput::named("to"))
+        .unwrap();
+    let paper = db.papers().create(complete()).unwrap();
+    db.collections()
+        .set_membership(paper.id, from.id, true)
+        .unwrap();
+    // A missing source or target changes nothing (no committed destination membership).
+    let missing = CollectionId(Uuid::now_v7());
+    assert_eq!(
+        db.collections().move_membership(paper.id, missing, to.id),
+        Err(ServiceError::NotFound)
+    );
+    assert_eq!(
+        db.collections().move_membership(paper.id, from.id, missing),
+        Err(ServiceError::NotFound)
+    );
+    assert_eq!(
+        db.collections().for_paper(paper.id).unwrap(),
+        vec![from.clone()]
+    );
+    invalid(CollectionService::new(db.collections()).move_paper(paper.id, from.id, from.id));
+    CollectionService::new(db.collections())
+        .move_paper(paper.id, from.id, to.id)
+        .unwrap();
+    assert_eq!(
+        db.collections().for_paper(paper.id).unwrap(),
+        vec![to.clone()]
+    );
+    // Idempotent: moving again (not in `from` any more) keeps it in `to` only.
+    db.collections()
+        .move_membership(paper.id, from.id, to.id)
+        .unwrap();
+    assert_eq!(db.collections().for_paper(paper.id).unwrap(), vec![to]);
+}
+
+#[test]
 fn transaction_failures_roll_back_child_promotion_and_destination_memberships() {
     let (_temp, dir, mut db) = library();
     let root = db
