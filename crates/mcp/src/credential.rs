@@ -46,13 +46,22 @@ pub const CLIENT_KIND: &str = "mcp";
 pub fn read_only() -> CapabilitySet {
     cm_protocol::ipc::CapabilitySet::from([Capability::LibraryRead, Capability::JobsRead])
 }
-/// Added by a separately approved write grant: register/update papers, organization and
-/// annotation changes, import commit (LibraryWrite) and DOI metadata lookups.
+/// Added by a separately approved write grant: register/update papers, organization
+/// changes, import commit (LibraryWrite), DOI metadata lookups (NetworkLookup) and
+/// add_annotation (AnnotationsWrite: since #26 `LibraryWrite` alone no longer writes
+/// annotations). The same set as #26's `profiles::mcp_write` (`papers:write` +
+/// `annotations:write`). Delete stays out: LibraryDelete is never requested.
 pub fn write_extra() -> CapabilitySet {
-    CapabilitySet::from([Capability::LibraryWrite, Capability::NetworkLookup])
+    CapabilitySet::from([
+        Capability::LibraryWrite,
+        Capability::NetworkLookup,
+        Capability::AnnotationsWrite,
+    ])
 }
 /// Added by an approved export grant: export_citations has papersd write a new file into
-/// this server's private temporary directory (LocalFileWrite), which it reads back.
+/// this server's private temporary directory (LocalFileWrite), which it reads back. With
+/// the read-only base this is #26's `Export` alternative {LibraryRead, LocalFileWrite};
+/// `ExportAllowedDir` would not do, since the private temp dir is not an allowed folder.
 pub fn export_extra() -> CapabilitySet {
     CapabilitySet::from([Capability::LocalFileWrite])
 }
@@ -485,6 +494,57 @@ mod tests {
         assert_eq!(session_ceiling(true), read_only());
         assert!(Profile::default().label().starts_with(LABEL_PREFIX));
         assert!(all.label().starts_with(LABEL_PREFIX));
+    }
+
+    #[test]
+    fn each_profile_enables_exactly_its_tools_under_the_daemon_policy() {
+        use cm_protocol::ipc::Operation;
+        let can = |profile: Profile, operation: Operation| {
+            operation
+                .requirement()
+                .satisfied_by(&profile.capabilities())
+        };
+        let read = Profile::default();
+        let write = Profile {
+            write: true,
+            export: false,
+        };
+        let export = Profile {
+            write: false,
+            export: true,
+        };
+        // The tools a write grant enables (DESIGN §14.2), add_annotation included: since
+        // #26 annotation writes need AnnotationsWrite even where LibraryWrite is held.
+        for operation in [
+            Operation::MetadataResolve,
+            Operation::ImportPreview,
+            Operation::ImportCommit,
+            Operation::PaperUpdate,
+            Operation::OrganizationWrite,
+            Operation::AnnotationWrite,
+        ] {
+            assert!(can(write, operation), "{operation:?}");
+            assert!(!can(read, operation), "{operation:?}");
+            assert!(!can(export, operation), "{operation:?}");
+        }
+        // export_citations: the read base plus LocalFileWrite meets #26's Export any-of.
+        assert!(can(export, Operation::Export));
+        assert!(!can(read, Operation::Export));
+        assert!(!can(write, Operation::Export));
+        // Never delete, trash or bulk changes, whatever the profile.
+        let all = Profile {
+            write: true,
+            export: true,
+        };
+        for operation in [
+            Operation::PaperTrash,
+            Operation::OrganizationDelete,
+            Operation::BulkTrash,
+            Operation::BulkMove,
+            Operation::GrantIssue,
+        ] {
+            assert!(!can(all, operation), "{operation:?}");
+        }
     }
 
     #[test]
