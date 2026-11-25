@@ -10,8 +10,9 @@
 //! A fixed threshold (which also turns off the dynamic adjustment) can only be set at
 //! process start without `unsafe` (`mallopt` is FFI), through the `GLIBC_TUNABLES`
 //! environment variable. `apply` therefore re-executes the running binary once with the
-//! tunable added. The process keeps its PID, arguments and open descriptors. A value the
-//! user already set for this tunable is respected, and if the re-exec fails the process
+//! tunable added. The process keeps its PID, arguments and open descriptors. A threshold the
+//! user already set (this tunable, or the older `MALLOC_MMAP_THRESHOLD_` variable, which the
+//! tunable would override) is respected, and if the re-exec fails the process
 //! simply continues with glibc's defaults. Child processes inherit the variable, which
 //! only changes their allocator threshold. Other platforms and C libraries: no-op.
 
@@ -19,6 +20,21 @@
 pub const MMAP_THRESHOLD_TUNABLE: &str = "glibc.malloc.mmap_threshold=262144";
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
 const VARIABLE: &str = "GLIBC_TUNABLES";
+/// glibc's older per-setting variable for the same threshold. `GLIBC_TUNABLES` takes
+/// precedence over it, so adding the tunable would silently replace the user's choice.
+pub const LEGACY_THRESHOLD_VARIABLE: &str = "MALLOC_MMAP_THRESHOLD_";
+
+/// The `GLIBC_TUNABLES` value to re-execute with, given the current `GLIBC_TUNABLES` and
+/// `MALLOC_MMAP_THRESHOLD_`: `None` when the user set a threshold through either.
+pub fn tunables_to_apply(
+    tunables: Option<&std::ffi::OsStr>,
+    legacy_threshold: Option<&std::ffi::OsStr>,
+) -> Option<String> {
+    if legacy_threshold.is_some() {
+        return None;
+    }
+    tunables_with_threshold(tunables)
+}
 
 /// The `GLIBC_TUNABLES` value to re-execute with, or `None` when the current value already
 /// sets an mmap threshold (ours, after the re-exec, or the user's) or is not UTF-8.
@@ -46,7 +62,10 @@ pub fn apply() {
     #[cfg(all(target_os = "linux", target_env = "gnu"))]
     {
         use std::os::unix::process::CommandExt;
-        let Some(value) = tunables_with_threshold(std::env::var_os(VARIABLE).as_deref()) else {
+        let Some(value) = tunables_to_apply(
+            std::env::var_os(VARIABLE).as_deref(),
+            std::env::var_os(LEGACY_THRESHOLD_VARIABLE).as_deref(),
+        ) else {
             return;
         };
         let mut args = std::env::args_os();
@@ -92,6 +111,23 @@ mod tests {
         // A different tunable with a similar name does not count.
         assert!(
             tunables_with_threshold(Some(OsStr::new("glibc.malloc.mmap_threshold_x=1"))).is_some()
+        );
+    }
+
+    #[test]
+    fn a_threshold_set_through_the_legacy_variable_is_respected() {
+        // GLIBC_TUNABLES would override MALLOC_MMAP_THRESHOLD_, so no re-exec at all.
+        assert_eq!(tunables_to_apply(None, Some(OsStr::new("1048576"))), None);
+        assert_eq!(
+            tunables_to_apply(
+                Some(OsStr::new("glibc.malloc.arena_max=2")),
+                Some(OsStr::new("1048576"))
+            ),
+            None
+        );
+        assert_eq!(
+            tunables_to_apply(None, None).as_deref(),
+            Some(MMAP_THRESHOLD_TUNABLE)
         );
     }
 }

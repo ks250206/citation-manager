@@ -46,7 +46,8 @@ Status: accepted for #17. Builds on #11 (PDFium worker), #15 (Details › PDF sl
 - papersd and the GUI re-execute themselves once at start on glibc Linux with
   `GLIBC_TUNABLES=glibc.malloc.mmap_threshold=262144` (`cm_daemon::malloc_tuning`), so freed
   bitmap-sized buffers go back to the OS instead of staying in the heap (glibc's dynamic
-  threshold otherwise serves them from the heap after the first one is freed). Measurements:
+  threshold otherwise serves them from the heap after the first one is freed). A threshold the
+  user already set (in `GLIBC_TUNABLES` or `MALLOC_MMAP_THRESHOLD_`) is left alone. Measurements:
   [ISSUE_30 #85](../validation/ISSUE_30.md#85-pdf-閲覧時のメモリ削減).
 - User rotation is applied to the bitmap client-side (`rotate_rgba`); the effective rotation for
   geometry is page /Rotate + user turns. A test proves the rotated bitmap and the effective
