@@ -97,10 +97,18 @@ repository or command-line arguments, and are never printed.
    with `--options runtime --timestamp`, verifies (`codesign --verify --deep --strict`),
    notarizes the app (zip, `notarytool submit --wait`) and staples it, builds and signs the
    `.dmg`, notarizes and staples it, and validates (`stapler validate`, `spctl -a -t open
-   --context context:primary-signature`). The CI workflow runs the same stages when the
-   secrets `CM_SIGN_IDENTITY`, `CM_SIGN_P12_BASE64`, `CM_SIGN_P12_PASSWORD` (and optionally
-   `CM_NOTARY_KEY_P8`, `CM_NOTARY_KEY_ID`, `CM_NOTARY_ISSUER`) exist; otherwise it records
-   `UNVERIFIED: no Developer ID` in `release-signing.json`. This signed path has **never run**
+   --context context:primary-signature`). In CI only the `release-sign` job of
+   `package-macos.yml` runs these stages, and only when it is dispatched by hand on a `v*` tag.
+   It requires approval in the GitHub environment `release`. Set the environment up as follows:
+   - Add the signing secrets as **environment** secrets of `release`, not as repository secrets:
+     `CM_SIGN_IDENTITY`, `CM_SIGN_P12_BASE64` and `CM_SIGN_P12_PASSWORD`, and optionally
+     `CM_NOTARY_KEY_P8`, `CM_NOTARY_KEY_ID` and `CM_NOTARY_ISSUER`.
+   - Require a reviewer.
+   - Limit its deployment refs to protected `v*` tags.
+
+   That job restores no build cache and fails, instead of publishing, when the environment has
+   no Developer ID or Apple does not accept notarization. Branch and PR runs never see the
+   secrets; they record `UNVERIFIED: no Developer ID` in `release-signing.json`. This signed path has **never run**
    (no identity), so treat its first execution as a test.
 4. Re-run the layout smoke on the stapled build on a clean Mac: install from the `.dmg`, start
    with quarantine, PDF text/render, browser capture, MCP, backup/restore.

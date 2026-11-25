@@ -169,6 +169,19 @@ class ReleaseSign(unittest.TestCase):
             {'CM_NOTARY_KEY_PATH': '/k.p8', 'CM_NOTARY_KEY_ID': 'K', 'CM_NOTARY_ISSUER': 'I'}),
             ['--key', '/k.p8', '--key-id', 'K', '--issuer', 'I'])
 
+    def test_signing_secrets_reach_only_the_gated_release_job(self):
+        workflow = (ROOT / '.github/workflows/package-macos.yml').read_text()
+        head, release = workflow.split('\n  release-sign:\n', 1)
+        # Branch/PR runs (app-layout) never reference a secret.
+        self.assertNotIn('secrets.', head)
+        self.assertIn('secrets.CM_SIGN_P12_BASE64', release)
+        gate = "if: github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/tags/v')"
+        self.assertIn(gate, release)
+        self.assertIn('environment: release', release)
+        # No cache produced by other refs is restored into the credential-bearing job.
+        self.assertNotIn('rust-cache', release)
+        self.assertIn('persist-credentials: false', release)
+
     def test_workflow_never_prints_or_traces_secrets(self):
         workflow = (ROOT / '.github/workflows/package-macos.yml').read_text()
         self.assertNotRegex(workflow, r'-----BEGIN|MII[A-Za-z0-9+/]{40}')
