@@ -20,6 +20,8 @@ class InstallLinux(unittest.TestCase):
             executable.write_bytes(b'binary')
             (root / 'build/papersd').write_bytes(b'daemon')
             (root / 'build/papers-native-host').write_bytes(b'host')
+            (root / 'build/papers').write_bytes(b'cli')
+            (root / 'build/papers-mcp').write_bytes(b'mcp')
             pdfium = root / 'pdfium'
             (pdfium / 'lib').mkdir(parents=True)
             (pdfium / 'licenses').mkdir()
@@ -38,6 +40,10 @@ class InstallLinux(unittest.TestCase):
             # The browser host is installed as papersd's sibling (#23).
             self.assertEqual((prefix / 'bin/papers-native-host').read_bytes(), b'host')
             self.assertTrue((prefix / 'bin/papers-native-host').stat().st_mode & 0o111)
+            # The CLI and the MCP server start `<own dir>/papersd`: installed beside it (#28/#29).
+            for name, content in (('papers', b'cli'), ('papers-mcp', b'mcp')):
+                self.assertEqual((prefix / 'bin' / name).read_bytes(), content)
+                self.assertTrue((prefix / 'bin' / name).stat().st_mode & 0o111)
             # Must agree with cm_pdf::worker::linux_bundled_library.
             self.assertEqual((prefix / 'lib/citation-manager/libpdfium.so').read_bytes(), b'so')
             self.assertTrue((prefix / 'share/doc/citation-manager/pdfium-licenses/pdfium.txt').is_file())

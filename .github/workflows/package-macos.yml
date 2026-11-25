@@ -13,12 +13,14 @@ on:
       - 'packaging/**'
       - 'scripts/package/**'
       - 'scripts/native-host/**'
+      - 'tests/e2e/release/**'
       - '.github/workflows/package-macos.yml'
   pull_request:
     paths:
       - 'packaging/**'
       - 'scripts/package/**'
       - 'scripts/native-host/**'
+      - 'tests/e2e/release/**'
       - '.github/workflows/package-macos.yml'
   workflow_dispatch:
 permissions:
@@ -71,7 +73,7 @@ jobs:
         run: |
           cargo build --release --locked -p cm-daemon --bins --features desktop-bootstrap
           cargo build --release --locked -p cm-cli -p cm-mcp -p cm-native-host
-          cargo build --release --locked -p cm-native-host --example inspect_capture
+          cargo build --release --locked -p cm-native-host --example inspect_capture --example release_e2e_owner
       - name: Third-party notices (normal-dependency closure of the shipped binaries)
         run: |
           python3 scripts/package/third_party_notices.py --out "$RUNNER_TEMP/notices"
@@ -191,6 +193,19 @@ jobs:
           rm -f "$real/dev.citation_manager.native_host.json"
           ls -la "$real" 2>/dev/null || true
           exit $status
+      - name: Release E2E (#32) - drag-install from the disk image, host capture, CLI/MCP/REST, annotated export, portability
+        if: ${{ !cancelled() }}
+        run: |
+          # Non-browser parts of tests/e2e/release (the browser probes are the steps above; the
+          # GUI launch after a move is in the smoke). The app is copied out of the mounted image.
+          dmg="$(ls "$RUNNER_TEMP"/evidence/Citation-Manager-*-arm64-adhoc.dmg)"
+          mnt="$RUNNER_TEMP/e2e mount"
+          mkdir -p "$mnt"
+          hdiutil attach -readonly -nobrowse -mountpoint "$mnt" "$dmg"
+          trap 'hdiutil detach "$mnt" || hdiutil detach -force "$mnt"' EXIT
+          python3 tests/e2e/release/run.py --app "$mnt/$APP_NAME" \
+            --owner-client target/release/examples/release_e2e_owner \
+            --out "$RUNNER_TEMP/evidence/release-e2e" --work "$RUNNER_TEMP/release e2e"
       - name: Developer ID signing and notarization (UNVERIFIED without the secrets)
         if: ${{ !cancelled() }}
         env:
