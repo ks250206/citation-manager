@@ -2,6 +2,7 @@
 mod api;
 mod deferred;
 mod library;
+mod pdf;
 mod pdf_export;
 mod workbench;
 
@@ -10,6 +11,7 @@ use std::collections::BTreeMap;
 pub use api::{api_commands, ids as api_ids};
 pub use deferred::deferred_commands;
 pub use library::{ids, library_commands};
+pub use pdf::{ids as pdf_ids, pdf_commands};
 pub use pdf_export::{ids as pdf_export_ids, pdf_export_commands};
 pub use workbench::{ids as workbench_ids, workbench_commands};
 
@@ -133,8 +135,9 @@ impl CommandRegistry {
         for command in library_commands()
             .into_iter()
             .chain(workbench_commands())
-            .chain(api_commands())
+            .chain(pdf_commands())
             .chain(pdf_export_commands())
+            .chain(api_commands())
             .chain(deferred_commands())
         {
             registry

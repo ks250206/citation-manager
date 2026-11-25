@@ -2,7 +2,7 @@
 use cm_desktop::{
     commands::{
         Availability, Command, CommandContext, CommandRegistry, DisabledReason, RegistryError,
-        Requirement, ids,
+        Requirement, deferred_commands, ids,
     },
     keymap::{
         ConfigSource, Context, DiagnosticCode, InputState, KeyResolver, KeyStroke, Keymap,
@@ -159,25 +159,92 @@ fn availability_requires_connection_and_current_resources_without_grant_semantic
     );
 }
 
+/// Test-only descriptor: the built-in deferred provider is empty now, so the
+/// "deferred stays disabled" policy is exercised with a local fixture, not a product placeholder.
+const TEST_DEFERRED: Command = Command {
+    id: "test.deferred",
+    title: "Deferred fixture",
+    description: "Not connected",
+    requirement: Requirement::Deferred {
+        issue: 9999,
+        reason: "fixture is not connected",
+    },
+};
+
 #[test]
-fn known_pdf_api_commands_remain_disabled_even_when_host_claims_connection() {
+fn former_placeholders_are_connected_providers_and_deferred_provider_is_empty() {
     let registry = CommandRegistry::m1();
-    for (id, owner) in [
-        ("pdf.highlight_selection", 21),
-        ("pdf.show_annotations", 21),
+    // #20 connected `pdf.save`; #21 connected the PDF selection/annotation and full-text
+    // placeholders; #26 connected `api.open_settings`. No built-in command is deferred.
+    assert!(deferred_commands().is_empty());
+    assert!(
+        registry
+            .iter()
+            .all(|c| !matches!(c.requirement, Requirement::Deferred { .. }))
+    );
+    for id in [
+        "pdf.save",
+        "pdf.highlight_selection",
+        "pdf.show_annotations",
+        "search.full_text",
+        "api.open_settings",
+    ] {
+        let command = registry.get(id).expect(id);
+        assert!(
+            !matches!(command.requirement, Requirement::Deferred { .. }),
+            "{id}"
+        );
+    }
+}
+
+#[test]
+fn deferred_descriptor_remains_disabled_even_when_host_claims_connection() {
+    let mut registry = CommandRegistry::m1();
+    registry.register(TEST_DEFERRED).unwrap();
+    let id = TEST_DEFERRED.id;
+    let handlers = [id];
+    let context = CommandContext {
+        connected_handlers: &handlers,
+        has_selection: true,
+        ..connected()
+    };
+    match registry.availability(id, &context) {
+        Availability::Disabled(DisabledReason::Deferred { issue, reason }) => {
+            assert_eq!(issue, 9999);
+            assert!(!reason.is_empty());
+        }
+        other => panic!("expected deferred {id}: {other:?}"),
+    }
+}
+
+#[test]
+fn issue_21_pdf_and_search_commands_are_connectable_descriptors() {
+    let registry = CommandRegistry::m1();
+    for id in [
+        "pdf.highlight_selection",
+        "pdf.show_annotations",
+        "search.full_text",
+        "pdf.next_page",
+        "pdf.find",
+        "link.open_clipboard",
     ] {
         let handlers = [id];
         let context = CommandContext {
             connected_handlers: &handlers,
+            has_selection: true,
             ..connected()
         };
-        match registry.availability(id, &context) {
-            Availability::Disabled(DisabledReason::Deferred { issue, reason }) => {
-                assert_eq!(issue, owner);
-                assert!(!reason.is_empty());
-            }
-            other => panic!("expected deferred {id}: {other:?}"),
-        }
+        assert_eq!(
+            registry.availability(id, &context),
+            Availability::Enabled,
+            "{id}"
+        );
+        // Not connected by the host: still disabled, never silently enabled.
+        assert_eq!(
+            registry.availability(id, &connected()),
+            Availability::Disabled(DisabledReason::NotConnected),
+            "{id}"
+        );
     }
 }
 
@@ -928,14 +995,10 @@ fn quoted_braces_escapes_and_unicode_are_json_data_not_structural_depth_or_execu
 
 #[test]
 fn known_disabled_command_is_valid_configuration_but_cannot_become_enabled_by_matching() {
-    let registry = CommandRegistry::m1();
+    let mut registry = CommandRegistry::m1();
+    registry.register(TEST_DEFERRED).unwrap();
     let loaded = load_or_default(
-        &document(vec![binding(
-            "library",
-            "normal",
-            &["p"],
-            "pdf.highlight_selection",
-        )]),
+        &document(vec![binding("library", "normal", &["p"], TEST_DEFERRED.id)]),
         &registry,
     )
     .unwrap();
@@ -950,8 +1013,8 @@ fn known_disabled_command_is_valid_configuration_but_cannot_become_enabled_by_ma
     ) {
         Resolution::Command {
             id,
-            availability: Availability::Disabled(DisabledReason::Deferred { issue: 21, .. }),
-        } => assert_eq!(id, "pdf.highlight_selection"),
+            availability: Availability::Disabled(DisabledReason::Deferred { issue: 9999, .. }),
+        } => assert_eq!(id, TEST_DEFERRED.id),
         other => panic!("disabled binding must remain disabled: {other:?}"),
     }
     assert!(!resolver.has_pending());

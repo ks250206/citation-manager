@@ -48,6 +48,22 @@ pub trait LibraryClient: Send + Sync + 'static {
     ) -> Result<(), ServiceError> {
         Err(ServiceError::Unavailable)
     }
+    /// #18 full-text search (bibliographic records, annotations, PDF page text).
+    fn search(
+        &self,
+        _request: crate::search::SearchRequest,
+        _complete: Reply<crate::search::SearchReply>,
+    ) -> Result<(), ServiceError> {
+        Err(ServiceError::Unavailable)
+    }
+    /// #18 extraction status and bounded page-text reads.
+    fn fulltext(
+        &self,
+        _request: crate::search::FulltextRequest,
+        _complete: Reply<crate::search::FulltextReply>,
+    ) -> Result<(), ServiceError> {
+        Err(ServiceError::Unavailable)
+    }
     /// Highlights/notes (#19). Clients without annotation support report Unavailable.
     fn annotations(
         &self,

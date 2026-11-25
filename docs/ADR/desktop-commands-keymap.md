@@ -38,16 +38,18 @@ Known M1 descriptors (library/import dispatch ownership stays with #16):
 
 All are disconnected until the host explicitly connects them. Even palette.open/citation.copy do
 not claim a palette/clipboard implementation exists here. `paper.open` means paper details; it does
-not claim a PDF viewer is available. The small `commands::deferred` provider contains only known
-examples, with an issue and disabled reason:
+not claim a PDF viewer is available. The small `commands::deferred` provider holds only known
+design examples, with an issue and disabled reason, until their owner connects them. Every former
+placeholder is connected now, so the provider is **empty**:
 
 | ID | Connecting owner | Reason |
 |---|---|---|
-| `pdf.highlight_selection`, `pdf.show_annotations` | #21 | PDF selection/annotations are not connected |
-| `search.full_text` | #18 | Full-text search is not connected |
+| _(none)_ | | |
 
 `pdf.save` was connected by #20: `commands::pdf_export` registers "Save Current PDF…"
 (Selection requirement) and the native host dispatches it ([pdf-export](pdf-export.md)).
+`pdf.highlight_selection`, `pdf.show_annotations` and `search.full_text` were connected by #21:
+`commands::pdf` registers them with the other PDF navigation/find/link commands.
 `api.open_settings` was connected by #26: `commands::api` registers it with
 `api.new_token` and `api.new_mcp_profile` (UI requirement).
 
@@ -167,7 +169,8 @@ most-recent-first history of at most 16 registered IDs. Ranking never executes a
 `commands::workbench` is an additive provider for the #15 workbench (screens, filters, Trash,
 reading layout, export entry, Vim toggle, keymap reload/copy). The native host connects every
 library and workbench ID through one `run_command`, which rechecks availability before running.
-Deferred descriptors (#18/#20/#21/#26) remain disabled and show their issue in the palette.
+Deferred descriptors remain disabled and show their issue in the palette (none are registered now:
+#20, #21 and #26 connected theirs).
 
 Keys: platform shortcuts (⌘ on macOS, Ctrl on Linux) are GPUI bindings — ⌘K palette, ⌘N/⌘S/⌘F,
 ⌘1/⌘2/⌘, screens, ↑↓/↩/Esc in the table. Keys the bindings do not consume in the table go through

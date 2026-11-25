@@ -222,3 +222,22 @@ fn keyboard_row_movement_follows_latest_visible_selection() {
     other.selected = vec![ids[0], ids[3]];
     assert_eq!(other.adjacent(1), Some(ids[1]));
 }
+
+#[test]
+fn opening_a_paper_from_a_hit_or_link_makes_it_the_whole_selection() {
+    // Export "Selected" builds its ids from `selected`; after a search hit or `paper://`
+    // link opens another paper, the export must target that paper, not the old rows.
+    let all = ids(4);
+    let (ids, outside) = (&all[..3], all[3]);
+    let mut library = loaded(ids);
+    library.select(ids[0], false);
+    library.select(ids[1], true);
+    library.select_only(ids[2]);
+    assert_eq!(library.selected, vec![ids[2]]);
+    // Opening the already selected paper again keeps it selected (no toggle).
+    library.select_only(ids[2]);
+    assert_eq!(library.selected, vec![ids[2]]);
+    // A paper outside the loaded page (e.g. a hit from another collection) still counts.
+    library.select_only(outside);
+    assert_eq!(library.selected, vec![outside]);
+}
