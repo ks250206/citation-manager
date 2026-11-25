@@ -27,7 +27,8 @@ use cm_protocol::{
 use cm_storage::daemon::StoredGrant;
 use std::{
     path::{Path, PathBuf},
-    sync::{Arc, RwLock},
+    sync::{Arc, Condvar, Mutex, RwLock},
+    time::Duration,
 };
 
 pub struct ApiService {
@@ -36,6 +37,11 @@ pub struct ApiService {
     library_key: String,
     settings: RwLock<ApiSettings>,
     pub audit: Arc<AuditLog>,
+    /// #27 REST listener state, reported by the listener manager (`crate::rest`).
+    listener: Mutex<ListenerState>,
+    /// Bumped on every saved settings change; the listener manager waits on it.
+    generation: Mutex<u64>,
+    changed: Condvar,
 }
 
 fn invalid(reason: impl Into<String>) -> WireError {
@@ -98,7 +104,34 @@ impl ApiService {
             library_key,
             settings: RwLock::new(settings),
             audit,
+            listener: Mutex::new(ListenerState::Stopped),
+            generation: Mutex::new(0),
+            changed: Condvar::new(),
         })
+    }
+    pub fn listener_state(&self) -> ListenerState {
+        *self.listener.lock().unwrap_or_else(|e| e.into_inner())
+    }
+    pub fn set_listener_state(&self, state: ListenerState) {
+        *self.listener.lock().unwrap_or_else(|e| e.into_inner()) = state;
+    }
+    /// Settings generation (changes whenever settings are saved).
+    pub fn settings_generation(&self) -> u64 {
+        *self.generation.lock().unwrap_or_else(|e| e.into_inner())
+    }
+    /// Waits until the settings generation differs from `seen` or `timeout` passes.
+    pub fn wait_settings_change(&self, seen: u64, timeout: Duration) -> u64 {
+        let guard = self.generation.lock().unwrap_or_else(|e| e.into_inner());
+        let (guard, _) = self
+            .changed
+            .wait_timeout_while(guard, timeout, |g| *g == seen)
+            .unwrap_or_else(|e| e.into_inner());
+        *guard
+    }
+    /// Wakes the listener manager (settings saved or daemon stopping).
+    pub fn notify_listener(&self) {
+        *self.generation.lock().unwrap_or_else(|e| e.into_inner()) += 1;
+        self.changed.notify_all();
     }
     pub fn settings(&self) -> ApiSettings {
         self.settings
@@ -131,7 +164,7 @@ impl ApiService {
             ApiCommand::Overview => Ok(ApiReply::Overview(ApiOverview {
                 settings: self.settings(),
                 secret_backend: self.secrets.backend(),
-                listener: ListenerState::NotAvailable,
+                listener: self.listener_state(),
             })),
             ApiCommand::SaveSettings(settings) => {
                 settings.validate().map_err(|e| invalid(e.to_string()))?;
@@ -148,10 +181,12 @@ impl ApiService {
                     .api_settings()
                     .save(&settings, now)?;
                 *self.settings.write().unwrap_or_else(|e| e.into_inner()) = settings.clone();
+                // The REST listener follows the saved settings (started, moved or stopped).
+                self.notify_listener();
                 Ok(ApiReply::Overview(ApiOverview {
                     settings,
                     secret_backend: self.secrets.backend(),
-                    listener: ListenerState::NotAvailable,
+                    listener: self.listener_state(),
                 }))
             }
             ApiCommand::ListTokens => Ok(ApiReply::Tokens(

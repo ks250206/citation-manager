@@ -114,7 +114,8 @@ impl SecretBackend {
     }
 }
 
-/// The REST listener is #27; until then the daemon only stores settings.
+/// #27 REST listener state as reported by papersd. `NotAvailable` is kept for builds or
+/// daemons without the listener (pre-#27); papersd reports `Stopped` or `Listening`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ListenerState {

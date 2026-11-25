@@ -37,7 +37,10 @@ pdfium-render = { version = "=0.9.5", default-features = false, features = ["pdf
 # Known later-issue dependencies: declarations do not imply implemented adapters.
 rmcp = { version = "=3.9.0", default-features = false, features = ["server", "transport-io"] }
 tokio = { version = "=1.54.1", features = ["rt-multi-thread", "macros"] }
-axum = "=0.8.9"
+axum = { version = "=0.8.9", default-features = false }
+# #27 REST listener: hyper/hyper-util are already in the lock (reqwest); pinned to those versions.
+hyper = { version = "=1.12.0", default-features = false }
+hyper-util = { version = "=0.1.21", default-features = false }
 clap = { version = "=4.6.7", features = ["derive"] }
 reqwest = { version = "=0.13.5", default-features = false, features = ["json", "rustls"] }
 tracing = "=0.1.44"

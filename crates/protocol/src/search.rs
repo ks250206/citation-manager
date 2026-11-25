@@ -18,6 +18,19 @@ pub enum FulltextRequest {
     AttachmentStatus(AttachmentId),
     /// Bounded read of stored page text.
     Pages(PageTextRequest),
+    /// #27 bounded page text of a paper's PDF: `attachment` (which must belong to the paper)
+    /// or else its first PDF attachment. Same limits and operation as `Pages`.
+    PaperPages(PaperPageTextRequest),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PaperPageTextRequest {
+    pub paper: PaperId,
+    pub attachment: Option<AttachmentId>,
+    pub from_page: u32,
+    pub max_pages: u32,
+    pub max_chars: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -144,7 +144,7 @@ impl Command {
                 LibraryRequest::List(_) => O::PaperList,
                 LibraryRequest::Get(_) => O::PaperGet,
                 LibraryRequest::Create(_) => O::PaperCreate,
-                LibraryRequest::Update(_) => O::PaperUpdate,
+                LibraryRequest::Update(_) | LibraryRequest::Patch(..) => O::PaperUpdate,
             },
             Self::Query(_) => O::LibraryQuery,
             Self::Organization(r) => match r {
@@ -194,7 +194,7 @@ impl Command {
                 FulltextRequest::Status(_) | FulltextRequest::AttachmentStatus(_) => {
                     O::FulltextStatus
                 }
-                FulltextRequest::Pages(_) => O::FulltextRead,
+                FulltextRequest::Pages(_) | FulltextRequest::PaperPages(_) => O::FulltextRead,
             },
         }
     }

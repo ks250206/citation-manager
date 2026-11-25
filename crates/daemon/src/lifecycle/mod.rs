@@ -93,6 +93,9 @@ pub fn remove_stale_socket(path: &Path) -> io::Result<()> {
 #[derive(Debug)]
 pub struct Activity {
     connections: AtomicUsize,
+    /// #27 holders that keep the daemon from idling without being a connection (the
+    /// enabled REST listener).
+    pinned: AtomicUsize,
     active_jobs: AtomicUsize,
     idle_since: Mutex<Instant>,
 }
@@ -100,6 +103,7 @@ impl Default for Activity {
     fn default() -> Self {
         Self {
             connections: AtomicUsize::new(0),
+            pinned: AtomicUsize::new(0),
             active_jobs: AtomicUsize::new(0),
             idle_since: Mutex::new(Instant::now()),
         }
@@ -112,7 +116,20 @@ impl Drop for ConnectionGuard {
         self.0.touch();
     }
 }
+/// Keeps the daemon from idle exit while held (see `Activity::pin`).
+pub struct PinGuard(Arc<Activity>);
+impl Drop for PinGuard {
+    fn drop(&mut self) {
+        self.0.pinned.fetch_sub(1, Ordering::SeqCst);
+        self.0.touch();
+    }
+}
 impl Activity {
+    /// #27: an enabled REST listener keeps papersd running (REST clients cannot start it).
+    pub fn pin(self: &Arc<Self>) -> PinGuard {
+        self.pinned.fetch_add(1, Ordering::SeqCst);
+        PinGuard(self.clone())
+    }
     pub fn connect(self: &Arc<Self>) -> ConnectionGuard {
         self.connections.fetch_add(1, Ordering::SeqCst);
         ConnectionGuard(self.clone())
@@ -134,6 +151,7 @@ impl Activity {
     /// True only with no connection and no queued/running/retry_wait job for `timeout`.
     pub fn idle_for(&self, timeout: Duration) -> bool {
         self.connections() == 0
+            && self.pinned.load(Ordering::SeqCst) == 0
             && self.active_jobs() == 0
             && self
                 .idle_since

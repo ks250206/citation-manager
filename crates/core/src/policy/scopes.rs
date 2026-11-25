@@ -276,7 +276,7 @@ pub const ENDPOINTS: &[Endpoint] = endpoints! {
     Rest "GET /tags" [OrganizationList] Scoped(&[PapersRead]);
     Rest "POST /tags" [OrganizationWrite] Scoped(&[PapersWrite]);
     Rest "DELETE /tags/{id}" [OrganizationDelete] Scoped(&[PapersDelete]);
-    Rest "POST /imports" [ImportPreview, ImportCommit] Scoped(&[PapersWrite]);
+    Rest "POST /imports" [ImportPreview, ImportCommit, ImportCancel] Scoped(&[PapersWrite]);
     Rest "POST /exports" [Export] Scoped(&[PapersRead, ExportsWrite]);
     Rest "GET /jobs/{id}" [JobRead] Scoped(&[JobsRead]);
     Rest "POST /jobs/{id}/cancel" [JobCancel] Scoped(&[JobsWrite]);

@@ -18,6 +18,130 @@ impl NewPaper {
     }
 }
 
+/// #27 JSON merge-patch of a paper's bibliographic fields (REST `PATCH /papers/{id}` and the
+/// body of `POST /papers`). An absent field is unchanged, `null` clears an optional field and
+/// a value replaces it. Unknown fields are rejected. The daemon applies it on the library
+/// worker in the same step as the read, so a write-only token never receives the record.
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PaperPatch {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub external_ids: Option<Vec<ExternalId>>,
+    #[serde(rename = "type", default, deserialize_with = "present")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub paper_type: Option<Option<String>>,
+    #[serde(rename = "abstract", default, deserialize_with = "present")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub abstract_text: Option<Option<String>>,
+    #[serde(default, deserialize_with = "present")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub year: Option<Option<i32>>,
+    #[serde(default, deserialize_with = "present")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub publication_date: Option<Option<String>>,
+    #[serde(default, deserialize_with = "present")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub journal: Option<Option<String>>,
+    #[serde(default, deserialize_with = "present")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub volume: Option<Option<String>>,
+    #[serde(default, deserialize_with = "present")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub issue: Option<Option<String>>,
+    #[serde(default, deserialize_with = "present")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pages: Option<Option<String>>,
+    #[serde(default, deserialize_with = "present")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub doi: Option<Option<String>>,
+    #[serde(default, deserialize_with = "present")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<Option<String>>,
+    #[serde(default, deserialize_with = "present")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub language: Option<Option<String>>,
+    #[serde(default, deserialize_with = "present")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub citation_key: Option<Option<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authors: Option<Vec<cm_domain::Contributor>>,
+    #[serde(default, deserialize_with = "present")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extra_json: Option<Option<serde_json::Value>>,
+}
+/// A present field (even `null`) is `Some`; `#[serde(default)]` makes an absent one `None`.
+fn present<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::Deserialize<'de>,
+{
+    <Option<T> as serde::Deserialize>::deserialize(deserializer).map(Some)
+}
+impl PaperPatch {
+    pub fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+    /// Applies the patch to a stored paper (ID and lifecycle timestamps are untouched).
+    pub fn apply(self, paper: &mut Paper) {
+        if let Some(title) = self.title {
+            paper.title = title;
+        }
+        if let Some(ids) = self.external_ids {
+            paper.external_ids = ids;
+        }
+        let b = &mut paper.bibliography;
+        if let Some(authors) = self.authors {
+            b.authors = authors;
+        }
+        for (patch, field) in [
+            (self.paper_type, &mut b.paper_type),
+            (self.abstract_text, &mut b.abstract_text),
+            (self.publication_date, &mut b.publication_date),
+            (self.journal, &mut b.journal),
+            (self.volume, &mut b.volume),
+            (self.issue, &mut b.issue),
+            (self.pages, &mut b.pages),
+            (self.doi, &mut b.doi),
+            (self.url, &mut b.url),
+            (self.language, &mut b.language),
+            (self.citation_key, &mut b.citation_key),
+        ] {
+            if let Some(value) = patch {
+                *field = value;
+            }
+        }
+        if let Some(year) = self.year {
+            b.year = year;
+        }
+        if let Some(extra) = self.extra_json {
+            b.extra_json = extra;
+        }
+    }
+    /// A new paper from a patch over an empty record; the title is required.
+    pub fn into_new_paper(self) -> Result<NewPaper, ServiceError> {
+        if self.title.is_none() {
+            return Err(ServiceError::InvalidInput("title is required".into()));
+        }
+        let mut paper = Paper {
+            id: PaperId(uuid::Uuid::nil()),
+            title: String::new(),
+            external_ids: Vec::new(),
+            bibliography: Bibliography::default(),
+            created_at: None,
+            updated_at: None,
+            deleted_at: None,
+        };
+        self.apply(&mut paper);
+        Ok(NewPaper {
+            title: paper.title,
+            external_ids: paper.external_ids,
+            bibliography: paper.bibliography,
+        })
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum PaperVisibility {
     #[default]
@@ -288,6 +412,49 @@ fn validate_metadata_inner(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn paper_patch_distinguishes_absent_null_and_value_and_round_trips() {
+        let patch: PaperPatch =
+            serde_json::from_str(r#"{"title":"New","journal":null,"year":2020}"#).unwrap();
+        assert_eq!(patch.title.as_deref(), Some("New"));
+        assert_eq!(patch.journal, Some(None));
+        assert_eq!(patch.year, Some(Some(2020)));
+        assert_eq!(patch.doi, None);
+        let wire = serde_json::to_string(&patch).unwrap();
+        assert_eq!(serde_json::from_str::<PaperPatch>(&wire).unwrap(), patch);
+        assert!(serde_json::from_str::<PaperPatch>(r#"{"titel":"x"}"#).is_err());
+        let untitled = PaperPatch {
+            journal: Some(Some("J".into())),
+            ..PaperPatch::default()
+        }
+        .into_new_paper();
+        assert!(matches!(untitled, Err(ServiceError::InvalidInput(_))));
+        let new = PaperPatch {
+            title: Some("T".into()),
+            journal: Some(Some("J".into())),
+            doi: Some(Some("10.1/x".into())),
+            ..PaperPatch::default()
+        }
+        .into_new_paper()
+        .unwrap();
+        let mut stored = Paper {
+            id: PaperId(uuid::Uuid::from_u128(1)),
+            title: new.title,
+            external_ids: new.external_ids,
+            bibliography: new.bibliography,
+            created_at: Some("c".into()),
+            updated_at: None,
+            deleted_at: None,
+        };
+        patch.apply(&mut stored);
+        assert_eq!(stored.title, "New");
+        assert_eq!(stored.bibliography.journal, None);
+        assert_eq!(stored.bibliography.year, Some(2020));
+        assert_eq!(stored.bibliography.doi.as_deref(), Some("10.1/x"));
+        assert_eq!(stored.created_at.as_deref(), Some("c"));
+        assert!(PaperPatch::default().is_empty());
+    }
 
     #[test]
     fn doi_resolver_wrappers_and_registrant_subdivisions_are_normalized() {

@@ -2,7 +2,8 @@
 //!
 //! Start order: private dirs -> exclusive library lock -> migrations (with pre-migration
 //! backup) -> grant registry + owner bootstrap credential -> library worker + job runner ->
-//! stale socket cleanup -> bind (0600 socket in a 0700 directory). No HTTP listener.
+//! stale socket cleanup -> bind (0600 socket in a 0700 directory) -> #27 REST listener
+//! manager (listens only while the persisted API settings enable it).
 //!
 //! Per connection: OS peer check, a bounded/timed Hello, credential -> stored grant, then
 //! every request is authorized against the *current* grant (default deny).
@@ -11,6 +12,8 @@
 //! daemon applies the bulk guard (`policy::elevation`), restricts `exports:write` tokens to
 //! the allowed export folders, and records denials and non-read operations in the audit log.
 pub mod auth;
+/// #27 in-process adapters (REST) dispatch through the same `Session::dispatch`.
+pub mod gateway;
 
 use crate::{
     desktop_worker::InProcessLibraryClient,
@@ -42,7 +45,7 @@ use cm_protocol::{
     },
     jobs::{JobCommand, JobReply},
     library::LibraryClient,
-    search::{FulltextReply, FulltextRequest, SearchReply, SearchRequest},
+    search::{FulltextReply, FulltextRequest, PageTextRequest, SearchReply, SearchRequest},
 };
 use cm_storage::{LibraryDb, LibraryDirectory, SqlFault, StorageError, fts::SearchReader};
 use std::{
@@ -83,6 +86,9 @@ pub struct DaemonConfig {
     pub secret_store: Option<Arc<dyn SecretStore>>,
     /// #26 size of each of the two audit log files.
     pub audit_max_bytes: u64,
+    /// #27 REST listener options (origins, limits, request log). Whether it listens, and
+    /// where, comes only from the persisted API settings.
+    pub rest: crate::rest::RestConfig,
 }
 impl DaemonConfig {
     pub fn new(library: PathBuf) -> Self {
@@ -96,6 +102,7 @@ impl DaemonConfig {
             extractor: None,
             secret_store: None,
             audit_max_bytes: crate::audit::DEFAULT_MAX_BYTES,
+            rest: crate::rest::RestConfig::default(),
         }
     }
 }
@@ -243,6 +250,7 @@ pub fn start(config: DaemonConfig) -> Result<RunningDaemon, StartError> {
         api,
         bulk: Mutex::new(BulkGuard::default()),
     });
+    let rest = crate::rest::Manager::start(gateway::Gateway(shared.clone()), config.rest)?;
     let stop = Arc::new(AtomicBool::new(false));
     let accept_stop = stop.clone();
     let idle = config.idle_timeout;
@@ -250,7 +258,9 @@ pub fn start(config: DaemonConfig) -> Result<RunningDaemon, StartError> {
         .name("papersd-accept".into())
         .spawn(move || {
             accept_loop(&listener, &shared, &accept_stop, idle);
-            // Stop accepting first, then remove our socket while still holding the lock.
+            // Stop the REST listener and stop accepting, then remove our socket while still
+            // holding the lock.
+            rest.stop();
             drop(listener);
             let _ = std::fs::remove_file(&shared.paths.socket);
             for stream in shared
@@ -490,25 +500,19 @@ impl Session {
             return;
         }
         let operation = command.operation();
-        let now = now_ms();
-        let held =
-            match self
-                .shared
-                .auth
-                .authorize(self.grant, self.requested.as_ref(), operation, now)
-            {
-                Ok(held) => held,
-                Err(denial) => {
-                    self.audit(operation, &Err(WireError::Denied(denial)), None);
-                    self.respond_now(id, Err(WireError::Denied(denial)));
-                    return;
-                }
-            };
-        if let Err(error) = self.guard(&command, operation, &held, now) {
-            self.audit(operation, &Err(error.clone()), None);
-            self.respond_now(id, Err(error));
-            return;
-        }
+        let held = match admit(
+            &self.shared,
+            self.grant,
+            self.requested.as_ref(),
+            &command,
+            now_ms(),
+        ) {
+            Ok(held) => held,
+            Err(error) => {
+                self.respond_now(id, Err(error));
+                return;
+            }
+        };
         let target = match &command {
             Command::Api(c) => api_target(c),
             Command::Grants(GrantCommand::Revoke(g)) => Some(*g),
@@ -817,50 +821,70 @@ impl Session {
     }
 }
 
+/// The per-request decision shared by every transport (IPC sessions and the in-process REST
+/// adapter, which dispatches through `Session::dispatch` as well): the operation's capability
+/// requirement against the grant's *current* state, then the #26 guards. Denials are audited.
+fn admit(
+    shared: &Shared,
+    grant: GrantId,
+    requested: Option<&CapabilitySet>,
+    command: &Command,
+    now: i64,
+) -> Result<CapabilitySet, WireError> {
+    let operation = command.operation();
+    let decided = shared
+        .auth
+        .authorize(grant, requested, operation, now)
+        .map_err(WireError::Denied)
+        .and_then(|held| guard(shared, grant, command, operation, &held, now).map(|()| held));
+    if let Err(error) = &decided {
+        record_denial(shared, grant, operation, error);
+    }
+    decided
+}
+
+/// #26 checks after the operation's capability requirement passed: the bulk guard (decided
+/// as `BulkTrash`/`BulkMove`) and export folders for tokens without `LocalFileWrite`.
+fn guard(
+    shared: &Shared,
+    grant: GrantId,
+    command: &Command,
+    operation: Operation,
+    held: &CapabilitySet,
+    now: i64,
+) -> Result<(), WireError> {
+    let moves = matches!(
+        command,
+        Command::Organization(
+            OrganizationRequest::CollectionMember(..) | OrganizationRequest::TagMember(..)
+        )
+    );
+    shared
+        .bulk
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .check(grant, held, operation, moves, now)
+        .map_err(|bulk| WireError::Denied(Denial::Forbidden(bulk)))?;
+    if let Command::Export(request) = command
+        && !held.contains(&Capability::LocalFileWrite)
+        && !policy::export::destination_allowed(&request.path, &shared.api.export_dirs())
+    {
+        return Err(WireError::Denied(Denial::Forbidden(Operation::Export)));
+    }
+    Ok(())
+}
+
+fn record_denial(shared: &Shared, grant: GrantId, operation: Operation, error: &WireError) {
+    shared.api.audit.record(&audit_entry(
+        grant,
+        shared.auth.kind_of(grant),
+        operation,
+        &Err(error.clone()),
+        None,
+    ));
+}
+
 impl Session {
-    /// #26 checks after the operation's capability requirement passed: the bulk guard
-    /// (decided as `BulkTrash`/`BulkMove`) and export folders for `exports:write` tokens.
-    fn guard(
-        &self,
-        command: &Command,
-        operation: Operation,
-        held: &CapabilitySet,
-        now: i64,
-    ) -> Result<(), WireError> {
-        let moves = matches!(
-            command,
-            Command::Organization(
-                OrganizationRequest::CollectionMember(..) | OrganizationRequest::TagMember(..)
-            )
-        );
-        self.shared
-            .bulk
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .check(self.grant, held, operation, moves, now)
-            .map_err(|bulk| WireError::Denied(Denial::Forbidden(bulk)))?;
-        if let Command::Export(request) = command
-            && !held.contains(&Capability::LocalFileWrite)
-            && !policy::export::destination_allowed(&request.path, &self.shared.api.export_dirs())
-        {
-            return Err(WireError::Denied(Denial::Forbidden(Operation::Export)));
-        }
-        Ok(())
-    }
-    fn audit(
-        &self,
-        operation: Operation,
-        result: &Result<Reply, WireError>,
-        target: Option<GrantId>,
-    ) {
-        self.shared.api.audit.record(&audit_entry(
-            self.grant,
-            self.shared.auth.kind_of(self.grant),
-            operation,
-            result,
-            target,
-        ));
-    }
     /// #18 search on a pooled read connection, inside one read snapshot and within the
     /// request's `timeout_ms` (enforced inside SQLite; an interrupted lookup is reported as
     /// a timed-out page by the search service).
@@ -926,6 +950,29 @@ impl Session {
             }
             FulltextRequest::Pages(request) => {
                 FulltextReply::Pages(Box::new(reader.pages(&request)?))
+            }
+            FulltextRequest::PaperPages(request) => {
+                // Same limits as `Pages`, checked before anything is looked up.
+                PageTextRequest {
+                    attachment: cm_protocol::domain::AttachmentId(request.paper.0),
+                    from_page: request.from_page,
+                    max_pages: request.max_pages,
+                    max_chars: request.max_chars,
+                }
+                .validate()?;
+                let attachments = reader.for_paper(request.paper)?;
+                let attachment = match request.attachment {
+                    Some(wanted) => attachments.iter().find(|a| a.attachment_id == wanted),
+                    None => attachments.first(),
+                }
+                .ok_or(ServiceError::NotFound)?
+                .attachment_id;
+                FulltextReply::Pages(Box::new(reader.pages(&PageTextRequest {
+                    attachment,
+                    from_page: request.from_page,
+                    max_pages: request.max_pages,
+                    max_chars: request.max_chars,
+                })?))
             }
             _ => {
                 return Err(WireError::Service(ServiceError::InvalidInput(

@@ -3,7 +3,7 @@
 use crate::domain::{Paper, PaperId};
 pub use cm_core::{
     ServiceError,
-    papers::{NewPaper, PaperList},
+    papers::{NewPaper, PaperList, PaperPatch},
 };
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -12,6 +12,8 @@ pub enum LibraryRequest {
     Get(PaperId),
     Create(Box<NewPaper>),
     Update(Box<Paper>),
+    /// #27 merge-patch applied on the library worker (read + update in one step).
+    Patch(PaperId, Box<PaperPatch>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
