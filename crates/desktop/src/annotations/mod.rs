@@ -125,6 +125,33 @@ pub fn annotation_at(
         .map(|a| a.id)
 }
 
+/// What to do with an annotation that a search hit or deep link asked to select.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PendingSelection {
+    /// Nothing was asked for.
+    Idle,
+    /// The open paper's annotation list has not arrived yet: keep waiting, with nothing
+    /// selected so the comment editor cannot save a stale value.
+    Wait,
+    /// Select it through the normal selection path (which loads its comment).
+    Select(AnnotationId),
+    /// The list arrived without it (deleted meanwhile, or another paper's annotation).
+    Missing(AnnotationId),
+}
+/// Resolve a requested annotation against the open paper's list (`None` until that list
+/// has arrived for the paper).
+pub fn pending_selection(
+    wanted: Option<AnnotationId>,
+    list: Option<&[Annotation]>,
+) -> PendingSelection {
+    match (wanted, list) {
+        (None, _) => PendingSelection::Idle,
+        (Some(_), None) => PendingSelection::Wait,
+        (Some(id), Some(list)) if list.iter().any(|a| a.id == id) => PendingSelection::Select(id),
+        (Some(id), Some(_)) => PendingSelection::Missing(id),
+    }
+}
+
 /// Direction of a history step.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Step {

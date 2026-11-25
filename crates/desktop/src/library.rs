@@ -100,6 +100,13 @@ impl Library {
     pub fn index_of(&self, id: PaperId) -> Option<usize> {
         self.papers.iter().position(|p| p.id == id)
     }
+    /// Make `id` the whole selection, e.g. when a search hit or `paper://` link opens it in
+    /// the editor, so actions on "the selection" (export Selected) follow the open paper.
+    /// Unlike `select`, never toggles it off.
+    pub fn select_only(&mut self, id: PaperId) {
+        self.selected.clear();
+        self.selected.push(id);
+    }
     pub fn select(&mut self, id: PaperId, multiple: bool) {
         if !multiple {
             self.selected.clear();

@@ -200,3 +200,20 @@ fn deep_links_accept_only_the_canonical_form_they_print() {
         assert!(DeepLink::parse(&bad).is_none(), "{bad} must be rejected");
     }
 }
+
+#[test]
+fn find_from_a_hit_keeps_its_page_and_starts_at_the_next_match() {
+    // Matches on pages 2, 5 and 9 (0-based), e.g. the hit's text also occurs earlier.
+    let pages = [(2, 1), (5, 3), (9, 1)];
+    // Plain find: cursor at the first match, and jump there.
+    assert_eq!(find_start(&pages, None), Some((0, Some(2))));
+    // Opened from a hit on page 5: stay there (no jump), cursor on page 5's match.
+    assert_eq!(find_start(&pages, Some(5)), Some((1, None)));
+    // Hit page without a stored-text match: cursor at the next match after it, no jump.
+    assert_eq!(find_start(&pages, Some(6)), Some((2, None)));
+    // Every match is earlier than the hit's page: wrap the cursor, still no jump.
+    assert_eq!(find_start(&pages, Some(10)), Some((0, None)));
+    assert_eq!(find_start(&pages, Some(0)), Some((0, None)));
+    assert_eq!(find_start(&[], Some(3)), None);
+    assert_eq!(find_start(&[], None), None);
+}

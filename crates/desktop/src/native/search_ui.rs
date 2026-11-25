@@ -3,7 +3,9 @@
 use super::*;
 use crate::{
     deep_links::{DeepLink, Target},
-    search::{self as presentation, coverage_notes, focus_text, snippet_runs, source_label},
+    search::{
+        self as presentation, coverage_notes, find_start, focus_text, snippet_runs, source_label,
+    },
 };
 use cm_protocol::search::{
     ExtractionState, FulltextReply, FulltextRequest, PageTextRequest, SearchCoverage, SearchHit,
@@ -82,6 +84,9 @@ pub(super) struct FindState {
     /// Stored text unavailable: matches come only from pages already rendered.
     pub loaded_only: bool,
     pub last_g: Option<std::time::Instant>,
+    /// Page the find was started from (an opened hit's page): the cursor starts at the
+    /// first match on or after it instead of jumping to the first match.
+    pub anchor: Option<u32>,
     /// Bumped when a find starts, is closed or its attachment goes away; replies from an
     /// older chain are dropped so two chains never merge their pages.
     pub generation: u64,
@@ -98,6 +103,7 @@ impl FindState {
             status: String::new(),
             loaded_only: false,
             last_g: None,
+            anchor: None,
             generation: 0,
         }
     }
@@ -300,7 +306,7 @@ impl LibraryView {
             && let Ok(id) = uuid::Uuid::parse_str(annotation)
         {
             let id = cm_protocol::annotations::AnnotationId(id);
-            self.ann.selected = Some(id);
+            self.ann_select_when_loaded(id, cx);
         }
         let Some(attachment) = target.attachment else {
             return;
@@ -323,7 +329,8 @@ impl LibraryView {
                 .input
                 .update(cx, |f, cx| f.set_text(text.clone(), cx));
             self.find.open = true;
-            self.start_find(attachment, text, cx);
+            // Keep the hit's page even when the text also occurs earlier in the PDF.
+            self.start_find(attachment, text, target.page, cx);
         }
         cx.notify();
     }
@@ -384,9 +391,11 @@ impl LibraryView {
         &mut self,
         attachment: AttachmentId,
         query: String,
+        anchor: Option<u32>,
         cx: &mut Context<Self>,
     ) {
         self.find.generation += 1;
+        self.find.anchor = anchor;
         self.find.query = query.trim().to_owned();
         self.find.attachment = Some(attachment);
         self.find.pages.clear();
@@ -484,9 +493,11 @@ impl LibraryView {
                     if capped {
                         self.find.status.push_str(" — stopped after 2000 pages");
                     }
-                    if let Some((page, _)) = self.find.pages.first().copied() {
-                        self.find.current = 0;
-                        self.pending_jump = Some((attachment, page));
+                    if let Some((current, jump)) = find_start(&self.find.pages, self.find.anchor) {
+                        self.find.current = current;
+                        if let Some(page) = jump {
+                            self.pending_jump = Some((attachment, page));
+                        }
                     }
                 }
             }
@@ -522,6 +533,7 @@ impl LibraryView {
     /// Forget find results (and any pending jump) that belong to another attachment.
     pub(super) fn reset_find(&mut self) {
         self.find.generation += 1;
+        self.find.anchor = None;
         self.find.query.clear();
         self.find.pages.clear();
         self.find.current = 0;
@@ -547,7 +559,7 @@ impl LibraryView {
                 if this.find.query == query.trim() && !this.find.pages.is_empty() {
                     this.find_step(true, cx);
                 } else if let Some(attachment) = this.host.selected {
-                    this.start_find(attachment, query, cx);
+                    this.start_find(attachment, query, None, cx);
                 }
             },
         )

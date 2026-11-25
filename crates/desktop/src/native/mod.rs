@@ -497,6 +497,10 @@ impl LibraryView {
                             cx,
                         );
                     } else {
+                        // The editor now shows this paper (search hit, `paper://` link or
+                        // import): selection-based actions such as export Selected must
+                        // target it, not the row selected before.
+                        self.library.select_only(p.id);
                         self.set_editor(Some(*p), None, cx);
                     }
                 }

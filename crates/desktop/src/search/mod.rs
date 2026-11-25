@@ -210,3 +210,21 @@ pub fn count_in_text(text: &str, needle: &str) -> usize {
     }
     count
 }
+
+/// Where the find cursor starts once the stored-text matches are known: `(index into
+/// pages, page to jump to)`. `pages` lists pages with matches in ascending order.
+///
+/// A find started by opening a hit keeps the hit's page (`anchor`): the cursor starts at
+/// the first match on or after that page (wrapping to the first match when every match is
+/// earlier) and nothing jumps, so an earlier occurrence of the same text never overrides
+/// the page that was clicked. A plain find jumps to the first match.
+pub fn find_start(pages: &[(u32, usize)], anchor: Option<u32>) -> Option<(usize, Option<u32>)> {
+    let (first, _) = *pages.first()?;
+    Some(match anchor {
+        None => (0, Some(first)),
+        Some(page) => (
+            pages.iter().position(|(p, _)| *p >= page).unwrap_or(0),
+            None,
+        ),
+    })
+}
