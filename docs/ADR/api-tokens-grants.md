@@ -107,7 +107,7 @@ permanently (`GrantCommand::Issue` refuses it). Any other grant gets it only thr
 only for tokens already holding `papers:write` or `papers:delete`; session narrowing
 applies). `EndElevation` stops it immediately.
 
-## API settings (listener is #27)
+## API settings (listener: [rest-api](rest-api.md), #27)
 
 `ApiSettings { enabled = false, bind = 127.0.0.1 | ::1, port = 39271 (1024..=65535),
 export_dirs }` in the singleton `api_settings` row; the table CHECKs repeat the loopback and
@@ -115,7 +115,8 @@ port rules. Export folders must be absolute, existing and reached without symlin
 `exports:write` tokens may only create files inside them (`policy::export`), on top of the
 #12 writer's no-symlink/create-new rules; arbitrary paths stay with the owner's
 `LocalFileWrite` (GUI save dialog). #27 reads `ApiCommand::Overview`/`ApiService::settings`
-and must not listen while `enabled` is false.
+and must not listen while `enabled` is false. Since #27 `Overview` reports the real
+`ListenerState` (`Stopped`/`Listening`) and `SaveSettings` wakes the listener manager.
 
 ## Secret store (`cm_protocol::client::secrets`, std-only)
 
@@ -154,9 +155,10 @@ is printed exactly once on stdout; when stdout is not a terminal the command ref
   re-exported as `cm_protocol::api::*`). Add rows there; the core tests then cover them.
 - Token verification: out of process, present the token as `Hello::credential` (IPC
   handshake); in process (#27 inside papersd), `Authenticator::authenticate` then
-  `Authenticator::authorize(grant, None, operation, now)` per request. The extra checks in
-  `ipc::Session::guard` (bulk guard, export folders) apply too: factor them out for REST
-  rather than reimplementing them.
+  `Authenticator::authorize(grant, None, operation, now)` per request. The extra checks
+  (bulk guard, export folders) apply too. Done in #27: `ipc::admit`/`ipc::guard` are shared
+  free functions and REST dispatches through `Session::dispatch` (`ipc::gateway`), see
+  [rest-api](rest-api.md). `POST /imports` also lists `ImportCancel` (same scope).
 - Settings: `ApiCommand::Overview` / `SaveSettings`; in the daemon `ApiService::settings()`.
 - Secrets: `PlatformSecretStore::detect(paths.secrets_dir(), uid).get(&account(...))` lets
   `papers mcp` load its profile token without a config-file secret.

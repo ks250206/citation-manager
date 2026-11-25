@@ -315,13 +315,28 @@ impl LibraryView {
                     .child(hint(
                         "Off by default. Listens on this computer only (loopback); other devices on your network cannot connect. Every request needs a token below.",
                     ))
-                    .when(
-                        overview.is_some_and(|o| o.listener == ListenerState::NotAvailable),
-                        |el| {
-                            el.child(hint(
-                                "This build stores these settings but does not include the HTTP listener yet.",
-                            ))
-                        },
+                    .when_some(
+                        overview.and_then(|o| match o.listener {
+                            ListenerState::NotAvailable => Some(
+                                "This daemon stores these settings but does not include the HTTP listener."
+                                    .to_owned(),
+                            ),
+                            ListenerState::Listening => Some(format!(
+                                "Listening on http://{}/api/v1",
+                                match o.settings.bind {
+                                    BindAddress::LoopbackV6 => format!("[::1]:{}", o.settings.port),
+                                    BindAddress::LoopbackV4 => {
+                                        format!("127.0.0.1:{}", o.settings.port)
+                                    }
+                                }
+                            )),
+                            ListenerState::Stopped if o.settings.enabled => Some(
+                                "Not listening yet: the port may be in use by another program."
+                                    .to_owned(),
+                            ),
+                            _ => None,
+                        }),
+                        |el, text| el.child(hint(text)),
                     )
                     .child(
                         row()

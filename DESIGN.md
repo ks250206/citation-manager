@@ -1009,3 +1009,17 @@ REST/MCP/CLI 対応表（#27–#29 が import）。§13.2 の `/search` は本�
 127.0.0.1/::1 と 1024–65535 のみ保存（listener は #27）。export は許可フォルダ限定。監査ログは
 内容・秘密なしの有界 file。GUI「API & integrations」と `papersd token|api` CLI bootstrap を提供する。
 証跡は [ISSUE_26](docs/validation/ISSUE_26.md)。
+
+## 35. #27 認証付き REST API・OpenAPI 契約
+
+[rest-api ADR](docs/ADR/rest-api.md) が §13/§17/§21.3 の実装上の明確化となる。listener は `papersd` 内の
+tokio runtime（専用 thread）で、永続 `ApiSettings` が有効な間だけ 127.0.0.1/::1 に bind し、設定変更に追従、
+有効中は daemon を idle 終了させない。全 endpoint は #26 `ENDPOINTS` の REST 行そのもので、Bearer token を
+`Authenticator` で毎要求検証（失効は keep-alive 接続の次要求から 401）、行の全 operation を事前認可し、
+各 command は IPC と同じ `Session::dispatch`（共有 `ipc::admit`/`ipc::guard`）を通る。HTTP は scoped token
+（api/mcp/cli）のみ。Host 完全一致・Origin 既定拒否・CORS 既定無効、body/URI/header/timeout/同時実行上限、
+`{error:{code,message,details,request_id}}`、内容・token なしの request log。§13.2 からの差分: export は
+`POST /exports`（許可フォルダへの書き込みのみ、#26）、import は本文の BibTeX/RIS（≤2 MiB、1 回 ≤100 件、
+完全重複は skip）、ページ描画・bulk・restore・job cancel は #26 表の追加行。下位 scope へ本文・注釈を返さず、
+書き込み応答は読めない token に保存済みレコードを返さない。契約は [OpenAPI](docs/openapi.json)（route 表と
+`ENDPOINTS` から生成、相互一致と全応答の schema 適合を試験）。証跡は [ISSUE_27](docs/validation/ISSUE_27.md)。

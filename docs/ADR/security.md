@@ -63,3 +63,12 @@ endpoint/tool/command 表と全 1024 scope 組合せの判定一致を自動試�
 OS secret store（無ければ 0600 file、弱いと明示）へ、DB は SHA-256 のみ。MCP profile は read-only 既定で write は
 確認付きの別操作。一括削除/移動は grant 毎の burst 上限を超えると 15 分以内の明示 elevation を要する。
 native host preset は変更していない。監査ログは内容・秘密を記録しない有界 file。
+
+## #27 実装状態
+
+REST は papersd 内の loopback listener（既定 OFF、127.0.0.1/::1 のみ）で、同じ `Session::dispatch`
+（live grant 判定 + bulk/export guard の共有関数 `ipc::admit`）を通る。HTTP では scoped token
+（api/mcp/cli）のみ受け付け、owner の desktop credential と native host は拒否（狭めるだけ）。
+Host 完全一致（DNS rebinding 対策）、Origin 既定拒否・CORS 既定無効、body/URI/header/時間/同時実行の上限、
+request_id 付き標準エラー、内容・token を含まない request log を自動試験した
+（[rest-api ADR](rest-api.md)、[証跡](../validation/ISSUE_27.md)）。同一 UID プロセスからの保護は主張しない。
