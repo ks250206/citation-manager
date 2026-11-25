@@ -13,6 +13,7 @@ macro_rules! primary {
     };
 }
 mod annotations_ui;
+mod api_ui;
 mod details_ui;
 mod import_ui;
 mod library_ui;
@@ -97,6 +98,11 @@ enum Event {
     Annotation(
         Box<annotations_ui::AnnOp>,
         Result<cm_protocol::annotations::AnnotationReply, ServiceError>,
+    ),
+    /// #26 API settings replies bypass the lanes like annotations.
+    Api(
+        Box<api_ui::ApiOp>,
+        Result<cm_protocol::api::ApiReply, ServiceError>,
     ),
     /// #20 export replies bypass the lanes too (a save never blocks other PDF work).
     PdfExport(
@@ -193,6 +199,9 @@ struct LibraryView {
     pending_jump: Option<(AttachmentId, u32)>,
     viewer_focus: FocusHandle,
     page_input: Entity<TextInput>,
+    /// #26 API & Integrations screen.
+    api: crate::api_settings::ApiSettingsState,
+    api_inputs: api_ui::ApiInputs,
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Screen {
@@ -201,6 +210,7 @@ enum Screen {
     Pdf,
     Settings,
     Report,
+    Api,
 }
 impl LibraryView {
     fn new(client: Arc<dyn LibraryClient>, window: &mut Window, cx: &mut Context<Self>) -> Self {
@@ -286,8 +296,19 @@ impl LibraryView {
             pending_jump: None,
             viewer_focus: cx.focus_handle(),
             page_input: cx.new(|cx| TextInput::new("Page", cx)),
+            api: Default::default(),
+            api_inputs: api_ui::ApiInputs::new(cx),
         };
         view.subscribe_viewer_inputs(window, cx);
+        // An edited port is part of the unsaved API settings draft (kept across refreshes).
+        cx.subscribe(
+            &view.api_inputs.port,
+            |this, _, _: &text_input::Edited, cx| {
+                this.api.dirty = true;
+                cx.notify();
+            },
+        )
+        .detach();
         view.subscribe_annotation_inputs(window, cx);
         view.subscribe_search_inputs(window, cx);
         cx.subscribe(
@@ -436,6 +457,10 @@ impl LibraryView {
             }
             Event::Annotation(op, result) => {
                 self.annotation_reply(*op, result, cx);
+                return;
+            }
+            Event::Api(op, result) => {
+                self.api_reply(*op, result, cx);
                 return;
             }
             Event::Search(op, result) => {
@@ -604,6 +629,7 @@ impl LibraryView {
             Event::Progress(_)
             | Event::Render(..)
             | Event::Annotation(..)
+            | Event::Api(..)
             | Event::Search(..)
             | Event::Find(..)
             | Event::PdfExport(..) => (),
@@ -1122,6 +1148,10 @@ impl Render for LibraryView {
         // descendant no "Library" binding (Esc, shortcuts) would fire. Hand focus
         // to the table on Library, else to the root. Find opts out by updating
         // `focus_layout` itself before focusing the search field.
+        // A shown token secret never outlives the screen it was shown on.
+        if self.screen != Screen::Api && self.api.revealed.is_some() {
+            self.api_conceal(cx);
+        }
         let layout = (self.screen, self.settings.details_tab.clone());
         if layout != self.focus_layout {
             self.focus_layout = layout;
@@ -1165,6 +1195,7 @@ impl Render for LibraryView {
                 Screen::Import => self.import_screen(cx).into_any_element(),
                 Screen::Pdf => self.pdf_screen(cx).into_any_element(),
                 Screen::Settings => self.settings_screen(cx).into_any_element(),
+                Screen::Api => self.api_screen(cx).into_any_element(),
                 Screen::Report => div()
                     .id("operation-report")
                     .flex_1()

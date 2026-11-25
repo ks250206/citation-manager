@@ -2,6 +2,7 @@
 //! request deadlines, connection drop, idle-exit retry and reconnect backoff (#25 review).
 use super::*;
 use crate::{
+    api::{ApiCommand, ApiReply, IssueToken, SECRET_HELPER_TIMEOUT},
     exchange::ImportRequestUi,
     ipc::{CapabilitySet, Credential, GrantId, MAX_IN_FLIGHT, PROTOCOL_VERSION},
     library::{LibraryClient, LibraryRequest, PaperList, ServiceError},
@@ -29,6 +30,9 @@ enum Script {
     CloseAlways,
     /// The connector itself fails (no daemon).
     Refuse,
+    /// Like `Silent`, but answers `Command::Api(Revoke)` / `Command::Api(Overview)` after
+    /// this delay, like a daemon waiting on a slow OS secret store.
+    AnswerApiAfter(Duration),
 }
 #[derive(Debug, PartialEq)]
 enum Seen {
@@ -88,13 +92,31 @@ impl Connector for Fake {
                 return;
             }
             let _ = read_frame::<_, ClientFrame>(&mut server, MAX_HANDSHAKE_FRAME);
-            if matches!(script, Script::Silent) {
+            if matches!(script, Script::Silent | Script::AnswerApiAfter(_)) {
                 write_frame(&mut server, &welcome(), MAX_RESPONSE_FRAME).unwrap();
             }
             loop {
                 match read_frame::<_, ClientFrame>(&mut server, MAX_REQUEST_FRAME) {
-                    Ok(Some(ClientFrame::Request { id, .. })) => {
+                    Ok(Some(ClientFrame::Request { id, command })) => {
                         let _ = seen.send(Seen::Request(id));
+                        if let (Script::AnswerApiAfter(delay), Command::Api(api)) =
+                            (script, &command)
+                        {
+                            let reply = match api {
+                                ApiCommand::Revoke(g) => ApiReply::Revoked(*g),
+                                _ => ApiReply::Audit(Vec::new()),
+                            };
+                            thread::sleep(delay);
+                            // The client may have given up and closed the connection.
+                            let _ = write_frame(
+                                &mut server,
+                                &ServerFrame::Response {
+                                    id,
+                                    result: Ok(Reply::Api(reply)),
+                                },
+                                MAX_RESPONSE_FRAME,
+                            );
+                        }
                     }
                     Ok(Some(ClientFrame::Cancel { id })) => {
                         let _ = seen.send(Seen::Cancel(id));
@@ -262,6 +284,115 @@ fn per_command_deadlines_are_generous_for_long_operations() {
     assert_eq!(t.backoff(1), None);
     assert_eq!(t.backoff(2), Some(Duration::from_millis(250)));
     assert_eq!(t.backoff(40), Some(Duration::from_secs(10)));
+}
+
+fn api_request(
+    client: &IpcLibraryClient,
+    command: ApiCommand,
+) -> mpsc::Receiver<Result<ApiReply, ServiceError>> {
+    let (tx, rx) = mpsc::channel();
+    client
+        .api(
+            command,
+            Box::new(move |r| {
+                let _ = tx.send(r);
+            }),
+        )
+        .unwrap();
+    rx
+}
+
+/// Codex review (PR #69): issue/re-issue/revoke wait on the OS secret store in the daemon
+/// (a Keychain put is a write plus a read-back, each up to `SECRET_HELPER_TIMEOUT`; a
+/// re-issue also deletes secrets). Their deadline must cover that whole sequence, or the
+/// reply carrying the new secret is discarded while the daemon completes the action.
+#[test]
+fn secret_store_commands_get_a_deadline_covering_every_helper_run() {
+    let grant = GrantId(uuid::Uuid::nil());
+    let issue = Command::Api(ApiCommand::IssueToken(IssueToken {
+        label: "t".into(),
+        kind: crate::api::ClientKind::Api,
+        scopes: [crate::api::Scope::PapersRead].into(),
+        expires_at_ms: None,
+    }));
+    let reissue = Command::Api(ApiCommand::Reissue(grant));
+    let revoke = Command::Api(ApiCommand::Revoke(grant));
+    let grant_revoke = Command::Grants(crate::ipc::GrantCommand::Revoke(grant));
+    assert_eq!(issue.secret_store_steps(), 2);
+    assert_eq!(reissue.secret_store_steps(), 4);
+    assert_eq!(revoke.secret_store_steps(), 1);
+    assert_eq!(grant_revoke.secret_store_steps(), 1);
+
+    let t = ClientTimeouts::default();
+    for command in [&issue, &reissue, &revoke, &grant_revoke] {
+        let steps = command.secret_store_steps();
+        let deadline = t.for_command(command);
+        assert_eq!(deadline, t.interactive, "{command:?}");
+        assert!(
+            deadline >= SECRET_HELPER_TIMEOUT * steps + t.control,
+            "{command:?}: {deadline:?}"
+        );
+    }
+    // Commands that never touch the store keep the short control deadline.
+    for command in [
+        ApiCommand::Overview,
+        ApiCommand::ListTokens,
+        ApiCommand::Audit { limit: 10 },
+        ApiCommand::EndElevation(grant),
+        ApiCommand::Elevate {
+            grant,
+            kind: crate::api::BulkKind::Move,
+            duration_ms: 60_000,
+        },
+        ApiCommand::SetScopes {
+            grant,
+            scopes: [crate::api::Scope::PapersRead].into(),
+        },
+    ] {
+        assert_eq!(command.secret_store_steps(), 0, "{command:?}");
+        assert_eq!(t.for_command(&Command::Api(command)), t.control);
+    }
+    assert_eq!(
+        t.for_command(&Command::Grants(crate::ipc::GrantCommand::List)),
+        t.control
+    );
+    // A short configured `interactive` limit never cuts the helper sequence short.
+    let short = ClientTimeouts {
+        control: Duration::from_secs(1),
+        interactive: Duration::from_secs(2),
+        ..t
+    };
+    assert_eq!(
+        short.for_command(&reissue),
+        SECRET_HELPER_TIMEOUT * 4 + Duration::from_secs(1)
+    );
+}
+
+#[test]
+fn a_slow_secret_store_reply_outlives_the_control_deadline() {
+    let delay = Duration::from_millis(600);
+    let timeouts = ClientTimeouts {
+        control: Duration::from_millis(150),
+        interactive: Duration::from_millis(150),
+        ..ClientTimeouts::default()
+    };
+    // Revoke waits on the secret store: its reply arrives after `control` and is delivered.
+    let (connector, _, _) = fake(Script::AnswerApiAfter(delay));
+    let client = IpcLibraryClient::with_timeouts(connector, timeouts).unwrap();
+    let grant = GrantId(uuid::Uuid::nil());
+    let reply = api_request(&client, ApiCommand::Revoke(grant))
+        .recv_timeout(Duration::from_secs(10))
+        .unwrap();
+    assert_eq!(reply.unwrap(), ApiReply::Revoked(grant));
+    // A command that never touches the store still expires at the control deadline.
+    let (connector, _, _) = fake(Script::AnswerApiAfter(delay));
+    let client = IpcLibraryClient::with_timeouts(connector, timeouts).unwrap();
+    let started = Instant::now();
+    let reply = api_request(&client, ApiCommand::Overview)
+        .recv_timeout(Duration::from_secs(10))
+        .unwrap();
+    assert_eq!(reply.unwrap_err(), ServiceError::Unavailable);
+    assert!(started.elapsed() < delay, "{:?}", started.elapsed());
 }
 
 /// A stream whose peer is already gone, reporting it the way macOS does: setting socket

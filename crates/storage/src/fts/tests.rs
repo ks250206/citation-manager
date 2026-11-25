@@ -371,6 +371,18 @@ fn ranking_filters_snippets_pages_and_errors() {
         SearchReply::Invalid(e) => assert_eq!(e.diagnostics[0].code, "AmbiguousCollection"),
         other => panic!("{other:?}"),
     }
+    // A collection-ID scope alone (blank DSL) lists that collection's papers, even when
+    // its name is ambiguous; a blank DSL without any scope still fails.
+    let mut by_id = SearchRequest::new("  ");
+    by_id.collection = Some(col.id);
+    assert_eq!(papers_of(&results(&db, &by_id)), vec![body_hit]);
+    let mut by_papers = SearchRequest::new("");
+    by_papers.papers = vec![title_hit];
+    assert_eq!(papers_of(&results(&db, &by_papers)), vec![title_hit]);
+    match search(&db.search_index(), &SearchRequest::new(" ")).unwrap() {
+        SearchReply::Invalid(e) => assert_eq!(e.diagnostics[0].code, "EmptyInput"),
+        other => panic!("{other:?}"),
+    }
     let mut bib_only = SearchRequest::new("lithium");
     bib_only.sources.pages = false;
     assert_eq!(papers_of(&results(&db, &bib_only)), vec![title_hit]);

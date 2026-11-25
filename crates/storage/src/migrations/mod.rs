@@ -47,6 +47,10 @@ fn registry() -> Result<Vec<Migration<'static>>, StorageError> {
             "20261124T120000Z_issue-19_001_annotation-review.sql",
             include_str!("../../migrations/20261124T120000Z_issue-19_001_annotation-review.sql"),
         ),
+        (
+            "20261124T180000Z_issue-26_001_tokens-settings.sql",
+            include_str!("../../migrations/20261124T180000Z_issue-26_001_tokens-settings.sql"),
+        ),
     ];
     if manifest.len() != files.len() {
         return Err(StorageError::Migration("registry/files differ".into()));
@@ -319,6 +323,78 @@ mod tests {
         ];
         assert!(run_registry(&mut fresh, &bad, None).is_err());
         assert!(schema(&fresh).is_empty()); // includes rollback of history bootstrap and first migration
+    }
+
+    #[test]
+    fn issue_26_carries_legacy_api_tokens_over_revoked_and_marks_the_desktop_grant() {
+        let mut db = Connection::open_in_memory().unwrap();
+        let migrations = registry().unwrap();
+        let before = migrations
+            .iter()
+            .position(|m| m.id.contains("issue-26_001"))
+            .unwrap();
+        run_registry(&mut db, &migrations[..before], None).unwrap();
+        db.execute_batch(
+            "INSERT INTO api_tokens(id, name, token_hash, scopes_json, created_at, revoked_at)
+               VALUES ('not-a-uuid', 'old client', zeroblob(32), '[\"papers:read\"]', '2026-01-02T03:04:05Z', NULL);
+             INSERT INTO daemon_grants(id, token_sha256, label, capabilities_json, created_at_ms)
+               VALUES ('01900000-0000-7000-8000-000000000001', randomblob(32), 'desktop-bootstrap', '[]', 1);",
+        )
+        .unwrap();
+        run_registry(&mut db, &migrations, Some(&mut Snapshot::new())).unwrap();
+        let table: u32 = db
+            .query_row(
+                "SELECT count(*) FROM sqlite_schema WHERE name = 'api_tokens'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(table, 0);
+        let (id, label, caps, created, revoked, kind): (
+            String,
+            String,
+            String,
+            i64,
+            Option<i64>,
+            String,
+        ) = db
+            .query_row(
+                "SELECT id, label, capabilities_json, created_at_ms, revoked_at_ms, client_kind
+                 FROM daemon_grants WHERE label = 'old client'",
+                [],
+                |r| {
+                    Ok((
+                        r.get(0)?,
+                        r.get(1)?,
+                        r.get(2)?,
+                        r.get(3)?,
+                        r.get(4)?,
+                        r.get(5)?,
+                    ))
+                },
+            )
+            .unwrap();
+        assert!(uuid::Uuid::parse_str(&id).is_ok(), "{id}");
+        assert_eq!(
+            (label.as_str(), caps.as_str(), kind.as_str()),
+            ("old client", "[]", "api")
+        );
+        assert_eq!(created, 1_767_323_045_000);
+        assert!(revoked.is_some());
+        let desktop: String = db
+            .query_row(
+                "SELECT client_kind FROM daemon_grants WHERE label = 'desktop-bootstrap'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(desktop, "desktop");
+        let enabled: bool = db
+            .query_row("SELECT enabled FROM api_settings WHERE id = 1", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert!(!enabled);
     }
 
     #[test]

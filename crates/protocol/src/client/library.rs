@@ -47,8 +47,9 @@ pub struct ClientTimeouts {
     pub handshake: Duration,
     /// Socket write limit for request and cancel frames. Default 30 s.
     pub write: Duration,
-    /// `Status`, `Jobs`, `Grants`, `Search`, `Fulltext`: answered on the daemon's connection
-    /// thread. Default 30 s.
+    /// `Status`, `Jobs`, `Grants`, `Search`, `Fulltext` and `Api`: answered on the daemon's
+    /// connection thread. Default 30 s. Commands that wait on the OS secret store get the
+    /// `interactive` limit instead (see `for_command`).
     pub control: Duration,
     /// Library CRUD, queries, organization, lifecycle, settings, DOI resolve: they queue
     /// behind the daemon's single library worker. Default 5 min.
@@ -80,8 +81,27 @@ impl Default for ClientTimeouts {
 impl ClientTimeouts {
     /// Deadline of one request of this command, measured from when it is sent.
     pub fn for_command(&self, command: &Command) -> Duration {
+        // Token management that touches the OS secret store (issue, re-issue, revoke) runs
+        // a sequence of helper processes in the daemon, each allowed
+        // `SECRET_HELPER_TIMEOUT` (20 s): a Keychain `put` writes and then reads back, and a
+        // re-issue also deletes the old secret (and the new one if the old cannot be
+        // revoked), so up to 80 s before the daemon answers. With a slow keyring, or one
+        // waiting for the user to unlock it, the 30 s control deadline would expire while the
+        // daemon still completes the action: the reply carrying the new secret (shown only
+        // once) would be discarded and the old token already revoked. These commands get the
+        // `interactive` class instead, never less than the whole helper sequence plus the
+        // control allowance for the daemon's own work.
+        let steps = command.secret_store_steps();
+        if steps > 0 {
+            let sequence = crate::api::SECRET_HELPER_TIMEOUT
+                .saturating_mul(steps)
+                .saturating_add(self.control);
+            return self.interactive.max(sequence);
+        }
         match command {
             Command::Status | Command::Jobs(_) | Command::Grants(_) => self.control,
+            // Settings, listing, scope changes, elevation, audit: registry and database only.
+            Command::Api(_) => self.control,
             // #18: bounded by the request's scan budget (<= 10 s) and FTS candidate caps.
             Command::Search(_) | Command::Fulltext(_) => self.control,
             Command::Annotations(_) => self.interactive,
@@ -540,6 +560,16 @@ impl<C: Connector> Transport<C> {
 }
 
 impl LibraryClient for IpcLibraryClient {
+    fn api(
+        &self,
+        command: crate::api::ApiCommand,
+        complete: crate::library::Reply<crate::api::ApiReply>,
+    ) -> Result<(), ServiceError> {
+        self.typed(Command::Api(command), None, None, complete, |r| match r {
+            Reply::Api(reply) => Some(reply),
+            _ => None,
+        })
+    }
     fn submit(&self, request: LibraryRequest, complete: Completion) -> Result<(), ServiceError> {
         self.typed(
             Command::Library(request),

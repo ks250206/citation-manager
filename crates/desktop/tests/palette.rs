@@ -56,14 +56,19 @@ fn ranking_puts_recent_first_for_empty_query_and_reports_availability() {
         copy.availability,
         Availability::Disabled(DisabledReason::SelectionRequired)
     );
-    let deferred = entries
+    // #21 and #26 connected the last deferred placeholders: no palette entry is deferred.
+    assert!(entries.iter().all(|e| !matches!(
+        e.availability,
+        Availability::Disabled(DisabledReason::Deferred { .. })
+    )));
+    let highlight = entries
         .iter()
-        .find(|e| e.id == "api.open_settings")
+        .find(|e| e.id == "pdf.highlight_selection")
         .unwrap();
-    assert!(matches!(
-        deferred.availability,
-        Availability::Disabled(DisabledReason::Deferred { issue: 26, .. })
-    ));
+    assert_eq!(
+        highlight.availability,
+        Availability::Disabled(DisabledReason::SelectionRequired)
+    );
     let filtered = rank(&registry, &context, "vim", &recent);
     assert_eq!(filtered[0].id, workbench_ids::TOGGLE_VIM);
     assert!(rank(&registry, &context, "qqqq", &recent).is_empty());

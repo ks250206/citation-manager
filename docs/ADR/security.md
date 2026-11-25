@@ -1,7 +1,9 @@
 # #7: daemon の信頼境界
 
 状態: 採用方針。#25 で最初の IPC から認証/authorizer を実装・自動試験した（[daemon-ipc ADR](daemon-ipc.md)、
-[Linux 証跡](../validation/ISSUE_25.md)）。macOS の peer/.app 起動、永続 token 管理 UI は #34/#26。
+[Linux 証跡](../validation/ISSUE_25.md)）。永続 token/scope/MCP profile/elevation/API 設定と管理 UI は #26
+（[api-tokens-grants ADR](api-tokens-grants.md)、[証跡](../validation/ISSUE_26.md)）。macOS の peer/.app 起動と
+Keychain 実機確認は #34。
 
 ## 権限を与える主体
 
@@ -63,3 +65,20 @@ operation を追加した。capture preview は作成 grant に束縛し、Libra
 narrowing のみ。native host / MCP read-only preset、GrantAdmin 経由の別 grant による write 許可、
 失効/期限の live session への即時適用、preview の grant binding を自動試験した。
 owner の bootstrap credential は library 内 0600 file であり、同一 UID の任意プロセスからの保護は主張しない。
+
+## #26 実装状態
+
+API/MCP/CLI token は daemon grant そのもの（別 table・transport 別判定なし）。scope は core の固定 capability 集合で、
+endpoint/tool/command 表と全 1024 scope 組合せの判定一致を自動試験した。token は必ず期限付き、平文は一度だけ表示し
+OS secret store（無ければ 0600 file、弱いと明示）へ、DB は SHA-256 のみ。MCP profile は read-only 既定で write は
+確認付きの別操作。一括削除/移動は grant 毎の burst 上限を超えると 15 分以内の明示 elevation を要する。
+native host preset は変更していない。監査ログは内容・秘密を記録しない有界 file。
+
+## #27 実装状態
+
+REST は papersd 内の loopback listener（既定 OFF、127.0.0.1/::1 のみ）で、同じ `Session::dispatch`
+（live grant 判定 + bulk/export guard の共有関数 `ipc::admit`）を通る。HTTP では scoped token
+（api/mcp/cli）のみ受け付け、owner の desktop credential と native host は拒否（狭めるだけ）。
+Host 完全一致（DNS rebinding 対策）、Origin 既定拒否・CORS 既定無効、body/URI/header/時間/同時実行の上限、
+request_id 付き標準エラー、内容・token を含まない request log を自動試験した
+（[rest-api ADR](rest-api.md)、[証跡](../validation/ISSUE_27.md)）。同一 UID プロセスからの保護は主張しない。

@@ -73,3 +73,9 @@ Browser/MCP capture DTO and the pure resolution policy (serde/serde_json only).
 `loopback-test-server` feature (fixture HTTP server + loopback-only policy) is enabled only by
 `daemon`'s dev-dependency. `protocol::capture` adds `Command::Capture`; `daemon` composes it
 and registers the `capture.pdf_fetch` job. See [browser capture](browser-capture.md).
+
+## #29 additions
+
+No new crate edge: `mcp` still depends only on `protocol` (normal and dev). The MCP SDK
+(rmcp, exact pin) and its tokio stack stay inside `mcp`; `mcp` gains the working
+`papers-mcp` executable. See [mcp-server](mcp-server.md).

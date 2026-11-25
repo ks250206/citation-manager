@@ -310,6 +310,13 @@ impl LibraryClient for InProcessLibraryClient {
                 LibraryRequest::Update(paper) => service
                     .update(&paper)
                     .map(|p| LibraryReply::Paper(Box::new(p))),
+                LibraryRequest::Patch(id, patch) => {
+                    let mut paper = service.get(id)?;
+                    patch.apply(&mut paper);
+                    service
+                        .update(&paper)
+                        .map(|p| LibraryReply::Paper(Box::new(p)))
+                }
             }
         })
     }
@@ -325,19 +332,26 @@ impl LibraryClient for InProcessLibraryClient {
     ) -> Result<(), ServiceError> {
         self.enqueue(complete, move |w| {
             use cm_core::{collections::CollectionService, tags::TagService};
+            use cm_protocol::organization::OrganizationItem;
+            let mut item = None;
             match request {
                 OrganizationRequest::List => (),
                 OrganizationRequest::ForPaper(id) => {
                     return Ok(Organization {
                         collections: CollectionService::new(w.db.collections()).for_paper(id)?,
                         tags: TagService::new(w.db.tags()).for_paper(id)?,
+                        item: None,
                     });
                 }
                 OrganizationRequest::CreateCollection(v) => {
-                    CollectionService::new(w.db.collections()).create(v)?;
+                    item = Some(OrganizationItem::Collection(
+                        CollectionService::new(w.db.collections()).create(v)?,
+                    ));
                 }
                 OrganizationRequest::UpdateCollection(id, v) => {
-                    CollectionService::new(w.db.collections()).update(id, v)?;
+                    item = Some(OrganizationItem::Collection(
+                        CollectionService::new(w.db.collections()).update(id, v)?,
+                    ));
                 }
                 OrganizationRequest::DeleteCollection(id) => {
                     CollectionService::new(w.db.collections()).delete(id)?
@@ -351,10 +365,14 @@ impl LibraryClient for InProcessLibraryClient {
                     }
                 }
                 OrganizationRequest::CreateTag(v) => {
-                    TagService::new(w.db.tags()).create(v)?;
+                    item = Some(OrganizationItem::Tag(
+                        TagService::new(w.db.tags()).create(v)?,
+                    ));
                 }
                 OrganizationRequest::UpdateTag(id, v) => {
-                    TagService::new(w.db.tags()).update(id, v)?;
+                    item = Some(OrganizationItem::Tag(
+                        TagService::new(w.db.tags()).update(id, v)?,
+                    ));
                 }
                 OrganizationRequest::DeleteTag(id) => TagService::new(w.db.tags()).delete(id)?,
                 OrganizationRequest::TagMember(p, t, present) => {
@@ -369,6 +387,7 @@ impl LibraryClient for InProcessLibraryClient {
             Ok(Organization {
                 collections: CollectionService::new(w.db.collections()).list()?,
                 tags: TagService::new(w.db.tags()).list()?,
+                item,
             })
         })
     }
@@ -560,6 +579,16 @@ impl Worker<'_> {
             }
             Format::Ris => service.export(request.selection, &cm_metadata::ris::RisSerializer)?,
         };
+        // #26: bounded exports; nothing is created when a cap is exceeded.
+        if report.records > cm_core::policy::export::MAX_EXPORT_RECORDS
+            || report.text.len() > cm_core::policy::export::MAX_EXPORT_BYTES
+        {
+            return Err(ServiceError::InvalidInput(format!(
+                "export exceeds {} records or {} MiB; export a collection or selection instead",
+                cm_core::policy::export::MAX_EXPORT_RECORDS,
+                cm_core::policy::export::MAX_EXPORT_BYTES / (1024 * 1024)
+            )));
+        }
         files::write_new(&request.path, report.text.as_bytes())?;
         Ok(Exported {
             path: request.path,

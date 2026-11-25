@@ -7,6 +7,9 @@
 mod library;
 #[cfg(unix)]
 pub mod local;
+/// #26 OS secret stores for token plaintext (std-only, shared by daemon/CLI/MCP).
+#[cfg(unix)]
+pub mod secrets;
 #[cfg(unix)]
 mod sha256;
 #[cfg(all(test, unix))]

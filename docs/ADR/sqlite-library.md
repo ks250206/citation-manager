@@ -44,6 +44,7 @@ SQLite WAL の前提に従い、保存先は同一ホストの local filesystem 
 - 初期 relational schema は papers、people、paper_people（role と全体の sort_order）、
   paper_external_ids（未知 namespace と順序）、collections/所属、tags/所属、attachments、
   fulltext_pages、annotations（source/anchor_state/unresolved_reason/page_label）、jobs、api_tokens。
+#26 で未使用の `api_tokens` は `daemon_grants` に統合・削除した（[api-tokens-grants](api-tokens-grants.md)）。
   JSON/FK/unique/page range/annotation state を SQL 制約でも検査する。
   FTS index/trigger は検索実装 #18 が追加migrationで所有する。token の発行/認可、job実行、
   collection操作、annotation編集などのサービスが動いたという意味ではない。

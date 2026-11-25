@@ -428,9 +428,10 @@ fn pair(o: &Options) -> u8 {
     }
 }
 
-/// Native-host grants have no expiry: the capture-only grant would otherwise stop browser
-/// saving with no renewal flow (consent/rotation UI is #26). Instead every grant id is always
-/// recorded somewhere (`grant` or `revoke_pending`) until a revocation succeeded.
+/// The grant is requested without an explicit expiry; the daemon applies #26's delegated-grant
+/// lifetime (`CaptureCommit` is a write capability: 30 days by default). An expired grant makes
+/// the browser see `unauthorized`, and a plain `pair` then issues a fresh one. Every grant id is
+/// always recorded somewhere (`grant` or `revoke_pending`) until a revocation succeeded.
 fn pair_with(store: &Store, config: &mut HostConfig, force: bool) -> u8 {
     let mut run = || -> Result<u8, String> {
         let exe = current_exe()?;

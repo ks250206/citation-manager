@@ -2,7 +2,7 @@
 use crate::error::service_error;
 use cm_core::{
     ServiceError,
-    policy::{Capability, CapabilitySet, Grant, GrantId},
+    policy::{Capability, CapabilitySet, ClientKind, Grant, GrantId, Scope, ScopeSet},
 };
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use uuid::Uuid;
@@ -13,20 +13,29 @@ pub struct StoredGrant {
     pub token_sha256: [u8; 32],
     pub issued_by: Option<GrantId>,
     pub created_at_ms: i64,
+    /// #26 metadata. Diagnostic/display only; `grant.capabilities` is the authority.
+    pub client_kind: ClientKind,
+    pub scopes: Option<ScopeSet>,
+    pub last_used_at_ms: Option<i64>,
+    pub replaces: Option<GrantId>,
 }
 
 pub struct SqliteGrants<'a> {
     pub(crate) connection: &'a Connection,
 }
-const COLUMNS: &str = "SELECT id, token_sha256, label, capabilities_json, issued_by, created_at_ms, expires_at_ms, revoked_at_ms FROM daemon_grants";
+const COLUMNS: &str = "SELECT id, token_sha256, label, capabilities_json, issued_by, created_at_ms, expires_at_ms, revoked_at_ms, client_kind, scopes_json, last_used_at_ms, elevated_until_ms, replaces FROM daemon_grants";
+fn json<T: serde::Serialize>(value: &T) -> Result<String, ServiceError> {
+    serde_json::to_string(value).map_err(|e| ServiceError::InvalidInput(e.to_string()))
+}
 impl SqliteGrants<'_> {
     pub fn insert(&self, stored: &StoredGrant) -> Result<(), ServiceError> {
-        let capabilities = serde_json::to_string(&stored.grant.capabilities)
-            .map_err(|e| ServiceError::InvalidInput(e.to_string()))?;
+        let capabilities = json(&stored.grant.capabilities)?;
+        let scopes = stored.scopes.as_ref().map(json).transpose()?;
         self.connection
             .execute(
-                "INSERT INTO daemon_grants(id, token_sha256, label, capabilities_json, issued_by, created_at_ms, expires_at_ms, revoked_at_ms)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL)",
+                "INSERT INTO daemon_grants(id, token_sha256, label, capabilities_json, issued_by, created_at_ms, expires_at_ms, revoked_at_ms,
+                                           client_kind, scopes_json, last_used_at_ms, elevated_until_ms, replaces)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, ?8, ?9, NULL, ?10, ?11)",
                 params![
                     stored.grant.id.0.to_string(),
                     stored.token_sha256.as_slice(),
@@ -35,6 +44,10 @@ impl SqliteGrants<'_> {
                     stored.issued_by.map(|g| g.0.to_string()),
                     stored.created_at_ms,
                     stored.grant.expires_at_ms,
+                    stored.client_kind.name(),
+                    scopes,
+                    stored.grant.elevated_until_ms,
+                    stored.replaces.map(|g| g.0.to_string()),
                 ],
             )
             .map(|_| ())
@@ -79,6 +92,44 @@ impl SqliteGrants<'_> {
             .map(|n| n == 1)
             .map_err(service_error)
     }
+    /// #26 in-place scope change of a live grant (capabilities are the authority).
+    pub fn set_access(
+        &self,
+        id: GrantId,
+        capabilities: &CapabilitySet,
+        scopes: Option<&ScopeSet>,
+        expires_at_ms: Option<i64>,
+    ) -> Result<bool, ServiceError> {
+        let scopes = scopes.map(json).transpose()?;
+        self.connection
+            .execute(
+                "UPDATE daemon_grants SET capabilities_json = ?2, scopes_json = ?3, expires_at_ms = ?4
+                 WHERE id = ?1 AND revoked_at_ms IS NULL",
+                params![id.0.to_string(), json(capabilities)?, scopes, expires_at_ms],
+            )
+            .map(|n| n == 1)
+            .map_err(service_error)
+    }
+    /// #26 time-limited elevation (`None` ends it).
+    pub fn set_elevation(&self, id: GrantId, until_ms: Option<i64>) -> Result<bool, ServiceError> {
+        self.connection
+            .execute(
+                "UPDATE daemon_grants SET elevated_until_ms = ?2 WHERE id = ?1 AND revoked_at_ms IS NULL",
+                params![id.0.to_string(), until_ms],
+            )
+            .map(|n| n == 1)
+            .map_err(service_error)
+    }
+    /// #26 coarse last-use timestamp.
+    pub fn touch(&self, id: GrantId, at_ms: i64) -> Result<(), ServiceError> {
+        self.connection
+            .execute(
+                "UPDATE daemon_grants SET last_used_at_ms = max(coalesce(last_used_at_ms, 0), ?2) WHERE id = ?1",
+                params![id.0.to_string(), at_ms],
+            )
+            .map(|_| ())
+            .map_err(service_error)
+    }
 }
 
 fn decode(row: &Row<'_>) -> rusqlite::Result<StoredGrant> {
@@ -102,6 +153,17 @@ fn decode(row: &Row<'_>) -> rusqlite::Result<StoredGrant> {
         .collect();
     let issued_by: Option<String> = row.get(4)?;
     let revoked_at_ms: Option<i64> = row.get(7)?;
+    let kind: String = row.get(8)?;
+    let scopes: Option<String> = row.get(9)?;
+    // Unknown scope names are dropped like unknown capabilities (display only).
+    let scopes = scopes.map(|raw| {
+        serde_json::from_str::<Vec<serde_json::Value>>(&raw)
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|v| serde_json::from_value::<Scope>(v).ok())
+            .collect()
+    });
+    let replaces: Option<String> = row.get(12)?;
     Ok(StoredGrant {
         grant: Grant {
             id: GrantId(uuid(0, row.get(0)?)?),
@@ -109,9 +171,14 @@ fn decode(row: &Row<'_>) -> rusqlite::Result<StoredGrant> {
             capabilities,
             expires_at_ms: row.get(6)?,
             revoked: revoked_at_ms.is_some(),
+            elevated_until_ms: row.get(11)?,
         },
         token_sha256,
         issued_by: issued_by.map(|v| uuid(4, v).map(GrantId)).transpose()?,
         created_at_ms: row.get(5)?,
+        client_kind: ClientKind::parse(&kind).unwrap_or(ClientKind::Unspecified),
+        scopes,
+        last_used_at_ms: row.get(10)?,
+        replaces: replaces.map(|v| uuid(12, v).map(GrantId)).transpose()?,
     })
 }
