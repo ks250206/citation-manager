@@ -174,6 +174,35 @@ test('too_large: the HTML is cut by a quarter and the preview retried once', asy
   assert.ok(!(shrinkSnapshot(SNAPSHOT).html ?? '').includes('�'));
 });
 
+test('a retryable preview failure keeps the corrections: Retry re-applies them, Back keeps the last preview', async () => {
+  const replies: Outcome<unknown>[] = [
+    okOf(parsePreview(previewResult())),
+    { ok: false, error: { code: 'busy', message: 'busy', retryable: true } },
+    { ok: false, error: { code: 'timeout', message: 'timed out', retryable: true } },
+    okOf(parsePreview(previewResult({ id: 'preview-2' }))),
+  ];
+  const { ctl, calls } = controller({ ...base(), preview: () => replies.shift() as Outcome<unknown> });
+  await ctl.start();
+  await ctl.save();
+  await ctl.correct({ title: 'Fixed title' });
+  assert.equal(ctl.state.phase.kind === 'error' && ctl.state.phase.recovery, 'retry');
+  // Back returns to the last good preview, made without the failed corrections.
+  ctl.dispatch({ type: 'back' });
+  assert.equal(ctl.state.phase.kind as string, 'review');
+  assert.equal(ctl.state.preview?.preview_id, 'preview-1');
+  assert.deepEqual(ctl.state.corrections, {});
+  assert.equal(canCommit(ctl.state), true);
+  await ctl.correct({ title: 'Fixed title' });
+  assert.equal(ctl.state.phase.kind === 'error' && ctl.state.phase.recovery, 'retry');
+  await ctl.recover();
+  const previews = calls.filter((c) => c.op === 'preview') as { capture: { meta: { name: string; content: string }[] } }[];
+  assert.equal(previews.length, 4);
+  assert.deepEqual(previews[3]?.capture.meta.find((m) => m.name === 'citation_title'), { name: 'citation_title', content: 'Fixed title' });
+  assert.equal(ctl.state.phase.kind as string, 'review');
+  assert.equal(ctl.state.preview?.preview_id, 'preview-2');
+  assert.equal(ctl.state.corrections.title, 'Fixed title');
+});
+
 test('corrections: clearing removes page tags, the title cannot be cleared, the container type is kept', () => {
   assert.throws(() => normalizeCorrections({ title: '  ' }), /title cannot be empty/);
   const cleared = normalizeCorrections({ doi: '', authors: [' '], year: '' });

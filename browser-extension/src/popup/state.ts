@@ -39,6 +39,8 @@ export interface State {
   /** Destination and corrections the current preview was made with. */
   previewDestination: Destination | null;
   corrections: Corrections;
+  /** Corrections of a preview that failed, for Retry (the last good preview stays for Back). */
+  pendingCorrections: Corrections | null;
   decisions: Action[];
   pdf: number | null;
   saved: CommitResult | null;
@@ -62,6 +64,7 @@ export function initialState(destination: Destination = { collection: null, tags
     preview: null,
     previewDestination: null,
     corrections: {},
+    pendingCorrections: null,
     decisions: [],
     pdf: null,
     saved: null,
@@ -203,15 +206,16 @@ export function reduce(state: State, event: Event): State {
     }
     case 'extracted':
       if (!event.outcome.ok) return fail(state, 'extract', event.outcome.error);
-      return { ...state, snapshot: event.outcome.result, corrections: {}, conflicts: 0 };
+      return { ...state, snapshot: event.outcome.result, corrections: {}, pendingCorrections: null, conflicts: 0 };
     case 'previewed': {
-      if (!event.outcome.ok) return fail(state, 'preview', event.outcome.error);
+      if (!event.outcome.ok) return fail({ ...state, pendingCorrections: event.corrections }, 'preview', event.outcome.error);
       const preview = event.outcome.result;
       return {
         ...state,
         preview,
         previewDestination: { collection: event.destination.collection, tags: [...event.destination.tags] },
         corrections: event.corrections,
+        pendingCorrections: null,
         // The capture grant can only Create or Skip. An exact duplicate cannot be created
         // (the daemon refuses it), so it defaults to Skip; merging happens in the app.
         decisions: preview.candidates.map((c) => (c.exact_duplicate ? 'Skip' : 'Create')),
@@ -262,14 +266,17 @@ export function reduce(state: State, event: Event): State {
       return fail(state, event.op, event.error);
     case 'repoll':
       return { ...state, polls: 0 };
-    case 'back':
-      if (state.saved !== null && state.preview === null) return { ...state, phase: { kind: 'saved' } };
-      if (state.preview && state.previewDestination) {
+    case 'back': {
+      // Leaving an error drops the corrections of a failed preview.
+      const left: State = { ...state, pendingCorrections: null };
+      if (left.saved !== null && left.preview === null) return { ...left, phase: { kind: 'saved' } };
+      if (left.preview && left.previewDestination) {
         // A failed re-preview (e.g. after a destination change) leaves the last good preview:
         // go back to it with the destination it was made for, so it can be committed.
-        return { ...state, destination: { ...state.previewDestination }, phase: { kind: 'review' } };
+        return { ...left, destination: { ...left.previewDestination }, phase: { kind: 'review' } };
       }
-      return { ...state, phase: state.preview ? { kind: 'review' } : { kind: 'ready' } };
+      return { ...left, phase: left.preview ? { kind: 'review' } : { kind: 'ready' } };
+    }
   }
 }
 
