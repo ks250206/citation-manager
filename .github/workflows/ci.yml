@@ -122,6 +122,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-dev libx11-xcb-dev \
             libxcb1-dev libwayland-dev libfontconfig-dev libfreetype-dev libvulkan-dev
+          # PDFium substitutes a system CJK font for non-embedded Japanese fonts (layouts_runtime).
+          sudo apt-get install -y fonts-wqy-zenhei
       - name: Rust build cache (saved from main only; PRs restore it)
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
@@ -139,7 +141,7 @@ jobs:
         run: |
           python3 scripts/pdfium/fetch.py --platform linux-x64 target/pdfium-linux
           export CM_PDFIUM_LIBRARY="$GITHUB_WORKSPACE/target/pdfium-linux/lib/libpdfium.so"
-          cargo test -p cm-pdf --features runtime --locked --test metadata_runtime --test runtime --test extract_runtime --test export_runtime
+          cargo test -p cm-pdf --features runtime --locked --test metadata_runtime --test runtime --test extract_runtime --test export_runtime --test layouts_runtime
           cargo test -p cm-daemon --features pdfium-runtime-tests --locked --test fulltext_runtime --test pdf_export_runtime
       - name: Independent check of the annotated export (pypdf structure + poppler rendering, no PDFium)
         run: |

@@ -1,0 +1,107 @@
+{
+  "started_utc": "2026-11-25T10:36:22.317578+00:00",
+  "system": "Darwin",
+  "machine": "arm64",
+  "platform": "macOS-15.8.2-arm64-arm-64bit-Mach-O",
+  "python": "3.14.10",
+  "rust": "rustc 1.99.1 (58cf8f9c3 2026-10-13)\nbinary: rustc\ncommit-hash: 58cf8f9c35b355199727627d07ae34a4e2846d67\ncommit-date: 2026-10-13\nhost: aarch64-apple-darwin\nrelease: 1.99.1\nLLVM version: 23.1.1",
+  "cargo": "cargo 1.99.1 (5f94df478 2026-08-27)",
+  "git_head": "ee2a33b0a2861d59b618a732e33e6fd6976ba01f",
+  "git_status": "",
+  "cargo_lock_sha256": "9cad1156a30d30904f1523dbb0cb2ceacdc383516bf919620433e2d9b7a61cb4",
+  "build_environment": {
+    "RUSTFLAGS": null,
+    "CARGO_ENCODED_RUSTFLAGS": null,
+    "CARGO_BUILD_TARGET": null,
+    "CARGO_TARGET_DIR": null
+  },
+  "ci": true,
+  "runner": {
+    "name": "GitHub Actions 1000002885",
+    "os": "macOS",
+    "arch": "ARM64",
+    "image": "macos15",
+    "image_version": "20261118.0550.1"
+  },
+  "model": "VirtualMac2,1",
+  "cpu": "Apple M1 (Virtual)",
+  "physical_cpu_count": "3",
+  "logical_cpu_count": "3",
+  "ram_bytes": 7516192768,
+  "os": "ProductName:\t\tmacOS\nProductVersion:\t\t15.8.2\nBuildVersion:\t\t24H232",
+  "virtualized": "1",
+  "parameters": {
+    "papers": 10000,
+    "pdfs": 1000,
+    "pages_per_pdf": 20,
+    "pages": 20000,
+    "samples": 21,
+    "warm_repeats": 11,
+    "seed": 30
+  },
+  "artifacts": {
+    "papersd": {
+      "cargo_args": [
+        "-p",
+        "cm-daemon",
+        "--bin",
+        "papersd",
+        "--features",
+        "pdf-metadata"
+      ],
+      "features": [
+        "default",
+        "pdf-metadata"
+      ],
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 0,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": false
+      },
+      "sha256": "61c7e8f11a17aa7a02857c3b0dba4058f3016f868bf9179088f6164fb0d3667a"
+    },
+    "ipc": {
+      "cargo_args": [
+        "-p",
+        "cm-daemon",
+        "--example",
+        "bench_representative_ipc"
+      ],
+      "features": [
+        "default"
+      ],
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 0,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": false
+      },
+      "sha256": "43b44ebe256fdaa76b7f61cbf2941c5fc3356609e5a09cda8f661c5d07b38d31"
+    },
+    "seed": {
+      "cargo_args": [
+        "-p",
+        "cm-storage",
+        "--example",
+        "bench_representative_seed"
+      ],
+      "features": [],
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 0,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": false
+      },
+      "sha256": "1c3e3c7937a6dbd7b9c41a32a5bdfd63f61ecca83ecfcc3d645c49b124ff4f87"
+    },
+    "gui": null
+  },
+  "pdfium": {
+    "path": "/Users/runner/work/citation-manager/citation-manager/target/representative-benchmark/macos-ci/pdfium/lib/libpdfium.dylib",
+    "sha256": "8d1e46a6dbe32d7cb95279ab3def2e71e557a3d4cc49162453afa3e3b250dc5e"
+  }
+}
