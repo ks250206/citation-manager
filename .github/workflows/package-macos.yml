@@ -4,7 +4,8 @@ name: macOS app package
 # load/render/text, lazy daemon start/idle exit, a GUI launch after moving the bundle, an
 # ad-hoc signed variant, and Chrome/Firefox Native Messaging probes. #31: third-party notices,
 # the .dmg (run from the mounted read-only image), a hardened-runtime variant, and Developer ID
-# signing/notarization, which reports "UNVERIFIED: no Developer ID" without the secrets.
+# signing/notarization in the separate release-sign job, which runs only for a hand-dispatched
+# v* tag behind the `release` environment; every other run reports "UNVERIFIED: no Developer ID".
 # Hosted-runner evidence only: not a real-hardware check; ad-hoc is not a distribution signature.
 on:
   # push as well: workflow_dispatch only works once this file is on the default branch.
@@ -206,8 +207,63 @@ jobs:
           python3 tests/e2e/release/run.py --app "$mnt/$APP_NAME" \
             --owner-client target/release/examples/release_e2e_owner \
             --out "$RUNNER_TEMP/evidence/release-e2e" --work "$RUNNER_TEMP/release e2e"
-      - name: Developer ID signing and notarization (UNVERIFIED without the secrets)
+      - name: Developer ID preflight (signing itself runs only in the gated release-sign job)
         if: ${{ !cancelled() }}
+        run: |
+          # No signing secret is referenced in this job: it runs for any pushed branch and PR.
+          python3 scripts/package/macos/release_sign.py preflight --allow-unverified \
+            --status "$RUNNER_TEMP/evidence/release-signing.json"
+          echo "### Release signing: UNVERIFIED here by design (see the release-sign job)" >> "$GITHUB_STEP_SUMMARY"
+      - name: Archive bundles
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/evidence"
+          if [ -d "$RUNNER_TEMP/package/$APP_NAME" ]; then
+            ditto -c -k --keepParent "$RUNNER_TEMP/package/$APP_NAME" "$RUNNER_TEMP/evidence/Citation-Manager-unsigned.app.zip"
+          fi
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: package-macos-evidence
+          path: ${{ runner.temp }}/evidence/
+          if-no-files-found: error
+          retention-days: 14
+
+  release-sign:
+    # Developer ID signing and notarization (#31). Runs only when dispatched by hand on a v* tag
+    # and only after approval in the `release` environment, which holds the CM_SIGN_* /
+    # CM_NOTARY_* secrets (environment secrets, not repository secrets; restrict the
+    # environment's deployment refs to protected v* tags). No build cache is restored here, so
+    # nothing produced by branch or PR runs reaches the credential-bearing job.
+    if: github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: macos-15
+    timeout-minutes: 90
+    environment: release
+    defaults:
+      run:
+        shell: bash
+    env:
+      APP_NAME: Citation Manager.app
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.14'
+      - name: Exact toolchain and Xcode Metal compiler
+        run: |
+          rustup toolchain install 1.99.1 --profile minimal
+          if ! xcrun --sdk macosx metal -v; then
+            xcodebuild -downloadComponent MetalToolchain
+          fi
+      - name: Fetch the pinned PDFium and generate third-party notices
+        run: |
+          python3 scripts/pdfium/fetch.py "$RUNNER_TEMP/pdfium"
+          python3 scripts/package/third_party_notices.py --out "$RUNNER_TEMP/notices"
+          mkdir -p "$RUNNER_TEMP/evidence"
+      - name: Developer ID signing and notarization
         env:
           # Secrets only reach this step's environment; nothing below prints them.
           CM_SIGN_IDENTITY: ${{ secrets.CM_SIGN_IDENTITY }}
@@ -219,9 +275,9 @@ jobs:
         run: |
           status="$RUNNER_TEMP/evidence/release-signing.json"
           if [ -z "$CM_SIGN_IDENTITY" ] || [ -z "$CM_SIGN_P12_BASE64" ] || [ -z "$CM_SIGN_P12_PASSWORD" ]; then
-            python3 scripts/package/macos/release_sign.py preflight --allow-unverified --status "$status"
-            echo "### Release signing: UNVERIFIED: no Developer ID (no signing secrets configured)" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
+            echo "### Release signing: UNVERIFIED: no Developer ID (the release environment has no signing secrets)" >> "$GITHUB_STEP_SUMMARY"
+            # A release run without a Developer ID fails instead of publishing an unsigned build.
+            python3 scripts/package/macos/release_sign.py preflight --status "$status"
           fi
           # Temporary keychain holding only the Developer ID identity; deleted in the next step.
           keychain="$RUNNER_TEMP/release-signing.keychain-db"
@@ -255,18 +311,11 @@ jobs:
         run: |
           if [ -n "${CM_SIGN_KEYCHAIN:-}" ]; then security delete-keychain "$CM_SIGN_KEYCHAIN" || true; fi
           rm -f "$RUNNER_TEMP/notary.p8" "$RUNNER_TEMP/identity.p12"
-      - name: Archive bundles
-        if: always()
-        run: |
-          mkdir -p "$RUNNER_TEMP/evidence"
-          if [ -d "$RUNNER_TEMP/package/$APP_NAME" ]; then
-            ditto -c -k --keepParent "$RUNNER_TEMP/package/$APP_NAME" "$RUNNER_TEMP/evidence/Citation-Manager-unsigned.app.zip"
-          fi
-      - name: Upload evidence
+      - name: Upload the signed release and its status
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: package-macos-evidence
+          name: release-signed
           path: ${{ runner.temp }}/evidence/
           if-no-files-found: error
           retention-days: 14
