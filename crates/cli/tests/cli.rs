@@ -140,9 +140,44 @@ impl Env {
             .unwrap() as usize
     }
 }
+impl Env {
+    /// `papers server stop`, which verifies the daemon's pid through socket peer credentials.
+    /// That is Linux-only for now (#34): elsewhere the command must refuse with exit 7, and
+    /// the test stops papersd by the pid `server status` reports instead.
+    fn stop_daemon(&self) {
+        if cfg!(target_os = "linux") {
+            assert_eq!(self.papers(&["server", "stop"]).expect(0)["stopped"], true);
+            return;
+        }
+        let status = self.papers(&["server", "status"]).expect(0);
+        let refused = self.papers(&["server", "stop"]);
+        refused.expect(7);
+        if let Some(pid) = status["pid"].as_u64() {
+            let _ = std::process::Command::new("kill")
+                .arg(pid.to_string())
+                .status();
+        }
+        for _ in 0..100 {
+            if self.papers(&["server", "status"]).expect(0)["running"] == false {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        panic!("papersd did not stop");
+    }
+}
 impl Drop for Env {
     fn drop(&mut self) {
-        let _ = self.papers(&["server", "stop", "--force", "--no-start"]);
+        if cfg!(target_os = "linux") {
+            let _ = self.papers(&["server", "stop", "--force", "--no-start"]);
+        } else if let Ok(status) =
+            serde_json::from_str::<Value>(&self.papers(&["server", "status"]).stdout)
+            && let Some(pid) = status["data"]["pid"].as_u64()
+        {
+            let _ = std::process::Command::new("kill")
+                .arg(pid.to_string())
+                .status();
+        }
     }
 }
 
@@ -512,7 +547,7 @@ fn file_import_search_show_fulltext_annotations_export_without_gui() {
     assert!(human.stdout.starts_with(&paper));
 
     // Stop: the daemon exits and status reports it without restarting it.
-    assert_eq!(env.papers(&["server", "stop"]).expect(0)["stopped"], true);
+    env.stop_daemon();
     assert_eq!(
         env.papers(&["server", "status"]).expect(0)["running"],
         false
@@ -686,7 +721,7 @@ fn usage_unavailable_features_and_daemon_errors_have_distinct_exit_codes() {
     assert_eq!(rest.json()["error"]["code"], "feature_unavailable");
 
     // The earlier daemon-backed checks started papersd: stop it, then start explicitly.
-    env.papers(&["server", "stop"]).expect(0);
+    env.stop_daemon();
     let started = env.papers(&["server", "start"]).expect(0);
     assert_eq!(started["started"], true);
     assert_eq!(env.papers(&["server", "start"]).expect(0)["started"], false);
