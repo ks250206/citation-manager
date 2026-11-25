@@ -1,7 +1,7 @@
 # MVP acceptance (#32): DESIGN §24 traceability
 
-Status on 2026-11-25, branch `claude/issue-32-acceptance` (stacked on PR #79 → #78; main at
-`3811f1d` with #30 merged in). **The MVP is not complete.** Seven of the 17 §24 criteria are
+Status on 2026-11-25, branch `claude/issue-32-acceptance` (stacked on PR #79; main includes
+#30 (PR #77), #34 (PR #78) and the MIT license (PR #80)). **The MVP is not complete.** Seven of the 17 §24 criteria are
 passed with evidence; the other ten are partial, mostly because the macOS release itself (real
 Mac, Developer ID signing, store-published extensions, the 16 GB reference machine) has never
 been exercised. Nothing below is marked passed without a test, script, workflow run or
@@ -114,7 +114,7 @@ Mac remains unverified (#26).
 | 13 | 「MCP から文献検索・本文取得・書き込みが権限に応じ実行できる。」 | #29 (PR #70), #26 | `cm-mcp` unit + stdio subprocess tests (read-only default, write grant, stdout purity); release E2E with a raw JSON-RPC client: search/full text with sources, write refused then allowed after the owner's grant | Linux automated; Linux release E2E; macOS VM release E2E | **passed** | [mcp-server ADR](../ADR/mcp-server.md), PR #70, release E2E `privacy.mcp_*`, `mcp.*`. Not verified: a third-party desktop MCP client application |
 | 14 | 「CLI から文献の追加・検索・エクスポートを行える。」 | #28 (PR #68) | `crates/cli/tests` subprocess tests against real `papersd`; release E2E `add file`, `import`, `search`, `fulltext`, `export`, `server stop` | Linux automated; Linux and macOS VM release E2E; macOS VM smoke (CLI via PATH symlink) | **passed** | [ISSUE_28](ISSUE_28.md), [APP_LAYOUT_POC](APP_LAYOUT_POC.md), release E2E `cli.*`. `add doi` with a live provider: see #4 |
 | 15 | 「バックアップ・リカバリ手段が明示されている。」 | #9 (PR #38), #50 (PR #51), #30, #31 (PR #79) | storage `recovery` tests (WAL backup → restore), `crash_recovery` SIGKILL, `daemon_recovery` (#30); documented procedures; release E2E backup by copy → restore elsewhere | Linux/macOS automated; Linux and macOS VM release E2E (`cp -a` / `ditto`) | **passed** | [INSTALL §6](../INSTALL.md#6-backup-and-restore), [RECOVERY](../RECOVERY.md), [ISSUE_9](ISSUE_9.md), [CRASH_RECOVERY](CRASH_RECOVERY.md), [ISSUE_30](ISSUE_30.md). The guides arrive with PR #79. The verified portable bundle backup of the storage layer has no app/CLI command yet (copy of a stopped library is the documented route) |
-| 16 | 「PDFium 同梱・署名・配布ライセンスを確認済みである。」 | #11, #34, #31, PR #80 | fetch with pinned checksums; bundle layout/`otool`; notices generator (423 crates) + PDFium notices bundled; `release_sign.py preflight` | macOS VM | **partial** | [PDFIUM_POC](PDFIUM_POC.md), [ISSUE_31](ISSUE_31.md), [LICENSES](../LICENSES.md). Bundling and third-party notices: verified. Missing: Developer ID signature and notarization (`UNVERIFIED: no Developer ID`), and the project's own license (MIT chosen in PR #80, not merged; `LICENSES.md` still says "not yet chosen") |
+| 16 | 「PDFium 同梱・署名・配布ライセンスを確認済みである。」 | #11, #34, #31, PR #80 | fetch with pinned checksums; bundle layout/`otool`; notices generator (423 crates) + PDFium notices bundled; `release_sign.py preflight` | macOS VM | **partial** | [PDFIUM_POC](PDFIUM_POC.md), [ISSUE_31](ISSUE_31.md), [LICENSES](../LICENSES.md). Bundling and third-party notices: verified. Project license: MIT (PR #80, merged; bundled as `Resources/licenses/LICENSE` by PR #79). Missing: Developer ID signature and notarization (`UNVERIFIED: no Developer ID`; pending on the owner's side) |
 | 17 | 「RSS / 起動時間 / 検索速度を計測し、測定結果を公開できる。」 | #47, #30 | `representative.py --gui`, `benchmark.yml`; raw JSON committed | Linux; macOS VM 7 GB; real Mac M4 Max (#47 headless only) | **partial** | [ISSUE_30](ISSUE_30.md) and [ISSUE_30/](ISSUE_30/): measured and published, but not on the 16 GB Apple Silicon reference machine, macOS GUI RSS and frame drops unmeasured, and the measured PDF-view RSS (409.7 MiB, Linux) is above the §16.2 target of 350 MB |
 
 **Count: 7 passed (#3, #8, #10, #12, #13, #14, #15), 10 partial (#1, #2, #4, #5, #6, #7, #9, #11,
@@ -135,7 +135,7 @@ open while a child is open or a gate below remains.
 | #9 attachments/backup | closed | met ([ISSUE_9](ISSUE_9.md)) | — |
 | #10 GPUI vertical slice | closed | met on a real Mac ([ISSUE_10](ISSUE_10.md)); Japanese IME candidate selection not verified | — |
 | #11 PDFium PoC | closed | met ([PDFIUM_POC](PDFIUM_POC.md)) | — |
-| #34 `.app` layout | open (PR #78) | hosted-runner evidence complete ([APP_LAYOUT_POC](APP_LAYOUT_POC.md)) | real Mac: Finder install, quarantine, concurrent first start, sleep/logout, TCC |
+| #34 `.app` layout | open (PR #78 merged; real-Mac items remain) | hosted-runner evidence complete ([APP_LAYOUT_POC](APP_LAYOUT_POC.md)) | real Mac: Finder install, quarantine, concurrent first start, sleep/logout, TCC |
 | #52 command registry, #53 FTS tokenizer | closed | met ([ISSUE_52](ISSUE_52.md), [ISSUE_53](ISSUE_53.md)) | — |
 | **#2 M1** 文献管理・DOI・BibTeX/RIS | open | Exit met: 1000 BibTeX/RIS records imported, classified, searched and re-exported without corruption on a real Mac ([native-bulk](issue-15/native-bulk.md)) | #15 gates below; live DOI |
 | #12 collections/tags/filters | closed | met | — |
@@ -163,19 +163,17 @@ open while a child is open or a gate below remains.
    install from the `.dmg` by Finder, first launch with quarantine/Gatekeeper, relaunch, the GUI on
    Metal (viewer, selection, annotations, ⌘ shortcuts, Japanese IME, NSSavePanel export), browser
    capture with the real extension, Keychain token storage, sleep/logout, concurrent first start.
-2. **Developer ID signing and notarization** (#31): no certificate or notary credentials exist;
+2. **Developer ID signing and notarization** (#31; on hold by the owner): no certificate or notary credentials exist;
    `release_sign.py` reports `UNVERIFIED: no Developer ID`; the signed path has never run.
 3. **Store-published extension IDs** (#24): Chrome Web Store / AMO listings; until then only the
    development IDs exist and `npm run build:release` refuses to build.
 4. **16 GB Apple Silicon measurement** (#30, DESIGN §16.1), GUI frame time, and the PDF-view RSS
    that is above target on Linux (409.7 MiB vs. 350 MB).
-5. **Project license** (PR #80, MIT chosen but not merged; `docs/LICENSES.md` and the bundled
-   notices still say "not yet chosen").
-6. **#15 native gates** listed in its README: offline DOI fallback, failed-page retry, native
+5. **#15 native gates** listed in its README: offline DOI fallback, failed-page retry, native
    queued-late-arrival.
-7. **Live DOI providers**: no lane has ever resolved a DOI against Crossref/DataCite.
-8. **Merges**: PR #78 (#34) and PR #79 (#31) are not merged; this branch stacks on them.
-9. **Process**: CI on the #32 PR and the independent different-model review required by
+6. **Live DOI providers**: no lane has ever resolved a DOI against Crossref/DataCite.
+7. **Merges**: PR #79 (#31) is not merged yet; this branch stacks on it (PR #78 is merged).
+8. **Process**: CI on the #32 PR and the independent different-model review required by
    CONTRIBUTING have not run for this branch.
 
 ## Product defects found by the release E2E
