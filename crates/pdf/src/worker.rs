@@ -27,7 +27,7 @@ pub const MACOS_PDFIUM_SHA256: &str =
 pub const LINUX_PDFIUM_SHA256: &str =
     "1c251efce460d67437a4c76d4be9033ae2f17bf5603f5bff1af10209b94ca723";
 pub const MAX_INPUT_BYTES: usize = 32 * 1024 * 1024;
-pub const MAX_PIXELS: usize = cm_core::geometry::MAX_RENDER_PIXELS;
+pub const MAX_PIXELS: usize = 4 * 1024 * 1024;
 pub const MAX_CHARS: usize = 100_000;
 pub const QUEUE_CAPACITY: usize = 8;
 // pdfium-render 0.9.5 retains process-global bindings in OnceLock, even after Pdfium drops.

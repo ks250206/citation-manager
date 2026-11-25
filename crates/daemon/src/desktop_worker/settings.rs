@@ -46,50 +46,16 @@ pub(super) fn load(path: &Path) -> Result<SettingsLoaded, ServiceError> {
         }
         Ok(settings)
     })();
-    let keymap_path = path.with_file_name("keymap.json");
-    let (keymap, keymap_warning) = match load_keymap(&keymap_path) {
-        Ok(bytes) => (bytes, None),
-        Err(e) => (None, Some(format!("Keymap file ignored: {e}"))),
-    };
-    let (settings, warning) = match result {
-        Ok(settings) => (settings, None),
-        Err(e) => (
-            Settings::default(),
-            Some(format!("Using default layout: {e}")),
-        ),
-    };
-    let warning = match (warning, keymap_warning) {
-        (Some(a), Some(b)) => Some(format!("{a}; {b}")),
-        (a, b) => a.or(b),
-    };
-    Ok(SettingsLoaded {
-        settings,
-        warning,
-        keymap,
-        keymap_path: Some(keymap_path),
+    Ok(match result {
+        Ok(settings) => SettingsLoaded {
+            settings,
+            warning: None,
+        },
+        Err(e) => SettingsLoaded {
+            settings: Settings::default(),
+            warning: Some(format!("Using default layout: {e}")),
+        },
     })
-}
-/// Same private-file rules as settings; the bytes are validated by the desktop keymap parser.
-const MAX_KEYMAP_BYTES: u64 = 64 * 1024;
-fn load_keymap(path: &Path) -> Result<Option<Vec<u8>>, ServiceError> {
-    match fs::symlink_metadata(path) {
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => return Err(invalid(e.to_string())),
-        Ok(_) => (),
-    }
-    private(path).map_err(|_| {
-        invalid("keymap.json must be a regular file you own with mode 0600 (chmod 600 keymap.json)")
-    })?;
-    let mut bytes = Vec::new();
-    File::open(path)
-        .map_err(|e| invalid(e.to_string()))?
-        .take(MAX_KEYMAP_BYTES + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|e| invalid(e.to_string()))?;
-    if bytes.len() as u64 > MAX_KEYMAP_BYTES {
-        return Err(invalid("Keymap exceeds 64 KiB"));
-    }
-    Ok(Some(bytes))
 }
 pub(super) fn save(path: &Path, settings: &Settings) -> Result<(), ServiceError> {
     if !settings.valid() {

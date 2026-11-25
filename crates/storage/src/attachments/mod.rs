@@ -34,19 +34,6 @@ impl ManagedStore {
             attachment.byte_size,
         )
     }
-    /// Path of a stored blob after verifying its bytes match the recorded digest and size.
-    /// For read-only consumers (PDF rendering); never hand out paths for unverified data.
-    pub fn verified_path(
-        &self,
-        attachment: &Attachment,
-    ) -> Result<std::path::PathBuf, StorageError> {
-        match self.verify(attachment)? {
-            AttachmentStatus::Present => {
-                managed_path(&self.directory, attachment.storage_key.as_str(), false)
-            }
-            _ => Err(invalid("attachment missing or corrupt")),
-        }
-    }
     pub(crate) fn verify_key(
         &self,
         storage_key: &str,

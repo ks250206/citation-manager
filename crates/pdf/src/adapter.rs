@@ -260,8 +260,8 @@ pub(crate) fn execute(pdfium: &Pdfium, op: Operation, ctx: &Context) -> Result<O
                 let (w, h) = v.size();
                 if w < 1.
                     || h < 1.
-                    || w.ceil() > cm_core::geometry::MAX_RENDER_SIDE
-                    || h.ceil() > cm_core::geometry::MAX_RENDER_SIDE
+                    || w.ceil() > 8192.
+                    || h.ceil() > 8192.
                     || w.ceil() * h.ceil() > MAX_PIXELS as f32
                 {
                     return Err(PdfError::LimitExceeded);

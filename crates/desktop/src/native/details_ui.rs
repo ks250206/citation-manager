@@ -1,13 +1,7 @@
 use super::*;
 impl LibraryView {
-    pub(super) fn details_screen(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Stateful<Div> {
+    pub(super) fn details_screen(&self, cx: &mut Context<Self>) -> Stateful<Div> {
         let enabled = !self.locked();
-        // The viewer owns its own scrolling, so the PDF tab is not inside the details scroll.
-        let viewer = (self.settings.details_tab == "PDF").then(|| self.viewer_panel(window, cx));
         let tab = self.settings.details_tab.as_str();
         div()
             .id("details-host")
@@ -55,27 +49,14 @@ impl LibraryView {
                         })),
                     ),
             )
-            .when_some(viewer, |el, viewer| {
-                el.child(
-                    div()
-                        .id("pdf-attachments")
-                        .max_h(px(220.))
-                        .flex_shrink_0()
-                        .overflow_y_scroll()
-                        .p_3()
-                        .border_b_1()
-                        .border_color(rgb(BORDER))
-                        .child(self.pdf_host(cx)),
-                )
-                .child(viewer)
-            })
-            .when(tab != "PDF", |el| el.child(
+            .child(
                 div()
                     .id("details-content")
                     .flex_1()
                     .overflow_y_scroll()
                     .p_3()
                     .child(match tab {
+                        "PDF" => self.pdf_host(cx).into_any_element(),
                         "Notes" => div()
                             .child(hint(
                                 "Notes editing is not available in this version. No note text is saved.",
@@ -83,7 +64,7 @@ impl LibraryView {
                             .into_any_element(),
                         _ => self.info_tab(enabled, cx).into_any_element(),
                     }),
-            ))
+            )
     }
     fn info_tab(&self, enabled: bool, cx: &mut Context<Self>) -> Div {
         div()
@@ -129,6 +110,7 @@ impl LibraryView {
                 ))
             })
             .when_some(self.editor.as_ref(), |el, p| {
+                let id = p.id;
                 let deleted = p.deleted_at.is_some();
                 el.child(
                     div()
@@ -155,7 +137,21 @@ impl LibraryView {
                             .when(!deleted && enabled, |b| {
                                 b.text_color(rgb(0xb42318)).border_color(rgb(0xf1c4bf))
                             })
-                            .on_click(cx.listener(|this, _, _, cx| this.toggle_trash(cx))),
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                if this.locked() || !this.can_replace_editor(cx) {
+                                    return;
+                                }
+                                this.call(Lane::Editor, Event::Editor, |c, done| {
+                                    c.lifecycle(
+                                        id,
+                                        !deleted,
+                                        Box::new(move |result| {
+                                            done(result.map(|p| LibraryReply::Paper(Box::new(p))))
+                                        }),
+                                    )
+                                });
+                                cx.notify();
+                            })),
                         ),
                 )
             })
@@ -204,24 +200,6 @@ impl LibraryView {
                         ))
                     }),
             )
-    }
-    /// Move the open paper to Trash, or restore it when it is already there.
-    pub(super) fn toggle_trash(&mut self, cx: &mut Context<Self>) {
-        let Some(paper) = &self.editor else {
-            return;
-        };
-        let (id, deleted) = (paper.id, paper.deleted_at.is_some());
-        if self.locked() || !self.can_replace_editor(cx) {
-            return;
-        }
-        self.call(Lane::Editor, Event::Editor, |c, done| {
-            c.lifecycle(
-                id,
-                !deleted,
-                Box::new(move |result| done(result.map(|p| LibraryReply::Paper(Box::new(p))))),
-            )
-        });
-        cx.notify();
     }
     fn memberships(&self, cx: &mut Context<Self>) -> Div {
         let Some(p) = &self.editor else {
@@ -292,13 +270,12 @@ impl LibraryView {
                 .child(
                     div()
                         .id("attach-drop")
-                        .px_3()
-                        .py_1()
-                        .my_1()
-                        .rounded_md()
-                        .text_size(px(12.))
+                        .p_4()
+                        .my_2()
                         .bg(rgb(0xe0eaff))
-                        .child("Drop PDFs here to ATTACH to this paper (bibliography unchanged)")
+                        .child(
+                            "Drop PDFs here to attach to this paper. Bibliography stays unchanged.",
+                        )
                         .on_drop(cx.listener(move |this, paths: &ExternalPaths, _, cx| {
                             if !this.locked() {
                                 this.inspect(
@@ -313,13 +290,10 @@ impl LibraryView {
             .child(
                 div()
                     .id("register-drop")
-                    .px_3()
-                    .py_1()
-                    .my_1()
-                    .rounded_md()
-                    .text_size(px(12.))
+                    .p_4()
+                    .my_2()
                     .bg(rgb(0xe5efe8))
-                    .child("Drop PDFs here to register them as NEW papers (after review)")
+                    .child("Drop PDFs here to review registration as NEW papers.")
                     .on_drop(cx.listener(|this, paths: &ExternalPaths, _, cx| {
                         if !this.locked() {
                             this.inspect(
@@ -344,18 +318,20 @@ impl LibraryView {
                     .enumerate()
                     .map(|(index, (a, status))| {
                         let id = a.id;
-                        nav_item(
+                        button(
                             ("attachment", index),
                             format!(
-                                "📄 {} · {} KB{}",
+                                "{} {} · {} bytes · {:?}",
+                                if self.host.selected == Some(id) {
+                                    "▸"
+                                } else {
+                                    ""
+                                },
                                 a.original_name,
-                                a.byte_size.div_ceil(1024),
-                                match status {
-                                    AttachmentStatus::Present => String::new(),
-                                    other => format!(" · {other:?}"),
-                                }
+                                a.byte_size,
+                                status
                             ),
-                            self.host.selected == Some(id),
+                            true,
                         )
                         .w_full()
                         .on_click(cx.listener(move |this, _, _, cx| {
@@ -364,5 +340,20 @@ impl LibraryView {
                         }))
                     }),
             )
+            .when_some(self.host.selected, |el, id| {
+                el.child(
+                    div()
+                        .id("pdf-viewer-host-slot")
+                        .mt_4()
+                        .p_4()
+                        .h(px(220.))
+                        .bg(rgb(0xe7e9ed))
+                        .child(line("Attachment selected"))
+                        .child(line(format!("{}", id.0)))
+                        .child(line(
+                            "PDF rendering and annotation tools are not available in this version.",
+                        )),
+                )
+            })
     }
 }

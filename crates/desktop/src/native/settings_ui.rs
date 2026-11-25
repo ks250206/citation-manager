@@ -232,7 +232,6 @@ impl LibraryView {
                             )
                     })),
             )
-            .child(self.keyboard_card(cx))
             .child(
                 card()
                     .child(title("Export bibliography"))
@@ -430,121 +429,6 @@ impl LibraryView {
                         ),
                     ),
             )
-    }
-    fn keyboard_card(&self, cx: &mut Context<Self>) -> Div {
-        use crate::commands::workbench_ids as wb;
-        let run = |id: &'static str| {
-            cx.listener(
-                move |this: &mut Self, _: &ClickEvent, window: &mut Window, cx| {
-                    this.run_command(id, window, cx)
-                },
-            )
-        };
-        div()
-            .p_4()
-            .rounded_lg()
-            .border_1()
-            .border_color(rgb(BORDER))
-            .bg(rgb(SURFACE))
-            .flex()
-            .flex_col()
-            .gap_2()
-            .child(
-                div()
-                    .text_size(px(15.))
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .child("Keyboard"),
-            )
-            .child(hint(format!(
-                "{} opens the Command Palette everywhere. Text fields always receive typed keys.",
-                shortcut("K")
-            )))
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .child(div().w(px(150.)).child("Vim keys in table"))
-                    .child(
-                        nav_item("vim-on", "On", self.settings.vim).on_click(cx.listener(
-                            |this, _, window, cx| {
-                                if !this.settings.vim {
-                                    this.run_command(wb::TOGGLE_VIM, window, cx)
-                                }
-                            },
-                        )),
-                    )
-                    .child(
-                        nav_item("vim-off", "Off", !self.settings.vim).on_click(cx.listener(
-                            |this, _, window, cx| {
-                                if this.settings.vim {
-                                    this.run_command(wb::TOGGLE_VIM, window, cx)
-                                }
-                            },
-                        )),
-                    )
-                    .child(hint(
-                        "j/k move · gg/G first/last · y copy citation · / search",
-                    )),
-            )
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .child(div().w(px(150.)).child("Keymap"))
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .overflow_hidden()
-                            .text_ellipsis()
-                            .whitespace_nowrap()
-                            .child(
-                                match (self.keymap_custom, self.keymap_diagnostics.is_empty()) {
-                                    (true, _) => format!(
-                                        "Custom: {}",
-                                        self.keymap_path.as_deref().unwrap_or("keymap.json")
-                                    ),
-                                    (false, false) => {
-                                        "Built-in defaults (keymap.json was rejected)".to_owned()
-                                    }
-                                    (false, true) => "Built-in defaults".to_owned(),
-                                },
-                            ),
-                    )
-                    .child(button("keymap-reload", "Reload", true).on_click(run(wb::RELOAD_KEYMAP)))
-                    .child(
-                        button("keymap-copy", "Copy default JSON", true)
-                            .on_click(run(wb::COPY_DEFAULT_KEYMAP)),
-                    ),
-            )
-            .when(!self.keymap_diagnostics.is_empty(), |el| {
-                el.child(
-                    div()
-                        .p_2()
-                        .rounded_md()
-                        .bg(rgb(0xffe5e5))
-                        .text_color(rgb(0x9b1c1c))
-                        .text_size(px(12.))
-                        .child(
-                            "The whole keymap.json was ignored; fix these and Reload. \
-                             Unknown commands, duplicate keys and prefix conflicts are rejected.",
-                        )
-                        .children(
-                            self.keymap_diagnostics
-                                .iter()
-                                .take(12)
-                                .map(|d| div().child(format!("• {d}"))),
-                        ),
-                )
-            })
-            .child(hint(format!(
-                "Custom keymaps replace the defaults entirely. File: {} (private 0600).",
-                self.keymap_path
-                    .as_deref()
-                    .unwrap_or("keymap.json beside the settings file")
-            )))
     }
     pub(super) fn pick_export(&mut self, cx: &mut Context<Self>) {
         if self.busy(Lane::Export) {
