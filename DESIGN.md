@@ -1005,5 +1005,5 @@ unicode61 token と、範囲・件数・時間上限付きの literal scan で�
 書込は preview → 明示 decision → `--yes`（非対話時は必須）で commit し、merge は `--merge <id>` のみ。
 credential/要求 capability は `credentials` module に集約し（既定は owner の desktop bootstrap credential、
 `client_kind=cli`、subcommand ごとの最小 `requested`）、#26 の CLI token をそこへ追加する。
-`papers mcp` は #7 の `cm_mcp::run_stdio` を呼び、#29 未実装の間は exit 7。REST は #27。
+`papers mcp` は解決済みの library/接続設定で #29 の `cm_mcp::run_stdio_with` を呼ぶ（既定 read-only、owner credential は渡さない）。REST は #27。
 

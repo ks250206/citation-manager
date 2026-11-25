@@ -69,7 +69,7 @@ where
     match &cli.command {
         Command::Completions(args) => return commands::completions::write(args.shell, out, err),
         // stdout belongs to the MCP protocol: never print an envelope there.
-        Command::Mcp => return commands::mcp::run(err),
+        Command::Mcp => return commands::mcp::run(&cli, err),
         _ => {}
     }
     let name = commands::name(&cli.command);
