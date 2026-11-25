@@ -68,8 +68,9 @@ impl Scope {
         Self::ALL.into_iter().find(|s| s.name() == name)
     }
     /// The daemon capabilities a token with this scope holds. Never `GrantAdmin`,
-    /// `UiSettings`, `LocalFileRead`/`LocalFileWrite`, `CapturePreview`, `DestinationRead`
-    /// or the `LibraryRead` bundle: those stay with the owner and the native host.
+    /// `UiSettings`, `LocalFileRead`/`LocalFileWrite`/`LocalFileReplace`, `CapturePreview`,
+    /// `DestinationRead` or the `LibraryRead` bundle: those stay with the owner and the
+    /// native host.
     pub fn capabilities(self) -> &'static [Capability] {
         use Capability as C;
         match self {
@@ -384,13 +385,14 @@ impl std::fmt::Display for TokenPolicyError {
 
 /// Capabilities that change data, write files or start work. Delegated grants holding any of
 /// them get the shorter write lifetime.
-const WRITE_CAPABILITIES: [Capability; 9] = [
+const WRITE_CAPABILITIES: [Capability; 10] = [
     Capability::LibraryWrite,
     Capability::LibraryDelete,
     Capability::AnnotationsWrite,
     Capability::ExportAllowedDir,
     Capability::JobsControl,
     Capability::LocalFileWrite,
+    Capability::LocalFileReplace,
     Capability::LocalFileRead,
     Capability::UiSettings,
     Capability::NetworkLookup,
@@ -541,6 +543,7 @@ mod tests {
             Capability::UiSettings,
             Capability::LocalFileRead,
             Capability::LocalFileWrite,
+            Capability::LocalFileReplace,
             Capability::CapturePreview,
             Capability::DestinationRead,
             Capability::LibraryRead,
