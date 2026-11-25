@@ -156,3 +156,20 @@ by the tab URL becoming visible).
 - Authenticated pages, PDF tabs (`pdf_url` from a PDF document is unit-tested only), very
   large real publisher pages, and pages that block script injection (CSP/sandbox) in a real
   browser.
+
+## After merging main (#62) through #22/#23
+
+Merged `claude/issue-23-native-host` @ `921f379` (contains main #19/#25/#18, #22 and #23). Only
+`ci.yml` conflicted: main's Linux PDFium steps are kept and the `browser-extension` job follows.
+
+| Command | Result |
+|---|---|
+| `npm ci && npm run build && npm run lint && npm test` (`browser-extension/`, Node 22) | passed: build, policy checks, 69 unit tests |
+| `node tests/e2e/run.mjs --browser chromium` (Playwright Chromium 1243, Xvfb) | passed: all 29 checks |
+| `cargo fmt`, workspace clippy, `desktop-bootstrap`/`native-gpui` clippy | passed |
+| `cargo test --workspace --locked --no-fail-fast` | passed: 396 tests |
+| `cargo test -p cm-daemon -p cm-desktop --features cm-daemon/desktop-bootstrap --locked` | passed: 142 tests |
+| pinned Linux PDFium runtime tests, `check_architecture.py`, script unit tests (38), `check_migrations.py --base origin/main` | passed |
+
+Not rerun after this merge: the Firefox ESR E2E (no Firefox binary on this host). `npm run
+build:release` still fails by design while the store IDs in `extension-ids.json` are empty.
