@@ -11,8 +11,8 @@ Status: accepted for #19. Builds on #8 (annotations table), #17 (viewer, shared 
   needs non-blank text however it is anchored; whitespace-only comments are stored as none.
 - **Service** is the only writer. Every change returns an `Edit` (Created/Updated/Deleted with full
   rows). Undo applies the inverse, redo the edit, both restoring *exact* rows (ids, timestamps) and
-  only from the state the edit expects — otherwise `Conflict`, so an AI agent's or another window's
-  newer change is never clobbered. `History` (bounded 200) lives in the UI.
+  only from the state the edit expects — otherwise `Conflict` (including a target annotation that
+  was deleted meanwhile), so an AI agent's or another window's newer change is never clobbered. `History` (bounded 200) lives in the UI.
 - **Replayed edits are untrusted input.** Every row an undo/redo writes passes the same validation
   as a new write; `confirmed_at` is only valid on `source=ai`; an `Updated` edit may not change
   id, attachment, kind, source, quote, context or `created_at`. A written `confirmed_at` must be
