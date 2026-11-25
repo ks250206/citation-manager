@@ -6,6 +6,7 @@ import type { CaptureRequest, Decision, ErrorInfo, Outcome } from './types';
 export const PORT_NAME = 'capture-popup';
 
 export type PopupRequest =
+  | { rid: number; op: 'ping' }
   | { rid: number; op: 'hello' }
   | { rid: number; op: 'destinations' }
   | { rid: number; op: 'extract'; tabId: number }
@@ -39,6 +40,7 @@ export function parsePopupRequest(raw: unknown): PopupRequest {
     return v;
   };
   switch (raw.op) {
+    case 'ping':
     case 'hello':
     case 'destinations':
       return { rid, op: raw.op };

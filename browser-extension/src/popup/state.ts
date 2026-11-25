@@ -139,6 +139,10 @@ export const DUPLICATE_MESSAGE =
  * for the same page with a duplicate warning is reported as an existing paper.
  */
 function commitFailed(state: State, error: ErrorInfo): State {
+  if (error.code === 'commit_unknown') {
+    // Possibly saved: drop the preview so the same commit is not offered again.
+    return fail({ ...state, preview: null, previewDestination: null }, 'commit', error);
+  }
   const preview = state.preview;
   const suspect = preview !== null && (preview.hidden_matches > 0 || preview.candidates.some((c) => c.exact_duplicate));
   if (error.code !== 'conflict' || !suspect) return fail(state, 'commit', error);
@@ -250,6 +254,11 @@ export function reduce(state: State, event: Event): State {
       return { ...state, polls: 0 };
     case 'back':
       if (state.saved !== null && state.preview === null) return { ...state, phase: { kind: 'saved' } };
+      if (state.preview && state.previewDestination) {
+        // A failed re-preview (e.g. after a destination change) leaves the last good preview:
+        // go back to it with the destination it was made for, so it can be committed.
+        return { ...state, destination: { ...state.previewDestination }, phase: { kind: 'review' } };
+      }
       return { ...state, phase: state.preview ? { kind: 'review' } : { kind: 'ready' } };
   }
 }

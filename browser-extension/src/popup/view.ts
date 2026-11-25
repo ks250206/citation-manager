@@ -1,6 +1,7 @@
 // Popup rendering with plain DOM. Every page- or host-supplied string is inserted with
 // textContent / attribute setters, never as markup.
 import type { Collection, Contributor, Corrections, Draft, PreviewCandidate } from '../shared/types';
+import { clearedFields, doiKey } from '../shared/request';
 import type { Controller } from './controller';
 import { canCommit, destinationChanged, pdfView, type State } from './state';
 
@@ -171,7 +172,12 @@ function correctionForm(doc: Document, state: State, ctl: Controller): HTMLEleme
     void ctl.correct(next);
   });
   details.append(
-    el(doc, 'p', { class: 'hint' }, 'Corrections are checked again by the library before saving. Other fields can be edited in the app.'),
+    el(
+      doc,
+      'p',
+      { class: 'hint' },
+      'Corrections are checked again by the library before saving. Empty a field to clear it (not the title); a cleared value can come back from other page metadata or the DOI lookup. Other fields can be edited in the app.',
+    ),
     apply,
   );
   return details;
@@ -183,6 +189,50 @@ function button(doc: Document, id: string, label: string, onClick: () => void, a
   return b;
 }
 
+/** Host and shortened path of a PDF URL, for display. */
+export function pdfParts(url: string): { host: string; path: string } {
+  try {
+    const u = new URL(url);
+    return { host: u.host, path: u.pathname.length > 40 ? `${u.pathname.slice(0, 37)}…` : u.pathname };
+  } catch {
+    return { host: url, path: '' };
+  }
+}
+
+/** What the extractor had to leave out. */
+export function snapshotHints(state: State): { id: string; text: string }[] {
+  const s = state.snapshot;
+  if (!s) return [];
+  const hints: { id: string; text: string }[] = [];
+  if (s.html_truncated) hints.push({ id: 'html', text: 'This page is large; only its first part was read.' });
+  if (s.dropped_meta > 0) {
+    hints.push({ id: 'meta', text: `${s.dropped_meta} meta tag(s) were too large or over the limit and were not read.` });
+  }
+  if (s.dropped_json_ld > 0) {
+    hints.push({ id: 'json_ld', text: `${s.dropped_json_ld} structured-data (JSON-LD) block(s) were too large or over the limit and were not read.` });
+  }
+  return hints;
+}
+
+/** Corrections the library did not take: an invalid DOI, or a cleared field filled again. */
+export function correctionNotes(state: State): { id: string; text: string }[] {
+  const draft = state.preview?.candidates[0]?.draft;
+  const c = state.corrections;
+  if (!draft) return [];
+  const notes: { id: string; text: string }[] = [];
+  const doi = doiOf(draft);
+  if (c.doi && doiKey(doi ?? '') !== doiKey(c.doi)) {
+    notes.push({ id: 'doi', text: `The corrected DOI "${c.doi}" was not accepted (not a valid DOI) and was ignored.` });
+  }
+  const refilled = clearedFields(c).filter((f) =>
+    f === 'authors' ? draft.authors.length > 0 : f === 'doi' ? doi !== null : f === 'year' ? draft.year !== null : draft.journal !== null,
+  );
+  if (refilled.length > 0) {
+    notes.push({ id: 'cleared', text: `Cleared but filled again from other page metadata: ${refilled.join(', ')}. Edit it in the app if needed.` });
+  }
+  return notes;
+}
+
 function reviewView(doc: Document, state: State, ctl: Controller): HTMLElement[] {
   const preview = state.preview;
   if (!preview) return [];
@@ -190,9 +240,8 @@ function reviewView(doc: Document, state: State, ctl: Controller): HTMLElement[]
   if (preview.provisional) {
     out.push(el(doc, 'p', { class: 'banner', id: 'provisional' }, 'Little metadata was found on this page. It can be saved provisionally (title and URL) and completed below or later in the app.'));
   }
-  if (state.snapshot?.html_truncated) {
-    out.push(el(doc, 'p', { class: 'hint' }, 'This page is large; only its first part was read.'));
-  }
+  for (const hint of snapshotHints(state)) out.push(el(doc, 'p', { class: 'hint', 'data-hint': hint.id }, hint.text));
+  for (const note of correctionNotes(state)) out.push(el(doc, 'p', { class: 'hint warn', 'data-note': note.id }, note.text));
   preview.candidates.forEach((candidate, i) => out.push(candidateView(doc, candidate, i, state, ctl)));
   if (preview.hidden_matches > 0) {
     out.push(
@@ -210,23 +259,21 @@ function reviewView(doc: Document, state: State, ctl: Controller): HTMLElement[]
   }
 
   const pdfs = el(doc, 'fieldset', { id: 'pdfs', class: 'pdfs' }, el(doc, 'legend', {}, 'PDF'));
-  const pdfOption = (index: number | null, label: string, title?: string) => {
+  const pdfOption = (index: number | null, label: Child[], title?: string) => {
     const input = el(doc, 'input', { type: 'radio', name: 'pdf', value: index === null ? 'none' : String(index), id: `pdf-${index ?? 'none'}` }) as HTMLInputElement;
     input.checked = state.pdf === index;
     input.addEventListener('change', () => ctl.dispatch({ type: 'pdf', index }));
-    return el(doc, 'label', { for: input.id, class: 'pdf', title }, input, label);
+    return el(doc, 'label', { for: input.id, class: 'pdf', title }, input, ...label);
   };
+  // The first candidate is preselected (DESIGN §3.1: attach the PDF when one is available);
+  // its host is shown prominently so the user sees where the library will download from.
   preview.pdf_candidates.forEach((p, i) => {
-    let host = p.url;
-    try {
-      const u = new URL(p.url);
-      host = `${u.host}${u.pathname.length > 40 ? `${u.pathname.slice(0, 37)}…` : u.pathname}`;
-    } catch {
-      // keep the raw text
-    }
-    pdfs.append(pdfOption(i, `${host} (${p.origin.replace('_', '-')})`, p.url));
+    const { host, path } = pdfParts(p.url);
+    pdfs.append(
+      pdfOption(i, [el(doc, 'strong', { class: 'pdf-host' }, host), el(doc, 'span', { class: 'pdf-path' }, ` ${path}`), ` (${p.origin.replace('_', '-')})`], p.url),
+    );
   });
-  pdfs.append(pdfOption(null, preview.pdf_candidates.length === 0 ? 'No PDF found on this page' : 'Do not download a PDF'));
+  pdfs.append(pdfOption(null, [preview.pdf_candidates.length === 0 ? 'No PDF found on this page' : 'Do not download a PDF']));
   pdfs.append(el(doc, 'p', { class: 'hint' }, 'The library downloads public PDFs itself after saving. PDFs that need your login: download them and attach them in the app.'));
   out.push(pdfs);
   out.push(destinationPicker(doc, state, ctl, false));

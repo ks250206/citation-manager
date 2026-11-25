@@ -19,13 +19,40 @@ export function nativeError(error: unknown): ErrorInfo {
   return { code: 'host_failed', message: `The native host stopped unexpectedly (${message.slice(0, 200)}).`, retryable: true };
 }
 
+/**
+ * Per-type reply deadlines. The host itself bounds daemon start (15 s) and replies (300 s);
+ * the extension gives up earlier so the popup is never stuck. A late reply is handed to
+ * `onLate` (the session cancels a late preview).
+ */
+export const DEADLINES_MS: Record<string, number> = {
+  hello: 10_000,
+  destinations: 15_000,
+  'capture.preview': 30_000,
+  'capture.commit': 30_000,
+  'capture.cancel': 15_000,
+  'capture.pdf_job': 15_000,
+  'capture.retry_pdf': 15_000,
+};
+
+export const TIMEOUT_MESSAGE = 'Citation Manager did not answer in time. Try again.';
+
+const TIMEOUT = Symbol('timeout');
+
 export class HostClient {
   private sequence = 0;
   private readonly prefix = Date.now().toString(36);
 
-  constructor(private readonly send: NativeSend) {}
+  constructor(
+    private readonly send: NativeSend,
+    private readonly deadlines: Record<string, number> = DEADLINES_MS,
+  ) {}
 
-  async call<T>(type: string, fields: Record<string, unknown>, parse: (v: unknown) => T): Promise<Outcome<T>> {
+  async call<T>(
+    type: string,
+    fields: Record<string, unknown>,
+    parse: (v: unknown) => T,
+    onLate?: (outcome: Outcome<T>) => void,
+  ): Promise<Outcome<T>> {
     const id = `cm-${this.prefix}-${++this.sequence}`;
     const message = { ...fields, v: PROTOCOL_VERSION, id, type };
     try {
@@ -33,17 +60,34 @@ export class HostClient {
     } catch (error) {
       return { ok: false, error: (error as BoundaryError).info() };
     }
+    const settle = (raw: unknown): Outcome<T> => {
+      try {
+        return checkReply(raw, id, type, parse);
+      } catch (error) {
+        if (error instanceof BoundaryError) return { ok: false, error: error.info() };
+        throw error;
+      }
+    };
+    const sent = this.send(HOST_NAME, message);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<typeof TIMEOUT>((resolve) => {
+      timer = setTimeout(() => resolve(TIMEOUT), this.deadlines[type] ?? 30_000);
+    });
     let raw: unknown;
     try {
-      raw = await this.send(HOST_NAME, message);
+      raw = await Promise.race([sent, deadline]);
     } catch (error) {
       return { ok: false, error: nativeError(error) };
+    } finally {
+      clearTimeout(timer);
     }
-    try {
-      return checkReply(raw, id, type, parse);
-    } catch (error) {
-      if (error instanceof BoundaryError) return { ok: false, error: error.info() };
-      throw error;
+    if (raw === TIMEOUT) {
+      sent.then(
+        (late) => onLate?.(settle(late)),
+        () => undefined,
+      );
+      return { ok: false, error: { code: 'timeout', message: TIMEOUT_MESSAGE, retryable: true } };
     }
+    return settle(raw);
   }
 }

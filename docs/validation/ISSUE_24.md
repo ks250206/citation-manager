@@ -11,8 +11,9 @@ after merging `origin/claude/issue-23-native-host` at bb3c31d.
 |---|---|
 | `cd browser-extension && npm ci` | 20 packages from the committed lockfile (dev-only, pinned: typescript 5.9.3, esbuild 0.25.12, linkedom 0.18.12, @types/node 22.19.21) |
 | `npm run build` | `dist/chrome` (MV3 service worker, dev `key`) and `dist/firefox` (MV3 `background.scripts`, gecko ID) from one source |
-| `npm run lint` | `tsc --noEmit` (strict) passed; policy checks passed (exact permissions, no host permissions / content scripts / web-accessible resources / externally_connectable, no markup or dynamic-code sinks in `src/`) |
-| `npm test` | 51 passed, 0 failed (`node --test`) |
+| `npm run lint` | `tsc --noEmit` (strict) passed; policy checks passed (exact permissions, no host permissions / content scripts / web-accessible resources / externally_connectable, no markup or dynamic-code sinks in `src/`, CSP directives, release popup without the `?tab=` hook) |
+| `npm test` | 69 passed, 0 failed (`node --test`) |
+| `node build.mjs --release` / `--release --ids <file with valid IDs>` | refuses the empty placeholders / builds; the release `popup.js` has no `URLSearchParams` hook, the development one has |
 | `cargo fmt --all -- --check` | passed |
 | `cargo clippy --workspace --all-targets --locked -- -D warnings` | passed |
 | `cargo test -p cm-native-host --locked` | 25 unit + 11 `host_process` passed |
@@ -49,6 +50,34 @@ Unit test coverage (`browser-extension/tests/unit`):
   `baapgkfjfjjagdkpkmocjhfopmaohcdc` (same key as the #23 smoke extension), gecko ID, release
   builds refuse empty store IDs.
 
+## Review fixes (second round)
+
+Each with unit tests (`tests/unit/background.test.ts`, `tests/unit/review-fixes.test.ts`):
+
+- A commit in flight is never cancelled when the popup closes (or when a newer preview
+  supersedes it); a commit that fails after the popup closed releases its preview.
+- Host calls have deadlines (10/15/30 s); timeouts are retryable, except a commit, whose
+  timeout or `host_failed` becomes `commit_unknown` ("check the app before saving again"),
+  drops the preview and is never retried. A preview reply after its deadline is cancelled.
+- The popup pings the background every 20 s (Chrome MV3 worker idle stop), has its own
+  request deadline, reconnects after a lost worker, and maps a commit interrupted that way
+  to `commit_unknown`; the lost session's preview answers `not_found` → Preview again.
+- Back after a failed re-preview restores the previewed destination (commit enabled again).
+- Corrections: DOI/authors/year/journal can be cleared (title refused); a corrected
+  container keeps the page's container tag; an ignored invalid DOI and refilled cleared
+  fields are reported.
+- `too_large` → one retry with the HTML snapshot cut by 25 %.
+- PDF: the first candidate stays preselected (DESIGN §3.1) and its host is shown in bold.
+- Hints for dropped meta tags and JSON-LD blocks.
+- CSP adds `connect-src 'none'; form-action 'none'`.
+- `?tab=` hook compiled out of release builds (esbuild `define` + dead-code elimination).
+- Release IDs validated (Chrome `[a-p]{32}`, gecko email form or `{UUID}`, no empty strings,
+  no development IDs); Firefox `strict_min_version` 140 (Firefox ESR 153 still loads it in
+  the E2E).
+- CI: new `browser-extension` job in `.github/workflows/ci.yml` (ubuntu-24.04, Node 22,
+  `actions/setup-node` pinned by SHA): `npm ci`, build, lint, test. Not run on GitHub from
+  here.
+
 ## GUI-less end-to-end (real browsers, real host and daemon)
 
 `browser-extension/tests/e2e/run.mjs` (see its header and the extension README):
@@ -67,7 +96,8 @@ Browsers: Playwright's Chromium build 1243 (`/opt/pw-browsers/chromium-1243`, la
 checked against Mozilla's `SHA256SUMS`), headed on Xvfb, unsigned build sideloaded into the
 temp profile, driven over WebDriver BiDi.
 
-Both runs passed all 29 checks:
+Both runs passed all 29 checks (re-run after the review fixes, with binaries from the
+bb3c31d merge):
 
 1. `papers-native-host register --pair --development-extensions` into the temp profile; grant
    `{DestinationRead, CapturePreview, CaptureCommit}`. The `papersd` started for pairing

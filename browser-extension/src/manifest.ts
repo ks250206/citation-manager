@@ -23,7 +23,31 @@ export const DEV_CHROME_KEY =
 
 export const PERMISSIONS = ['activeTab', 'scripting', 'nativeMessaging', 'storage'] as const;
 
+/** Chrome extension IDs: 32 letters a-p (derived from the public key). */
+export const CHROME_ID = /^[a-p]{32}$/;
+/** Gecko add-on IDs: email-like `name@domain` or a `{UUID}` (as papers-native-host accepts). */
+export const GECKO_ID = /^(?:[A-Za-z0-9._+-]+@[A-Za-z0-9.-]+\.[A-Za-z0-9-]+|\{[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\})$/;
+
+/** Rejects malformed IDs, empty strings, and development IDs listed as release IDs. */
+export function checkIds(ids: ExtensionIds): void {
+  const fail = (m: string): never => {
+    throw new Error(`native-manifests/extension-ids.json: ${m}`);
+  };
+  for (const channel of ['development', 'release'] as const) {
+    const list = ids[channel];
+    if (!list || !Array.isArray(list.chrome) || !Array.isArray(list.firefox)) fail(`${channel} needs chrome and firefox lists`);
+    for (const id of list.chrome) if (typeof id !== 'string' || !CHROME_ID.test(id)) fail(`bad ${channel} Chrome ID ${JSON.stringify(id)}`);
+    for (const id of list.firefox) {
+      if (typeof id !== 'string' || id.length > 80 || !GECKO_ID.test(id)) fail(`bad ${channel} Firefox ID ${JSON.stringify(id)}`);
+    }
+  }
+  for (const id of [...ids.release.chrome, ...ids.release.firefox]) {
+    if (ids.development.chrome.includes(id) || ids.development.firefox.includes(id)) fail(`development ID ${id} listed as release`);
+  }
+}
+
 export function buildManifest(target: Target, channel: Channel, version: string, ids: ExtensionIds): Record<string, unknown> {
+  checkIds(ids);
   const base: Record<string, unknown> = {
     manifest_version: 3,
     name: channel === 'development' ? 'Citation Manager Capture (development)' : 'Citation Manager Capture',
@@ -44,7 +68,10 @@ export function buildManifest(target: Target, channel: Channel, version: string,
         description: 'Save the current page to Citation Manager',
       },
     },
-    content_security_policy: { extension_pages: "script-src 'self'; object-src 'none'; base-uri 'none'" },
+    // Extension pages never fetch or submit anything: host traffic is Native Messaging only.
+    content_security_policy: {
+      extension_pages: "script-src 'self'; object-src 'none'; base-uri 'none'; connect-src 'none'; form-action 'none'",
+    },
   };
   if (target === 'chrome') {
     base.background = { service_worker: 'background.js' };
@@ -63,7 +90,8 @@ export function buildManifest(target: Target, channel: Channel, version: string,
   base.browser_specific_settings = {
     gecko: {
       id: gecko,
-      strict_min_version: '128.0',
+      // data_collection_permissions is understood from Firefox 140 (ESR) on.
+      strict_min_version: '140.0',
       // Page data goes only to the local native host, never to the developer or a server.
       data_collection_permissions: { required: ['none'] },
     },

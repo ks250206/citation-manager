@@ -3,6 +3,8 @@
 //
 //   node build.mjs              dist/chrome, dist/firefox (development IDs)
 //   node build.mjs --release    same with the release IDs from native-manifests/extension-ids.json
+//                               (`--ids FILE` reads another ID file, e.g. to try a release build);
+//                               release builds compile the `?tab=` test hook out
 //   node build.mjs --tests      bundle tests/unit/*.test.ts into dist/tests for `node --test`
 //   node build.mjs --check      static policy checks of the sources and built manifests
 import { build } from 'esbuild';
@@ -11,17 +13,31 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = dirname(fileURLToPath(import.meta.url));
-const args = new Set(process.argv.slice(2));
+const argv = process.argv.slice(2);
+const args = new Set(argv);
+const idsFile = argv.includes('--ids') ? argv[argv.indexOf('--ids') + 1] : join(root, 'native-manifests/extension-ids.json');
 const dist = join(root, 'dist');
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
-const ids = JSON.parse(readFileSync(join(root, 'native-manifests/extension-ids.json'), 'utf8'));
+const ids = JSON.parse(readFileSync(idsFile, 'utf8'));
 
-const common = { bundle: true, target: ['chrome116', 'firefox128'], legalComments: 'none', logLevel: 'warning', charset: 'utf8' };
+const common = { bundle: true, target: ['chrome116', 'firefox140'], legalComments: 'none', logLevel: 'warning', charset: 'utf8' };
 
 async function loadManifestModule() {
   const out = join(dist, '.tools/manifest.mjs');
   await build({ ...common, entryPoints: [join(root, 'src/manifest.ts')], outfile: out, format: 'esm', platform: 'node' });
   return import(pathToFileURL(out).href);
+}
+
+/** `__TEST_HOOKS__` keeps the `?tab=` hook only in development/E2E builds. */
+function popupOptions(channel) {
+  return {
+    ...common,
+    entryPoints: [join(root, 'src/popup/index.ts')],
+    format: 'iife',
+    define: { __TEST_HOOKS__: channel === 'release' ? 'false' : 'true' },
+    // Dead-code elimination drops the hook from release builds.
+    minifySyntax: true,
+  };
 }
 
 async function buildExtension(channel) {
@@ -31,7 +47,7 @@ async function buildExtension(channel) {
     rmSync(out, { recursive: true, force: true });
     mkdirSync(out, { recursive: true });
     await build({ ...common, entryPoints: [join(root, 'src/background/index.ts')], outfile: join(out, 'background.js'), format: 'iife' });
-    await build({ ...common, entryPoints: [join(root, 'src/popup/index.ts')], outfile: join(out, 'popup.js'), format: 'iife' });
+    await build({ ...popupOptions(channel), outfile: join(out, 'popup.js') });
     // The snapshot is the completion value of content.js (see src/content/index.ts).
     await build({
       ...common,
@@ -62,7 +78,7 @@ async function buildTests() {
     format: 'esm',
     platform: 'node',
     packages: 'external',
-    define: { __REPO_ROOT__: JSON.stringify(join(root, '..')) },
+    define: { __REPO_ROOT__: JSON.stringify(join(root, '..')), __TEST_HOOKS__: 'true' },
   });
   console.log(`built ${entries.length} test files -> ${out}`);
 }
@@ -94,6 +110,18 @@ async function check() {
     }
     if (text.includes('<all_urls>') || /\*:\/\//.test(text)) problems.push(`${target}: URL pattern in manifest`);
     if (JSON.stringify(m.permissions) !== JSON.stringify(PERMISSIONS)) problems.push(`${target}: unexpected permissions`);
+  }
+  // The release popup must not contain the `?tab=` test hook.
+  const release = await build({ ...popupOptions('release'), write: false });
+  const releaseText = release.outputFiles[0].text;
+  if (releaseText.includes('"tab"')) problems.push('release popup still contains the ?tab= hook');
+  const dev = await build({ ...popupOptions('development'), write: false });
+  if (!dev.outputFiles[0].text.includes('"tab"')) problems.push('development popup lost the ?tab= hook (check is stale)');
+  for (const target of ['chrome', 'firefox']) {
+    const csp = buildManifest(target, 'development', pkg.version, ids).content_security_policy?.extension_pages ?? '';
+    for (const directive of ["script-src 'self'", "object-src 'none'", "connect-src 'none'", "form-action 'none'"]) {
+      if (!csp.includes(directive)) problems.push(`${target}: CSP lacks ${directive}`);
+    }
   }
   for (const icon of ['16', '32', '48', '128']) {
     if (!existsSync(join(root, `public/icons/icon-${icon}.png`))) problems.push(`missing icon ${icon}`);

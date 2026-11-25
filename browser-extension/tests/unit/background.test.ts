@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { checkSnapshot, isPopupSender } from '../../src/background/boundary';
 import { HostClient, nativeError } from '../../src/background/host';
-import { CaptureSession } from '../../src/background/session';
+import { COMMIT_UNKNOWN, CaptureSession } from '../../src/background/session';
 import { HOST_NAME, MiB } from '../../src/shared/limits';
 import type { PageSnapshot } from '../../src/shared/types';
 import { BoundaryError } from '../../src/shared/validate';
@@ -79,15 +79,15 @@ interface Sent {
   message: Record<string, unknown> & { id: string; type: string };
 }
 
-function fakeHost(answer: (m: Sent['message']) => unknown) {
+function fakeHost(answer: (m: Sent['message']) => unknown, deadlines?: Record<string, number>) {
   const sent: Sent[] = [];
   const client = new HostClient(async (host, message) => {
     const m = message as Sent['message'];
     sent.push({ host, message: m });
-    const reply = answer(m);
+    const reply = await answer(m);
     if (reply instanceof Error) throw reply;
     return reply;
-  });
+  }, deadlines);
   return { sent, client };
 }
 
@@ -102,8 +102,8 @@ const capture = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-function session(answer: (m: Sent['message']) => unknown) {
-  const host = fakeHost(answer);
+function session(answer: (m: Sent['message']) => unknown, deadlines?: Record<string, number>) {
+  const host = fakeHost(answer, deadlines);
   const s = new CaptureSession({ host: host.client, extract: async () => snapshot() });
   return { ...host, s };
 }
@@ -207,4 +207,117 @@ test('host errors and a missing host pass through with their codes', async () =>
   const r3 = await badJob.s.handle({ rid: 3, op: 'retry_pdf', job: 'not-a-uuid' });
   assert.equal(r3.outcome.ok ? null : r3.outcome.error.code, 'bad_request');
   assert.equal(badJob.sent.length, 0);
+});
+
+// ---- review fixes: in-flight commits, deadlines, unknown commit outcome -----------------
+
+const deferred = <T>() => {
+  let resolve!: (v: T) => void;
+  const promise = new Promise<T>((r) => (resolve = r));
+  return { promise, resolve };
+};
+const cancels = (sent: Sent[]) => sent.filter((m) => m.message.type === 'capture.cancel').map((m) => m.message.preview_id);
+const COMMIT = { op: 'commit', preview_id: 'p1', decisions: [{ candidate_index: 0, action: 'Create' }], pdf: null };
+
+test('closing the popup during a commit never cancels that commit', async () => {
+  const gate = deferred<unknown>();
+  const { s, sent } = session((m) => {
+    if (m.type === 'capture.preview') return ok(m, previewResult({ id: 'p1' }));
+    if (m.type === 'capture.commit') return gate.promise.then(() => ok(m, commitResult()));
+    return ok(m, { cancelled: true });
+  });
+  await s.handle({ rid: 1, op: 'preview', capture: capture() });
+  const commit = s.handle({ rid: 2, ...COMMIT });
+  await new Promise((r) => setTimeout(r, 5));
+  await s.close(); // popup closed while the host is committing
+  assert.deepEqual(cancels(sent), []);
+  gate.resolve(null);
+  const reply = await commit;
+  assert.equal(reply.outcome.ok, true);
+  assert.deepEqual(cancels(sent), [], 'nothing cancelled after a successful commit either');
+  assert.deepEqual(s.openPreviews(), []);
+});
+
+test('a commit that fails after the popup closed releases its preview', async () => {
+  const gate = deferred<unknown>();
+  const { s, sent } = session((m) => {
+    if (m.type === 'capture.preview') return ok(m, previewResult({ id: 'p1' }));
+    if (m.type === 'capture.commit') return gate.promise.then(() => err(m, 'busy', true));
+    return ok(m, { cancelled: true });
+  });
+  await s.handle({ rid: 1, op: 'preview', capture: capture() });
+  const commit = s.handle({ rid: 2, ...COMMIT });
+  await new Promise((r) => setTimeout(r, 5));
+  await s.close();
+  gate.resolve(null);
+  await commit;
+  assert.deepEqual(cancels(sent), ['p1']);
+});
+
+test('a preview superseded while its commit is in flight is not cancelled', async () => {
+  const gate = deferred<unknown>();
+  let n = 0;
+  const { s, sent } = session((m) => {
+    if (m.type === 'capture.preview') return ok(m, previewResult({ id: `p${++n}` }));
+    if (m.type === 'capture.commit') return gate.promise.then(() => ok(m, commitResult()));
+    return ok(m, { cancelled: true });
+  });
+  await s.handle({ rid: 1, op: 'preview', capture: capture() });
+  const commit = s.handle({ rid: 2, ...COMMIT });
+  await new Promise((r) => setTimeout(r, 5));
+  await s.handle({ rid: 3, op: 'preview', capture: capture() });
+  assert.deepEqual(cancels(sent), []);
+  gate.resolve(null);
+  await commit;
+});
+
+test('host calls have deadlines; a timeout is retryable except for commit', async () => {
+  const never = new Promise(() => undefined);
+  const slow = session(() => never, { 'capture.preview': 20, hello: 20 });
+  const preview = await slow.s.handle({ rid: 1, op: 'preview', capture: capture() });
+  assert.deepEqual(preview.outcome.ok ? null : [preview.outcome.error.code, preview.outcome.error.retryable], ['timeout', true]);
+  const hello = await slow.s.handle({ rid: 2, op: 'hello' });
+  assert.equal(hello.outcome.ok ? null : hello.outcome.error.code, 'timeout');
+
+  const stuck = session((m) => (m.type === 'capture.commit' ? never : ok(m, previewResult({ id: 'p1' }))), { 'capture.commit': 20 });
+  await stuck.s.handle({ rid: 1, op: 'preview', capture: capture() });
+  const commit = await stuck.s.handle({ rid: 2, ...COMMIT });
+  assert.deepEqual(commit.outcome, { ok: false, error: { code: 'commit_unknown', message: COMMIT_UNKNOWN, retryable: false } });
+  assert.deepEqual(stuck.s.openPreviews(), [], 'not offered for another commit');
+  await stuck.s.close();
+  assert.deepEqual(cancels(stuck.sent), [], 'an unknown commit is never cancelled');
+});
+
+test('host_failed during a commit is not retryable: check the app first', async () => {
+  const { s } = session((m) => (m.type === 'capture.commit' ? new Error('Native host has exited.') : ok(m, previewResult({ id: 'p1' }))));
+  await s.handle({ rid: 1, op: 'preview', capture: capture() });
+  const reply = await s.handle({ rid: 2, ...COMMIT });
+  assert.equal(reply.outcome.ok ? null : reply.outcome.error.code, 'commit_unknown');
+  assert.equal(reply.outcome.ok ? null : reply.outcome.error.retryable, false);
+  assert.match(reply.outcome.ok ? '' : reply.outcome.error.message, /Check the app before saving again/);
+  // Outside a commit the same failure stays retryable.
+  const hello = session(() => new Error('Native host has exited.'));
+  const r2 = await hello.s.handle({ rid: 3, op: 'hello' });
+  assert.equal(r2.outcome.ok ? null : r2.outcome.error.retryable, true);
+});
+
+test('a preview reply that arrives after the deadline is cancelled', async () => {
+  const gate = deferred<unknown>();
+  const { s, sent } = session((m) => {
+    if (m.type === 'capture.preview') return gate.promise.then(() => ok(m, previewResult({ id: 'late' })));
+    return ok(m, { cancelled: true });
+  }, { 'capture.preview': 20 });
+  const reply = await s.handle({ rid: 1, op: 'preview', capture: capture() });
+  assert.equal(reply.outcome.ok ? null : reply.outcome.error.code, 'timeout');
+  gate.resolve(null);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.deepEqual(cancels(sent), ['late']);
+  assert.deepEqual(s.openPreviews(), []);
+});
+
+test('ping keeps the worker busy without touching the host', async () => {
+  const { s, sent } = session(() => new Error('unexpected'));
+  const reply = await s.handle({ rid: 9, op: 'ping' });
+  assert.deepEqual(reply, { rid: 9, outcome: { ok: true, result: null } });
+  assert.equal(sent.length, 0);
 });

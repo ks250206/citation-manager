@@ -222,7 +222,7 @@ test('manual corrections replace the page tags and are sent as a new preview', a
 });
 
 test('correction helpers', () => {
-  assert.deepEqual(normalizeCorrections({ title: ' ', doi: ' 10.9999/y ' }), { doi: '10.9999/y' });
+  assert.deepEqual(normalizeCorrections({ doi: ' 10.9999/y ' }), { doi: '10.9999/y' });
   assert.throws(() => normalizeCorrections({ year: '99' }));
   const r = buildCaptureRequest(SNAPSHOT, { collection: null, tags: [] }, true, { doi: '10.9999/z' });
   assert.equal(r.meta[0]?.name, 'citation_doi');

@@ -2,6 +2,7 @@
 // pure state machine. All side effects are injected, so the flow is unit-tested with fakes.
 import type { PopupRequest } from '../shared/messages';
 import { buildCaptureRequest, normalizeCorrections } from '../shared/request';
+import { truncateUtf8, utf8Length } from '../shared/utf8';
 import type {
   CommitResult,
   Corrections,
@@ -16,6 +17,13 @@ import type {
 import { canCommit, destinationChanged, initialState, isTerminalJob, MAX_POLLS, reduce, type Event, type State } from './state';
 
 type Body = PopupRequest extends infer R ? (R extends { rid: number } ? Omit<R, 'rid'> : never) : never;
+
+/** The snapshot with its HTML cut to 75 % of its UTF-8 size (on a code point boundary). */
+export function shrinkSnapshot(snapshot: PageSnapshot): PageSnapshot {
+  if (!snapshot.html) return snapshot;
+  const cut = truncateUtf8(snapshot.html, Math.floor(utf8Length(snapshot.html) * 0.75));
+  return { ...snapshot, html: cut.text === '' ? null : cut.text, html_truncated: true };
+}
 
 export interface Client {
   request(body: Body): Promise<Outcome<unknown>>;
@@ -96,7 +104,14 @@ export class Controller {
     this.deps.remember(destination, this.state.offline);
     this.dispatch({ type: 'begin', op: 'preview' });
     const capture = buildCaptureRequest(snapshot, destination, this.state.offline, corrections);
-    const outcome = await this.call<PreviewResult>({ op: 'preview', capture });
+    let outcome = await this.call<PreviewResult>({ op: 'preview', capture });
+    if (!outcome.ok && outcome.error.code === 'too_large' && snapshot.html) {
+      // Over a limit after all (e.g. corrections on a page at the budget): retry once with
+      // the HTML snapshot cut by a quarter. Meta tags and JSON-LD stay whole.
+      const smaller = shrinkSnapshot(snapshot);
+      this.state = { ...this.state, snapshot: smaller };
+      outcome = await this.call<PreviewResult>({ op: 'preview', capture: buildCaptureRequest(smaller, destination, this.state.offline, corrections) });
+    }
     this.dispatch({ type: 'previewed', outcome, destination, corrections });
   }
 

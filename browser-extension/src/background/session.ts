@@ -4,7 +4,10 @@
 // the daemon's small preview capacity.
 import { MAX_PDF_CANDIDATES } from '../shared/limits';
 import { errorInfo, parsePopupRequest, type PopupReply, type PopupRequest } from '../shared/messages';
-import type { Outcome, PageSnapshot, PreviewResult } from '../shared/types';
+import type { CommitResult, Outcome, PageSnapshot, PreviewResult } from '../shared/types';
+
+export const COMMIT_UNKNOWN =
+  'The save may have completed before the connection was lost. Check the app before saving again.';
 import {
   BoundaryError,
   checkDecisions,
@@ -30,6 +33,8 @@ interface OpenPreview {
 
 export class CaptureSession {
   private readonly previews = new Map<string, OpenPreview>();
+  /** Previews whose commit has been sent and not answered yet. */
+  private readonly committing = new Set<string>();
   private closed = false;
 
   constructor(private readonly deps: SessionDeps) {}
@@ -55,6 +60,9 @@ export class CaptureSession {
   private async dispatch(request: PopupRequest): Promise<Outcome<unknown>> {
     const { host } = this.deps;
     switch (request.op) {
+      case 'ping':
+        // Keep-alive from the open popup (an MV3 service worker idles out otherwise).
+        return { ok: true, result: null };
       case 'hello':
         return host.call('hello', {}, parseHello);
       case 'destinations':
@@ -62,7 +70,11 @@ export class CaptureSession {
       case 'extract':
         return { ok: true, result: await this.deps.extract(request.tabId) };
       case 'preview': {
-        const outcome = await host.call('capture.preview', { capture: request.capture }, parsePreview);
+        // A reply that arrives after the deadline still opened a preview: cancel it.
+        const late = (o: Outcome<PreviewResult>) => {
+          if (o.ok) void this.cancelAll([o.result.preview_id]);
+        };
+        const outcome = await host.call('capture.preview', { capture: request.capture }, parsePreview, late);
         if (outcome.ok) await this.track(outcome.result);
         return outcome;
       }
@@ -75,10 +87,25 @@ export class CaptureSession {
         }
         const fields: Record<string, unknown> = { preview_id: request.preview_id, decisions };
         if (request.pdf !== null) fields.pdf = request.pdf;
-        const outcome = await host.call('capture.commit', fields, parseCommit);
-        // Committed previews are consumed by the daemon; a conflict means preview again.
-        if (outcome.ok || outcome.error.code === 'conflict' || outcome.error.code === 'not_found') {
+        // A commit in flight is never cancelled, not even when the popup closes meanwhile.
+        this.committing.add(request.preview_id);
+        let outcome: Outcome<CommitResult>;
+        try {
+          outcome = await host.call('capture.commit', fields, parseCommit);
+        } finally {
+          this.committing.delete(request.preview_id);
+        }
+        if (!outcome.ok && (outcome.error.code === 'timeout' || outcome.error.code === 'host_failed')) {
+          // The host may have committed before it went away: never invite a blind re-save.
+          outcome = { ok: false, error: { code: 'commit_unknown', message: COMMIT_UNKNOWN, retryable: false } };
+        }
+        const settled = outcome.ok || ['conflict', 'not_found', 'commit_unknown'].includes(outcome.error.code);
+        if (settled) {
+          // Consumed by the daemon, gone, or of unknown state (left to expire, never cancelled).
           this.previews.delete(request.preview_id);
+        } else if (this.closed) {
+          // The popup is gone and the commit failed: release the preview now.
+          await this.cancelAll([request.preview_id]);
         }
         return outcome;
       }
@@ -95,7 +122,7 @@ export class CaptureSession {
 
   /** Records a new preview and cancels the ones it supersedes. */
   private async track(preview: PreviewResult): Promise<void> {
-    const superseded = [...this.previews.keys()].filter((id) => id !== preview.preview_id);
+    const superseded = [...this.previews.keys()].filter((id) => id !== preview.preview_id && !this.committing.has(id));
     this.previews.set(preview.preview_id, { candidates: preview.candidates.length, pdfs: preview.pdf_candidates.length });
     if (this.closed) superseded.push(preview.preview_id);
     await this.cancelAll(superseded);
@@ -109,10 +136,10 @@ export class CaptureSession {
     }
   }
 
-  /** The popup closed: cancel previews that were never committed. */
+  /** The popup closed: cancel previews that were never committed (in-flight commits finish). */
   async close(): Promise<void> {
     this.closed = true;
-    await this.cancelAll([...this.previews.keys()]);
+    await this.cancelAll([...this.previews.keys()].filter((id) => !this.committing.has(id)));
   }
 
   openPreviews(): string[] {
