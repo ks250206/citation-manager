@@ -1,6 +1,7 @@
 //! Application contracts independent of UI, storage drivers and transports.
 pub mod annotations;
 pub mod attachments;
+pub mod capture;
 pub mod collections;
 pub mod export;
 /// PDF page geometry shared by the PDF worker and the desktop viewer (no PDF runtime).
