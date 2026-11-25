@@ -147,3 +147,18 @@ jobs:
           python3 -m venv $RUNNER_TEMP/pdfium-tools
           $RUNNER_TEMP/pdfium-tools/bin/python -m pip install -r scripts/pdfium/requirements.txt
           $RUNNER_TEMP/pdfium-tools/bin/python scripts/pdfium/validate_export.py target/pdf-export-test-*
+  browser-extension:
+    # #24: build, lint and unit-test the WebExtension (no browsers; the E2E is a manual lane).
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: browser-extension
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - run: npm ci
+      - run: npm run build
+      - run: npm run lint
+      - run: npm test
