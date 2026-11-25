@@ -177,6 +177,103 @@ fn cache_is_lru_bounded_by_bytes_and_entries() {
 }
 
 #[test]
+fn explicit_zoom_applies_before_the_first_page_has_rendered() {
+    // First page too large at 100%: no geometry yet, and the pane may not be measured.
+    let mut scale = 1.0;
+    for expected in [0.8, 0.67, 0.5, MIN_SCALE] {
+        let mode = ZoomMode::Scale(step_zoom(scale, false));
+        scale = layout_scale(mode, None, (0.0, 0.0), scale);
+        assert_eq!(scale, expected);
+    }
+    assert_eq!(
+        layout_scale(ZoomMode::Scale(9.0), None, (500.0, 500.0), 1.0),
+        MAX_SCALE
+    );
+    // Fit modes need the reference page and a measured pane; until then the scale is kept.
+    for mode in [ZoomMode::FitWidth, ZoomMode::FitPage] {
+        assert_eq!(layout_scale(mode, None, (624.0, 900.0), 0.67), 0.67);
+        assert_eq!(
+            layout_scale(mode, Some((600.0, 800.0)), (0.0, 0.0), 0.67),
+            0.67
+        );
+    }
+    assert_eq!(
+        layout_scale(
+            ZoomMode::FitWidth,
+            Some((600.0, 800.0)),
+            (624.0, 900.0),
+            0.67
+        ),
+        1.0
+    );
+}
+
+#[test]
+fn busy_renders_wait_for_the_retry_delay_before_resubmission() {
+    use std::time::{Duration, Instant};
+    let a = attachment(1);
+    let key = RenderKey::new(a, 3, 1.5);
+    let other = RenderKey::new(a, 4, 1.5);
+    let t0 = Instant::now();
+    let mut busy = BusyBackoff::default();
+    assert!(!busy.is_deferred(&key, t0));
+    busy.defer(key, t0);
+    // The repaint right after the reply, and every frame within the delay, must skip it.
+    for ms in [0, 16, 150, 299] {
+        let now = t0 + Duration::from_millis(ms);
+        busy.prune(now);
+        assert!(busy.is_deferred(&key, now), "resubmitted after {ms} ms");
+        assert!(!busy.is_deferred(&other, now));
+    }
+    let due = t0 + BUSY_RETRY;
+    assert!(!busy.is_deferred(&key, due));
+    busy.prune(due);
+    assert!(busy.is_empty());
+    // Zoom/rotation changes start over.
+    busy.defer(key, due);
+    busy.defer(other, due);
+    assert_eq!(busy.len(), 2);
+    busy.clear();
+    assert!(!busy.is_deferred(&key, due));
+}
+
+#[test]
+fn building_the_page_column_does_not_evict_the_working_set() {
+    let a = attachment(1);
+    let key = |p: u32| RenderKey::new(a, p, 1.0);
+    let mut cache: RenderCache<u32> = RenderCache::new(1_000, 4);
+    // Browsed to the end of the document: later pages fill the cache.
+    for p in 6..10 {
+        cache.insert(key(p), p, 1);
+    }
+    // Scrolled back to the top: pages 0 and 1 are visible/prefetched.
+    let working = [0u32, 1];
+    let mut renders = 0;
+    for _frame in 0..10 {
+        // `schedule_renders`: refresh the working set and request one missing page.
+        for p in working.iter().rev() {
+            cache.get(&key(*p));
+        }
+        let requested = working.iter().copied().find(|p| !cache.contains(&key(*p)));
+        // The page column then reads every page in document order, including offscreen ones.
+        for p in 0..10 {
+            let _ = cache.peek(&key(p));
+        }
+        // The render reply arrives after the frame.
+        if let Some(p) = requested {
+            renders += 1;
+            cache.insert(key(p), p, 1);
+        }
+    }
+    assert_eq!(
+        renders, 2,
+        "each working page renders once, without thrashing"
+    );
+    assert!(working.iter().all(|p| cache.contains(&key(*p))));
+    assert_eq!(cache.peek(&key(0)), Some(&0));
+}
+
+#[test]
 fn render_zoom_is_capped_to_the_worker_bitmap_limits() {
     use cm_protocol::geometry::{MAX_RENDER_PIXELS, MAX_RENDER_SIDE};
     let letter = (612.0, 792.0);

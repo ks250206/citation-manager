@@ -2,11 +2,11 @@
 //! bounded render cache with cancellation, and character-based text selection.
 use super::annotations_ui::page_of;
 use super::*;
-use crate::annotations::{MARKER_H, MARKER_W, is_marker, marker_origin, quads_of};
+use crate::annotations::{MARKER_H, MARKER_W, is_marker, marker_origin, placement, quads_of};
 use crate::pdf_viewer::{
-    self, RenderCache, RenderKey, TextPos, ZoomMode, capped_zoom, hit_char, page_offsets,
-    page_range, render_zoom, rotate, rotate_rgba, rotated_points, scale_for, selected_text,
-    step_zoom, visible_pages, wanted_pages,
+    self, BusyBackoff, RenderCache, RenderKey, TextPos, ZoomMode, capped_zoom, hit_char,
+    layout_scale, page_offsets, page_range, render_zoom, rotate, rotate_rgba, rotated_points,
+    selected_text, step_zoom, visible_pages, wanted_pages,
 };
 use cm_protocol::annotations::{
     Annotation, AnnotationId, AnnotationKind, AnnotationPatch, NewAnnotation,
@@ -34,6 +34,8 @@ pub(super) struct Viewer {
     /// Request serial + cancellation per key; a reply applies only if its serial matches,
     /// so a late reply for a cancelled request cannot consume a newer request's slot.
     in_flight: HashMap<RenderKey, (u64, Cancellation)>,
+    /// `Busy` replies wait out their retry delay instead of being resubmitted every frame.
+    busy: BusyBackoff,
     serial: u64,
     scroll: ScrollHandle,
     anchor: Option<TextPos>,
@@ -66,6 +68,7 @@ impl Viewer {
             turns: 0,
             cache: RenderCache::default(),
             in_flight: HashMap::new(),
+            busy: BusyBackoff::default(),
             serial: 0,
             scroll: ScrollHandle::new(),
             anchor: None,
@@ -87,6 +90,7 @@ impl Viewer {
     fn reset_attempts(&mut self) {
         self.cancel_all();
         self.failures.clear();
+        self.busy.clear();
     }
     /// Size of a page in points after its own and the user's rotation.
     fn page_points(&self, page: u32) -> Option<(f32, f32)> {
@@ -199,6 +203,10 @@ impl Viewer {
                 .set_offset(point(x, px(-(top - pdf_viewer::PAGE_GAP).max(0.0))));
         }
     }
+    /// Page label PDFium reported for a rendered page, if any.
+    pub(super) fn page_label(&self, page: u32) -> Option<String> {
+        self.labels.get(&page).cloned().flatten()
+    }
     pub(super) fn current_page(&self) -> u32 {
         let (_, h) = self.pane();
         let top = -f32::from(self.scroll.offset().y);
@@ -261,10 +269,7 @@ impl LibraryView {
         let pane_h = if pane_h < 1.0 { 800.0 } else { pane_h };
         // Fit modes use the first page so the zoom does not jump while paging through
         // documents that mix page sizes/orientations.
-        let reference = v.page_points(0);
-        if let Some(page) = reference.filter(|_| pane_w > 1.0) {
-            v.scale = scale_for(v.mode, page, (pane_w, pane_h));
-        }
+        v.scale = layout_scale(v.mode, v.page_points(0), (pane_w, pane_h), v.scale);
         let base_zoom = render_zoom(v.scale, v.device_scale);
         let top = -f32::from(v.scroll.offset().y);
         let visible = visible_pages(&v.layout(), top, pane_h.max(1.0));
@@ -276,6 +281,13 @@ impl LibraryView {
                 RenderKey::new(v.attachment, p, capped_zoom(base_zoom, size))
             })
             .collect();
+        // Refresh recency only for the working set, least important first, so visible pages
+        // end up most recent and offscreen pages are the ones evicted.
+        for key in wanted.iter().rev() {
+            v.cache.get(key);
+        }
+        let now = std::time::Instant::now();
+        v.busy.prune(now);
         v.in_flight.retain(|key, (_, cancel)| {
             let keep = wanted.contains(key);
             if !keep {
@@ -287,7 +299,10 @@ impl LibraryView {
             if v.in_flight.len() >= MAX_IN_FLIGHT {
                 break;
             }
-            if v.cache.contains(&key) || v.in_flight.contains_key(&key) {
+            if v.cache.contains(&key)
+                || v.in_flight.contains_key(&key)
+                || v.busy.is_deferred(&key, now)
+            {
                 continue;
             }
             let cancel = Cancellation::default();
@@ -358,11 +373,11 @@ impl LibraryView {
             }
             Ok(PdfReply::Page(Err(RenderFailure::Cancelled))) => {}
             Ok(PdfReply::Page(Err(RenderFailure::Busy))) => {
-                // Transient: try again shortly instead of recording a failure.
+                // Transient: try again shortly instead of recording a failure. Until the
+                // deadline, repaints (including the notify below) skip this key.
+                v.busy.defer(key, std::time::Instant::now());
                 cx.spawn(async move |view, cx| {
-                    cx.background_executor()
-                        .timer(Duration::from_millis(300))
-                        .await;
+                    cx.background_executor().timer(pdf_viewer::BUSY_RETRY).await;
                     let _ = view.update(cx, |_, cx| cx.notify());
                 })
                 .detach();
@@ -398,9 +413,7 @@ impl LibraryView {
             let page = v.current_page();
             v.mode = mode;
             v.reset_attempts();
-            if let Some(reference) = v.page_points(0) {
-                v.scale = scale_for(mode, reference, v.pane());
-            }
+            v.scale = layout_scale(mode, v.page_points(0), v.pane(), v.scale);
             v.scroll_to_page(page);
         }
         cx.notify();
@@ -613,7 +626,7 @@ impl LibraryView {
                 let width = size.0 * scale;
                 let image = v
                     .cache
-                    .get(&RenderKey::new(v.attachment, page, capped_zoom(zoom, size)))
+                    .peek(&RenderKey::new(v.attachment, page, capped_zoom(zoom, size)))
                     .cloned();
                 let failure = v.failures.get(&page).map(ToString::to_string);
                 let image_only = v.has_text.get(&page) == Some(&false);
@@ -1007,6 +1020,18 @@ impl LibraryView {
                         Some(p) => format!("Selected · p. {}", p + 1),
                         None => "Selected · unresolved".into(),
                     }))
+                    .when(placement(a).is_some_and(|p| p.manual), |el| {
+                        el.child(
+                            primary_button(
+                                "pdf-ann-place",
+                                format!("Place on p. {}", current + 1),
+                                true,
+                            )
+                            .on_click(cx.listener(
+                                move |this, _, _, cx| this.ann_place_on_page(id, current, cx),
+                            )),
+                        )
+                    })
                     .when(a.kind == AnnotationKind::Highlight, |el| {
                         el.child(self.color_swatches(
                             "pdf-ann-color",

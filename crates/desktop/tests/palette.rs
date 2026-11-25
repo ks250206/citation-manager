@@ -132,6 +132,60 @@ fn platform_keys_map_to_canonical_tokens() {
 }
 
 #[test]
+fn platform_punctuation_normalizes_into_parser_vocabulary() {
+    let key = |k: &str, c: Option<&str>, p, ctrl, alt, shift| {
+        KeyStroke::from_platform(k, c, p, ctrl, alt, shift)
+    };
+    let parsed = |t: &str| Some(KeyStroke::parse(t).unwrap());
+    // The plus character is spelled `Plus`; `+` alone is a modifier separator.
+    assert_eq!(
+        key("+", Some("+"), false, false, false, true),
+        parsed("Plus")
+    );
+    assert_eq!(
+        key("+", Some("+"), false, false, false, false),
+        parsed("Plus")
+    );
+    assert_eq!(
+        key("+", Some("+"), true, false, false, false),
+        parsed("Cmd+Plus")
+    );
+    assert_eq!(
+        key("+", None, true, false, false, false),
+        parsed("Cmd+Plus")
+    );
+    // Shift reported with an unshifted non-letter becomes the produced character.
+    assert_eq!(
+        key("/", Some("?"), true, false, false, true),
+        parsed("Cmd+?")
+    );
+    assert_eq!(
+        key("=", Some("+"), true, false, false, true),
+        parsed("Cmd+Plus")
+    );
+    assert_eq!(
+        key("1", Some("!"), false, true, false, true),
+        parsed("Ctrl+!")
+    );
+    // Platforms that already apply Shift to the key are unchanged.
+    assert_eq!(
+        key("?", Some("?"), true, false, false, false),
+        parsed("Cmd+?")
+    );
+    assert_eq!(
+        key("=", Some("="), true, false, false, false),
+        parsed("Cmd+=")
+    );
+    // Without a produced character the layout-dependent result is unknown: no guess.
+    assert_eq!(key("/", None, true, false, false, true), None);
+    // Letters keep explicit Shift.
+    assert_eq!(
+        key("k", Some("K"), true, false, false, true),
+        parsed("Cmd+Shift+k")
+    );
+}
+
+#[test]
 fn shortcut_labels_come_from_the_active_keymap() {
     let registry = CommandRegistry::m1();
     let keymap = Keymap::parse(DEFAULT_JSON, &registry).unwrap();

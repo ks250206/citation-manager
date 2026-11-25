@@ -225,6 +225,7 @@ fn issue_21_pdf_and_search_commands_are_connectable_descriptors() {
         "pdf.show_annotations",
         "search.full_text",
         "pdf.next_page",
+        "pdf.place_note",
         "pdf.find",
         "link.open_clipboard",
     ] {

@@ -190,7 +190,9 @@ export class Controller {
   async recover(): Promise<void> {
     const phase = this.state.phase;
     if (phase.kind !== 'error') return;
-    if (phase.recovery === 'repreview') return this.state.snapshot ? this.preview() : this.save();
+    // A failed preview is retried with the corrections it was made with.
+    const corrections = (phase.op === 'preview' ? this.state.pendingCorrections : null) ?? this.state.corrections;
+    if (phase.recovery === 'repreview') return this.state.snapshot ? this.preview(corrections) : this.save();
     if (phase.recovery !== 'retry') {
       this.dispatch({ type: 'back' });
       return;
@@ -203,7 +205,7 @@ export class Controller {
       case 'extract':
         return this.save();
       case 'preview':
-        return this.preview();
+        return this.preview(corrections);
       case 'commit':
         return this.commit_retry();
       case 'pdf_job':

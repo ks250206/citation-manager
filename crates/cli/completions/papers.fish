@@ -43,7 +43,7 @@ complete -c papers -n "__fish_papers_needs_command" -f -a "fulltext" -d 'Read ex
 complete -c papers -n "__fish_papers_needs_command" -f -a "annotations" -d 'List a paper\'s highlights, comments and notes'
 complete -c papers -n "__fish_papers_needs_command" -f -a "export" -d 'Export BibTeX/RIS to a file or stdout'
 complete -c papers -n "__fish_papers_needs_command" -f -a "server" -d 'Inspect, start or stop the library\'s papersd'
-complete -c papers -n "__fish_papers_needs_command" -f -a "mcp" -d 'Serve MCP over stdio (requires the #29 MCP server; unavailable until then)'
+complete -c papers -n "__fish_papers_needs_command" -f -a "mcp" -d 'Serve MCP over stdio for this library (through papersd; never the desktop credential)'
 complete -c papers -n "__fish_papers_needs_command" -f -a "completions" -d 'Print a shell completion script'
 complete -c papers -n "__fish_papers_needs_command" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
 complete -c papers -n "__fish_papers_using_subcommand add; and not __fish_seen_subcommand_from doi file help" -l library -d 'Library directory (absolute or relative). Required for library commands' -r -F
@@ -254,7 +254,7 @@ complete -c papers -n "__fish_papers_using_subcommand server; and __fish_seen_su
 complete -c papers -n "__fish_papers_using_subcommand server; and __fish_seen_subcommand_from start" -l runtime-dir -d 'Private runtime directory for the daemon socket (default: $XDG_RUNTIME_DIR/citation-manager)' -r -F
 complete -c papers -n "__fish_papers_using_subcommand server; and __fish_seen_subcommand_from start" -l credential-file -d 'Present a credential issued by the daemon (0600 file) instead of the owner\'s desktop credential' -r -F
 complete -c papers -n "__fish_papers_using_subcommand server; and __fish_seen_subcommand_from start" -l daemon-idle-timeout-ms -d 'Idle timeout passed to a papersd that this invocation starts' -r
-complete -c papers -n "__fish_papers_using_subcommand server; and __fish_seen_subcommand_from start" -l rest -d 'REST API listener (not available yet: #27)'
+complete -c papers -n "__fish_papers_using_subcommand server; and __fish_seen_subcommand_from start" -l rest -d 'Not a start option: REST follows the persisted API settings (`papersd api set`). Exits 7'
 complete -c papers -n "__fish_papers_using_subcommand server; and __fish_seen_subcommand_from start" -l json -d 'Emit the JSON envelope on stdout (default)'
 complete -c papers -n "__fish_papers_using_subcommand server; and __fish_seen_subcommand_from start" -l text -d 'Emit human-readable text on stdout instead of JSON'
 complete -c papers -n "__fish_papers_using_subcommand server; and __fish_seen_subcommand_from start" -l read-only -d 'Ask the daemon for LibraryRead only, whatever the command; writes are then refused (exit 5)'
@@ -305,7 +305,7 @@ complete -c papers -n "__fish_papers_using_subcommand help; and not __fish_seen_
 complete -c papers -n "__fish_papers_using_subcommand help; and not __fish_seen_subcommand_from add import search list show fulltext annotations export server mcp completions help" -f -a "annotations" -d 'List a paper\'s highlights, comments and notes'
 complete -c papers -n "__fish_papers_using_subcommand help; and not __fish_seen_subcommand_from add import search list show fulltext annotations export server mcp completions help" -f -a "export" -d 'Export BibTeX/RIS to a file or stdout'
 complete -c papers -n "__fish_papers_using_subcommand help; and not __fish_seen_subcommand_from add import search list show fulltext annotations export server mcp completions help" -f -a "server" -d 'Inspect, start or stop the library\'s papersd'
-complete -c papers -n "__fish_papers_using_subcommand help; and not __fish_seen_subcommand_from add import search list show fulltext annotations export server mcp completions help" -f -a "mcp" -d 'Serve MCP over stdio (requires the #29 MCP server; unavailable until then)'
+complete -c papers -n "__fish_papers_using_subcommand help; and not __fish_seen_subcommand_from add import search list show fulltext annotations export server mcp completions help" -f -a "mcp" -d 'Serve MCP over stdio for this library (through papersd; never the desktop credential)'
 complete -c papers -n "__fish_papers_using_subcommand help; and not __fish_seen_subcommand_from add import search list show fulltext annotations export server mcp completions help" -f -a "completions" -d 'Print a shell completion script'
 complete -c papers -n "__fish_papers_using_subcommand help; and not __fish_seen_subcommand_from add import search list show fulltext annotations export server mcp completions help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
 complete -c papers -n "__fish_papers_using_subcommand help; and __fish_seen_subcommand_from add" -f -a "doi" -d 'Look up a DOI (Crossref/DataCite), preview duplicates, then commit'

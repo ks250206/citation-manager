@@ -20,7 +20,7 @@ pub mod exit {
     pub const PERMISSION: i32 = 5;
     /// papersd could not be reached or started, or it reported itself unavailable.
     pub const DAEMON: i32 = 6;
-    /// The requested feature is not available in this build (REST #27) or the MCP server failed.
+    /// The requested feature is not available this way (`server start --rest`) or the MCP server failed.
     pub const UNAVAILABLE: i32 = 7;
 }
 
