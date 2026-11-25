@@ -3,6 +3,7 @@ name = "cm-pdf"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
 publish.workspace = true
 
 # The workspace forbids `unsafe_code`. cm-pdf alone denies it instead so that the single
