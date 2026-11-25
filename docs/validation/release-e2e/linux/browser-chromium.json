@@ -1,0 +1,153 @@
+{
+  "checks": {
+    "installed_registration_healthy": true,
+    "papersd_stopped_before_browser": true,
+    "without_gesture_tab_url_hidden": true,
+    "without_gesture_save_has_no_access": true,
+    "article_popup_ready_paired": true,
+    "article_preview_title": true,
+    "article_preview_doi": true,
+    "article_preview_year": true,
+    "article_preview_authors": true,
+    "article_pdf_candidate_listed": true,
+    "article_default_decision_create": true,
+    "article_saved_with_paper_id": true,
+    "article_pdf_failure_reported_separately": true,
+    "article_retry_button_shown": true,
+    "article_retry_requeued": true,
+    "duplicate_popup_ready_paired": true,
+    "duplicate_preview_flags_existing_match": true,
+    "duplicate_defaults_to_skip": true,
+    "duplicate_skipped_not_conflict": true,
+    "duplicate_reported_not_created": true,
+    "duplicate_back_to_ready": true,
+    "provisional_popup_ready_paired": true,
+    "provisional_flagged": true,
+    "correction_applied_by_daemon": true,
+    "provisional_saved": true,
+    "host_exited_after_requests": true
+  },
+  "results": {
+    "browser": "chromium",
+    "host_status": "{\n  \"allowed\": {\n    \"chrome\": [\n      \"baapgkfjfjjagdkpkmocjhfopmaohcdc\"\n    ],\n    \"firefox\": [\n      \"citation-manager-dev@citation-manager.invalid\"\n    ]\n  },\n  \"executable\": \"<work>/prefix/bin/papers-native-host\",\n  \"grant\": \"01a212b2-72c6-77a4-931a-0fd8d762ba3c\",\n  \"healthy\": true,\n  \"host_path\": \"<work>/prefix/bin/papers-native-host\",\n  \"library\": \"<work>/home/.local/share/citation-manager/library\",\n  \"manifests\": [\n    {\n      \"browser\": \"chromium\",\n      \"path\": \"<work>/chromium-profile/NativeMessagingHosts/dev.citation_manager.native_host.json\",\n      \"points_to_this_executable\": true,\n      \"present\": true\n    }\n  ],\n  \"paired\": true,\n  \"registered\": true,\n  \"revoke_pending\": [],\n  \"unregistered\": false\n}\n",
+    "control": {
+      "tab_urls_visible": 0,
+      "save_error": "no_access"
+    },
+    "chromium_pages": [
+      "http://127.0.0.1:39131/no-metadata.html"
+    ],
+    "popup_mode": "popup-in-tab",
+    "article_review": {
+      "title": "Capturing Papers With the Desktop App Closed",
+      "authors": "Ada Lovelace; Grace Hopper",
+      "year": "2026",
+      "doi": "10.9999/e2e24.capture",
+      "journal": "Journal of Offline Fixtures",
+      "url": "—",
+      "pdfs": [
+        {
+          "value": "0",
+          "checked": true,
+          "label": "pdf.e2e24-fixture.example.com /e2e24-capture.pdf (highwire)"
+        },
+        {
+          "value": "none",
+          "checked": false,
+          "label": "Do not download a PDF"
+        }
+      ],
+      "decision": "Create",
+      "provisional": false,
+      "warnings": [],
+      "matches": [],
+      "commitEnabled": true
+    },
+    "article_paper": "01a212b3-1038-7125-8b35-fc5962e77b4a",
+    "article_pdf_states": [
+      "pending",
+      "failed"
+    ],
+    "article_pdf_text": "The paper is saved, but the PDF download failed: attempt limit 4 reached: network errorIf the PDF needs your login, download it in the browser and attach it in the app.Retry PDF download",
+    "article_after_retry": "PDF download queued (attempt 0 of 4).",
+    "duplicate_review": {
+      "title": "Capturing Papers With the Desktop App Closed",
+      "authors": "Ada Lovelace; Grace Hopper",
+      "year": "2026",
+      "doi": "10.9999/e2e24.capture",
+      "journal": "Journal of Offline Fixtures",
+      "url": "—",
+      "pdfs": [
+        {
+          "value": "0",
+          "checked": true,
+          "label": "pdf.e2e24-fixture.example.com /e2e24-capture.pdf (highwire)"
+        },
+        {
+          "value": "none",
+          "checked": false,
+          "label": "Do not download a PDF"
+        }
+      ],
+      "decision": "Skip",
+      "provisional": false,
+      "warnings": [
+        "Already in your library: 1 paper(s) here exactly match an existing paper (same DOI or identifier; details are shown only in the app). Browser capture skips them instead of saving a duplicate; merge in the app if needed."
+      ],
+      "matches": [],
+      "commitEnabled": false
+    },
+    "duplicate_hidden_count": "1",
+    "duplicate_commit": {
+      "phase": "error",
+      "code": "duplicate",
+      "message": "This paper is already in your library (same DOI or identifier), so nothing was saved. Browser capture cannot create a duplicate or merge; open the app to merge it.",
+      "paper": null,
+      "recover": null
+    },
+    "provisional_review": {
+      "title": "Lab notes: a page without citation metadata",
+      "authors": "—",
+      "year": "—",
+      "doi": "—",
+      "journal": "—",
+      "url": "—",
+      "pdfs": [
+        {
+          "value": "none",
+          "checked": true,
+          "label": "No PDF found on this page"
+        }
+      ],
+      "decision": "Create",
+      "provisional": true,
+      "warnings": [],
+      "matches": [],
+      "commitEnabled": true
+    },
+    "provisional_corrected": {
+      "title": "Lab Notes on Provisional Capture (corrected)",
+      "authors": "Rosalind Franklin; Lise Meitner",
+      "year": "2025",
+      "doi": "—",
+      "journal": "—",
+      "url": "—",
+      "pdfs": [
+        {
+          "value": "none",
+          "checked": true,
+          "label": "No PDF found on this page"
+        }
+      ],
+      "decision": "Create",
+      "provisional": false,
+      "warnings": [],
+      "matches": [],
+      "commitEnabled": true
+    },
+    "provisional_paper": "01a212b3-7f33-729e-a88a-1bf61f651b20",
+    "papersd_after_browser_quit": [
+      32298
+    ]
+  }
+}

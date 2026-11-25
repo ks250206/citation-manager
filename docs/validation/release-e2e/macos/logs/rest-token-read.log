@@ -1,0 +1,8 @@
+$ <work>/Applications/Citation Manager.app/Contents/MacOS/papersd token issue --library <work>/home/.local/share/citation-manager/library --label read only --kind api --allow-non-tty --scope papers:read
+exit 0 (20.2s)
+--- stdout
+<token>
+
+--- stderr
+Issued api token 01a212bd-837a-759c-9f32-4ee6a1f144a7 "read only" scopes [papers:read] expires in 90 days.
+Shown once. Stored in: private 0600 file outside the library (weaker fallback) (account 6fdd96f677c9cc8e:01a212bd-837a-759c-9f32-4ee6a1f144a7).

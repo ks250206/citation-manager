@@ -1,0 +1,6 @@
+$ <work>/Applications/Citation Manager.app/Contents/MacOS/papers search Host-level
+exit 0 (0.1s)
+--- stdout
+{"command":"search","data":{"coverage":{"complete":true,"continuation":null,"fts_truncated":false,"scan":"NotNeeded","scanned_documents":0,"short_terms":[],"timed_out":false,"unresolved":[],"unsearched":[]},"hits":[{"annotation_id":null,"attachment_id":null,"deleted":false,"doi":null,"highlights":[[0,10]],"matched_fields":["title"],"page_index":null,"page_label":null,"page_number":null,"paper_id":"01a212bd-3317-76b4-876a-6e15648dd815","score":3.968477711164651,"snippet":"Host-level Capture Without a Browser","snippet_truncated":false,"source":"bibliographic","title":"Host-level Capture Without a Browser","uri":null}],"next_cursor":null,"query":"Host-level","total_hits":1},"ok":true,"schema":"papers.v1","warnings":[]}
+
+--- stderr

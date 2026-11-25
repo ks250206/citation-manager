@@ -147,5 +147,5 @@ Apple Silicon 16 GB release 実機の値ではない。
 | 対象 | 実行主体 / 環境 | 証跡 | 状態 |
 |---|---|---|---|
 | 新規 install → ブラウザ保存（GUI/daemon 停止）→ GUI 再起動・検索 → CLI/REST/MCP → 注釈付き PDF → 可搬性・privacy・offline | implementing agent、Linux コンテナ（release build、Xvfb、Playwright Chromium、loopback のみの network namespace） | `tests/e2e/release/run.py`、[release-e2e/linux](release-e2e/linux/) | passed |
-| 同（ブラウザと GUI を除く）、`.dmg` から取り出した `.app` | GitHub hosted macOS VM（`package-macos.yml`） | workflow artifact `package-macos-evidence/release-e2e/` | MVP_ACCEPTANCE の macOS run を参照 |
+| 同（ブラウザと GUI を除く）、`.dmg` から取り出した `.app` | GitHub hosted macOS VM（`package-macos.yml`） | run 45613061723、[release-e2e/macos](release-e2e/macos/) | passed（66 checks） |
 | 実機 Mac・Developer ID 署名・store 拡張・16 GB 実機計測 | 上表の fallback 担当（owner）/ 権限を持つ担当 | — | **未実施**（MVP 完了の blocker） |

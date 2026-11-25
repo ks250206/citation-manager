@@ -1,0 +1,6 @@
+$ <work>/prefix/bin/papers annotations 01a212b2-735e-7146-8112-caee1a979cbf
+exit 0 (0.0s)
+--- stdout
+{"command":"annotations","data":{"annotations":[{"attachment_id":"01a212b2-7362-7546-9e32-62a500e2fa48","color":null,"comment":"REST note from the release E2E","confirmed_at":null,"created_at":"2026-11-25T12:35:54.958Z","id":"01a212b4-97ce-7146-beae-9f9d9da5b6cf","kind":"note","page_index":0,"page_label":null,"page_number":1,"quads":0,"quote":"","source":"ai","unresolved_reason":null,"updated_at":"2026-11-25T12:35:54.958Z","uri":"paper://01a212b2-735e-7146-8112-caee1a979cbf/attachment/01a212b2-7362-7546-9e32-62a500e2fa48?page=1"},{"attachment_id":"01a212b2-7362-7546-9e32-62a500e2fa48","color":"yellow","comment":"MCP highlight from the release E2E","confirmed_at":null,"created_at":"2026-11-25T12:35:55.029Z","id":"01a212b4-9815-7495-bc8a-e137ce14bf0f","kind":"highlight","page_index":0,"page_label":"iv","page_number":1,"quads":1,"quote":"coordinate proof","source":"ai","unresolved_reason":null,"updated_at":"2026-11-25T12:35:55.029Z","uri":"paper://01a212b2-735e-7146-8112-caee1a979cbf/attachment/01a212b2-7362-7546-9e32-62a500e2fa48?page=1"}],"paper_id":"01a212b2-735e-7146-8112-caee1a979cbf","total":2,"truncated":false},"ok":true,"schema":"papers.v1","warnings":[]}
+
+--- stderr

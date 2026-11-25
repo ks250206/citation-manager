@@ -1,0 +1,6 @@
+$ <work>/Applications/Citation Manager.app/Contents/MacOS/papers-mcp grant --library <work>/home/.local/share/citation-manager/library
+exit 0 (0.1s)
+--- stdout
+{"capabilities":["library_read","jobs_read"],"credential_file":"<work>/home/.local/share/citation-manager/library/daemon/mcp.credential","expires_at_ms":1803386682198,"grant_id":"01a212bc-a3d7-7793-9bae-59840e2ea939","label":"mcp read-only"}
+
+--- stderr

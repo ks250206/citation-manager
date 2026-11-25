@@ -1,0 +1,5 @@
+$ cp -a <work>/Backups/library-copy <work>/Restored/library
+exit 0 (0.0s)
+--- stdout
+
+--- stderr

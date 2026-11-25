@@ -909,6 +909,20 @@ class Run:
         self.step('teardown', self.teardown)
         return self.finish()
 
+    def sanitize(self, text):
+        """Evidence may be committed: machine paths become placeholders, tokens are removed."""
+        args = self.args
+        roots = [(self.work, '<work>'), (self.runtime_base, '<runtime>'), (self.out, '<out>'), (args.bin_dir, '<bin-dir>'),
+                 (args.pdfium_dir and args.pdfium_dir.resolve(), '<pdfium-dir>'),
+                 (args.owner_client and args.owner_client.parent, '<owner-client-dir>'),
+                 (args.app and args.app.parent, '<app-dir>'), (ROOT, '<repo>'), (Path.home(), '<home>')]
+        for path, placeholder in sorted(((p, n) for p, n in roots if p), key=lambda r: -len(str(r[0]))):
+            text = text.replace(str(path), placeholder)
+        text = re.sub(r'/tmp/cm[a-z]-[A-Za-z0-9_]+', '<tmp>', text)
+        for secret in filter(None, (getattr(self, 'token', None), getattr(self, 'read_token', None))):
+            text = text.replace(secret, '<token>')
+        return text
+
     def finish(self):
         passed = bool(self.checks) and all(self.checks.values())
         report = dict(schema='release-e2e.v1', passed=passed, checks=self.checks,
@@ -916,17 +930,9 @@ class Run:
                                   skipped_steps=[s['name'] for s in self.steps if s['status'] == 'skipped']),
                       steps=self.steps, ids=self.ids, results=self.results)
         text = json.dumps(report, indent=2, ensure_ascii=False, default=str)
-        # Evidence is committed: replace the temporary roots with placeholders.
-        for path, placeholder in ((self.work, '<work>'), (self.runtime_base, '<runtime>'), (ROOT, '<repo>')):
-            text = text.replace(str(path), placeholder)
-        (self.out / 'report.json').write_text(text + '\n')
-        for log in self.logs.iterdir():
-            content = log.read_text(errors='replace')
-            for path, placeholder in ((self.work, '<work>'), (self.runtime_base, '<runtime>'), (ROOT, '<repo>')):
-                content = content.replace(str(path), placeholder)
-            for secret in filter(None, (getattr(self, 'token', None), getattr(self, 'read_token', None))):
-                content = content.replace(secret, '<token>')
-            log.write_text(content)
+        (self.out / 'report.json').write_text(self.sanitize(text) + '\n')
+        for log in [*self.logs.iterdir(), *self.out.glob('browser-*.json')]:
+            log.write_text(self.sanitize(log.read_text(errors='replace')))
         print(f'[release-e2e] {report["counts"]["passed"]} passed, {report["counts"]["failed"]} failed, '
               f'skipped steps: {report["counts"]["skipped_steps"]}', flush=True)
         print(f'[release-e2e] {"PASSED" if passed else "FAILED"}; report {self.out / "report.json"}', flush=True)

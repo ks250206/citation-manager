@@ -7,12 +7,15 @@ Mac, Developer ID signing, store-published extensions, the 16 GB reference machi
 been exercised. Nothing below is marked passed without a test, script, workflow run or
 recorded native session in this repository; "Linux" means the Linux container used by the
 implementing agents (Xvfb for GUI runs), "macOS VM" a GitHub-hosted `macos-15-arm64` runner,
-"real Mac" an Apple Silicon machine operated through native CUA (#10/#15/#47).
+"real Mac" an Apple Silicon machine (native CUA sessions in #10/#15, headless benchmark in #47).
+Linux is itself a P2 target (DESIGN §2.3); it is used here as the automatable stand-in for the
+platform-neutral parts, never as evidence for macOS-specific behaviour.
 
 Result values: **passed** (the whole criterion has concrete evidence), **partial** (named parts
 are verified, others are not), **not verified** (no evidence), **failed** (evidence shows the
-criterion is not met). P1/P2 features (DESIGN §2.2/§2.3: Zotero migration of annotations,
-sync, OCR, Word/Docs, Windows, …) are not part of any criterion below.
+criterion is not met). Features outside the MVP or in P1/P2 (DESIGN §2.2/§2.3: sync,
+Word/Google Docs, CSL, OCR, Zotero migration and annotation import, Safari, Linux/Windows
+distribution, …) are not completion criteria and are not counted below.
 
 ## Release E2E (this issue)
 
@@ -25,8 +28,8 @@ loopback-only network namespace that counts every attempt to reach another host.
 
 | Run | Environment | Result | Evidence |
 |---|---|---|---|
-| Linux, `--browser chromium --gui --offline` | Linux container, Ubuntu 24.04, release build of this branch, pinned PDFium 8125, Playwright Chromium 1243 on Xvfb (no window manager), network namespace with only `lo` | **passed**, 88 checks, 0 failed, no step skipped | [report](release-e2e/linux/report.json), [logs](release-e2e/linux/logs/), [screenshots](release-e2e/linux/screenshots/) |
-| macOS, non-browser steps (`package-macos.yml`) | macOS VM, app copied out of the ad-hoc signed `.dmg` | see [macOS run](#macos-run) | workflow artifact `package-macos-evidence/release-e2e/` |
+| Linux, `--browser chromium --gui --offline` | Linux container, Ubuntu 24.04, release build of this branch, pinned PDFium 8125, Playwright Chromium 1243 on Xvfb (no window manager), network namespace with only `lo` | **passed**, 89 checks, 0 failed, no step skipped | [report](release-e2e/linux/report.json), [logs](release-e2e/linux/logs/), [screenshots](release-e2e/linux/screenshots/) |
+| macOS, non-browser steps (`package-macos.yml`) | macOS VM (`macos-15-arm64`, Darwin 24.6.0), app copied out of the mounted ad-hoc signed `.dmg` | **passed**, 66 checks, 0 failed; `gui_restart` and `offline_doi` skipped (Linux-only) | run [45613061723](https://github.com/ks250206/citation-manager/actions/runs/45613061723) on `cc2f58b`, [report](release-e2e/macos/report.json), [logs](release-e2e/macos/logs/) |
 
 What the Linux run shows (each line is one or more named checks in the report):
 
@@ -47,6 +50,9 @@ What the Linux run shows (each line is one or more named checks in the report):
   search → first row → Ctrl+K "Copy citation" put the browser-saved paper on the clipboard; Ctrl+Q
   quit cleanly; second start found the CLI paper the same way and opened its PDF tab
   ([screenshot](release-e2e/linux/screenshots/gui-2-pdf-tab.png)); the daemon idled out after.
+  The palette history was persisted (0600) — in `<library>/ui-settings.json`, not in the GUI's
+  `--settings` file, because the browser step's PDF job had started `papersd` first (defect
+  below).
 - **Search through CLI, REST and MCP** returned the same paper IDs for a full-text phrase, a
   browser-saved title and `日本語`; full-text hits carry `page_number` 1 and
   `paper://…?page=1`; REST refused a missing token (401) and a foreign `Host`.
@@ -66,7 +72,24 @@ same IPC requests), a live DOI lookup, signing/Gatekeeper, a real Mac.
 
 ### macOS run
 
-Filled in from the `package-macos.yml` run of this branch (see the end of this document).
+[Run 45613061723](https://github.com/ks250206/citation-manager/actions/runs/45613061723) of
+`package-macos.yml` on `cc2f58b` succeeded end to end (bundle smoke, ad-hoc signed bundle,
+`.dmg` run read-only, hardened runtime, Chrome for Testing and release Firefox probes, signing
+preflight `UNVERIFIED: no Developer ID`). Its new step mounted the `.dmg`, copied the app into
+an `Applications` folder of a temporary home and ran the release E2E without a browser and
+without the GUI: install (bundled PDFium and licenses), privacy defaults, CLI seeding with
+PDFium extraction from the bundle, a host-level capture (`hello`/`capture.preview`/
+`capture.commit` written to the bundle's host with no GUI and no daemon running), the same
+search results from CLI, REST and MCP, MCP/REST annotations, the owner's annotated export
+through the bundle's `papersd` (complete, 1 highlight + 1 note, original unchanged), BibTeX/RIS
+round trip and backup by `ditto`/restore. pypdf is not installed on the runner, so the
+independent re-read was skipped there (it ran on Linux).
+
+Observed on the VM, not counted as failures: `papers server stop` is refused on macOS
+("needs socket peer credentials", exit 7), so the run waited for the idle exit; each
+`papersd token issue` took 20.2 s and stored the secret in the 0600 fallback file — the Keychain
+was not usable for the temporary `HOME` of a non-interactive runner. Keychain storage on a real
+Mac remains unverified (#26).
 
 ## §24 criteria
 
@@ -77,7 +100,7 @@ Filled in from the `package-macos.yml` run of this branch (see the end of this d
 | 3 | 「コレクション・タグ・複合フィルタを設定できる。」 | #12 (PR #40), #15 (PR #45) | `crates/storage/tests/library_organization.rs` and core/domain tests; #15 native CUA session | Linux/macOS automated; **real Mac** native GUI | **passed** | [ISSUE_12](ISSUE_12.md); [native-awake](issue-15/native-awake.md): parent/child collections, two tags, AND→1 / OR→2, combined collection/tag/keyword/author/year/type filter, rename/move/delete ([continuation](issue-15/native-continuation.md)) |
 | 4 | 「DOI のみから文献を追加でき、重複登録を防止できる。」 | #14 (PR #44), #33 (PR #41), #15, #28, #29 | reqwest transport against loopback Crossref/DataCite fixtures, resolve → common preview → duplicate decision; CLI `add doi` with a scripted daemon; MCP `add_paper_by_doi` tests; release E2E offline DOI (explicit failure, nothing saved) | Linux/macOS automated; real Mac GUI DOI lookup (#15 awake run, cancel/ownership) | **partial** | [ISSUE_14](ISSUE_14.md), [ISSUE_33](ISSUE_33.md), [doi-pdf-ownership](issue-15/doi-pdf-ownership.md). Missing: a live Crossref/DataCite lookup end to end (no public network in any test lane), the offline DOI fallback in the GUI (#15 gate) |
 | 5 | 「PDF を閲覧・検索・テキスト選択できる。」 | #11 (PR #37), #17 (PR #59), #18, #21 (PR #64), #34 | PDFium corpus runtime tests (`cm-pdf --features runtime`), `layouts_runtime` (#30), Linux GUI runs (#17 view/select/copy, #21 find/jump), bundle smoke (PDFium render/text from `papersd` in the `.app`), release E2E PDF tab | Linux Xvfb GUI; macOS VM (bundled PDFium via `papersd`/REST, not the GUI viewer); real Mac (#11 PDFKit cross-check, no viewer) | **partial** | [issue-17](issue-17/README.md), [PDFIUM_POC](PDFIUM_POC.md), PR #64, [APP_LAYOUT_POC](APP_LAYOUT_POC.md). Missing: the GUI viewer and text selection on macOS (Metal, ⌘C, trackpad) |
-| 6 | 「ハイライト・コメントが保存され、注釈付き PDF を書き出せる。」 | #19 (PR #61/#62), #20 (PR #65), #29, #27 | `crates/{core,daemon,desktop}/tests/annotations.rs`; `pdf_export_runtime` + `validate_export.py` (pypdf + poppler, 4 rotations, CI `linux-native`); #19 Linux GUI highlight → restart; release E2E MCP/REST annotations → owner export | Linux (GUI and CI); macOS VM (release E2E export through the bundle's `papersd`, see below) | **partial** | [issue-19](issue-19/README.md), [issue-20](issue-20/README.md), [ISSUE_30 validate_export](ISSUE_30/linux/validate_export.json), release E2E. Missing: choosing a file in a real save dialog (no XDG portal here; NSSavePanel never driven), the GUI on macOS |
+| 6 | 「ハイライト・コメントが保存され、注釈付き PDF を書き出せる。」 | #19 (PR #61/#62), #20 (PR #65), #29, #27 | `crates/{core,daemon,desktop}/tests/annotations.rs`; `pdf_export_runtime` + `validate_export.py` (pypdf + poppler, 4 rotations, CI `linux-native`); #19 Linux GUI highlight → restart; release E2E MCP/REST annotations → owner export | Linux (GUI and CI); macOS VM (release E2E export through the bundle's `papersd`, [macOS run](#macos-run)) | **partial** | [issue-19](issue-19/README.md), [issue-20](issue-20/README.md), [ISSUE_30 validate_export](ISSUE_30/linux/validate_export.json), release E2E. Missing: choosing a file in a real save dialog (no XDG portal here; NSSavePanel never driven), the GUI on macOS |
 | 7 | 「全文検索結果から正しい PDF ページへジャンプできる。」 | #18, #21 (PR #64) | `cm-storage` FTS tests, `fulltext_runtime`, `crates/desktop/tests/search_ui.rs`; Linux GUI: hit → PDF tab at p. 1, `n` → rotated p. 2; release E2E page targets via CLI/REST/MCP | Linux Xvfb GUI; Linux/macOS VM headless | **partial** | PR #64, [ISSUE_18](ISSUE_18.md), [ISSUE_30](ISSUE_30.md) (recall 1.0 at 20,000 pages). Missing: the jump in the macOS GUI |
 | 8 | 「BibTeX と RIS のインポート・エクスポートを実行できる。」 | #13 (PR #43), #33, #15, #28 | `bibliography_behavior`, exchange round-trip tests; #15 native 1000-row import → classify → re-export → reparse; release E2E CLI import/export and re-import in fresh libraries | Linux/macOS automated; **real Mac** native GUI; Linux and macOS VM release E2E | **passed** | [ISSUE_13](ISSUE_13.md), [native-bulk](issue-15/native-bulk.md) (1000/1/1 exact records), release E2E `portability.*_round_trip_titles` |
 | 9 | 「Chrome/Firefox から論文ページを保存できる。」 | #22 (PR #63), #23 (PR #66), #24 (PR #67), #34, #31 | `run.mjs` with the real extension (Chromium, Firefox ESR 153); `browser_smoke.py` probe extension on macOS (Chrome for Testing, release Firefox); release E2E browser step | Linux (real extension, both browsers); macOS VM (probe extension, not the real popup) | **partial** | [ISSUE_24](ISSUE_24.md), [ISSUE_23](ISSUE_23.md), [ISSUE_31](ISSUE_31.md), release E2E. Missing: store-published extension IDs (`extension-ids.json` `release` is empty, so a release build of the extension refuses to build and users can only sideload the development ID), branded Chrome, the real extension on macOS, an AMO-signed add-on |
@@ -122,7 +145,7 @@ open while a child is open or a gate below remains.
 | #17 viewer, #18 extraction/FTS, #19 annotations, #20 export, #21 search UI | closed | met on Linux (GUI under Xvfb, PDFium 8125) | macOS GUI; #20 real save dialog |
 | **#4 M3** Browser Capture | open | Exit met: GUI closed → browser save (Linux Chromium + Firefox ESR with the real extension; macOS VM probes) | store extension IDs; real Mac |
 | #22 capture service, #23 native host, #24 extension | closed | met ([ISSUE_22](ISSUE_22.md), [ISSUE_23](ISSUE_23.md), [ISSUE_24](ISSUE_24.md)) | store IDs (#24), branded Chrome |
-| **#5 M4** daemon・REST・MCP・CLI | open | Exit met: with no GUI running an MCP client searches and reads full text; after the owner's write grant it adds annotations (release E2E, Linux; macOS VM below) | — |
+| **#5 M4** daemon・REST・MCP・CLI | open | Exit met: with no GUI running an MCP client searches and reads full text; after the owner's write grant it adds annotations (release E2E on Linux and the macOS VM) | — |
 | #25 papersd/IPC, #26 tokens/grants, #27 REST, #28 CLI, #29 MCP | closed | met ([ISSUE_25](ISSUE_25.md) … PR #70); macOS Keychain storage not verified (#26) | Keychain on a real Mac |
 | **#6 M5** 安定化と配布 | open | Exit **partly** met: new install → browser save → PDF annotation → MCP is reproducible by `tests/e2e/release` on Linux (passed) and, without a browser, on the macOS VM; not on a real Mac, not with a signed build | all blockers below |
 | #30 recovery/security/10k | open (PR #77 merged) | recovery, hostile-input and layout regressions met; benchmark partial ([ISSUE_30](ISSUE_30.md)) | 16 GB reference machine; PDF-view RSS above target; frame time unmeasured |
@@ -166,8 +189,11 @@ Recorded, not fixed (larger or design questions):
 
 - No app or CLI command for the storage layer's verified portable backup/restore; the documented
   route is copying a stopped library (INSTALL §6), which needs the daemon to be idle first.
-- `papers server stop` is not available on macOS (RECOVERY), so scripts there wait for the idle
-  exit.
+- `papers server stop` is not available on macOS (RECOVERY; exit 7 in the macOS run), so scripts
+  there wait for the idle exit.
+- When the Keychain cannot be used (macOS VM, temporary `HOME`), `papersd token issue` blocks for
+  about 20 s before falling back to the 0600 file; worth a shorter timeout or an explicit
+  "no keychain" path, to be checked on a real Mac.
 - **The GUI's `--settings` is ignored when `papersd` is already running.** The settings file is a
   `papersd` argument that only the GUI passes when it starts the daemon itself
   (`crates/daemon/src/bin/citation-manager.rs` → `DaemonConfig::settings`, default
