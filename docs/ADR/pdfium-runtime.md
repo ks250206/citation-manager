@@ -112,6 +112,14 @@ selection bounds で描画/文字位置を取得。GUIクリックは不要。PD
 
 ## #34 / #31 への handoff
 
+> **#34 で更新:** hosted macOS 15 runner で `.app` 内 papersd から実ロード・描画・抽出を確認
+> ([APP_LAYOUT_POC](../validation/APP_LAYOUT_POC.md))。署名済み bundle は nested dylib に実署名が必要で
+> (upstream の linker 署名のままでは `codesign` が bundle を封印しない)、署名で hash が変わる。
+> そのため release job が検証済み dylib のコピーを先に署名し、その SHA-256 を
+> `CM_PDFIUM_SIGNED_SHA256` で build 時に `PDFIUM_SIGNED_SHA256` として埋め込む。loader は upstream
+> digest かその 1 つだけを受理する（`trusted_library_digest`）。以下の「現 loader は原本 hash のみ」
+> という記述はこの更新前の状態。詳細は [app-layout](app-layout.md)。
+
 `bundled_library(current_exe)` → `Contents/Frameworks/libpdfium.dylib` の**絶対パス**。
 空白/Unicodeを含む bundle 移動も CWD/PATH 依存なし。開発 PoC の `CM_PDFIUM_LIBRARY` は example/runner
 だけが読む明示 override であり、製品の自動 fallback にしない。#34 はこの API と同じ固定 original dylib

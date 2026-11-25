@@ -16,7 +16,7 @@ Citation Manager.app/Contents/
   MacOS/papers                   CLI (#28), also `papers mcp`
   MacOS/papers-mcp               MCP stdio server and its grant bootstrap (#29)
   MacOS/papers-native-host       browser Native Messaging host (#23)
-  Frameworks/libpdfium.dylib     chromium/8125 universal, upstream bytes, SHA-256 pinned (#11)
+  Frameworks/libpdfium.dylib     chromium/8125 universal; upstream bytes, or the signed copy (see Signing)
   Resources/AppIcon.icns         rendered from assets/icon.svg at build time
   Resources/licenses/pdfium/     PDFium LICENSE + all 18 upstream third-party notices
   Resources/native-messaging/extension-ids.json
@@ -31,8 +31,7 @@ Citation Manager.app/Contents/
   `LC_RPATH` or an `@rpath`/`@loader_path`/`@executable_path` dependency; `otool -L` lists only
   `/usr/lib` and `/System/Library` libraries (checked by the smoke). The PDF worker `dlopen`s
   the absolute `Contents/Frameworks/libpdfium.dylib` after checking its SHA-256, so the
-  dylib's own install name (`./libpdfium.dylib`, upstream) is irrelevant and is not rewritten
-  (rewriting it would change the pinned hash). A future switch to linking would need
+  dylib's own install name (`./libpdfium.dylib`, upstream) is irrelevant and is not rewritten. A future switch to linking would need
   `@rpath` + `LC_RPATH @executable_path/../Frameworks` and a new hash pin.
 - Architecture: the hosted lane builds **arm64** binaries (the runner's native target). The
   PDFium dylib is universal (arm64 + x86_64). An Intel or universal build of the Rust
@@ -46,7 +45,7 @@ Citation Manager.app/Contents/
 | own executable | `current_exe()` **canonicalized** (macOS returns the executed path, e.g. a PATH symlink) | `app_bundle::own_executable`, `papers`, `papers-mcp`, papersd's PDF runtime |
 | `papersd` | `<dir of own executable>/papersd`, absolute, never a PATH search | GUI, `papers`, `papers-mcp`, native host |
 | PDFium | `<exe>/../../Frameworks/libpdfium.dylib` when the executable is in `X.app/Contents/MacOS`; otherwise refused (`LibraryPath`) | `cm_pdf::worker::bundled_library` |
-| PDFium trust | SHA-256 of the file equals the pinned original | `cm_pdf::worker::PDFIUM_SHA256` |
+| PDFium trust | SHA-256 equals the pinned upstream digest or the build-time pinned signed copy | `cm_pdf::worker::trusted_library_digest` |
 | default library (bundle launch only) | `~/Library/Application Support/Citation Manager/library` | `app_bundle::default_library` |
 | browser host config | `~/Library/Application Support/Citation Manager/native-host/` | native host `config` |
 | daemon socket | `$TMPDIR/citation-manager-<uid>/` (then `/tmp/…`), see #25 | `DaemonPaths` |
@@ -104,25 +103,34 @@ INSTALL guide).
 They resolve the link before looking for `papersd`, so the bundle's daemon and PDFium are used.
 A copy (not a link) outside the bundle has no sibling `papersd` and fails with exit 6.
 
-## Signing order and hardened runtime (handoff to #31)
+## Signing and the PDFium trust pin (handoff to #31)
 
-`scripts/package/macos/codesign.py` signs inside-out: the helper executables in
-`Contents/MacOS`, then the bundle (main executable, Info.plist and Resources sealed). The
-PDFium dylib keeps its upstream bytes and upstream ad-hoc signature, because the loader only
-accepts the pinned original hash. Consequences recorded for #31:
+An unsigned bundle runs (every Rust binary carries the arm64 linker ad-hoc signature, the dylib
+its upstream one), but `codesign --verify` reports "code has no resources but signature
+indicates they must be present". Signing the bundle, even ad hoc, fails while the nested dylib
+only has its upstream *linker* signature ("code object is not signed at all, in subcomponent
+Frameworks/libpdfium.dylib", hosted run 1). Signing the dylib rewrites it, and #11's loader
+accepted only the upstream digest. Decision:
 
-1. Notarization requires every Mach-O, including the dylib, to carry a Developer ID signature
-   with a secure timestamp. Re-signing the dylib changes its bytes, so the current
-   original-hash gate rejects it. #31 must replace the gate for signed builds (e.g. pin the
-   post-sign digest produced by the release job, or verify the code-signing identity) before a
-   notarized bundle can load PDFium.
-2. Hardened runtime enables library validation: a dylib must be signed by Apple or the same
-   Team ID as the process. With the dylib re-signed by the same Developer ID this holds
-   without the `com.apple.security.cs.disable-library-validation` entitlement; keeping the
-   upstream signature would need that entitlement, which notarization accepts but weakens the
-   process. The hosted run measures the ad-hoc behaviour (see the validation document).
-3. Developer ID identities on the initial environment: 0 (#7). Nothing here is a
-   distribution signature; an ad-hoc signature only makes `codesign --verify` meaningful.
+1. The release job signs a **copy** of the checksum-verified upstream dylib first
+   (`codesign.py pdfium SRC DEST`, Developer ID in #31) and records its SHA-256.
+2. The release binaries are built with `CM_PDFIUM_SIGNED_SHA256=<digest>`; `cm_pdf::worker`
+   compiles it into `PDFIUM_SIGNED_SHA256` (64 lowercase hex digits, checked at compile time).
+   The loader accepts the upstream digest or that one digest, nothing else, so the trust is
+   carried by the (signed) executables exactly like the upstream pin. Development builds
+   without the variable accept only the upstream digest.
+3. `build_app.py --signed-pdfium DEST --signed-pdfium-sha256 <digest>` bundles the copy and
+   records `bundled_sha256` / `signed_copy` in `Resources/pdfium-runtime.json`.
+4. `codesign.py app APP` signs the helper executables in `Contents/MacOS`, then the bundle
+   (main executable, Info.plist and Resources sealed); the dylib is not touched again.
+   Re-signing the dylib after the build makes PDFium unavailable by design.
+
+Hardened runtime and library validation (#31): with a Developer ID the dylib copy carries the
+same Team ID as the executables, which library validation requires; no
+`disable-library-validation` entitlement is needed. The ad-hoc hosted measurements and the
+Developer ID blockers are in [APP_LAYOUT_POC](../validation/APP_LAYOUT_POC.md) and
+[LICENSES](../LICENSES.md#signing-and-notarization). Developer ID identities on the initial
+environment: 0 (#7); nothing here is a distribution signature.
 
 ## Development and history
 

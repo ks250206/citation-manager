@@ -1061,3 +1061,16 @@ tokio runtime（専用 thread）で、永続 `ApiSettings` が有効な間だけ
 PDF 取得 job は host・ブラウザ・GUI の終了後も daemon が完了させる。PDF バイナリは Native Messaging で
 運ばない。manifest は実行中の実行ファイルの絶対パスから生成し（開発 tree は拒否）、移動/更新後は
 `refresh` で再登録する。Linux の Chromium/Firefox ESR 実機 smoke は [ISSUE_23](docs/validation/ISSUE_23.md)。
+
+## 39. #34 `.app` 配置・PDFium ロード・遅延起動
+
+[app-layout ADR](docs/ADR/app-layout.md) が §4/§5.1/§12.2/§17 の macOS 配布形の確定事項となる。
+`Citation Manager.app/Contents/MacOS/` に `citation-manager`（GUI）・`papersd`・`papers`・`papers-mcp`・
+`papers-native-host` を兄弟として置き、全 client は正規化した自身の実行パスの隣の `papersd` を絶対パスで
+遅延起動する（cwd/PATH/開発 checkout に依存しない、launchd 不使用）。PDFium は
+`Contents/Frameworks/libpdfium.dylib` を絶対パスで dlopen し、リンク・`LC_RPATH`・install_name 変更はしない。
+署名済み bundle では release job が dylib のコピーを先に署名し、その SHA-256 を build 時に固定する
+（upstream digest とその 1 つのみ受理）。Finder 起動（引数なし）は bundle 内に限り
+`~/Library/Application Support/Citation Manager/library` を使い、毎回の起動で native host manifest を
+`refresh` する（App Translocation/読取専用 volume は登録しない）。hosted macOS 15 runner の証跡は
+[APP_LAYOUT_POC](docs/validation/APP_LAYOUT_POC.md)。実機検証と Developer ID 署名/notarization（#31）は未完。
