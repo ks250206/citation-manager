@@ -238,16 +238,21 @@ fn run_document(w: &PdfWorker, root: &Path, corpus: &Path, out: &Path, inherited
                         vec![line_quad(&p, 410.), line_quad(&p, 382.)]
                     },
                     comment: "検証コメント αβ café".into(),
+                    name: format!("highlight-{i}"),
+                    color: [255, 255, 0],
+                    opacity: 0.5,
                 });
                 notes.push(Note {
+                    name: format!("note-{i}"),
                     page_index: index(i),
-                    bounds: Rect {
+                    bounds: Some(Rect {
                         left: 300.,
                         bottom: 300.,
                         right: 324.,
                         top: 324.,
-                    },
+                    }),
                     contents: "独立ノート 日本語".into(),
+                    color: [255, 204, 0],
                 });
             }
         }
@@ -382,6 +387,9 @@ fn run_document(w: &PdfWorker, root: &Path, corpus: &Path, out: &Path, inherited
             .quad(),
         ],
         comment: "outside".into(),
+        name: String::new(),
+        color: [255, 255, 0],
+        opacity: 0.5,
     };
     assert!(matches!(
         call(
@@ -401,14 +409,17 @@ fn run_document(w: &PdfWorker, root: &Path, corpus: &Path, out: &Path, inherited
                 source: source(corpus),
                 highlights: vec![],
                 notes: vec![Note {
+                    name: String::new(),
                     page_index: index(0),
-                    bounds: Rect {
+                    // Entirely off the visible page: refused, never relocated.
+                    bounds: Some(Rect {
                         left: 5.,
                         bottom: 40.,
                         right: 15.,
                         top: 50.
-                    },
-                    contents: "outside crop".into()
+                    }),
+                    contents: "outside crop".into(),
+                    color: [255, 204, 0],
                 }]
             }
         ),
@@ -427,7 +438,7 @@ fn run_document(w: &PdfWorker, root: &Path, corpus: &Path, out: &Path, inherited
     };
     assert_eq!(
         export.appearance,
-        AppearanceStatus::RequiresExportCompletion
+        AppearanceStatus::NormalAppearanceGenerated
     );
     let bytes = export.bytes;
     let exported = out.join("pdfium-export.pdf");
