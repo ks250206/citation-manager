@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Chrome/Firefox capture extension for Citation Manager (#24). Talks only to papers-native-host over Native Messaging.",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "type": "module",
   "engines": {
     "node": ">=22"

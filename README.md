@@ -116,3 +116,8 @@ PDF 既存添付と新規文献化は別操作です。Info/Notes/PDF host の�
 各書誌 batch は最大100件の別承認が必要で、途中 cancel は以前の commit を取り消しません。
 設定の既定保存先は専用 library 内 `ui-settings.json`、明示 absolute `--settings` でも指定できます。
 複数行入力/Undo/redo、未保存変更の移動確認と終了中 write の結果照合には制限が残ります。
+
+## ライセンス
+
+MIT License（[LICENSE](LICENSE)）。同梱する PDFium・GPUI などのサードパーティのライセンスは
+[docs/licenses](docs/licenses) と [pdfium-licenses](docs/ADR/pdfium-licenses) を参照してください。
