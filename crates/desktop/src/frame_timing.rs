@@ -311,6 +311,10 @@ pub struct Log {
     frame_count: u64,
     dropped_frames: u64,
     dropped_spans: u64,
+    /// Set when absorbed changes have not reached the file yet; cleared only by a
+    /// successful write, so a failed write is retried on the next flush even when the GUI
+    /// is idle and no new samples arrive.
+    unwritten: bool,
 }
 
 impl Log {
@@ -334,7 +338,17 @@ impl Log {
         }
         self.open = delta.open;
         self.frame_count = delta.frame_count;
+        self.unwritten |= changed;
         changed
+    }
+
+    /// Whether the file is behind the log (new changes, or an earlier write failed).
+    pub fn needs_write(&self) -> bool {
+        self.unwritten
+    }
+
+    pub fn mark_written(&mut self) {
+        self.unwritten = false;
     }
 
     pub fn to_json(&self, origin_unix_us: u64) -> Value {
@@ -472,10 +486,14 @@ pub fn flush() {
         Ok(mut r) => (r.drain(Instant::now()), r.origin_unix_us()),
         Err(_) => return,
     };
-    if log.absorb(delta)
-        && let Err(error) = write_atomically(path, &log.to_json(origin))
-    {
-        eprintln!("{ENV}: write failed: {error}");
+    log.absorb(delta);
+    if !log.needs_write() {
+        return;
+    }
+    match write_atomically(path, &log.to_json(origin)) {
+        Ok(()) => log.mark_written(),
+        // Kept unwritten: the next flush (writer thread or quit) retries.
+        Err(error) => eprintln!("{ENV}: write failed: {error}"),
     }
 }
 
@@ -581,9 +599,19 @@ mod tests {
         assert_eq!(value["schema"], SCHEMA);
         assert_eq!(value["frames"][0], json!([1, 2]));
         assert_eq!(value["frame_count"], 3);
+        assert!(log.needs_write());
+        // A failed write leaves the log unwritten, so an idle flush (no new samples)
+        // still retries; only a successful write clears it.
         assert!(!log.absorb(Delta {
             frame_count: 3,
             ..Delta::default()
         }));
+        assert!(log.needs_write(), "retried after a failed write");
+        log.mark_written();
+        assert!(!log.absorb(Delta {
+            frame_count: 3,
+            ..Delta::default()
+        }));
+        assert!(!log.needs_write(), "nothing new after a successful write");
     }
 }
