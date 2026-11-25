@@ -197,6 +197,9 @@ def phase_static(ev, app, expect_signed, require_notices=False):
     ev.check('layout_files_present', not missing, missing or [str(p.relative_to(app)) for p in macho_files(app)])
     notices = sorted(p.name for p in (contents / 'Resources/licenses/pdfium').iterdir())
     ev.check('pdfium_notices_bundled', 'LICENSE' in notices and len(notices) >= 19, notices)
+    project_license = contents / 'Resources/licenses/LICENSE'
+    ev.check('project_license_bundled', project_license.is_file()
+             and project_license.read_text().startswith('MIT License'), str(project_license))
     crates = crate_notice_count(contents)
     ev.check('crate_notices_bundled', bool(crates) and (contents / 'Resources/licenses/THIRD_PARTY_NOTICES.md').is_file(),
              {'crates': crates}, required=require_notices)

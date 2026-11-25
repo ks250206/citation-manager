@@ -13,6 +13,7 @@ Layout (docs/ADR/app-layout.md; what `cm_pdf::worker::bundled_library` and the s
     MacOS/papers-native-host      browser Native Messaging host
     Frameworks/libpdfium.dylib    chromium/8125 universal, upstream bytes (sha256 pinned)
     Resources/AppIcon.icns        when built on macOS (rendered from assets/icon.svg)
+    Resources/licenses/LICENSE    the project's MIT license
     Resources/licenses/pdfium/    PDFium LICENSE + every upstream third-party notice
     Resources/licenses/THIRD_PARTY_NOTICES.md, third-party-licenses.json
                                   Rust crates (scripts/package/third_party_notices.py, #31)
@@ -139,6 +140,7 @@ def copy_pdfium(pdfium_dir, contents, signed=None, signed_sha256=None):
 
 
 NOTICES = ('THIRD_PARTY_NOTICES.md', 'third-party-licenses.json')
+PROJECT_LICENSE = ROOT / 'LICENSE'
 
 
 def copy_notices(notices_dir, contents):
@@ -169,6 +171,8 @@ def build(bin_dir, pdfium_dir, out, version=None, build_number='1', icon=True,
         shutil.copy2(bin_dir / name, contents / 'MacOS' / name)
         (contents / 'MacOS' / name).chmod(0o755)
     copy_pdfium(pdfium_dir, contents, signed_pdfium and Path(signed_pdfium), signed_pdfium_sha256)
+    # The project's own MIT license ships next to the third-party notices.
+    shutil.copy2(PROJECT_LICENSE, contents / 'Resources/licenses/LICENSE')
     if notices_dir is not None:
         copy_notices(notices_dir, contents)
     messaging = contents / 'Resources/native-messaging'
