@@ -263,3 +263,55 @@ fn per_command_deadlines_are_generous_for_long_operations() {
     assert_eq!(t.backoff(2), Some(Duration::from_millis(250)));
     assert_eq!(t.backoff(40), Some(Duration::from_secs(10)));
 }
+
+/// A stream whose peer is already gone, reporting it the way macOS does: setting socket
+/// options fails with EINVAL before any frame is written.
+struct ClosedPeerQuirk;
+impl io::Read for ClosedPeerQuirk {
+    fn read(&mut self, _: &mut [u8]) -> io::Result<usize> {
+        Ok(0)
+    }
+}
+impl io::Write for ClosedPeerQuirk {
+    fn write(&mut self, _: &[u8]) -> io::Result<usize> {
+        Err(io::ErrorKind::BrokenPipe.into())
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+impl Stream for ClosedPeerQuirk {
+    fn try_clone_stream(&self) -> io::Result<Box<dyn Stream>> {
+        Ok(Box::new(ClosedPeerQuirk))
+    }
+    fn shutdown_stream(&self) {}
+    fn set_io_timeouts(&self, _: Option<Duration>, _: Option<Duration>) -> io::Result<()> {
+        Err(io::Error::from_raw_os_error(22))
+    }
+}
+
+#[test]
+fn transport_errors_after_connect_are_a_handshake_close_but_timeouts_are_not() {
+    // The macOS EINVAL-from-setsockopt case, and the other ways a just-closed socket fails.
+    let err =
+        handshake_within(&mut ClosedPeerQuirk, hello(), Duration::from_millis(100)).unwrap_err();
+    assert!(err.closed_during_handshake(), "{err:?}");
+    for kind in [
+        io::ErrorKind::NotConnected,
+        io::ErrorKind::BrokenPipe,
+        io::ErrorKind::ConnectionReset,
+        io::ErrorKind::UnexpectedEof,
+    ] {
+        assert!(
+            ClientError::Io(kind.into()).closed_during_handshake(),
+            "{kind:?}"
+        );
+    }
+    for kind in [io::ErrorKind::TimedOut, io::ErrorKind::WouldBlock] {
+        assert!(
+            !ClientError::Io(kind.into()).closed_during_handshake(),
+            "{kind:?}"
+        );
+    }
+    assert!(!ClientError::Protocol("expected welcome").closed_during_handshake());
+}
